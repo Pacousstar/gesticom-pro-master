@@ -1,0 +1,49 @@
+# Dépendances
+node_modules/
+.next/
+.turbo/
+out/
+build/
+dist/
+
+# Environnement (SÉCURITÉ !)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Base de données (On n'envoie JAMAIS les données clients sur GitHub)
+*.db
+*.db-wal
+*.db-shm
+prisma/*.sqlite
+prisma/*.sqlite-journal
+prisma/gesticom.db
+prisma/dev.db
+
+# Binaires Lourds et Exécutables
+node.exe
+GestiComService.exe
+GestiCom-Installateur.exe
+*.exe
+*.zip
+*.msi
+*.dll
+*.pdb
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Divers
+.DS_Store
+.vscode/
+.idea/
+.tsbuildinfo
+next-env.d.ts
+.gemini/

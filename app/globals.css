@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 600 !important;
+  /* Force toutes les polices par défaut à 600 (semibold) */
+}
+
+/* Force l'accentuation des titres en gras complet pour contraster avec le corps à 600 */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+th,
+strong,
+b,
+.font-bold {
+  font-weight: 800 !important;
+}
+
+/* Éviter le texte gris clair illisible */
+.text-gray-400,
+.text-gray-500 {
+  color: #374151 !important;
+  /* Equivalent à text-gray-700 pour plus de contraste */
+}
+
+/* Formulaires : champs et listes déroulantes toujours lisibles (fond + texte) */
+/* !important pour priorité sur thèmes / composants — évite fond blanc sur blanc */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #6b7280 !important;
+}
+
+select option {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Tableaux : lignes de données toujours visibles (évite texte grisé dans modals/nouvelles fenêtres) */
+tbody tr {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+tbody td {
+  color: #111827;
+}
+
+/* Animations pour les pages d'accueil et de connexion */
+@keyframes blob {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: translateY(-20px) translateX(10px);
+    opacity: 0.6;
+  }
+}
+
+@keyframes gridMove {
+  0% {
+    transform: translate(0, 0);
+  }
+
+  100% {
+    transform: translate(50px, 50px);
+  }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+.animate-float {
+  animation: float 8s ease-in-out infinite;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 45s linear infinite;
+}
+
+/* Utilitaires d'impression */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

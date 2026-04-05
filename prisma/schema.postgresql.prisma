@@ -1,0 +1,502 @@
+// Prisma Schema - GestiCom (Version PostgreSQL pour Vercel)
+// Ce fichier est une copie du schema.prisma modifiée pour PostgreSQL
+// Utiliser ce fichier pour le déploiement sur Vercel
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"  // Changé de "sqlite" à "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ENTITÉS / MAGASINS
+model Entite {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  nom          String
+  type         String // "MAISON_MERE" | "SUCCURSALE"
+  localisation String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  utilisateurs Utilisateur[]
+  magasins     Magasin[]
+  mouvements   Mouvement[]
+  ventes       Vente[]
+  achats       Achat[]
+  charges      Charge[]
+  depenses     Depense[]
+  banques      Banque[]
+}
+
+// UTILISATEURS & RÔLES
+model Utilisateur {
+  id                        Int      @id @default(autoincrement())
+  login                     String   @unique // identifiant de connexion
+  nom                       String
+  email                     String?  @unique
+  motDePasse                String // hash bcrypt
+  role                      String // "SUPER_ADMIN" | "ADMIN" | "COMPTABLE" | "GESTIONNAIRE" | "MAGASINIER" | "ASSISTANTE"
+  permissionsPersonnalisees String? // JSON array of permissions (overrides role permissions if set)
+  entiteId                  Int
+  entite                    Entite   @relation(fields: [entiteId], references: [id])
+  actif                     Boolean  @default(true)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  mouvements          Mouvement[]
+  ventes              Vente[]
+  achats              Achat[]
+  charges             Charge[]
+  operationsCaisse    Caisse[]
+  depenses            Depense[]
+  auditLogs           AuditLog[]
+  ecrituresComptables EcritureComptable[]
+  operationsBancaires OperationBancaire[]
+  DashboardPreference DashboardPreference?
+
+  @@index([actif])
+  @@index([entiteId])
+}
+
+// MAGASINS
+model Magasin {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  nom          String
+  localisation String
+  entiteId     Int
+  entite       Entite   @relation(fields: [entiteId], references: [id])
+  actif        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  stocks           Stock[]
+  mouvements       Mouvement[]
+  ventes           Vente[]
+  achats           Achat[]
+  operationsCaisse Caisse[]
+  depenses         Depense[]
+  charges          Charge[]
+
+  @@index([entiteId])
+  @@index([actif])
+}
+
+// PRODUITS (CATALOGUE COMMUN)
+model Produit {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  designation String
+  categorie   String
+  prixAchat   Float?
+  prixVente   Float?
+  seuilMin    Int      @default(5)
+  actif       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stocks       Stock[]
+  mouvements   Mouvement[]
+  ventesLignes VenteLigne[]
+  achatsLignes AchatLigne[]
+
+  @@index([designation])
+  @@index([categorie])
+  @@index([actif])
+}
+
+// STOCKS PAR MAGASIN
+model Stock {
+  id               Int      @id @default(autoincrement())
+  produitId        Int
+  produit          Produit  @relation(fields: [produitId], references: [id])
+  magasinId        Int
+  magasin          Magasin  @relation(fields: [magasinId], references: [id])
+  quantite         Int      @default(0) // stock courant (mouvements)
+  quantiteInitiale Int      @default(0) // stock initial officiel (grisé, MAJ seule)
+  createdAt        DateTime @default(now()) // date d'entrée du stock
+  updatedAt        DateTime @updatedAt
+
+  @@unique([produitId, magasinId])
+  @@index([produitId])
+  @@index([magasinId])
+  @@index([quantite])
+}
+
+// MOUVEMENTS DE STOCK
+model Mouvement {
+  id            Int         @id @default(autoincrement())
+  date          DateTime    @default(now())
+  type          String // "ENTREE" | "SORTIE"
+  produitId     Int
+  produit       Produit     @relation(fields: [produitId], references: [id])
+  magasinId     Int
+  magasin       Magasin     @relation(fields: [magasinId], references: [id])
+  entiteId      Int
+  entite        Entite      @relation(fields: [entiteId], references: [id])
+  utilisateurId Int
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  quantite      Int
+  observation   String?
+  createdAt     DateTime    @default(now())
+
+  @@index([date])
+  @@index([type])
+  @@index([produitId])
+  @@index([magasinId])
+}
+
+// CLIENTS
+model Client {
+  id            Int      @id @default(autoincrement())
+  nom           String
+  telephone     String?
+  type          String // "CREDIT" | "CASH"
+  plafondCredit Float? // si CREDIT
+  ncc           String? // Numéro de Compte Contribuable (SYSCOHADA)
+  actif         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ventes Vente[]
+
+  @@index([actif])
+}
+
+// FOURNISSEURS
+model Fournisseur {
+  id        Int      @id @default(autoincrement())
+  nom       String
+  telephone String?
+  email     String?
+  ncc       String? // Numéro de Compte Contribuable (SYSCOHADA)
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  achats Achat[]
+
+  @@index([actif])
+}
+
+// CAISSE (mouvements entrée/sortie)
+model Caisse {
+  id            Int         @id @default(autoincrement())
+  date          DateTime    @default(now())
+  magasinId     Int
+  magasin       Magasin     @relation(fields: [magasinId], references: [id])
+  type          String // "ENTREE" | "SORTIE"
+  motif         String
+  montant       Float
+  utilisateurId Int
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@index([date])
+  @@index([magasinId])
+}
+
+// PARAMÈTRES ENTREPRISE (une seule ligne)
+model Parametre {
+  id            Int      @id @default(autoincrement())
+  nomEntreprise String   @default("")
+  contact       String   @default("")
+  localisation  String   @default("")
+  devise        String   @default("FCFA")
+  tvaParDefaut  Float    @default(0)
+  logo          String?  // Base64 ou URL du logo
+  updatedAt     DateTime @updatedAt
+}
+
+// VENTES
+model Vente {
+  id             Int         @id @default(autoincrement())
+  numero         String      @unique
+  date           DateTime    @default(now())
+  magasinId      Int
+  magasin        Magasin     @relation(fields: [magasinId], references: [id])
+  entiteId       Int
+  entite         Entite      @relation(fields: [entiteId], references: [id])
+  utilisateurId  Int
+  utilisateur    Utilisateur @relation(fields: [utilisateurId], references: [id])
+  clientId       Int?
+  client         Client?     @relation(fields: [clientId], references: [id])
+  clientLibre    String? // saisie libre si pas de fiche Client
+  montantTotal   Float
+  montantPaye    Float       @default(0) // avance / montant déjà encaissé
+  statutPaiement String      @default("PAYE") // "PAYE" | "PARTIEL" | "CREDIT"
+  modePaiement   String // "ESPECES" | "MOBILE_MONEY" | "CREDIT"
+  statut         String      @default("VALIDEE") // "VALIDEE" | "ANNULEE"
+  observation    String?
+  createdAt      DateTime    @default(now())
+
+  lignes VenteLigne[]
+
+  @@index([date])
+  @@index([numero])
+  @@index([magasinId])
+  @@index([entiteId])
+}
+
+model VenteLigne {
+  id           Int     @id @default(autoincrement())
+  venteId      Int
+  vente        Vente   @relation(fields: [venteId], references: [id], onDelete: Cascade)
+  produitId    Int
+  produit      Produit @relation(fields: [produitId], references: [id])
+  designation  String // Copie pour historique
+  quantite     Int
+  prixUnitaire Float
+  montant      Float
+
+  @@index([venteId])
+  @@index([produitId])
+}
+
+// ACHATS
+model Achat {
+  id               Int          @id @default(autoincrement())
+  numero           String       @unique
+  date             DateTime     @default(now())
+  magasinId        Int
+  magasin          Magasin      @relation(fields: [magasinId], references: [id])
+  entiteId         Int
+  entite           Entite       @relation(fields: [entiteId], references: [id])
+  utilisateurId    Int
+  utilisateur      Utilisateur  @relation(fields: [utilisateurId], references: [id])
+  fournisseurId    Int?
+  fournisseur      Fournisseur? @relation(fields: [fournisseurId], references: [id])
+  fournisseurLibre String? // saisie libre si pas de fiche
+  montantTotal     Float
+  montantPaye      Float        @default(0) // avance / montant déjà réglé
+  statutPaiement   String      @default("PAYE") // "PAYE" | "PARTIEL" | "CREDIT"
+  modePaiement     String
+  observation      String?
+  createdAt        DateTime    @default(now())
+
+  lignes AchatLigne[]
+
+  @@index([date])
+  @@index([magasinId])
+  @@index([entiteId])
+}
+
+model AchatLigne {
+  id           Int     @id @default(autoincrement())
+  achatId      Int
+  achat        Achat   @relation(fields: [achatId], references: [id], onDelete: Cascade)
+  produitId    Int
+  produit      Produit @relation(fields: [produitId], references: [id])
+  designation  String
+  quantite     Int
+  prixUnitaire Float
+  montant      Float
+
+  @@index([achatId])
+  @@index([produitId])
+}
+
+// CHARGES
+model Charge {
+  id            Int         @id @default(autoincrement())
+  date          DateTime    @default(now())
+  magasinId     Int?
+  magasin       Magasin?    @relation(fields: [magasinId], references: [id])
+  entiteId      Int
+  entite        Entite      @relation(fields: [entiteId], references: [id])
+  utilisateurId Int
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  type          String // "FIXE" | "VARIABLE"
+  rubrique      String // "LOYER", "SALAIRES", "ELECTRICITE", etc.
+  montant       Float
+  observation   String?
+  createdAt     DateTime    @default(now())
+
+  @@index([date])
+  @@index([type])
+  @@index([magasinId])
+}
+
+// DEPENSES
+model Depense {
+  id                 Int         @id @default(autoincrement())
+  date               DateTime    @default(now())
+  magasinId          Int?
+  magasin            Magasin?    @relation(fields: [magasinId], references: [id])
+  entiteId           Int
+  entite             Entite      @relation(fields: [entiteId], references: [id])
+  utilisateurId      Int
+  utilisateur        Utilisateur @relation(fields: [utilisateurId], references: [id])
+  categorie          String // "LOYER", "SALAIRES", "TRANSPORT", "COMMUNICATION", "MAINTENANCE", "AUTRE"
+  libelle            String // Description de la dépense
+  montant            Float // montant total
+  montantPaye        Float       @default(0) // avance / montant déjà réglé
+  statutPaiement     String      @default("PAYE") // "PAYE" | "PARTIEL" | "CREDIT"
+  modePaiement       String // "ESPECES" | "MOBILE_MONEY" | "VIREMENT" | "CHEQUE"
+  beneficiaire       String? // Nom du bénéficiaire
+  pieceJustificative String? // Référence pièce justificative
+  observation        String?
+  createdAt          DateTime    @default(now())
+
+  @@index([date])
+  @@index([categorie])
+  @@index([magasinId])
+}
+
+// BANQUE
+model Banque {
+  id            Int         @id @default(autoincrement())
+  numero        String      @unique // Numéro de compte bancaire
+  nomBanque     String // Nom de la banque (ex: "UBA", "SGBC", "Ecobank")
+  libelle       String // Libellé du compte (ex: "Compte Principal", "Compte Chèque")
+  soldeInitial  Float       @default(0) // Solde initial du compte
+  soldeActuel   Float       @default(0) // Solde actuel (calculé)
+  entiteId      Int
+  entite        Entite      @relation(fields: [entiteId], references: [id])
+  compteId      Int? // Référence au plan de comptes SYSCOHADA (ex: 512, 513)
+  compte        PlanCompte? @relation(fields: [compteId], references: [id])
+  actif         Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  operations OperationBancaire[]
+
+  @@index([entiteId])
+  @@index([compteId])
+}
+
+model OperationBancaire {
+  id            Int         @id @default(autoincrement())
+  banqueId      Int
+  banque        Banque      @relation(fields: [banqueId], references: [id], onDelete: Cascade)
+  date          DateTime    @default(now())
+  type          String // "DEPOT" | "RETRAIT" | "VIREMENT_ENTRANT" | "VIREMENT_SORTANT" | "FRAIS" | "INTERETS"
+  libelle       String
+  montant       Float
+  soldeAvant    Float // Solde avant l'opération
+  soldeApres    Float // Solde après l'opération
+  reference     String? // Référence (chèque, virement, etc.)
+  beneficiaire  String? // Bénéficiaire ou émetteur
+  utilisateurId Int
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  observation   String?
+  createdAt     DateTime    @default(now())
+
+  @@index([banqueId])
+  @@index([date])
+  @@index([type])
+}
+
+// AUDIT / TRAÇABILITÉ
+model AuditLog {
+  id            Int         @id @default(autoincrement())
+  date          DateTime    @default(now())
+  utilisateurId Int
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  action        String // "CONNEXION" | "DECONNEXION" | "CREATION" | "MODIFICATION" | "SUPPRESSION" | "LECTURE"
+  type          String // Type d'entité : "UTILISATEUR" | "PRODUIT" | "STOCK" | "VENTE" | "ACHAT" | "DEPENSE" | "CHARGE" | etc.
+  entiteId      Int? // ID de l'entité concernée (optionnel)
+  description   String? // Description détaillée de l'action
+  details       String? // Détails de l'action (JSON ou texte)
+  ipAddress     String? // Adresse IP de l'utilisateur
+  userAgent     String? // User agent du navigateur
+  createdAt     DateTime    @default(now())
+
+  @@index([date])
+  @@index([utilisateurId])
+  @@index([action])
+  @@index([type])
+}
+
+// COMPTABILITÉ SYSCOHADA (Système Comptable OHADA)
+
+// PLAN DE COMPTES SYSCOHADA
+model PlanCompte {
+  id        Int      @id @default(autoincrement())
+  numero    String   @unique // Numéro de compte SYSCOHADA (ex: "411", "512", "701")
+  libelle   String // Libellé du compte
+  classe    String // Classe comptable (1-8 selon SYSCOHADA)
+  type      String // "ACTIF" | "PASSIF" | "CHARGES" | "PRODUITS"
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ecritures EcritureComptable[]
+  banques   Banque[]
+
+  @@index([numero])
+  @@index([classe])
+}
+
+// JOURNAL COMPTABLE (SYSCOHADA)
+model Journal {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique // Code du journal (ex: "AC", "VE", "OD")
+  libelle   String // Libellé du journal
+  type      String // "ACHATS" | "VENTES" | "BANQUE" | "CAISSE" | "OD" (Opérations Diverses)
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ecritures EcritureComptable[]
+
+  @@index([code])
+}
+
+// ÉCRITURES COMPTABLES (Journal)
+model EcritureComptable {
+  id            Int         @id @default(autoincrement())
+  numero        String      @unique // Numéro d'écriture unique
+  date          DateTime    @default(now())
+  journalId     Int
+  journal       Journal     @relation(fields: [journalId], references: [id])
+  piece         String? // Numéro de pièce justificative
+  libelle       String // Libellé de l'écriture
+  compteId      Int
+  compte        PlanCompte  @relation(fields: [compteId], references: [id])
+  debit         Float       @default(0)
+  credit        Float       @default(0)
+  reference     String? // Référence à une opération (vente, achat, etc.)
+  referenceType String? // Type de référence : "VENTE" | "ACHAT" | "DEPENSE" | "CHARGE" | "CAISSE" | "BANQUE"
+  referenceId   Int? // ID de l'opération référencée
+  utilisateurId Int
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@index([date])
+  @@index([journalId])
+  @@index([compteId])
+  @@index([referenceType, referenceId])
+}
+
+// TEMPLATES D'IMPRESSION
+model PrintTemplate {
+  id         Int      @id @default(autoincrement())
+  type       String // "VENTE" | "ACHAT" | "BON_LIVRAISON" | "FACTURE"
+  nom        String
+  logo       String? // URL ou base64
+  enTete     String? // HTML ou texte
+  piedDePage String? // HTML ou texte
+  variables  String? // JSON des variables personnalisées
+  actif      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([type])
+  @@index([actif])
+}
+
+// PRÉFÉRENCES DASHBOARD
+model DashboardPreference {
+  id            Int         @id @default(autoincrement())
+  utilisateurId Int         @unique
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  widgets       String? // JSON des widgets activés et leur position
+  periode       String? // Période par défaut pour les graphiques
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
