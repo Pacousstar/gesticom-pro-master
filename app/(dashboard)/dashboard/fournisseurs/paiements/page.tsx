@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Search, Loader2, Calendar, User, CreditCard, Hash, Coins, Download, Filter, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 interface PaiementFournisseur {
   id: number
@@ -24,8 +26,10 @@ export default function PaiementsFournisseursPage() {
   const [endDate, setEndDate] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
+  const ITEMS_PER_PAGE_REPORT = 18
   const { error: showError } = useToast()
-  const [isPrinting, setIsPrinting] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPrintingData, setIsPrintingData] = useState(false)
   const [entreprise, setEntreprise] = useState<any>(null)
 
   useEffect(() => {
@@ -66,6 +70,17 @@ export default function PaiementsFournisseursPage() {
     fetchData(startDate, endDate)
   }
 
+  const handleOpenPreview = async () => {
+    setIsPrintingData(true)
+    try {
+      setIsPreviewOpen(true)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsPrintingData(false)
+    }
+  }
+
   const filteredData = Array.isArray(data) ? data.filter(p => 
     (p.fournisseurNom || '').toLowerCase().includes(search.toLowerCase()) || 
     (p.achatNumero || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -87,83 +102,38 @@ export default function PaiementsFournisseursPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+
+      <div className="flex items-center justify-between no-print">
         <div>
-          <h1 className="text-2xl font-bold text-white uppercase tracking-tight">Décaissements Fournisseurs</h1>
-          <p className="text-sm text-white/90 font-medium">Historique des paiements effectués par période</p>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Décaissements Fournisseurs</h1>
+          <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest italic">Historique des paiements effectués par période</p>
         </div>
-        <button 
-          onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 500); }}
-          disabled={isPrinting}
-          className="flex items-center gap-2 rounded-xl border-2 border-orange-500 bg-orange-50 px-6 py-3 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50"
-        >
-          {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />} 
-          IMPRIMER LE JOURNAL
-        </button>
-      </div>
-
-      {/* Zone d'impression des Décaissements Fournisseurs */}
-      <div className="hidden print:block font-sans text-black bg-white p-4">
-        <div className="flex justify-between items-center mb-6 border-b-4 border-black pb-4">
-          <div>
-            <h1 className="text-3xl font-black uppercase tracking-tighter italic">{entreprise?.nomEntreprise || 'GESTICOM PRO'}</h1>
-            <p className="text-sm font-bold uppercase">{entreprise?.localisation || 'Localisation'}</p>
-            <p className="text-xs font-medium text-gray-700">{entreprise?.contact || 'Contact'}</p>
-          </div>
-          <div className="text-right">
-            <h2 className="text-xl font-black text-gray-800 uppercase italic">Journal des Décaissements</h2>
-            <p className="text-sm font-bold">{new Date().toLocaleDateString('fr-FR')}</p>
-            <p className="text-[10px] uppercase text-gray-500 font-bold italic">
-              Période du {new Date(startDate).toLocaleDateString('fr-FR')} au {new Date(endDate).toLocaleDateString('fr-FR')}
-            </p>
-          </div>
-        </div>
-
-        <table className="w-full text-xs border-collapse border-2 border-black">
-          <thead>
-            <tr className="bg-gray-200 uppercase font-black">
-              <th className="border-2 border-black px-2 py-2 text-left">Date</th>
-              <th className="border-2 border-black px-2 py-2 text-left">Fournisseur</th>
-              <th className="border-2 border-black px-2 py-2 text-left">Mode</th>
-              <th className="border-2 border-black px-2 py-2 text-left">Réf. Achat</th>
-              <th className="border-2 border-black px-2 py-2 text-right">Montant</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((p, idx) => (
-              <tr key={idx} className="border-b border-gray-300">
-                <td className="border-2 border-black px-2 py-1 text-[10px]">
-                  {new Date(p.date).toLocaleString('fr-FR')}
-                </td>
-                <td className="border-2 border-black px-2 py-1 font-bold uppercase">{p.fournisseurNom}</td>
-                <td className="border-2 border-black px-2 py-1">{p.modePaiement}</td>
-                <td className="border-2 border-black px-2 py-1 font-mono">{p.achatNumero}</td>
-                <td className="border-2 border-black px-2 py-1 text-right font-black">
-                  {p.montant.toLocaleString('fr-FR')} F
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot className="font-bold">
-            <tr className="bg-gray-900 text-white font-black uppercase italic">
-              <td colSpan={4} className="border-2 border-black px-3 py-4 text-right text-sm tracking-widest">TOTAL DÉCAISSÉ (PÉRIODE)</td>
-              <td className="border-2 border-black px-3 py-4 text-right text-2xl underline decoration-double tracking-tighter">
-                {total.toLocaleString('fr-FR')} F
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-        
-        <div className="mt-12 flex justify-between items-end">
-           <p className="text-[10px] italic text-gray-500 uppercase font-black">Document de contrôle financier - Gesticom Pro</p>
-           <div className="text-center w-64 border-t-2 border-black pt-2">
-              <p className="text-xs font-black uppercase">Visa Direction Comptable</p>
-              <div className="h-20"></div>
-           </div>
+        <div className="flex items-center gap-2 no-print">
+          <button
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (startDate) params.set('dateDebut', startDate)
+              if (endDate) params.set('dateFin', endDate)
+              window.location.href = `/api/fournisseurs/paiements/export-excel?${params.toString()}`
+            }}
+            disabled={loading || filteredData.length === 0}
+            className="flex items-center gap-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 px-6 py-3 text-sm font-black text-emerald-800 hover:bg-emerald-100 shadow-lg transition-all active:scale-95 disabled:opacity-50 uppercase tracking-widest"
+          >
+            <Download className="h-5 w-5" />
+            Excel
+          </button>
+          <button 
+            onClick={handleOpenPreview}
+            disabled={isPrintingData || filteredData.length === 0}
+            className="flex items-center gap-2 rounded-xl border-2 border-orange-500 bg-orange-600 px-6 py-3 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 disabled:opacity-50 uppercase tracking-widest"
+          >
+            {isPrintingData ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />} 
+            Aperçu Journal
+          </button>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 no-print">
         <form onSubmit={handleFilter} className="flex flex-wrap gap-2 items-end bg-white p-3 rounded-lg border border-gray-200 shadow-sm w-full md:w-auto">
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">Du</label>
@@ -201,7 +171,7 @@ export default function PaiementsFournisseursPage() {
       </div>
 
       {/* Résumé par mode de paiement */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 no-print">
         <div className="rounded-lg bg-purple-100 px-4 py-3 border border-purple-200 md:col-span-2 shadow-sm">
           <p className="text-sm text-purple-800 font-bold uppercase">Total Décaissé (Période)</p>
           <p className="text-2xl font-black text-purple-900">{total.toLocaleString('fr-FR')} F</p>
@@ -214,7 +184,7 @@ export default function PaiementsFournisseursPage() {
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm no-print">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
@@ -244,7 +214,7 @@ export default function PaiementsFournisseursPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
-                {paginatedData.map((p) => (
+                {paginatedData.map((p: PaiementFournisseur) => (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
                       {new Date(p.date).toLocaleDateString('fr-FR', {
@@ -288,17 +258,139 @@ export default function PaiementsFournisseursPage() {
           />
         )}
       </div>
-      {/* Styles Print */}
-      <style jsx global>{`
-        @media print {
-          nav, aside, button, .no-print { display: none !important; }
-          .print-document, body { background: white !important; padding: 10px !important; margin: 0 !important; }
-          .rounded-xl { border: none !important; box-shadow: none !important; }
-          table { width: 100% !important; border-collapse: collapse !important; }
-          th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
-          td, th { border: 1px solid #e5e7eb !important; padding: 8px !important; font-size: 10px !important; }
-        }
-      `}</style>
+
+      {/* MODALE D'APERÇU IMPRESSION PAIEMENTS */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu du Journal des Paiements</h2>
+                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic">Période du {new Date(startDate).toLocaleDateString()} au {new Date(endDate).toLocaleDateString()}</p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
+                 {filteredData.length} OPÉRATIONS
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
+               {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: PaiementFournisseur[], index: number, allChunks: PaiementFournisseur[][]) => (
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
+                       <ListPrintWrapper
+                        title="Journal des Paiements Fournisseurs"
+                        subtitle={`Transactions du ${new Date(startDate).toLocaleDateString()} au ${new Date(endDate).toLocaleDateString()}`}
+                        pageNumber={index + 1}
+                        totalPages={allChunks.length}
+                        hideHeader={index > 0} // Header seulement sur la page 1
+                        hideVisa={index < allChunks.length - 1} // Visa seulement sur la dernière page
+                      >
+                         <table className="w-full text-[14px] border-collapse border-2 border-black">
+                          <thead>
+                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-2 border-black">
+                              <th className="border-2 border-black px-3 py-3 text-left">Date / Réf.</th>
+                              <th className="border-2 border-black px-3 py-3 text-left">Fournisseur</th>
+                              <th className="border-2 border-black px-3 py-3 text-center">Mode</th>
+                              <th className="border-2 border-black px-3 py-3 text-right">Montant</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chunk.map((p: PaiementFournisseur, idx: number) => (
+                              <tr key={idx} className="border border-black">
+                                <td className="border border-black px-3 py-2">
+                                   <div className="font-bold">{new Date(p.date).toLocaleDateString('fr-FR')}</div>
+                                   <div className="text-[10px] font-mono text-gray-500">{p.achatNumero}</div>
+                                </td>
+                                <td className="border border-black px-3 py-2 font-black uppercase tracking-tight">
+                                  {p.fournisseurNom}
+                                </td>
+                                <td className="border border-black px-3 py-2 text-center text-[12px] uppercase font-bold italic">
+                                  {p.modePaiement}
+                                </td>
+                                <td className="border border-black px-3 py-2 text-right font-black text-[15px]">
+                                  {p.montant.toLocaleString()} F
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {index === allChunks.length - 1 && (
+                            <tfoot>
+                              <tr className="bg-gray-200 font-black text-[16px] border-2 border-black uppercase italic">
+                                <td colSpan={3} className="border border-black px-3 py-5 text-right tracking-[0.2em]">TOTAL GÉNÉRAL DÉCAISSÉ</td>
+                                <td className="border border-black px-3 py-5 text-right bg-white underline decoration-double shadow-inner">{total.toLocaleString()} F</td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </ListPrintWrapper>
+                    </div>
+                  ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rendu Système (Impression Native) */}
+      <div className="hidden print:block absolute inset-0 bg-white">
+          {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: PaiementFournisseur[], index: number, allChunks: PaiementFournisseur[][]) => (
+                  <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                    <ListPrintWrapper
+                      title="Journal des Paiements Fournisseurs"
+                      subtitle={`Synthèse du ${new Date(startDate).toLocaleDateString()} au ${new Date(endDate).toLocaleDateString()}`}
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      hideVisa={index < allChunks.length - 1}
+                    >
+                       <table className="w-full text-[14px] border-collapse border-2 border-black">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900">
+                            <th className="border-2 border-black px-3 py-3 text-left">Date</th>
+                            <th className="border-2 border-black px-3 py-3 text-left">Fournisseur</th>
+                            <th className="border-2 border-black px-3 py-3 text-center">Mode</th>
+                            <th className="border-2 border-black px-3 py-3 text-right">Montant</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((p: PaiementFournisseur, idx: number) => (
+                            <tr key={idx} className="border border-black">
+                              <td className="border border-black px-3 py-2 font-bold">{new Date(p.date).toLocaleDateString('fr-FR')}</td>
+                              <td className="border border-black px-3 py-2 font-black uppercase text-[12px]">{p.fournisseurNom}</td>
+                              <td className="border border-black px-3 py-2 text-center italic">{p.modePaiement}</td>
+                              <td className="border border-black px-3 py-2 text-right font-black">{p.montant.toLocaleString()} F</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
+                              <td colSpan={3} className="border-2 border-black px-3 py-4 text-right">TOTAL GÉNÉRAL</td>
+                              <td className="border-2 border-black px-3 py-4 text-right bg-white">{total.toLocaleString()} F</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ))}
+      </div>
     </div>
   )
 }

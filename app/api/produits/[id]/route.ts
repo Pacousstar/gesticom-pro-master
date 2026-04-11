@@ -28,6 +28,7 @@ export async function PATCH(
     if (body?.prixAchat !== undefined) {
       const v = body.prixAchat
       data.prixAchat = v === null || v === '' ? null : Math.max(0, Number(v))
+      data.pamp = data.prixAchat // Force PAMP update for stock valuation
     }
     if (body?.prixVente !== undefined) {
       const v = body.prixVente

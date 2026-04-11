@@ -148,22 +148,20 @@ export default function RapportsPage() {
   const [produitsParClient, setProduitsParClient] = useState<RapportProduitClient[]>([])
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null)
 
+  // Stock & Logistique State
+  const [valeurStock, setValeurStock] = useState<{ totalValeur: number; data: any[] } | null>(null)
+  const [mouvementsDetailles, setMouvementsDetailles] = useState<any[]>([])
+  const [mouvementsTotals, setMouvementsTotals] = useState({ entree: 0, sortie: 0 })
+  const [mouvementsPagination, setMouvementsPagination] = useState<any>(null)
+  const [mouvementsPage, setMouvementsPage] = useState(1)
+
   // New Data State Phase 2
-  const [mouvementsDetailles, setMouvementsDetailles] = useState<NouveauMouvement[]>([])
-  const [soldesClients, setSoldesClients] = useState<SoldeTiers[]>([])
-  const [soldesFournisseurs, setSoldesFournisseurs] = useState<SoldeTiers[]>([])
-  const [paiementsByMode, setPaiementsByMode] = useState<PaiementDetail[]>([])
-  const [mouvementsFinances, setMouvementsFinances] = useState<any[]>([])
-  const [valeurStock, setValeurStock] = useState<{ data: ValeurStock[], totalValeur: number } | null>(null)
+  const [enterprise, setEnterprise] = useState<any>(null)
 
   // Pagination Tiers States
   const [pageClients, setPageClients] = useState(1)
   const [pageFournisseurs, setPageFournisseurs] = useState(1)
   const itemsPerPageTiers = 10
-  const [mouvementTotals, setMouvementTotals] = useState<{ entree: number; sortie: number } | null>(null)
-  const [categoriesData, setCategoriesData] = useState<RapportCategorie[]>([])
-  const [movPage, setMovPage] = useState(1)
-  const [paginationMov, setPaginationMov] = useState<{ totalPages: number; total: number; limit: number } | null>(null)
 
   // Filter Data
   const [magasins, setMagasins] = useState<Magasin[]>([])
@@ -179,6 +177,10 @@ export default function RapportsPage() {
   const [paginationFactures, setPaginationFactures] = useState<{ totalPages: number; total: number } | null>(null)
   const [selectedCatFilter, setSelectedCatFilter] = useState('')
   const [selectedProdFilter, setSelectedProdFilter] = useState('')
+
+  // Pagination Valorisation
+  const [pageValorisation, setPageValorisation] = useState(1)
+  const ITEMS_PER_PAGE_VALORISATION = 20
 
   useEffect(() => {
     const loadInit = async () => {
@@ -263,58 +265,23 @@ export default function RapportsPage() {
         }
       } catch (e) { console.error("Erreur factures:", e) }
 
-      // --- NEW RAPPORTS PHASE 2 ---
-      // 216. Mouvements avec pagination
+      // 5. Valorisation Stock
       try {
-        const resMov = await fetch(`/api/rapports/stocks/mouvements?${params.toString()}&page=${movPage}`)
-        if (resMov.ok) {
-          const dataMov = await resMov.json()
-          setMouvementsDetailles(dataMov.mouvements || [])
-          setMouvementTotals(dataMov.totals || null)
-          setPaginationMov(dataMov.pagination || null)
+        const resV = await fetch(`/api/rapports/stocks/valeur?dateDebut=${dateDebut}&dateFin=${dateFin}&magasinId=${filtreMagasin}`)
+        if (resV.ok) setValeurStock(await resV.json())
+      } catch (e) { console.error("Erreur valorisation stock:", e) }
+
+      // 6. Mouvements Stock
+      try {
+        const resM = await fetch(`/api/rapports/stocks/mouvements?dateDebut=${dateDebut}&dateFin=${dateFin}&magasinId=${filtreMagasin}&page=${mouvementsPage}`)
+        if (resM.ok) {
+          const dataM = await resM.json()
+          setMouvementsDetailles(dataM.mouvements || [])
+          setMouvementsTotals(dataM.totals || { entree: 0, sortie: 0 })
+          setMouvementsPagination(dataM.pagination || null)
         }
       } catch (e) { console.error("Erreur mouvements stock:", e) }
 
-      try {
-        const resSC = await fetch(`/api/rapports/finances/soldes?type=CLIENT`)
-        if (resSC.ok) {
-          const dataSC = await resSC.json()
-          setSoldesClients(Array.isArray(dataSC) ? dataSC : [])
-        }
-      } catch (e) { console.error("Erreur soldes clients:", e) }
-
-      try {
-        const resSF = await fetch(`/api/rapports/finances/soldes?type=FOURNISSEUR`)
-        if (resSF.ok) {
-          const dataSF = await resSF.json()
-          setSoldesFournisseurs(Array.isArray(dataSF) ? dataSF : [])
-        }
-      } catch (e) { console.error("Erreur soldes fournisseurs:", e) }
-
-      try {
-        const resPM = await fetch(`/api/rapports/finances/paiements?type=CLIENT&dateDebut=${dateDebut}&dateFin=${dateFin}`)
-        if (resPM.ok) {
-          const dataPM = await resPM.json()
-          setPaiementsByMode(dataPM.summary || [])
-          setMouvementsFinances(dataPM.transactions || [])
-        }
-      } catch (e) { console.error("Erreur paiements par mode:", e) }
-
-      try {
-        const resVal = await fetch(`/api/rapports/stocks/valeur?dateFin=${dateFin}&magasinId=${filtreMagasin}`)
-        if (resVal.ok) {
-          const dataVal = await resVal.json()
-          setValeurStock(dataVal && typeof dataVal === 'object' && !dataVal.error ? dataVal : { data: [], totalValeur: 0 })
-        }
-      } catch (e) { console.error("Erreur valeur stock:", e) }
-
-      try {
-        const resCat = await fetch(`/api/rapports/categories`)
-        if (resCat.ok) {
-          const dataCat = await resCat.json()
-          setCategoriesData(dataCat.data || [])
-        }
-      } catch (e) { console.error("Erreur catégories:", e) }
 
     } catch (e) {
       console.error("Erreur globale rapports:", e)
@@ -337,7 +304,7 @@ export default function RapportsPage() {
 
   useEffect(() => {
     fetchAllData()
-  }, [dateDebut, dateFin, filtreMagasin, facturesPage, movPage])
+  }, [dateDebut, dateFin, filtreMagasin, facturesPage, mouvementsPage])
 
   const preset = (days: number) => {
     const end = new Date()
@@ -500,11 +467,10 @@ export default function RapportsPage() {
       )}
 
       {/* Navigation Onglets Premium Bright Pro */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 py-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-4">
         <TabButton id="logistique" label="Stocks & Logistique" icon={Package} color="orange" />
-        <TabButton id="categories" label="Arborescence Articles" icon={PieChart} color="indigo" />
-        <TabButton id="ventes" label="Intelligence Tiers" icon={Users} color="emerald" />
-        <TabButton id="finances" label="Finance & Encaissements" icon={DollarSign} color="amber" />
+        <TabButton id="ventes" label="Intelligence Clients" icon={Users} color="emerald" />
+        <TabButton id="finances" label="Recouvrement & Finances" icon={DollarSign} color="amber" />
       </div>
 
       {/* Contenu de l'onglet */}
@@ -553,15 +519,12 @@ export default function RapportsPage() {
                             <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-none">Flux Période</p>
                             <ArrowRightLeft className="h-4 w-4 text-blue-500" />
                         </div>
-                        <div className="text-4xl font-black text-slate-900 tracking-tighter">{Array.isArray(mouvementsDetailles) ? mouvementsDetailles.length : 0}</div>
+                        <div className="text-4xl font-black text-slate-900 tracking-tighter">{mouvementsTotals.entree + mouvementsTotals.sortie}</div>
                     </div>
                     <div className="mt-6 flex items-center gap-2">
                         <div className="flex -space-x-2">
-                            {[1,2,3].map(i => (
-                                <div key={i} className="h-6 w-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[8px] font-black text-slate-400">
-                                    {String.fromCharCode(64 + i)}
-                                </div>
-                            ))}
+                            <div className="h-6 w-6 rounded-full border-2 border-white bg-emerald-100 flex items-center justify-center text-[8px] font-black text-emerald-600">IN</div>
+                            <div className="h-6 w-6 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[8px] font-black text-blue-600">OUT</div>
                         </div>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter ml-2 italic">Transactions actives</span>
                     </div>
@@ -573,376 +536,138 @@ export default function RapportsPage() {
               <LogistiqueTop top={topProduits} searchTerm={searchTerm} />
             </div>
 
-            {/* Journal des Mouvements Détaillés Bright Pro */}
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
-                <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
-                    <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase italic">
-                        <ArrowRightLeft className="h-5 w-5 text-orange-500" />
-                        Registre des Flux de Stock
-                    </h3>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border border-gray-100 px-4 py-1.5 rounded-full bg-white shadow-sm">
-                            {paginationMov?.total || (Array.isArray(mouvementsDetailles) ? mouvementsDetailles.length : 0)} opérations tracées
-                        </span>
+            {/* Restauration : Tableaux détaillés de Valorisation et Mouvements */}
+            <div className="space-y-8">
+                {/* 1. Valorisation détaillée */}
+                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-xl overflow-hidden">
+                    <div className="px-8 py-8 border-b border-gray-50 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
+                        <h3 className="text-lg font-black text-white uppercase tracking-tighter italic flex items-center gap-3">
+                            <TrendingUp className="h-6 w-6 text-orange-500" />
+                            Valorisation Détaillée par Référence
+                        </h3>
+                        <div className="text-right">
+                            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic">Valeur Totale Calculée</p>
+                            <p className="text-2xl font-black text-orange-500 tabular-nums">{(valeurStock?.totalValeur || 0).toLocaleString()} <span className="text-xs">F</span></p>
+                        </div>
                     </div>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-left">
-                        <thead>
-                            <tr className="bg-white border-b border-gray-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] italic">
-                                <th className="px-8 py-6">Horodatage</th>
-                                <th className="px-8 py-6">Nature du Flux</th>
-                                <th className="px-8 py-6">Désignation & Code</th>
-                                <th className="px-8 py-6">Emplacement</th>
-                                <th className="px-8 py-6 text-right">Volume</th>
-                                <th className="px-8 py-6">Opérateur</th>
-                                <th className="px-8 py-6">Notes / Réf</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {Array.isArray(mouvementsDetailles) && mouvementsDetailles.filter(m => (m.produit?.designation || '').toLowerCase().includes(searchTerm.toLowerCase())).map(m => (
-                                <tr key={m.id} className="hover:bg-orange-50/30 transition-all duration-300 group">
-                                    <td className="px-8 py-7">
-                                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-                                            {m.date ? new Date(m.date).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '---'}
-                                        </div>
-                                        <div className="text-[10px] text-slate-300 font-mono italic">
-                                            {m.date ? new Date(m.date).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '---'}
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-7">
-                                        <span className={`px-4 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest border shadow-sm flex items-center gap-2 w-fit ${
-                                            m.type === 'ENTREE' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'
-                                        }`}>
-                                            <span className={`h-1.5 w-1.5 rounded-full ${m.type === 'ENTREE' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                            {m.type === 'ENTREE' ? 'Entrée Stock' : 'Sortie Stock'}
-                                        </span>
-                                    </td>
-                                    <td className="px-8 py-7">
-                                        <div className="text-sm font-black text-slate-900 uppercase tracking-tighter truncate max-w-[200px] group-hover:text-orange-600 transition-colors uppercase italic">{m.produit?.designation || 'Produit inconnu'}</div>
-                                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest opacity-60">REF: {m.produit?.code || '---'}</div>
-                                    </td>
-                                    <td className="px-8 py-7">
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-2 w-2 rounded-full bg-blue-500" />
-                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-tight">{m.magasin?.nom || 'Magasin inconnu'}</span>
-                                        </div>
-                                    </td>
-                                    <td className={`px-8 py-7 text-right font-black tabular-nums text-lg tracking-tighter ${m.type === 'ENTREE' ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                        {m.type === 'ENTREE' ? '+' : '-'}{m.quantite}
-                                    </td>
-                                      <td className="px-8 py-7">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 border border-gray-100 shadow-sm uppercase italic">
-                                                {m.utilisateur?.nom?.substring(0, 2) || '??'}
-                                            </div>
-                                            <span className="text-[10px] font-black text-slate-500 uppercase italic">{m.utilisateur?.nom || 'Inconnu'}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-7">
-                                        <div className="text-[10px] text-slate-400 italic max-w-[120px] truncate group-hover:whitespace-normal group-hover:max-w-[250px] transition-all bg-gray-50/50 p-2 rounded-lg border border-gray-100">
-                                            {m.observation || 'Aucune observation'}
-                                        </div>
-                                    </td>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-gray-50/50 border-b border-gray-100 italic">
+                                    <th className="px-8 py-5">Article</th>
+                                    <th className="px-8 py-5 text-right">Stock</th>
+                                    <th className="px-8 py-5 text-right">P.U (Moyen)</th>
+                                    <th className="px-8 py-5 text-right">Valeur Totale</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                        {mouvementTotals && (
-                            <tfoot className="bg-slate-800 text-white font-black border-t-2 border-orange-500 shadow-2xl">
-                                <tr>
-                                    <td colSpan={4} className="px-8 py-10 uppercase text-[10px] tracking-[0.4em] italic opacity-40">Récapitulatif des Flux Logistiques</td>
-                                    <td className="px-8 py-10 text-right tabular-nums">
-                                        <div className="text-emerald-400 text-2xl tracking-tighter italic">+{(mouvementTotals.entree || 0).toLocaleString()}</div>
-                                        <div className="text-rose-400 text-2xl tracking-tighter italic">-{(mouvementTotals.sortie || 0).toLocaleString()}</div>
-                                    </td>
-                                    <td colSpan={2} className="px-8 py-10 text-right">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 italic opacity-60">Impact Net Unités</div>
-                                        <div className="text-4xl font-black tracking-tighter italic text-orange-500 underline decoration-2 underline-offset-8">
-                                            {((mouvementTotals?.entree || 0) - (mouvementTotals?.sortie || 0)).toLocaleString()}
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        )}
-                    </table>
-                </div>
-                {paginationMov && (
-                    <div className="p-8 border-t border-gray-50 bg-gray-50/30 flex justify-center">
-                        <Pagination 
-                            currentPage={movPage}
-                            totalPages={paginationMov.totalPages}
-                            totalItems={paginationMov.total}
-                            itemsPerPage={paginationMov.limit}
-                            onPageChange={(p) => setMovPage(p)}
-                        />
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {valeurStock?.data?.filter((p: any) => 
+                                    p.designation.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    p.code?.toLowerCase().includes(searchTerm.toLowerCase())
+                                ).slice((pageValorisation - 1) * ITEMS_PER_PAGE_VALORISATION, pageValorisation * ITEMS_PER_PAGE_VALORISATION).map((p: any, i: number) => (
+                                    <tr key={i} className="hover:bg-gray-50 transition-all duration-300 group">
+                                        <td className="px-8 py-5">
+                                            <p className="text-sm font-black text-slate-900 uppercase tracking-tight italic group-hover:text-orange-600 transition-colors">{p.designation}</p>
+                                            <p className="text-[9px] font-mono text-slate-400">REF: {p.code}</p>
+                                        </td>
+                                        <td className="px-8 py-5 text-right font-bold text-slate-900 tabular-nums">{p.quantite.toLocaleString()}</td>
+                                        <td className="px-8 py-5 text-right text-slate-400 tabular-nums">{p.prixUnitaire.toLocaleString()} F</td>
+                                        <td className="px-8 py-5 text-right font-black text-slate-900 tabular-nums italic">{p.valeur.toLocaleString()} <span className="text-[10px] text-slate-300">F</span></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
-                )}
-            </div>
-
-            {/* Valorisation du Stock Détaillée */}
-            {/* Valorisation du Stock Détaillée (Paginée) */}
-            <LogistiqueValorisationTable 
-               valeurStock={valeurStock} 
-               searchTerm={searchTerm} 
-            />
-          </div>
-        )}
-
-        {activeTab === 'categories' && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Filtres spécifiques Catégories/Produits Bright Pro */}
-            <div className="flex flex-wrap gap-4 bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-xl relative overflow-hidden">
-                <div className="flex flex-col gap-1 flex-1 min-w-[250px] relative z-10">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Filtrer par Catégorie</label>
-                    <select 
-                        value={selectedCatFilter} 
-                        onChange={e => { setSelectedCatFilter(e.target.value); setSelectedProdFilter(''); }}
-                        className="rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm font-black text-slate-900 shadow-inner focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 outline-none transition-all"
-                    >
-                        <option value="">Toutes les catégories</option>
-                        {Array.isArray(categoriesData) && Array.from(new Set(categoriesData.map(c => c.nom))).sort().map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                    </select>
+                    {/* Pagination Valorisation */}
+                    {valeurStock?.data && valeurStock.data.length > ITEMS_PER_PAGE_VALORISATION && (
+                        <div className="px-8 py-6 bg-gray-50/50 border-t border-gray-100">
+                             <Pagination 
+                                currentPage={pageValorisation}
+                                totalPages={Math.ceil(valeurStock.data.filter((p: any) => 
+                                    p.designation.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    p.code?.toLowerCase().includes(searchTerm.toLowerCase())
+                                ).length / ITEMS_PER_PAGE_VALORISATION)}
+                                onPageChange={setPageValorisation}
+                             />
+                        </div>
+                    )}
                 </div>
-                <div className="flex flex-col gap-1 flex-1 min-w-[250px] relative z-10">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Filtrer par Produit</label>
-                    <select 
-                        value={selectedProdFilter} 
-                        onChange={e => setSelectedProdFilter(e.target.value)}
-                        className="rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm font-black text-slate-900 shadow-inner focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 outline-none transition-all"
-                    >
-                        <option value="">Tous les produits</option>
-                        {Array.isArray(produits) && produits
-                            .filter(p => !selectedCatFilter || p.categorie === selectedCatFilter)
-                            .map(p => (
-                                <option key={p.id} value={p.designation}>{p.designation}</option>
-                            ))
-                        }
-                    </select>
-                </div>
-                <button 
-                  onClick={() => { setSelectedCatFilter(''); setSelectedProdFilter(''); }}
-                  className="mt-6 px-8 py-2.5 rounded-xl bg-orange-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg active:scale-95 relative z-10 border border-orange-500"
-                >
-                  Réinitialiser
-                </button>
-                <div className="absolute right-0 top-0 h-full w-24 bg-gradient-to-l from-orange-50/50 to-transparent pointer-events-none" />
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-               <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-800 shadow-xl text-slate-900">
-                  <p className="text-orange-600 text-[9px] font-black uppercase tracking-widest opacity-80">Rayonnages</p>
-                  <div className="mt-2 text-4xl font-black tracking-tighter italic text-slate-900">
-                    {selectedCatFilter ? '01' : (categoriesData.length < 10 ? `0${categoriesData.length}` : categoriesData.length)}
-                  </div>
-               </div>
-               {/* 2. Nombre Articles - White */}
-               <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl text-slate-900">
-                  <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest opacity-80">Articles Uniques</p>
-                  <div className="mt-2 text-4xl font-black tracking-tighter">
-                    {(Array.isArray(categoriesData) ? categoriesData : [])
-                        .filter(c => !selectedCatFilter || c.nom === selectedCatFilter)
-                        .reduce((acc, c) => acc + (selectedProdFilter ? 1 : (c?.nbProduits || 0)), 0)}
-                  </div>
-               </div>
-               {/* 3. Quantité Totale - White */}
-               <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl text-slate-900">
-                  <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest opacity-80">Volume Stocké</p>
-                  <div className="mt-2 text-4xl font-black tracking-tighter text-blue-600">
-                    {(Array.isArray(categoriesData) ? categoriesData : [])
-                        .filter(c => !selectedCatFilter || c.nom === selectedCatFilter)
-                        .reduce((acc, c) => acc + (c?.quantiteTotale || 0), 0).toLocaleString()}
-                  </div>
-               </div>
-               {/* 4. Valeur Achat - White */}
-               <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl text-slate-900 border-l-orange-500 border-l-4">
-                  <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest opacity-80">Investissement</p>
-                  <div className="mt-2 text-xl font-black tracking-tight truncate">
-                    {(Array.isArray(categoriesData) ? categoriesData : [])
-                        .filter(c => !selectedCatFilter || c.nom === selectedCatFilter)
-                        .reduce((acc, c) => acc + (c?.valeurAchatStock || 0), 0).toLocaleString()} <span className="text-[10px] opacity-40">F</span>
-                  </div>
-               </div>
-               {/* 5. Valeur Vente - Orange */}
-               <div className="bg-orange-600 p-6 rounded-[2rem] border border-orange-500 shadow-xl text-white">
-                  <p className="text-orange-100 text-[9px] font-black uppercase tracking-widest opacity-80">Vente Potentielle</p>
-                  <div className="mt-2 text-xl font-black tracking-tight truncate italic">
-                    {(Array.isArray(categoriesData) ? categoriesData : [])
-                        .filter(c => !selectedCatFilter || c.nom === selectedCatFilter)
-                        .reduce((acc, c) => acc + (c?.valeurVenteStock || 0), 0).toLocaleString()} <span className="text-[10px] opacity-60">F</span>
-                  </div>
-               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {categoriesData
-                    .filter(c => (!selectedCatFilter || c.nom === selectedCatFilter))
-                    .filter(c => c.nom.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map((c, i) => {
-                        const totalPV = categoriesData.reduce((acc, cat) => acc + cat.valeurVenteStock, 0) || 1
-                        const ratio = (c.valeurVenteStock / totalPV) * 100
-
-                        return (
-                            <div key={i} className="group relative bg-white rounded-[2.5rem] border border-gray-100 p-7 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 overflow-hidden">
-                                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                                    <PieChart className="h-32 w-32 text-orange-600" />
-                                </div>
-
-                                <div className="flex items-start justify-between mb-8 relative z-10">
-                                    <div>
-                                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none italic group-hover:text-orange-600 transition-colors">{c.nom}</h3>
-                                        <p className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-widest flex items-center gap-2">
-                                            <span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse shadow-sm shadow-orange-500/50" />
-                                            Segmentation Stock
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-sm font-black text-blue-600 tracking-widest">{ratio.toFixed(1)}%</div>
-                                        <div className="text-[8px] font-black text-slate-300 uppercase tracking-tighter">Poids Global</div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4 relative z-10">
-                                    {/* Métriques Bright Pro */}
-                                    <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 shadow-inner group/stat">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Package className="h-3 w-3 text-slate-400" />
-                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Articles</span>
-                                        </div>
-                                        <div className="text-2xl font-black text-slate-900 tracking-tighter italic">{c.nbProduits}</div>
-                                    </div>
-
-                                    <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 shadow-inner">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <TrendingUp className="h-3 w-3 text-slate-400" />
-                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unités</span>
-                                        </div>
-                                        <div className="text-2xl font-black text-slate-900 tracking-tighter italic">{c.quantiteTotale.toLocaleString()}</div>
-                                    </div>
-
-                                    <div className="bg-orange-50/30 p-4 rounded-2xl border border-orange-100/50 shadow-inner col-span-2 flex justify-between items-center mt-2">
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <DollarSign className="h-3 w-3 text-orange-500" />
-                                                <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Valeur Inventaire (PV)</span>
-                                            </div>
-                                            <div className="text-xl font-black text-slate-900 tracking-tight italic">{c.valeurVenteStock.toLocaleString()} <span className="text-[10px] opacity-40">F</span></div>
-                                        </div>
-                                        <ArrowRightLeft className="h-5 w-5 text-orange-200 group-hover:rotate-180 transition-transform duration-700" />
-                                    </div>
-                                </div>
-
-                                <div className="mt-8 pt-6 border-t border-dashed border-gray-100 relative z-10">
-                                    <button 
-                                        onClick={() => setSelectedCatFilter(c.nom)}
-                                        className="w-full py-3.5 rounded-2xl bg-gray-50 text-slate-500 text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all shadow-sm active:scale-95 border border-gray-100 italic"
-                                    >
-                                        Consulter l'Inventaire
-                                    </button>
-                                </div>
-                                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-orange-600 to-transparent group-hover:h-2 transition-all" />
+                {/* 2. Journal des mouvements détaillé */}
+                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-xl overflow-hidden">
+                    <div className="px-8 py-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
+                        <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter italic flex items-center gap-3">
+                            <ArrowRightLeft className="h-6 w-6 text-blue-600" />
+                            Historique des Mouvements de Stock
+                        </h3>
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-xl border border-emerald-100 italic">
+                                <span className="text-[10px] font-black text-emerald-600 uppercase">Entrées:</span>
+                                <span className="font-black text-emerald-700">{mouvementsTotals.entree}</span>
                             </div>
-                        )
-                    })}
+                            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 italic">
+                                <span className="text-[10px] font-black text-blue-600 uppercase">Sorties:</span>
+                                <span className="font-black text-blue-700">{mouvementsTotals.sortie}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-gray-50/50 border-b border-gray-100 italic">
+                                    <th className="px-8 py-5">Date & Heure</th>
+                                    <th className="px-8 py-5">Référence Article</th>
+                                    <th className="px-8 py-5">Magasin</th>
+                                    <th className="px-8 py-5 text-center">Type</th>
+                                    <th className="px-8 py-5 text-right">Quantité</th>
+                                    <th className="px-8 py-5">Par</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {mouvementsDetailles.map((m: any, i: number) => (
+                                    <tr key={i} className="hover:bg-gray-50 transition-all duration-300">
+                                        <td className="px-8 py-5 text-xs text-slate-400 italic">
+                                            {new Date(m.date).toLocaleDateString('fr-FR')} à {new Date(m.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                        </td>
+                                        <td className="px-8 py-5">
+                                            <p className="text-sm font-black text-slate-900 uppercase tracking-tighter italic">{m.produit.designation}</p>
+                                        </td>
+                                        <td className="px-8 py-5 text-xs text-slate-600 font-bold uppercase">{m.magasin.nom}</td>
+                                        <td className="px-8 py-5">
+                                            <div className="flex justify-center">
+                                                <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest italic ${m.type === 'ENTREE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
+                                                    {m.type}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-5 text-right font-black text-slate-900 tabular-nums italic text-base">
+                                            {m.type === 'ENTREE' ? '+' : '-'}{m.quantite}
+                                        </td>
+                                        <td className="px-8 py-5 text-xs text-slate-400 font-bold uppercase tracking-tight">{m.utilisateur?.nom}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {mouvementsPagination && mouvementsPagination.totalPages > 1 && (
+                        <div className="px-8 py-6 bg-gray-50/50 border-t border-gray-100">
+                            <Pagination 
+                                currentPage={mouvementsPage}
+                                totalPages={mouvementsPagination.totalPages}
+                                onPageChange={setMouvementsPage}
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
+
+
           </div>
         )}
+
 
         {activeTab === 'ventes' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-             {/* Grille de Soldes Tiers Bright Pro */}
-             <div className="grid lg:grid-cols-2 gap-8">
-                 <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-                        <Users className="h-40 w-40 text-rose-500" />
-                    </div>
-                    <h3 className="text-xl font-black text-slate-900 mb-8 flex items-center justify-between relative z-10">
-                        <span className="flex items-center gap-3 uppercase tracking-tighter italic"><Users className="h-5 w-5 text-rose-500" /> Créances Clients</span>
-                        <span className="text-[9px] font-black bg-rose-50 text-rose-600 px-4 py-1.5 rounded-full border border-rose-100 shadow-sm uppercase">{(Array.isArray(soldesClients) ? soldesClients : []).length} comptes</span>
-                    </h3>
-                    <div className="space-y-4 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar min-h-[500px] relative z-10">
-                        {(Array.isArray(soldesClients) ? soldesClients : [])
-                            .filter(s => (s.nom || '').toLowerCase().includes(searchTerm.toLowerCase()))
-                            .slice((pageClients - 1) * itemsPerPageTiers, pageClients * itemsPerPageTiers)
-                            .map(s => (
-                            <div key={s.id} className={`flex items-center justify-between p-5 rounded-2xl border transition-all duration-300 ${s.solde > 0 ? 'border-rose-100 bg-rose-50/30 hover:bg-rose-50 shadow-sm' : 'border-emerald-100 bg-emerald-50/30 hover:bg-emerald-50 shadow-sm'} group/item`}>
-                                <div>
-                                    <div className="text-sm font-black text-slate-900 uppercase tracking-tighter group-hover/item:text-rose-600 transition-colors italic">
-                                        {s.nom}
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 opacity-60">{s.code || 'SANS CODE'}</div>
-                                </div>
-                                <div className="text-right">
-                                    <div className={`text-2xl font-black tabular-nums tracking-tighter ${s.solde > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                        {Math.abs(s.solde || 0).toLocaleString()}
-                                    </div>
-                                    <div className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-                                        {s.solde > 0 ? 'Solde Débiteur' : 'Solde Créditeur'}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {(Array.isArray(soldesClients) ? soldesClients : []).length === 0 && <div className="py-24 text-center text-slate-200 font-black uppercase italic tracking-[0.5em] text-xs">Aucune créance enregistrée</div>}
-                    </div>
-                    {soldesClients.length > itemsPerPageTiers && (
-                        <div className="mt-8 flex justify-center pt-8 border-t border-gray-50 relative z-10">
-                            <Pagination 
-                                currentPage={pageClients} 
-                                totalPages={Math.ceil(soldesClients.length / itemsPerPageTiers)} 
-                                onPageChange={setPageClients} 
-                                totalItems={soldesClients.length}
-                                itemsPerPage={itemsPerPageTiers}
-                            />
-                        </div>
-                    )}
-                 </div>
-
-                 <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-                        <ShoppingBag className="h-40 w-40 text-orange-500" />
-                    </div>
-                    <h3 className="text-xl font-black text-slate-900 mb-8 flex items-center justify-between relative z-10">
-                        <span className="flex items-center gap-3 uppercase tracking-tighter italic"><ShoppingBag className="h-5 w-5 text-orange-500" /> Dettes Fournisseurs</span>
-                        <span className="text-[9px] font-black bg-orange-50 text-orange-600 px-4 py-1.5 rounded-full border border-orange-100 shadow-sm uppercase">{(Array.isArray(soldesFournisseurs) ? soldesFournisseurs : []).length} comptes</span>
-                    </h3>
-                    <div className="space-y-4 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar min-h-[500px] relative z-10">
-                        {(Array.isArray(soldesFournisseurs) ? soldesFournisseurs : [])
-                            .filter(s => (s.nom || '').toLowerCase().includes(searchTerm.toLowerCase()))
-                            .slice((pageFournisseurs - 1) * itemsPerPageTiers, pageFournisseurs * itemsPerPageTiers)
-                            .map(s => (
-                            <div key={s.id} className={`flex items-center justify-between p-5 rounded-2xl border transition-all duration-300 ${s.solde > 0 ? 'border-orange-100 bg-orange-50/30 hover:bg-orange-50 shadow-sm' : 'border-emerald-100 bg-emerald-50/30 hover:bg-emerald-50 shadow-sm'} group/item`}>
-                                <div>
-                                    <div className="text-sm font-black text-slate-900 uppercase tracking-tighter group-hover/item:text-orange-600 transition-colors italic">
-                                        {s.nom}
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 opacity-60">REF: {s.code || 'FOURNISSEUR'}</div>
-                                </div>
-                                <div className="text-right">
-                                    <div className={`text-2xl font-black tabular-nums tracking-tighter ${s.solde > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
-                                        {Math.abs(s.solde || 0).toLocaleString()}
-                                    </div>
-                                    <div className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-                                        {s.solde > 0 ? 'Reste à payer' : 'Crédit ouvert'}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {(Array.isArray(soldesFournisseurs) ? soldesFournisseurs : []).length === 0 && <div className="py-24 text-center text-slate-200 font-black uppercase italic tracking-[0.5em] text-xs">Aucune dette fournisseur</div>}
-                    </div>
-                    {soldesFournisseurs.length > itemsPerPageTiers && (
-                        <div className="mt-8 flex justify-center pt-8 border-t border-gray-50 relative z-10">
-                            <Pagination 
-                                currentPage={pageFournisseurs} 
-                                totalPages={Math.ceil(soldesFournisseurs.length / itemsPerPageTiers)} 
-                                onPageChange={setPageFournisseurs} 
-                                totalItems={soldesFournisseurs.length}
-                                itemsPerPage={itemsPerPageTiers}
-                            />
-                        </div>
-                    )}
-                 </div>
-             </div>
 
             <div className="grid lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1 border border-gray-100 bg-white p-8 rounded-[2.5rem] shadow-xl">
@@ -1036,31 +761,6 @@ export default function RapportsPage() {
 
         {activeTab === 'finances' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Tableau de bord Trésorerie Rapide */}
-            <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl overflow-hidden relative group">
-                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-                    <DollarSign className="h-40 w-40 text-orange-500" />
-                </div>
-                <h3 className="text-xl font-black text-slate-900 mb-8 uppercase tracking-widest border-b border-gray-50 pb-4 italic">
-                    Répartition des Flux par Mode
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    {paiementsByMode.map((p, i) => (
-                        <div key={i} className="group/card relative h-32 rounded-[2rem] border border-gray-100 bg-gray-50/50 p-6 hover:bg-white hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 cursor-pointer overflow-hidden">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-500 opacity-20 group-hover/card:opacity-100 transition-opacity" />
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest absolute top-6">{p.modePaiement}</p>
-                            <div className="mt-8 flex flex-col">
-                                <span className="text-2xl font-black text-slate-900 tabular-nums tracking-tighter italic">
-                                    {p._sum.montantPaye.toLocaleString()}
-                                </span>
-                                <span className="text-[9px] font-black text-orange-600 tracking-[0.2em] italic uppercase">{p._count.id} Opérations</span>
-                            </div>
-                        </div>
-                    ))}
-                    {paiementsByMode.length === 0 && <div className="col-span-4 py-16 text-center text-slate-200 font-black uppercase tracking-[0.4em] text-sm italic">Aucun flux détecté</div>}
-                </div>
-            </div>
-
             <PaiementTable
               title="État de Paiement des Créances Clients (Récapitulatif)"
               data={etatPaiementVentes}
@@ -1074,214 +774,6 @@ export default function RapportsPage() {
               type="achats"
               searchTerm={searchTerm}
             />
-            
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
-                <div className="p-8 border-b border-gray-50 bg-gray-50/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter italic">Grand Journal des Factures Ventes</h3>
-                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Période du {dateDebut} au {dateFin}</p>
-                    </div>
-                    <div className="flex flex-1 max-w-md relative">
-                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                         <input 
-                            type="text" 
-                            placeholder="Filtrer ce journal (N°, Client...)"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
-                         />
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="text-right">
-                            <p className="text-[9px] font-black text-slate-400 uppercase italic">Solde Cumulé Période</p>
-                            <p className="text-2xl font-black text-rose-600 tabular-nums">
-                                {(Array.isArray(facturesVentes) ? facturesVentes : []).reduce((acc, f) => acc + (f.resteAPayer || 0), 0).toLocaleString()} <span className="text-xs">FCFA</span>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                        <thead className="bg-white">
-                            <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-gray-50 italic">
-                                <th className="px-6 py-5">Réf. Facture</th>
-                                <th className="px-6 py-5">Date</th>
-                                <th className="px-6 py-5">Client</th>
-                                <th className="px-6 py-5 text-right">Montant TTC</th>
-                                <th className="px-6 py-5 text-right text-emerald-600">Réglé</th>
-                                <th className="px-6 py-5 text-right text-rose-600">Reste A Recouvrer</th>
-                                <th className="px-6 py-5 text-center">Gestion Risque</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {facturesVentes.filter(f => (f.client || '').toLowerCase().includes(searchTerm.toLowerCase()) || (f.numero || '').toLowerCase().includes(searchTerm.toLowerCase())).map(f => (
-                                <tr key={f.id} className="hover:bg-rose-50/30 transition-all duration-300 group">
-                                    <td className="px-6 py-5 text-sm font-black text-blue-600 font-mono tracking-tighter group-hover:scale-110 origin-left transition-transform italic">{f.numero}</td>
-                                    <td className="px-6 py-5 text-[10px] text-slate-400 font-bold uppercase italic">{new Date(f.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</td>
-                                    <td className="px-6 py-5">
-                                        <div className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase italic">{f.client}</div>
-                                        <div className="text-[9px] text-slate-400 font-mono">{f.clientCode || '---'}</div>
-                                    </td>
-                                    <td className="px-6 py-5 text-sm text-right font-black text-slate-400 tabular-nums italic">{f.montantTotal.toLocaleString()}</td>
-                                    <td className="px-6 py-5 text-sm text-right font-black text-emerald-600 tabular-nums italic">{(f.montantPaye || 0).toLocaleString()}</td>
-                                    <td className="px-6 py-5 text-right">
-                                        <div className="text-lg font-black text-rose-600 tabular-nums italic">{f.resteAPayer.toLocaleString()}</div>
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter italic opacity-60">Solde Ouvert</div>
-                                    </td>
-                                    <td className="px-6 py-5 text-center">
-                                        <div className="flex justify-center">
-                                            <StatutBadge statut={f.statutPaiement} />
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                        <tfoot className="bg-gray-50/30">
-                            <tr className="font-black text-slate-900 text-sm">
-                                <td colSpan={3} className="px-6 py-8 italic tracking-[0.3em] uppercase opacity-40">Bilan Financier du Journal</td>
-                                <td className="px-6 py-8 text-right tabular-nums text-xl italic">
-                                    {(Array.isArray(facturesVentes) ? facturesVentes : []).reduce((acc, f) => acc + (f.montantTotal || 0), 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-8 text-right tabular-nums text-xl italic text-emerald-600">
-                                    {(Array.isArray(facturesVentes) ? facturesVentes : []).reduce((acc, f) => acc + (f.montantPaye || 0), 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-8 text-right text-4xl tabular-nums text-rose-600 tracking-tighter drop-shadow-[0_0_15px_rgba(244,63,94,0.3)] italic">
-                                    {(Array.isArray(facturesVentes) ? facturesVentes : []).reduce((acc, f) => acc + (f.resteAPayer || 0), 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-8 text-center text-[10px] text-slate-400 font-black italic">FCFA TOTAL</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-                {facturesVentes.length > 20 && (
-                    <div className="p-6 border-t border-gray-50 bg-gray-50/30 flex justify-center">
-                        <Pagination 
-                            currentPage={facturesPage} 
-                            totalPages={paginationFactures?.totalPages || 1} 
-                            itemsPerPage={10} 
-                            totalItems={paginationFactures?.total || facturesVentes.length} 
-                            onPageChange={setFacturesPage} 
-                        />
-                    </div>
-                )}
-            </div>
-
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
-                {/* En-tête avec métriques de trésorerie (Point 18) */}
-                <div className="p-8 border-b border-gray-50 bg-gray-50/30">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                        <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase italic">
-                            <DollarSign className="h-5 w-5 text-orange-500" />
-                            Grand Journal de Trésorerie
-                        </h3>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border border-gray-100 px-4 py-1.5 rounded-full bg-white shadow-sm">
-                                {(mouvementsFinances || []).length} écritures totales
-                            </span>
-                            <span className="text-[9px] font-black text-emerald-600 uppercase tracking-[0.2em] border border-emerald-100 px-4 py-1.5 rounded-full bg-emerald-50 shadow-sm">
-                                {(mouvementsFinances || []).filter((m: any) => m.type === 'RECETTE').length} encaissements
-                            </span>
-                            <span className="text-[9px] font-black text-rose-600 uppercase tracking-[0.2em] border border-rose-100 px-4 py-1.5 rounded-full bg-rose-50 shadow-sm">
-                                {(mouvementsFinances || []).filter((m: any) => m.type !== 'RECETTE').length} décaissements
-                            </span>
-                        </div>
-                    </div>
-                    {/* Métriques Financières (Point 18) */}
-                    {(mouvementsFinances || []).length > 0 && (() => {
-                        const totalRecettes = (mouvementsFinances || []).filter((m: any) => m.type === 'RECETTE').reduce((s: number, m: any) => s + (m.montant || 0), 0)
-                        const totalDepenses = (mouvementsFinances || []).filter((m: any) => m.type !== 'RECETTE').reduce((s: number, m: any) => s + (m.montant || 0), 0)
-                        const soldeNet = totalRecettes - totalDepenses
-                        return (
-                            <div className="grid grid-cols-3 gap-4 mt-6">
-                                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
-                                    <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Total Encaissements</p>
-                                    <p className="text-2xl font-black text-emerald-700 tracking-tighter mt-1">+{totalRecettes.toLocaleString()} <span className="text-xs font-mono opacity-50">F</span></p>
-                                </div>
-                                <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
-                                    <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Total Décaissements</p>
-                                    <p className="text-2xl font-black text-rose-700 tracking-tighter mt-1">-{totalDepenses.toLocaleString()} <span className="text-xs font-mono opacity-50">F</span></p>
-                                </div>
-                                <div className={`border rounded-2xl p-4 ${soldeNet >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
-                                    <p className={`text-[9px] font-black uppercase tracking-widest ${soldeNet >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Solde Net Période</p>
-                                    <p className={`text-2xl font-black tracking-tighter mt-1 ${soldeNet >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{soldeNet >= 0 ? '+' : ''}{soldeNet.toLocaleString()} <span className="text-xs font-mono opacity-50">F</span></p>
-                                </div>
-                            </div>
-                        )
-                    })()}
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-left">
-                        <thead>
-                            <tr className="bg-white border-b border-gray-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] italic">
-                                <th className="px-8 py-6">Date & Heure</th>
-                                <th className="px-8 py-6">Catégorie de Flux</th>
-                                <th className="px-8 py-6">Libellé / Opération</th>
-                                <th className="px-8 py-6">Mode</th>
-                                <th className="px-8 py-6 text-right">Montant</th>
-                                <th className="px-8 py-6">Statut</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {Array.isArray(mouvementsFinances) && mouvementsFinances.slice((pageTresorerie - 1) * 15, pageTresorerie * 15).map((m: any) => (
-                                <tr key={m.id} className="hover:bg-orange-50/30 transition-all duration-300 group">
-                                    <td className="px-8 py-7">
-                                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-                                            {m.date ? new Date(m.date).toLocaleDateString('fr-FR') : '---'}
-                                        </div>
-                                        <div className="text-[10px] text-slate-300 font-mono italic">
-                                            {m.date ? new Date(m.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '---'}
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-7">
-                                        <span className={`px-4 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest border shadow-sm flex items-center gap-2 w-fit ${
-                                            m.type === 'RECETTE' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'
-                                        }`}>
-                                            <span className={`h-1.5 w-1.5 rounded-full ${m.type === 'RECETTE' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                            {m.type === 'RECETTE' ? 'Encaissement' : 'Décaissement'}
-                                        </span>
-                                    </td>
-                                    <td className="px-8 py-7">
-                                        <div className="text-sm font-black text-slate-900 uppercase tracking-tighter truncate max-w-[250px] italic group-hover:text-blue-600 transition-colors">{m.libelle || 'Opération'}</div>
-                                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest opacity-60 italic">{m.categorie || 'Opération diverse'}</div>
-                                    </td>
-                                    <td className="px-8 py-7">
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-2 w-2 rounded-full bg-slate-200" />
-                                            <span className="text-[10px] font-black text-slate-500 uppercase italic">{m.modePaiement || '---'}</span>
-                                        </div>
-                                    </td>
-                                    <td className={`px-8 py-7 text-right font-black tabular-nums text-lg tracking-tighter ${m.type === 'RECETTE' ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                        {m.type === 'RECETTE' ? '+' : '-'}{(m.montant || 0).toLocaleString()}
-                                    </td>
-                                    <td className="px-8 py-7">
-                                        <span className="px-3 py-1 bg-slate-50 text-slate-400 text-[8px] font-black rounded-lg border border-gray-100 uppercase italic">Validé</span>
-                                    </td>
-                                </tr>
-                            ))}
-                            {(!Array.isArray(mouvementsFinances) || mouvementsFinances.length === 0) && (
-                                <tr>
-                                    <td colSpan={6} className="px-8 py-20 text-center text-slate-200 font-black uppercase italic tracking-[0.5em] text-xs">Aucun mouvement financier</td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-                {/* Pagination Trésorerie (Point 17) */}
-                {Array.isArray(mouvementsFinances) && mouvementsFinances.length > 15 && (
-                    <div className="p-6 border-t border-gray-50 bg-gray-50/30 flex justify-between items-center">
-                        <span className="text-[10px] uppercase font-black tracking-widest text-slate-400">
-                            Page {pageTresorerie} / {Math.ceil(mouvementsFinances.length / 15)} — {mouvementsFinances.length} écritures
-                        </span>
-                        <Pagination
-                            currentPage={pageTresorerie}
-                            totalPages={Math.ceil(mouvementsFinances.length / 15)}
-                            itemsPerPage={15}
-                            totalItems={mouvementsFinances.length}
-                            onPageChange={setPageTresorerie}
-                        />
-                    </div>
-                )}
-            </div>
           </div>
         )}
       </div>
@@ -1391,79 +883,6 @@ function LogistiqueTop({ top, searchTerm }: { top: any[], searchTerm: string }) 
     )
 }
 
-function LogistiqueValorisationTable({ valeurStock, searchTerm }: any) {
-  const [page, setPage] = useState(1)
-  const itemsPerPage = 20
-  const filteredData = (Array.isArray(valeurStock?.data) ? valeurStock.data : []).filter((v: any) => (v.designation || '').toLowerCase().includes(searchTerm.toLowerCase()))
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage)
-  const paginatedData = filteredData.slice((page - 1) * itemsPerPage, page * itemsPerPage)
-
-  return (
-    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-xl overflow-hidden mt-8">
-      <div className="p-8 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase italic">
-              <DollarSign className="h-5 w-5 text-blue-600" />
-              Valorisation Analytique du Stock
-          </h3>
-          <div className="text-[9px] font-black bg-slate-100 text-slate-500 px-4 py-1.5 rounded-full border border-gray-200 uppercase italic">
-              {filteredData.length} références tracées
-          </div>
-      </div>
-      <div className="overflow-x-auto">
-          <table className="min-w-full text-left">
-              <thead className="bg-white">
-                  <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-gray-50 italic">
-                      <th className="px-8 py-6">Désignation & Code</th>
-                      <th className="px-8 py-6">Segment</th>
-                      <th className="px-8 py-6 text-right">Unités</th>
-                      <th className="px-8 py-6 text-right">P.A Moyen</th>
-                      <th className="px-8 py-6 text-right text-orange-600">Valeur Inventaire</th>
-                  </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                  {paginatedData.map((v: any) => (
-                      <tr key={v.id} className="hover:bg-orange-50/30 transition-all duration-300 group">
-                          <td className="px-8 py-7">
-                              <div className="text-sm font-black text-slate-900 uppercase tracking-tighter italic group-hover:text-blue-600 transition-colors">{v.designation}</div>
-                              <div className="text-[10px] text-slate-300 font-mono tracking-tighter uppercase italic opacity-60">REF: {v.code}</div>
-                          </td>
-                          <td className="px-8 py-7">
-                              <span className="text-[9px] font-black bg-blue-50 text-blue-600 border border-blue-100 px-4 py-1.5 rounded-xl uppercase italic shadow-sm">
-                                  {v.categorie}
-                              </span>
-                          </td>
-                          <td className="px-8 py-7 text-right font-black text-slate-900 tabular-nums italic text-lg">{(v?.quantite || 0).toLocaleString()}</td>
-                          <td className="px-8 py-7 text-right text-slate-400 font-bold tabular-nums italic">{(v?.prixAchat || 0).toLocaleString()}</td>
-                          <td className="px-8 py-7 text-right font-black text-orange-600 tabular-nums text-2xl tracking-tighter italic">
-                              {(v?.valeur || 0).toLocaleString()}
-                          </td>
-                      </tr>
-                  ))}
-              </tbody>
-              <tfoot className="bg-slate-900 text-white shadow-2xl border-t-4 border-orange-600">
-                  <tr className="font-black">
-                      <td colSpan={3} className="px-8 py-10 italic text-[10px] tracking-[0.4em] uppercase opacity-40">Récapitulatif Valorisation Globale</td>
-                      <td colSpan={2} className="px-8 py-10 text-right text-5xl tracking-tighter whitespace-nowrap italic text-white">
-                          {(valeurStock?.totalValeur || 0).toLocaleString()} <span className="text-xl font-bold opacity-30 uppercase">FCFA</span>
-                      </td>
-                  </tr>
-              </tfoot>
-          </table>
-      </div>
-      {totalPages > 1 && (
-        <div className="p-8 flex justify-center border-t border-gray-50 bg-gray-50/30">
-          <Pagination 
-            currentPage={page} 
-            totalPages={totalPages} 
-            itemsPerPage={itemsPerPage} 
-            totalItems={filteredData.length} 
-            onPageChange={setPage} 
-          />
-        </div>
-      )}
-    </div>
-  )
-}
 
 function PaiementTable({ title, data, type, searchTerm }: any) {
   const [page, setPage] = useState(1)

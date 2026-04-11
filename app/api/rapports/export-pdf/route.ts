@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
@@ -15,9 +16,24 @@ export async function GET(request: NextRequest) {
   const fin = hasDates ? new Date(dateFin + 'T23:59:59') : null
 
   try {
+    const entiteId = await getEntiteId(session)
+    const whereBase: any = {}
+
+    // Filtrage par entité (support SUPER_ADMIN)
+    if (session.role === 'SUPER_ADMIN') {
+      const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+      if (entiteIdFromParams) {
+        whereBase.entiteId = Number(entiteIdFromParams)
+      } else if (entiteId > 0) {
+        whereBase.entiteId = entiteId
+      }
+    } else if (entiteId > 0) {
+      whereBase.entiteId = entiteId
+    }
+
     const [stocks, topData, mouvements] = await Promise.all([
       prisma.stock.findMany({
-        where: { produit: { actif: true } },
+        where: { ...whereBase, produit: { actif: true } },
         include: {
           produit: { select: { id: true, code: true, designation: true, categorie: true, seuilMin: true } },
           magasin: { select: { id: true, code: true, nom: true } },
@@ -27,15 +43,20 @@ export async function GET(request: NextRequest) {
         ? prisma.venteLigne.findMany({
             where: {
               vente: {
+                ...whereBase,
                 date: { gte: deb, lte: fin },
                 statut: 'VALIDEE',
               },
             },
             select: { produitId: true, quantite: true },
           })
-        : prisma.venteLigne.groupBy({ by: ['produitId'], _sum: { quantite: true } }),
+        : prisma.venteLigne.groupBy({ 
+            by: ['produitId'], 
+            where: whereBase,
+            _sum: { quantite: true } 
+          }),
       prisma.mouvement.findMany({
-        where: deb && fin ? { date: { gte: deb, lte: fin } } : undefined,
+        where: { ...whereBase, ...(deb && fin ? { date: { gte: deb, lte: fin } } : {}) },
         take: 500,
         orderBy: { date: 'desc' },
         include: {

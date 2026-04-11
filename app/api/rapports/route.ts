@@ -173,7 +173,8 @@ export async function GET(request: NextRequest) {
     const finPrecedent = new Date(deb)
     finPrecedent.setDate(finPrecedent.getDate() - 1)
 
-    const [ventesActuelles, achatsActuelsResult, ventesPrecedentes, achatsPrecedentsResult] = await Promise.all([
+    // 1. Agrégations Ventes et Achats pour le calcul des totaux et de l'évolution
+    const [ventesActuelles, achatsActuelsResult, ventesPrecedentes, achatsPrecedentsResult, regsActuels, regsPrecedents] = await Promise.all([
       prisma.vente.aggregate({
         where: {
           date: { gte: deb, lte: fin },
@@ -181,7 +182,7 @@ export async function GET(request: NextRequest) {
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
           ...(magasinId ? { magasinId: Number(magasinId) } : {}),
         },
-        _sum: { montantTotal: true, montantPaye: true },
+        _sum: { montantTotal: true },
         _count: { id: true },
       }),
       prisma.achat.aggregate({
@@ -200,7 +201,7 @@ export async function GET(request: NextRequest) {
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
           ...(magasinId ? { magasinId: Number(magasinId) } : {}),
         },
-        _sum: { montantTotal: true, montantPaye: true },
+        _sum: { montantTotal: true },
         _count: { id: true },
       }),
       prisma.achat.aggregate({
@@ -212,15 +213,32 @@ export async function GET(request: NextRequest) {
         },
         _sum: { montantTotal: true, fraisApproche: true },
       }),
+      // Calcul des encaissements réels sur la période (basé sur la date du règlement)
+      prisma.reglementVente.aggregate({
+        where: {
+          date: { gte: deb, lte: fin },
+          statut: 'VALIDE',
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
+        },
+        _sum: { montant: true }
+      }),
+      prisma.reglementVente.aggregate({
+        where: {
+          date: { gte: debPrecedent, lte: finPrecedent },
+          statut: 'VALIDE',
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
+        },
+        _sum: { montant: true }
+      })
     ])
 
     const caActuel = Number(ventesActuelles._sum.montantTotal || 0)
-    const caEncaisseActuel = Number(ventesActuelles._sum.montantPaye || 0)
+    const caEncaisseActuel = Number(regsActuels._sum.montant || 0)
     const montantAchatsActuels = Number(achatsActuelsResult._sum.montantTotal || 0) + Number(achatsActuelsResult._sum.fraisApproche || 0)
     const ventesActuellesCount = ventesActuelles._count.id || 0
 
     const caPrecedent = Number(ventesPrecedentes._sum.montantTotal || 0)
-    const caEncaissePrecedent = Number(ventesPrecedentes._sum.montantPaye || 0)
+    const caEncaissePrecedent = Number(regsPrecedents._sum.montant || 0)
     const montantAchatsPrecedents = Number(achatsPrecedentsResult._sum.montantTotal || 0) + Number(achatsPrecedentsResult._sum.fraisApproche || 0)
     const ventesPrecedentesCount = ventesPrecedentes._count.id || 0
 

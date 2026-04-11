@@ -35,6 +35,8 @@ import {
   CreditCard,
   FileBarChart,
   Archive,
+  BookOpen,
+  ArrowRightLeft,
 } from 'lucide-react'
 import type { Session } from '@/lib/auth'
 import { ToastContainer } from '@/components/ui/Toast'
@@ -58,10 +60,10 @@ const navigation = [
     section: '📦 LOGISTIQUE',
     items: [
       { name: 'Produits', href: '/dashboard/produits', icon: Package, permission: 'produits:view', key: 'produits' },
+      { name: 'Mouvements de Stock', href: '/dashboard/rapports-inventaire/mouvements', icon: ArrowRightLeft, permission: 'stocks:view', key: 'stocks' },
+      { name: 'Valeur de Stock', href: '/dashboard/rapports-inventaire/valeur', icon: TrendingUp, permission: 'stocks:view', key: 'stocks' },
       { name: 'Bons de Commande', href: '/dashboard/commandes-fournisseurs', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'achats:view', key: 'commandes' },
       { name: 'Stocks', href: '/dashboard/stock', icon: Warehouse, permission: 'stocks:view', key: 'stocks' },
-      { name: 'Mouvements de Stock', href: '/dashboard/rapports-inventaire/mouvements', icon: Activity, permission: 'rapports:view', key: 'mouvements' },
-      { name: 'Valeur de Stock', href: '/dashboard/rapports-inventaire/valeur', icon: DollarSign, permission: 'rapports:view', key: 'valeurStock' },
     ]
   },
   {
@@ -93,6 +95,7 @@ const navigation = [
       { name: 'Rapports Généraux', href: '/dashboard/rapports', icon: FileText, permission: 'rapports:view', key: 'rapports' },
       { name: 'État des Paiements', href: '/dashboard/rapports-finances', icon: DollarSign, permission: 'rapports:view', key: 'etatPaiements' },
       { name: 'Rentabilité Produits', href: '/dashboard/rapports/rentabilite', icon: TrendingUp, permission: 'rapports:view', key: 'rentabilite' },
+      { name: 'Guide pédagogique', href: '/dashboard/pedagogie', icon: BookOpen, permission: 'rapports:view' },
     ]
   },
   {
@@ -137,6 +140,7 @@ export default function DashboardLayoutClient({
   children: React.ReactNode
   user: UserWithPermissions
 }) {
+  const [mounted, setMounted] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -203,6 +207,7 @@ export default function DashboardLayoutClient({
   }
 
   useEffect(() => {
+    setMounted(true)
     loadNotifications()
     loadEntites()
     fetchDailyPerformance()
@@ -472,6 +477,9 @@ export default function DashboardLayoutClient({
     }
   }
 
+  // Suppression de la garde d'hydratation bloquante car elle peut vider l'écran au premier chargement.
+  // if (!mounted) return null;
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700">
       {/* Animations de fond */}
@@ -538,6 +546,21 @@ export default function DashboardLayoutClient({
                     </span>
                   </div>
                 </Link>
+
+                {/* Badge Entité Active (Contextuel) */}
+                {entiteActuelle && (
+                  <div className="mx-4 mb-6 p-4 rounded-2xl bg-emerald-950/40 border border-emerald-400/30 shadow-inner group/entite">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg group-hover/entite:rotate-6 transition-transform">
+                        <Building2 className="h-6 w-6 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest leading-none mb-1">ENTITÉ ACTIVE</p>
+                        <p className="text-sm font-black text-white truncate uppercase tracking-tighter italic">{entiteActuelle.nom}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {navigation.map((section) => {
                   const visibleItems = section.items.filter((item) => {
@@ -666,7 +689,7 @@ export default function DashboardLayoutClient({
             <form action="/api/auth/logout" method="POST" className="mt-4">
               <button
                 type="submit"
-                className="flex w-full items-center justify-center gap-3 rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-3 text-[11px] font-black text-white transition-all duration-300 shadow-lg hover:shadow-orange-500/30 uppercase tracking-[0.2em]"
+                className="flex w-full items-center justify-center gap-3 rounded-xl bg-[#FF4500] hover:bg-[#FF4500] px-4 py-3 text-[11px] font-black text-white transition-all duration-300 shadow-lg hover:shadow-[#FF4500]/30 uppercase tracking-[0.2em]"
               >
                 <LogOut className="h-4 w-4 text-[#006B44]" />
                 DÉCONNEXION
@@ -683,10 +706,13 @@ export default function DashboardLayoutClient({
               <button className="lg:hidden" onClick={() => setSidebarOpen(true)}>
                 <Menu className="h-6 w-6 text-gray-600" />
               </button>
-              <Link href="/dashboard" className="hidden sm:flex items-center gap-2">
+              <Link href="/dashboard" className="hidden sm:flex items-center gap-2 pr-4 border-r border-gray-100">
                 <Image src="/icon-512x512.png" alt="GestiCom Pro" width={40} height={40} className="h-10 w-10 object-contain drop-shadow-sm rounded-md" />
                 <span className="font-bold text-gray-900 text-sm tracking-tight">GestiCom <span className="text-orange-500">Pro</span></span>
               </Link>
+
+              {/* Breadcrumb Entité (Contextuel) */}
+
               <div className="relative hidden sm:block" ref={searchContainerRef}>
                 <div className="relative flex items-center">
                   <Search className={`absolute left-3 h-5 w-5 transition-colors ${isSearchingGlobal ? 'text-orange-500 animate-pulse' : 'text-gray-400'}`} />

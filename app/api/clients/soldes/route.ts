@@ -35,14 +35,9 @@ export async function GET(request: NextRequest) {
       clientId: { not: null },
     }
     
-    // Pour les règlements, on filtre directement par entité
-    // Pour les règlements, on filtre par l'entité de la vente ou de l'utilisateur (cas libre)
     const whereReglement: any = {
+      entiteId,
       statut: 'VALIDE',
-      OR: [
-        { vente: { entiteId } },
-        { venteId: null, utilisateur: { entiteId } }
-      ]
     }
 
     if (dateDebut && dateFin) {
@@ -74,11 +69,8 @@ export async function GET(request: NextRequest) {
     const reglementsGlobaux = await prisma.reglementVente.groupBy({
       by: ['clientId'],
       where: {
+        entiteId,
         statut: 'VALIDE',
-        OR: [
-          { vente: { entiteId } },
-          { venteId: null, utilisateur: { entiteId } }
-        ]
       },
       _sum: { montant: true },
     })
@@ -107,7 +99,7 @@ export async function GET(request: NextRequest) {
       const derV = await prisma.vente.findFirst({
         where: { clientId: c.id, statut: 'VALIDEE' },
         orderBy: { date: 'desc' },
-        select: { numero: true }
+        select: { numero: true, numeroBon: true }
       })
 
       return {
@@ -117,7 +109,8 @@ export async function GET(request: NextRequest) {
         variationPeriode,
         soldeClient,
         statut,
-        derniereFacture: derV?.numero || null
+        derniereFacture: derV?.numero || null,
+        derniereBon: derV?.numeroBon || null
       }
     }))
 

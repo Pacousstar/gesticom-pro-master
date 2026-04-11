@@ -61,6 +61,9 @@ model Utilisateur {
   entite                    Entite               @relation(fields: [entiteId], references: [id])
   ventes                    Vente[]
   commandesFournisseurs     CommandeFournisseur[]
+
+  @@index([entiteId])
+  @@index([actif])
 }
 
 model Magasin {
@@ -85,6 +88,9 @@ model Magasin {
   transfertsDest    Transfert[]    @relation("TransfertDest")
   ventes            Vente[]
   commandesFournisseurs CommandeFournisseur[]
+
+  @@index([entiteId])
+  @@index([actif])
 }
 
 model Produit {
@@ -117,6 +123,8 @@ model Produit {
   @@index([categorie])
   @@index([actif])
   @@index([codeBarres])
+  @@index([entiteId])
+  @@index([fournisseurId])
 }
 
 model Stock {
@@ -136,6 +144,7 @@ model Stock {
   @@index([produitId])
   @@index([magasinId])
   @@index([quantite])
+  @@index([entiteId])
 }
 
 model Mouvement {
@@ -160,6 +169,9 @@ model Mouvement {
   @@index([date])
   @@index([type])
   @@index([referenceTransfertId])
+  @@index([entiteId])
+  @@index([magasinId])
+  @@index([produitId])
 }
 
 model Transfert {
@@ -182,6 +194,7 @@ model Transfert {
   @@index([date])
   @@index([magasinOrigineId])
   @@index([magasinDestId])
+  @@index([entiteId])
 }
 
 model TransfertLigne {
@@ -221,6 +234,8 @@ model Client {
   ventes         Vente[]
 
   @@index([actif])
+  @@index([entiteId])
+  @@index([type])
 }
 
 model Fournisseur {
@@ -263,6 +278,8 @@ model ReglementVente {
   @@index([date])
   @@index([clientId])
   @@index([venteId])
+  @@index([entiteId])
+  @@index([modePaiement])
 }
 
 model ReglementAchat {
@@ -284,6 +301,8 @@ model ReglementAchat {
   @@index([date])
   @@index([fournisseurId])
   @@index([achatId])
+  @@index([entiteId])
+  @@index([modePaiement])
 }
 
 model Caisse {
@@ -300,6 +319,9 @@ model Caisse {
   magasin       Magasin     @relation(fields: [magasinId], references: [id])
 
   @@index([date])
+  @@index([entiteId])
+  @@index([magasinId])
+  @@index([type])
 }
 
 model Parametre {
@@ -363,6 +385,11 @@ model Vente {
 
   @@index([date])
   @@index([numero])
+  @@index([entiteId])
+  @@index([clientId])
+  @@index([magasinId])
+  @@index([statut])
+  @@index([statutPaiement])
 }
 
 model VenteLigne {
@@ -378,6 +405,9 @@ model VenteLigne {
   montant      Float
   vente        Vente   @relation(fields: [venteId], references: [id], onDelete: Cascade)
   produit      Produit @relation(fields: [produitId], references: [id], onDelete: Cascade)
+
+  @@index([venteId])
+  @@index([produitId])
 }
 
 model Achat {
@@ -406,6 +436,10 @@ model Achat {
   reglements       ReglementAchat[]
 
   @@index([date])
+  @@index([entiteId])
+  @@index([fournisseurId])
+  @@index([magasinId])
+  @@index([statut])
 }
 
 model AchatLigne {
@@ -420,6 +454,9 @@ model AchatLigne {
   montant      Float
   achat        Achat   @relation(fields: [achatId], references: [id], onDelete: Cascade)
   produit      Produit @relation(fields: [produitId], references: [id], onDelete: Cascade)
+
+  @@index([achatId])
+  @@index([produitId])
 }
 
 model Charge {
@@ -442,6 +479,8 @@ model Charge {
   @@index([date])
   @@index([type])
   @@index([magasinId])
+  @@index([entiteId])
+  @@index([statut])
 }
 
 model Depense {
@@ -467,6 +506,8 @@ model Depense {
   @@index([date])
   @@index([categorie])
   @@index([magasinId])
+  @@index([entiteId])
+  @@index([statutPaiement])
 }
 
 model Banque {
@@ -584,6 +625,7 @@ model EcritureComptable {
   @@index([journalId])
   @@index([compteId])
   @@index([referenceType, referenceId])
+  @@index([entiteId])
 }
 
 model PrintTemplate {
@@ -632,6 +674,8 @@ model ArchiveVente {
 
   @@index([date])
   @@index([numeroFactureOrigine])
+  @@index([entiteId])
+  @@index([clientId])
 }
 
 model ArchiveVenteLigne {
@@ -659,6 +703,8 @@ model ArchiveSoldeClient {
   entite        Entite      @relation(fields: [entiteId], references: [id])
 
   @@index([dateArchive])
+  @@index([entiteId])
+  @@index([clientId])
 }
 
 model CommandeFournisseur {
@@ -683,6 +729,10 @@ model CommandeFournisseur {
   lignes           CommandeFournisseurLigne[]
 
   @@index([date])
+  @@index([entiteId])
+  @@index([fournisseurId])
+  @@index([magasinId])
+  @@index([statut])
 }
 
 model CommandeFournisseurLigne {

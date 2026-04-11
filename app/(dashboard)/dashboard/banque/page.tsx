@@ -89,9 +89,12 @@ export default function BanquePage() {
   const [userRole, setUserRole] = useState<string>('')
   const [deletingOpId, setDeletingOpId] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 20
+  const itemsPerPage = 100
   const [statsConsolidation, setStatsConsolidation] = useState<any>(null)
   const [statsConsolidationLoading, setStatsConsolidationLoading] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
+  const [allOperationsForPrint, setAllOperationsForPrint] = useState<OperationBancaire[]>([])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -115,8 +118,8 @@ export default function BanquePage() {
 
   const fetchBanques = () => {
     fetch('/api/banques')
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setBanques)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((res) => setBanques(res.data || (Array.isArray(res) ? res : [])))
   }
 
   const fetchComptes = () => {
@@ -157,8 +160,8 @@ export default function BanquePage() {
     if (dateFin) params.set('dateFin', dateFin)
     if (filtreType) params.set('type', filtreType)
     fetch('/api/banques/operations?' + params.toString())
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setOperations)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((res) => setOperations(res.data || (Array.isArray(res) ? res : [])))
       .finally(() => setLoading(false))
 
     // Récupérer aussi les soldes globaux par mode (MoMo, Virement, Cheque)
@@ -540,51 +543,37 @@ export default function BanquePage() {
             PDF
           </button>
           
-          <ListPrintWrapper
-            title={selectedBanque ? `Relevé de Compte : ${banqueSelectionnee?.nomBanque} - ${banqueSelectionnee?.numero}` : "Relevé des Opérations Bancaires Globales"}
-            subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les opérations"}
-          >
-            <table className="w-full text-[10px] border-collapse border border-gray-300">
-              <thead>
-                <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                  <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Type</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Libellé</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Référence / Pièce</th>
-                  <th className="border border-gray-300 px-3 py-3 text-right">Montant (F)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {operations.map((op, idx) => (
-                  <tr key={idx} className="border-b border-gray-200">
-                    <td className="border border-gray-300 px-3 py-2">{new Date(op.date).toLocaleDateString('fr-FR')}</td>
-                    <td className="border border-gray-300 px-3 py-2 font-bold text-[9px]">{op.type}</td>
-                    <td className="border border-gray-300 px-3 py-2">{op.libelle}</td>
-                    <td className="border border-gray-300 px-3 py-2 italic">{op.reference || '-'}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-right font-black">
-                      {op.montant.toLocaleString('fr-FR')} F
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-gray-50 font-black">
-                  <td colSpan={4} className="border border-gray-300 px-3 py-3 text-right uppercase">Solde des opérations affichées</td>
-                  <td className="border border-gray-300 px-3 py-3 text-right text-sm">
-                    {soldeOperations.toLocaleString('fr-FR')} F
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </ListPrintWrapper>
 
           <button
             type="button"
-            onClick={() => window.print()}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 h-[42px]"
+            onClick={async () => {
+               setIsPrinting(true)
+               try {
+                  const params = new URLSearchParams()
+                  if (selectedBanque) params.set('banqueId', String(selectedBanque))
+                  if (dateDebut) params.set('dateDebut', dateDebut)
+                  if (dateFin) params.set('dateFin', dateFin)
+                  if (filtreType) params.set('type', filtreType)
+                  params.set('limit', '10000') // Récupérer tout pour l'impression
+
+                  const res = await fetch(`/api/banques/operations?${params.toString()}`)
+                  if (res.ok) {
+                    const data = await res.json()
+                    setAllOperationsForPrint(data.operations || [])
+                    setIsPreviewOpen(true)
+                  }
+               } catch (e) {
+                  console.error(e)
+                  showError("Erreur lors de la préparation de l'aperçu.")
+               } finally {
+                  setIsPrinting(false)
+               }
+            }}
+            disabled={isPrinting}
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 h-[42px] disabled:opacity-50 transition-all"
           >
-            <Printer className="h-4 w-4" />
-            IMPRIMER
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+            Aperçu Impression
           </button>
         </div>
       </div>
@@ -1208,6 +1197,162 @@ export default function BanquePage() {
           </div>
         </div>
       )}
+      {/* Modale d'Aperçu Impression Bancaire */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/90 backdrop-blur-sm no-print">
+          <div className="flex items-center justify-between bg-white px-6 py-4 shadow-lg">
+            <div className="flex items-center gap-4">
+               <h2 className="text-xl font-black text-gray-900 uppercase italic">Aperçu du Relevé Bancaire</h2>
+               <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-600 uppercase tracking-widest">
+                 {selectedBanque ? (banques.find(b => b.id === selectedBanque)?.nomBanque + ' - ' + banques.find(b => b.id === selectedBanque)?.numero) : 'Tous les comptes'}
+               </span>
+               <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-600 uppercase tracking-widest">
+                 {allOperationsForPrint.length} OPÉRATIONS
+               </span>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border border-gray-300 px-6 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => {
+                  window.print()
+                }}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-8 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95"
+              >
+                <Printer className="h-4 w-4" />
+                LANCER L'IMPRESSION
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-8 bg-gray-100/50">
+            <div className="mx-auto max-w-[210mm] bg-white p-2 shadow-2xl">
+               {(() => {
+                 const ITEMS_PER_PRINT = 18;
+                 const chunks = [];
+                 for (let i = 0; i < allOperationsForPrint.length; i += ITEMS_PER_PRINT) {
+                   chunks.push(allOperationsForPrint.slice(i, i + ITEMS_PER_PRINT));
+                 }
+                 
+                 const totalSolde = allOperationsForPrint.reduce((acc, op) => acc + (op.montant || 0), 0);
+
+                 return chunks.map((chunk, index, allChunks) => (
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break mb-8 border-b-2 border-dashed border-gray-200 pb-8' : ''}>
+                      <ListPrintWrapper
+                        title={selectedBanque ? `Relevé de Compte : ${banques.find(b => b.id === selectedBanque)?.nomBanque} - ${banques.find(b => b.id === selectedBanque)?.numero}` : "Relevé des Opérations Bancaires Globales"}
+                        subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les opérations"}
+                        pageNumber={index + 1}
+                        totalPages={allChunks.length}
+                      >
+                         <table className="w-full text-[14px] border-collapse border-2 border-black">
+                          <thead>
+                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Libellé / Bénéficiaire</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Référence</th>
+                              <th className="px-3 py-3 text-right">Montant (F)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chunk.map((op, idx) => (
+                              <tr key={idx} className="border-b border-black">
+                                <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">{new Date(op.date).toLocaleDateString('fr-FR')}</td>
+                                <td className="border-r-2 border-black px-3 py-2 font-bold text-[11px] uppercase">{op.type.replace(/_/g, ' ')}</td>
+                                <td className="border-r-2 border-black px-3 py-2">
+                                   <div className="font-bold">{op.libelle}</div>
+                                   {op.beneficiaire && <div className="text-[10px] italic text-gray-500">Bénéf: {op.beneficiaire}</div>}
+                                </td>
+                                <td className="border-r-2 border-black px-3 py-2 font-mono text-[11px] uppercase">{op.reference || '-'}</td>
+                                <td className="px-3 py-2 text-right font-black">
+                                  {op.montant.toLocaleString('fr-FR')} F
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {index === allChunks.length - 1 && (
+                            <tfoot>
+                              <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic shadow-inner">
+                                <td colSpan={4} className="border-r-2 border-black px-3 py-5 text-right uppercase tracking-widest bg-white">Cumul des mouvements sur la période</td>
+                                <td className="px-3 py-5 text-right bg-slate-50 underline decoration-double">
+                                  {totalSolde.toLocaleString('fr-FR')} F
+                                </td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </ListPrintWrapper>
+                    </div>
+                  ));
+               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rendu masqué pour l'impression système direct */}
+      <div className="hidden print:block absolute inset-0 bg-white">
+          {(() => {
+                 const ITEMS_PER_PRINT = 18;
+                 const chunks = [];
+                 for (let i = 0; i < allOperationsForPrint.length; i += ITEMS_PER_PRINT) {
+                   chunks.push(allOperationsForPrint.slice(i, i + ITEMS_PER_PRINT));
+                 }
+                 const totalSolde = allOperationsForPrint.reduce((acc, op) => acc + (op.montant || 0), 0);
+
+                 return chunks.map((chunk, index, allChunks) => (
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                      <ListPrintWrapper
+                        title={selectedBanque ? `Relevé de Compte : ${banques.find(b => b.id === selectedBanque)?.nomBanque} - ${banques.find(b => b.id === selectedBanque)?.numero}` : "Relevé des Opérations Bancaires Globales"}
+                        subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les opérations"}
+                        pageNumber={index + 1}
+                        totalPages={allChunks.length}
+                        hideHeader={index > 0}
+                        hideVisa={index < allChunks.length - 1}
+                      >
+                         <table className="w-full text-[14px] border-collapse border-2 border-black">
+                          <thead>
+                            <tr className="bg-gray-100 uppercase font-black text-gray-700 border-b-2 border-black">
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Libellé</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Référence</th>
+                              <th className="px-3 py-3 text-right">Montant (F)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chunk.map((op, idx) => (
+                              <tr key={idx} className="border-b border-black">
+                                <td className="border-r-2 border-black px-3 py-2">{new Date(op.date).toLocaleDateString('fr-FR')}</td>
+                                <td className="border-r-2 border-black px-3 py-2 font-bold text-[11px] uppercase">{op.type}</td>
+                                <td className="border-r-2 border-black px-3 py-2">{op.libelle}</td>
+                                <td className="border-r-2 border-black px-3 py-2">{op.reference || '-'}</td>
+                                <td className="px-3 py-2 text-right font-black">
+                                  {op.montant.toLocaleString('fr-FR')} F
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {index === allChunks.length - 1 && (
+                            <tfoot>
+                              <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
+                                <td colSpan={4} className="border-r-2 border-black px-3 py-5 text-right uppercase bg-white">Total</td>
+                                <td className="px-3 py-5 text-right bg-white">
+                                  {totalSolde.toLocaleString('fr-FR')} F
+                                </td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </ListPrintWrapper>
+                    </div>
+                 ));
+          })()}
+      </div>
+
     </div>
   )
 }

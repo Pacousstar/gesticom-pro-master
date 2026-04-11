@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { getEntiteId } from '@/lib/get-entite-id'
 
-const DASHBOARD_TIMEOUT_MS = 8000
+const DASHBOARD_TIMEOUT_MS = 20000
 
 function timeoutPromise<T>(ms: number, fallback: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(fallback), ms))
@@ -51,11 +51,11 @@ export async function GET() {
       // 1 - Mouvements du jour
       prisma.mouvement.count({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteFilter } }).catch(catchZero('mouvement.count')),
       // 2 - Clients actifs
-      prisma.client.count({ where: { actif: true } }).catch(catchZero('Client')),
+      prisma.client.count({ where: { actif: true, ...entiteFilter } }).catch(catchZero('Client')),
       // 3 - Produits en stock
       prisma.stock.count({ where: { quantite: { gt: 0 }, magasin: entiteFilter } }).catch(catchZero('stock.count')),
       // 4 - Total produits catalogue
-      prisma.produit.count({ where: { actif: true } }).catch(catchZero('produit.count')),
+      prisma.produit.count({ where: { actif: true, ...entiteFilter } }).catch(catchZero('produit.count')),
       // 5 - Stocks faibles
       prisma.$queryRaw<Array<{
         id: number
@@ -108,7 +108,7 @@ export async function GET() {
       // 7 - Répartition par catégorie
       prisma.produit.groupBy({
         by: ['categorie'],
-        where: { actif: true },
+        where: { actif: true, ...entiteFilter },
         _count: { id: true },
       }).catch(catchEmpty('produit.groupBy')),
       // 8 - CA total (toutes périodes pour le calcul du panier moyen globale ou filtré)
@@ -152,6 +152,12 @@ export async function GET() {
         where: { date: { gte: new Date(now.getFullYear(), now.getMonth(), 1), lte: now }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter },
         _sum: { montantTotal: true }
       }).then((r: any) => toNum(r._sum.montantTotal)).catch(catchZero('vente.ca.mois')),
+      // 15 - Dépenses Totales (Nombre et Montant)
+      prisma.depense.aggregate({
+        where: entiteFilter,
+        _count: { id: true },
+        _sum: { montant: true }
+      }).catch(() => ({ _count: { id: 0 }, _sum: { montant: 0 } })),
     ])
 
     const timeoutFallback: any[] = [
@@ -166,6 +172,7 @@ export async function GET() {
       0, // caJour
       0, // transactionsHier
       0, // caMois
+      { _count: { id: 0 }, _sum: { montant: 0 } }, // depensesAgg
     ]
 
     const result = await Promise.race([
@@ -189,6 +196,7 @@ export async function GET() {
       caJour,
       transactionsHier,
       caMois,
+      depensesAgg,
     ] = result
 
     const timedOut = result === timeoutFallback
@@ -207,7 +215,7 @@ export async function GET() {
     const panierMoyen = nbVentesGlobal > 0 ? Math.round(caTotalGlobal / nbVentesGlobal) : 0
 
     const valeurStockTotal = stocksValeurRaw.reduce((sum: number, s: any) => {
-      const prixRevient = s.produit?.pamp && s.produit?.pamp > 0 ? s.produit?.pamp : (s.produit?.prixAchat ?? 0)
+      const prixRevient = s.produit?.pamp && s.produit?.pamp > 0 ? s.produit.pamp : (s.produit?.prixAchat ?? 0)
       return sum + (s.quantite * prixRevient)
     }, 0)
     const valeurStockVente = stocksValeurRaw.reduce((sum: number, s: any) => sum + (s.quantite * (s.produit?.prixVente ?? 0)), 0)
@@ -274,6 +282,8 @@ export async function GET() {
         time: v.date,
       })) : [],
       repartition,
+      totalDepensesCount: toNum(depensesAgg?._count?.id),
+      totalDepensesAmount: toNum(depensesAgg?._sum?.montant),
       _timeout: timedOut,
     }, {
       headers: {

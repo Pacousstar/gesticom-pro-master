@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatDate } from '@/lib/format-date'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import Pagination from '@/components/ui/Pagination'
 
 type Client = {
   id: number
@@ -51,6 +53,11 @@ export default function ClientRelevesPage() {
   const [data, setData] = useState<Vente[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingClients, setLoadingClients] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
+  const itemsPerPage = 20
+  const ITEMS_PER_PAGE_REPORT = 18
 
   // Chargement des clients pour le selecteur
   useEffect(() => {
@@ -85,7 +92,10 @@ export default function ClientRelevesPage() {
   }
 
   useEffect(() => {
-    if (selectedClientId) fetchReleve()
+    if (selectedClientId) {
+      setCurrentPage(1)
+      fetchReleve()
+    }
   }, [selectedClientId, dateDebut, dateFin])
 
   const selectedClient = clients.find(c => c.id === Number(selectedClientId))
@@ -99,11 +109,22 @@ export default function ClientRelevesPage() {
   }, [data])
 
   const handlePrint = () => {
-    window.print()
+    setIsPrinting(true)
+    setTimeout(() => {
+      setIsPreviewOpen(true)
+      setIsPrinting(false)
+    }, 500)
   }
+
+  const paginatedData = useMemo(() => {
+    return data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+  }, [data, currentPage])
+
+  const totalPages = Math.ceil(data.length / itemsPerPage)
 
   return (
     <div className="space-y-6">
+
       {/* Header & Filtres */}
       <div className="flex flex-wrap items-center justify-between gap-4 no-print">
         <div>
@@ -113,11 +134,11 @@ export default function ClientRelevesPage() {
         <div className="flex gap-2">
           <button
             onClick={handlePrint}
-            disabled={!selectedClientId || data.length === 0}
-            className="flex items-center gap-2 rounded-lg border-2 border-blue-500 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-50"
+            disabled={!selectedClientId || data.length === 0 || isPrinting}
+            className="flex items-center gap-2 rounded-lg border-2 border-blue-500 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-50 no-print shadow-xl transition-all"
           >
-            <Printer className="h-4 w-4" />
-            Imprimer Relevé
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+            Aperçu Relevé
           </button>
         </div>
       </div>
@@ -160,7 +181,7 @@ export default function ClientRelevesPage() {
       {selectedClientId ? (
         <>
           {/* Compteurs Professionnels */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 no-print">
             <div className="bg-white rounded-[2rem] p-6 shadow-xl border-b-8 border-blue-500">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-blue-50 rounded-2xl text-blue-600"><TrendingUp className="h-6 w-6" /></div>
@@ -199,7 +220,7 @@ export default function ClientRelevesPage() {
           </div>
 
           {/* Tableau de transactions */}
-          <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-gray-100">
+          <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-gray-100 no-print">
             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
                 <FileText className="h-4 w-4 text-gray-400" />
@@ -229,11 +250,11 @@ export default function ClientRelevesPage() {
                       <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Dû (Facturé)</th>
                       <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Réglé (Payé)</th>
                       <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Reste</th>
-                      <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest no-print">Statut</th>
+                      <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Statut</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {data.map((v) => (
+                    {paginatedData.map((v) => (
                       <tr key={v.id} className="hover:bg-gray-50/80 transition-colors group">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <p className="text-sm font-bold text-gray-700">{formatDate(v.date)}</p>
@@ -253,7 +274,7 @@ export default function ClientRelevesPage() {
                             {(v.montantTotal - v.montantPaye).toLocaleString()} F
                           </p>
                         </td>
-                        <td className="px-6 py-4 text-center no-print">
+                        <td className="px-6 py-4 text-center">
                           <span className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${v.statutPaiement === 'PAYE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                             {v.statutPaiement === 'PAYE' ? 'SÉCURISÉ' : 'À RECOUVRER'}
                           </span>
@@ -267,68 +288,196 @@ export default function ClientRelevesPage() {
                       <td className="px-6 py-4 text-right font-black text-lg italic tracking-tighter">{totals.du.toLocaleString()} F</td>
                       <td className="px-6 py-4 text-right font-black text-lg text-emerald-400 italic tracking-tighter">{totals.paye.toLocaleString()} F</td>
                       <td className="px-6 py-4 text-right font-black text-lg text-red-400 italic tracking-tighter">{(totals.du - totals.paye).toLocaleString()} F</td>
-                      <td className="no-print"></td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
             )}
-          </div>
-
-          {/* Zone Impression Invisible (Sauf Impression) */}
-          <div className="hidden print:block p-10 mt-10 border-t-4 border-gray-900 bg-white min-h-screen">
-             <div className="flex justify-between items-start mb-10 pb-6 border-b-2 border-gray-100">
-                <div>
-                   <h1 className="text-4xl font-black uppercase tracking-tighter italic">RELEVÉ DE COMPTE</h1>
-                   <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mt-1">GestiCom Pro - Gestion Financière</p>
-                </div>
-                <div className="text-right">
-                   <p className="text-lg font-black uppercase italic">{selectedClient?.nom}</p>
-                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Édité le {new Date().toLocaleDateString('fr-FR')}</p>
-                </div>
-             </div>
-
-             <div className="grid grid-cols-3 gap-10 mb-10">
-                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 text-center">
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Total Facturé</p>
-                   <p className="text-2xl font-black italic tracking-tighter">{totals.du.toLocaleString()} F</p>
-                </div>
-                <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 text-center">
-                   <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Total Réglé</p>
-                   <p className="text-2xl font-black text-emerald-700 italic tracking-tighter">{totals.paye.toLocaleString()} F</p>
-                </div>
-                <div className="bg-red-50 p-6 rounded-2xl border border-red-100 text-center">
-                   <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2">Solde à Payer</p>
-                   <p className="text-2xl font-black text-red-700 italic tracking-tighter">{(totals.du - totals.paye).toLocaleString()} F</p>
-                </div>
-             </div>
-
-             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 italic">Note : Ce document ne constitue pas une facture légale mais un état de synthèse de vos opérations sur la période du {formatDate(dateDebut)} au {formatDate(dateFin)}.</p>
+            
+            {totalPages > 1 && (
+              <div className="p-4 border-t border-gray-100">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={data.length}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setCurrentPage}
+                />
+              </div>
+            )}
           </div>
         </>
       ) : (
-        <div className="bg-white rounded-[2rem] p-20 shadow-xl border border-white/20 flex flex-col items-center justify-center text-center">
+        <div className="bg-white rounded-[2rem] p-20 shadow-xl border border-white/20 flex flex-col items-center justify-center text-center no-print">
           <div className="p-8 bg-orange-50 rounded-full text-orange-500 mb-6 group-hover:scale-110 transition-transform">
             <Users className="h-16 w-16" />
           </div>
           <h2 className="text-2xl font-black text-gray-900 uppercase italic tracking-tighter">Aucun client sélectionné</h2>
-          <p className="mt-2 text-gray-500 font-medium max-w-sm">Choisissez un client dans la liste ci-dessus pour générer son relevé de compte détaillé et son évolution de dette.</p>
         </div>
       )}
 
-      <style jsx global>{`
-        @media print {
-          @page { size: portrait; margin: 1.5cm; }
-          .no-print { display: none !important; }
-          body { background: white !important; font-family: 'Segoe UI', serif !important; padding: 0 !important; color: black !important; }
-          table { width: 100% !important; border-collapse: collapse !important; margin-top: 20px; border: 1px solid #000 !important; }
-          th { background: #f0f0f0 !important; border: 1px solid #000 !important; color: black !important; font-size: 10px !important; text-transform: uppercase; padding: 10px 5px !important; }
-          td { border: 1px dotted #ccc !important; padding: 8px 5px !important; font-size: 10px !important; color: black !important; }
-          .bg-gray-900 { background: #000 !important; color: white !important; }
-          tfoot td { border-top: 2px solid #000 !important; font-weight: 800 !important; font-size: 12px !important; background: #000 !important; color: white !important; }
-          h1, h2, h3 { color: black !important; }
-        }
-      `}</style>
+      {/* MODALE D'APERÇU IMPRESSION RELEVÉ CLIENT */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu du Relevé de Compte Client</h2>
+                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic">{selectedClient?.nom}</p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-blue-100 px-4 py-2 text-xs font-black text-blue-600 uppercase">
+                 {data.length} Transactions
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-xl bg-blue-600 px-10 py-2 text-sm font-black text-white hover:bg-blue-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] shadow-2xl">
+               {(() => {
+                  const chunks = [];
+                  for (let i = 0; i < data.length; i += ITEMS_PER_PAGE_REPORT) {
+                    chunks.push(data.slice(i, i + ITEMS_PER_PAGE_REPORT));
+                  }
+                  return chunks.map((chunk, index, allChunks) => (
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break mb-8 border-b-2 border-dashed border-gray-100 pb-8' : ''}>
+                      <ListPrintWrapper
+                        title={`RELEVÉ DE COMPTE : ${selectedClient?.nom}`}
+                        subtitle={`Transactions du ${formatDate(dateDebut)} au ${formatDate(dateFin)}`}
+                        pageNumber={index + 1}
+                        totalPages={allChunks.length}
+                        hideHeader={index > 0} // Header seulement sur la page 1
+                        hideVisa={index < allChunks.length - 1} // Visa seulement sur la dernière page
+                      >
+                         <table className="w-full text-[14px] border-collapse border-2 border-black">
+                          <thead>
+                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-2 border-black">
+                              <th className="border-2 border-black px-3 py-3 text-left">Date</th>
+                              <th className="border-2 border-black px-3 py-3 text-left">Référence / Mode</th>
+                              <th className="border-2 border-black px-3 py-3 text-right">Facturé (Dû)</th>
+                              <th className="border-2 border-black px-3 py-3 text-right">Réglé (Payé)</th>
+                              <th className="border-2 border-black px-3 py-3 text-right">Solde</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chunk.map((v, idx) => (
+                              <tr key={idx} className="border border-black">
+                                <td className="border border-black px-3 py-2 whitespace-nowrap">{formatDate(v.date)}</td>
+                                <td className="border border-black px-3 py-2 font-black">
+                                   <div className="uppercase tracking-tight">{v.numero}</div>
+                                   <div className="text-[10px] italic font-normal text-gray-500">{v.modePaiement}</div>
+                                </td>
+                                <td className="border border-black px-3 py-2 text-right font-black">
+                                  {v.montantTotal.toLocaleString()} F
+                                </td>
+                                <td className="border border-black px-3 py-2 text-right font-black text-emerald-800 bg-emerald-50/20">
+                                  {v.montantPaye.toLocaleString()} F
+                                </td>
+                                <td className="border border-black px-3 py-2 text-right font-black text-rose-800">
+                                  {(v.montantTotal - v.montantPaye).toLocaleString()} F
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {index === allChunks.length - 1 && (
+                            <tfoot>
+                              <tr className="bg-gray-200 font-black text-[15px] border-2 border-black uppercase italic">
+                                <td colSpan={2} className="border border-black px-3 py-5 text-right tracking-widest">SITUATION TOTALE</td>
+                                <td className="border border-black px-3 py-5 text-right bg-white">{totals.du.toLocaleString()} F</td>
+                                <td className="border border-black px-3 py-5 text-right bg-white text-emerald-800">{totals.paye.toLocaleString()} F</td>
+                                <td className="border border-black px-3 py-5 text-right bg-white text-rose-800 underline decoration-double">{(totals.du - totals.paye).toLocaleString()} F</td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                        {index === allChunks.length - 1 && (
+                          <div className="mt-6 p-4 border-2 border-black bg-gray-50 rounded-lg">
+                             <p className="text-[15px] font-black uppercase text-gray-900 italic">Solde de clôture global du client au {formatDate(dateFin)} :</p>
+                             <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedClient?.dette || 0).toLocaleString()} FCFA</p>
+                          </div>
+                        )}
+                      </ListPrintWrapper>
+                    </div>
+                  ));
+               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rendu Système (Impression Native) */}
+      <div className="hidden print:block absolute inset-0 bg-white">
+          {(() => {
+                const chunks = [];
+                for (let i = 0; i < data.length; i += ITEMS_PER_PAGE_REPORT) {
+                  chunks.push(data.slice(i, i + ITEMS_PER_PAGE_REPORT));
+                }
+                return chunks.map((chunk, index, allChunks) => (
+                  <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                    <ListPrintWrapper
+                      title={`RELEVÉ DE COMPTE : ${selectedClient?.nom}`}
+                      subtitle={`Audit des transactions du ${formatDate(dateDebut)} au ${formatDate(dateFin)}`}
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      hideVisa={index < allChunks.length - 1}
+                    >
+                       <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                            <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-left italic">Référence / Mode</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-right">Facturé (Dû)</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-right">Réglé (Payé)</th>
+                            <th className="px-3 py-3 text-right">Solde</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((v, idx) => (
+                            <tr key={idx} className="border-b border-black hover:bg-gray-50 transition-colors shadow-sm">
+                              <td className="border-r-2 border-black px-3 py-2 font-medium italic text-slate-800">{formatDate(v.date)}</td>
+                              <td className="border-r-2 border-black px-3 py-2 font-black uppercase text-[12px] italic text-orange-700 tracking-tighter">
+                                {v.numero}
+                                <div className="text-[9px] font-bold text-gray-400 not-italic tracking-widest">{v.modePaiement}</div>
+                              </td>
+                              <td className="border-r-2 border-black px-3 py-2 text-right font-black tabular-nums">{v.montantTotal.toLocaleString()} F</td>
+                              <td className="border-r-2 border-black px-3 py-2 text-right font-black tabular-nums text-emerald-800 bg-emerald-50/10 shadow-inner">{v.montantPaye.toLocaleString()} F</td>
+                              <td className="px-3 py-2 text-right font-black tabular-nums text-rose-800 underline decoration-double underline-offset-2 italic">{(v.montantTotal - v.montantPaye).toLocaleString()} F</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
+                              <td colSpan={2} className="px-3 py-6 text-right tracking-[0.2em] underline decoration-slate-400">ARRÊTÉ DU RELEVÉ AU {formatDate(dateFin)}</td>
+                              <td className="border-r-2 border-black px-3 py-6 text-right bg-white ring-2 ring-black font-mono shadow-inner">{totals.du.toLocaleString()} F</td>
+                              <td className="border-r-2 border-black px-3 py-6 text-right bg-white text-emerald-800 font-mono shadow-inner">{totals.paye.toLocaleString()} F</td>
+                              <td className="px-3 py-6 text-right bg-slate-900 text-white font-mono shadow-2xl">{(totals.du - totals.paye).toLocaleString()} F</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ));
+          })()}
+      </div>
     </div>
   )
 }

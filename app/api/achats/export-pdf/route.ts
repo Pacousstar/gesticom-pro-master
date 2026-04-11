@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
-    const limit = Math.min(5000, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 1000))
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
     const where: { date?: { gte: Date; lte: Date }; entiteId?: number } = {}
@@ -26,24 +25,26 @@ export async function GET(request: NextRequest) {
 
     const achats = await prisma.achat.findMany({
       where,
-      take: limit,
       orderBy: { date: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },
         fournisseur: { select: { nom: true } },
-        lignes: { include: { produit: { select: { code: true, designation: true } } } },
       },
     })
 
-    const doc = new jsPDF()
+    const parametres = await prisma.parametre.findFirst()
+    const nomEntreprise = parametres?.nomEntreprise || 'GESTICOM PRO'
+
+    const doc = new jsPDF({ orientation: 'landscape' })
     let y = 20
     const pageHeight = doc.internal.pageSize.height
-    const margin = 20
+    const pageWidth = doc.internal.pageSize.width
+    const margin = 10
     const lineHeight = 7
 
     // En-tête
     doc.setFontSize(18)
-    doc.text('Liste des Achats', margin, y)
+    doc.text(`Liste des Achats - ${nomEntreprise}`, margin, y)
     y += 10
 
     doc.setFontSize(10)
@@ -57,48 +58,92 @@ export async function GET(request: NextRequest) {
 
     // Tableau
     doc.setFontSize(9)
-    const startY = y
-    let currentY = startY
+    let currentY = y
 
-    // En-têtes du tableau
+    // En-têtes du tableau (Landscape)
     doc.setFont(undefined, 'bold')
-    doc.text('N°', margin, currentY)
-    doc.text('Date', margin + 25, currentY)
-    doc.text('Magasin', margin + 55, currentY)
-    doc.text('Fournisseur', margin + 85, currentY)
-    doc.text('Montant', margin + 130, currentY, { align: 'right' })
-    doc.text('Paiement', margin + 160, currentY)
+    const colPositions = {
+      n: margin,
+      date: margin + 25,
+      magasin: margin + 50,
+      fournisseur: margin + 70,
+      camion: margin + 130,
+      montant: margin + 175, // Right align
+      paiement: margin + 180,
+      statutPaiement: margin + 215,
+      reste: margin + 275, // Right align
+    }
+
+    doc.text('N°', colPositions.n, currentY)
+    doc.text('Date', colPositions.date, currentY)
+    doc.text('Magasin', colPositions.magasin, currentY)
+    doc.text('Fournisseur', colPositions.fournisseur, currentY)
+    doc.text('N° Camion', colPositions.camion, currentY)
+    doc.text('Montant', colPositions.montant, currentY, { align: 'right' })
+    doc.text('Paiement', colPositions.paiement, currentY)
+    doc.text('Statut Paiement', colPositions.statutPaiement, currentY)
+    doc.text('Reste', colPositions.reste, currentY, { align: 'right' })
+
     currentY += lineHeight
-    doc.line(margin, currentY - 2, 190, currentY - 2)
+    doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
 
     doc.setFont(undefined, 'normal')
+    let totalMontant = 0
+    let totalReste = 0
+
     for (const a of achats) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
+        doc.setFont(undefined, 'bold')
+        doc.text('N°', colPositions.n, currentY)
+        doc.text('Date', colPositions.date, currentY)
+        doc.text('Magasin', colPositions.magasin, currentY)
+        doc.text('Fournisseur', colPositions.fournisseur, currentY)
+        doc.text('N° Camion', colPositions.camion, currentY)
+        doc.text('Montant', colPositions.montant, currentY, { align: 'right' })
+        doc.text('Paiement', colPositions.paiement, currentY)
+        doc.text('Statut Paiement', colPositions.statutPaiement, currentY)
+        doc.text('Reste', colPositions.reste, currentY, { align: 'right' })
+        currentY += lineHeight
+        doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
+        doc.setFont(undefined, 'normal')
       }
 
       const dateStr = new Date(a.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
       const fournisseurStr = a.fournisseur?.nom || a.fournisseurLibre || '—'
-      const montantStr = Number(a.montantTotal).toLocaleString('fr-FR') + ' F'
+      const reste = a.montantTotal - (a.montantPaye || 0)
+      
+      totalMontant += a.montantTotal
+      totalReste += reste
 
-      doc.text(a.numero, margin, currentY)
-      doc.text(dateStr, margin + 25, currentY)
-      doc.text(a.magasin.code, margin + 55, currentY)
-      doc.text(fournisseurStr.length > 20 ? fournisseurStr.substring(0, 20) + '...' : fournisseurStr, margin + 85, currentY)
-      doc.text(montantStr, margin + 130, currentY, { align: 'right' })
-      doc.text(a.modePaiement, margin + 160, currentY)
+      doc.text(a.numero, colPositions.n, currentY)
+      doc.text(dateStr, colPositions.date, currentY)
+      doc.text(a.magasin.code, colPositions.magasin, currentY)
+      doc.text(fournisseurStr.length > 30 ? fournisseurStr.substring(0, 30) + '.' : fournisseurStr, colPositions.fournisseur, currentY)
+      doc.text(a.numeroCamion || '—', colPositions.camion, currentY)
+      doc.text(a.montantTotal.toLocaleString('fr-FR'), colPositions.montant, currentY, { align: 'right' })
+      doc.text(a.modePaiement, colPositions.paiement, currentY)
+      doc.text(a.statutPaiement === 'PAYE' ? 'Payé' : a.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit', colPositions.statutPaiement, currentY)
+      doc.text(reste.toLocaleString('fr-FR'), colPositions.reste, currentY, { align: 'right' })
 
       currentY += lineHeight
     }
+
+    // Totaux
+    doc.setFont(undefined, 'bold')
+    doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
+    doc.text('TOTAUX', colPositions.n, currentY)
+    doc.text(totalMontant.toLocaleString('fr-FR') + ' F', colPositions.montant, currentY, { align: 'right' })
+    doc.text(totalReste.toLocaleString('fr-FR') + ' F', colPositions.reste, currentY, { align: 'right' })
 
     // Pied de page
     const totalPages = doc.internal.pages.length - 1
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i)
       doc.setFontSize(8)
-      doc.text(`Page ${i} / ${totalPages}`, 190, pageHeight - 10, { align: 'right' })
-      doc.text(`GestiCom - ${new Date().toLocaleDateString('fr-FR')}`, margin, pageHeight - 10)
+      doc.text(`Page ${i} / ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' })
+      doc.text(`${nomEntreprise} - ${new Date().toLocaleDateString('fr-FR')}`, margin, pageHeight - 10)
     }
 
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'))

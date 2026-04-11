@@ -15,10 +15,14 @@ import {
   comptabiliserReglementVente,
   comptabiliserReglementAchat,
 } from '@/lib/comptabilisation'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function POST() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const eId = await getEntiteId(session)
+  const whereEntite: any = eId > 0 ? { entiteId: eId } : {}
 
   const created = { ventes: 0, achats: 0, depenses: 0, charges: 0, reglementsVentes: 0, reglementsAchats: 0, errors: [] as string[] }
   const sansEcriture = { ventes: 0, achats: 0, depenses: 0, charges: 0 }
@@ -27,14 +31,14 @@ export async function POST() {
     // Ventes sans écriture
     const ventesAvecEcriture = await prisma.ecritureComptable
       .findMany({
-        where: { referenceType: 'VENTE' },
+        where: { referenceType: 'VENTE', ...whereEntite },
         select: { referenceId: true },
         distinct: ['referenceId'],
       })
       .then((rows) => new Set(rows.map((r) => r.referenceId).filter(Boolean) as number[]))
 
     const ventesSansEcriture = await prisma.vente.findMany({
-      where: { id: { notIn: [...ventesAvecEcriture] }, statut: 'VALIDEE' },
+      where: { id: { notIn: [...ventesAvecEcriture] }, statut: 'VALIDEE', ...whereEntite },
       select: {
         id: true,
         numero: true,
@@ -73,14 +77,14 @@ export async function POST() {
     // Achats sans écriture
     const achatsAvecEcriture = await prisma.ecritureComptable
       .findMany({
-        where: { referenceType: 'ACHAT' },
+        where: { referenceType: 'ACHAT', ...whereEntite },
         select: { referenceId: true },
         distinct: ['referenceId'],
       })
       .then((rows) => new Set(rows.map((r) => r.referenceId).filter(Boolean) as number[]))
 
     const achatsSansEcriture = await prisma.achat.findMany({
-      where: { id: { notIn: [...achatsAvecEcriture] } },
+      where: { id: { notIn: [...achatsAvecEcriture] }, ...whereEntite },
       select: {
         id: true,
         numero: true,
@@ -119,14 +123,14 @@ export async function POST() {
     // Dépenses sans écriture
     const depensesAvecEcriture = await prisma.ecritureComptable
       .findMany({
-        where: { referenceType: 'DEPENSE' },
+        where: { referenceType: 'DEPENSE', ...whereEntite },
         select: { referenceId: true },
         distinct: ['referenceId'],
       })
       .then((rows) => new Set(rows.map((r) => r.referenceId).filter(Boolean) as number[]))
 
     const depensesSansEcriture = await prisma.depense.findMany({
-      where: { id: { notIn: [...depensesAvecEcriture] } },
+      where: { id: { notIn: [...depensesAvecEcriture] }, ...whereEntite },
       select: {
         id: true,
         date: true,
@@ -135,6 +139,7 @@ export async function POST() {
         libelle: true,
         modePaiement: true,
         utilisateurId: true,
+        entiteId: true,
       },
       orderBy: { date: 'asc' },
     })
@@ -150,6 +155,7 @@ export async function POST() {
           libelle: d.libelle,
           modePaiement: d.modePaiement || 'ESPECES',
           utilisateurId: d.utilisateurId,
+          entiteId: d.entiteId,
         })
         created.depenses++
       } catch (e: unknown) {
@@ -161,14 +167,14 @@ export async function POST() {
     // Charges sans écriture
     const chargesAvecEcriture = await prisma.ecritureComptable
       .findMany({
-        where: { referenceType: 'CHARGE' },
+        where: { referenceType: 'CHARGE', ...whereEntite },
         select: { referenceId: true },
         distinct: ['referenceId'],
       })
       .then((rows) => new Set(rows.map((r) => r.referenceId).filter(Boolean) as number[]))
 
     const chargesSansEcriture = await prisma.charge.findMany({
-      where: { id: { notIn: [...chargesAvecEcriture] } },
+      where: { id: { notIn: [...chargesAvecEcriture] }, ...whereEntite },
       select: {
         id: true,
         date: true,
@@ -176,6 +182,7 @@ export async function POST() {
         rubrique: true,
         observation: true,
         utilisateurId: true,
+        entiteId: true,
       },
       orderBy: { date: 'asc' },
     })
@@ -190,6 +197,7 @@ export async function POST() {
           rubrique: c.rubrique,
           libelle: c.observation ?? undefined,
           utilisateurId: c.utilisateurId,
+          entiteId: c.entiteId,
         })
         created.charges++
       } catch (e: unknown) {
@@ -201,15 +209,17 @@ export async function POST() {
     // Règlements Ventes sans écriture
     const regsVentesAvecEcriture = await prisma.ecritureComptable
       .findMany({
-        where: { referenceType: 'VENTE_REGLEMENT' },
+        where: { referenceType: 'VENTE_REGLEMENT', ...whereEntite },
         select: { referenceId: true },
         distinct: ['referenceId'],
       })
       .then((rows) => new Set(rows.map((r) => r.referenceId).filter(Boolean) as number[]))
 
     const regsVentesSansEcriture = await prisma.reglementVente.findMany({
-      where: { id: { notIn: [...regsVentesAvecEcriture] } },
-      include: { vente: { select: { numero: true } } },
+      where: { id: { notIn: [...regsVentesAvecEcriture] }, ...whereEntite },
+      include: { 
+        vente: { select: { numero: true, entiteId: true } } 
+      },
       orderBy: { date: 'asc' },
     })
 
@@ -222,6 +232,7 @@ export async function POST() {
           montant: Number(r.montant),
           modePaiement: r.modePaiement || 'ESPECES',
           utilisateurId: r.utilisateurId,
+          entiteId: r.vente?.entiteId || 1,
         })
         created.reglementsVentes++
       } catch (e: unknown) {
@@ -232,15 +243,17 @@ export async function POST() {
     // Règlements Achats sans écriture
     const regsAchatsAvecEcriture = await prisma.ecritureComptable
       .findMany({
-        where: { referenceType: 'ACHAT_REGLEMENT' },
+        where: { referenceType: 'ACHAT_REGLEMENT', ...whereEntite },
         select: { referenceId: true },
         distinct: ['referenceId'],
       })
       .then((rows) => new Set(rows.map((r) => r.referenceId).filter(Boolean) as number[]))
 
     const regsAchatsSansEcriture = await prisma.reglementAchat.findMany({
-      where: { id: { notIn: [...regsAchatsAvecEcriture] } },
-      include: { achat: { select: { numero: true } } },
+      where: { id: { notIn: [...regsAchatsAvecEcriture] }, ...whereEntite },
+      include: { 
+        achat: { select: { numero: true, entiteId: true } } 
+      },
       orderBy: { date: 'asc' },
     })
 
@@ -253,6 +266,7 @@ export async function POST() {
           montant: Number(r.montant),
           modePaiement: r.modePaiement || 'ESPECES',
           utilisateurId: r.utilisateurId,
+          entiteId: r.achat?.entiteId || 1,
         })
         created.reglementsAchats++
       } catch (e: unknown) {

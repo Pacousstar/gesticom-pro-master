@@ -7,6 +7,8 @@ import {
   FileText, ArrowLeft, History, ShoppingCart, Calendar, User
 } from 'lucide-react'
 import { formatDate } from '@/lib/format-date'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type Archive = {
   id: number
@@ -28,6 +30,7 @@ export default function ArchivesVentesPage() {
   const [filterDateDebut, setFilterDateDebut] = useState('')
   const [filterDateFin, setFilterDateFin] = useState('')
   const [filterMontantMin, setFilterMontantMin] = useState('')
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   useEffect(() => {
     fetchArchives()
@@ -67,13 +70,23 @@ export default function ArchivesVentesPage() {
           </h1>
           <p className="text-white/70 font-medium whitespace-pre-wrap">Consultation de l'historique pré-GestiCom</p>
         </div>
-        <Link 
-          href="/dashboard/archives/ventes/nouvelle"
-          className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-orange-600/20 transition-all uppercase tracking-widest text-sm"
-        >
-          <Plus className="h-5 w-5" />
-          Enregistrer une Archive
-        </Link>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setIsPreviewOpen(true)}
+            disabled={loading || filteredArchives.length === 0}
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-2xl font-black transition-all uppercase tracking-widest text-sm border border-white/20"
+          >
+            <Printer className="h-5 w-5" />
+            Imprimer Journal
+          </button>
+          <Link 
+            href="/dashboard/archives/ventes/nouvelle"
+            className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-orange-600/20 transition-all uppercase tracking-widest text-sm"
+          >
+            <Plus className="h-5 w-5" />
+            Enregistrer une Archive
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-emerald-100/50">
@@ -264,6 +277,145 @@ export default function ArchivesVentesPage() {
           </div>
         </div>
       )}
+      {/* Rendu Système (Impression Native) */}
+      <div className="hidden print:block absolute inset-0 bg-white shadow-2xl">
+        {chunkArray(filteredArchives, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                <ListPrintWrapper
+                    title="Journal des Archives Ventes"
+                    subtitle={`Audit Historique pré-GestiCom - Page ${index + 1}/${allChunks.length}`}
+                    pageNumber={index + 1}
+                    totalPages={allChunks.length}
+                    hideHeader={index > 0}
+                    hideVisa={index < allChunks.length - 1}
+                >
+                    <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner font-sans">
+                        <thead>
+                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                                <th className="border-r-2 border-black px-3 py-3 text-left">Date Origine</th>
+                                <th className="border-r-2 border-black px-3 py-3 text-left italic">N° Facture</th>
+                                <th className="border-r-2 border-black px-3 py-3 text-left tracking-tighter">Client d'Origine</th>
+                                <th className="px-3 py-3 text-right tabular-nums">Montant Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {chunk.map((a, idx) => (
+                                <tr key={idx} className="border-b border-black hover:bg-gray-50 transition-colors">
+                                    <td className="border-r-2 border-black px-3 py-2 font-black italic text-slate-800">{new Date(a.date).toLocaleDateString('fr-FR')}</td>
+                                    <td className="border-r-2 border-black px-3 py-2 font-black uppercase text-xs italic text-orange-700 tracking-widest">{a.numeroFactureOrigine}</td>
+                                    <td className="border-r-2 border-black px-3 py-2 font-black uppercase tracking-tighter italic text-gray-600">
+                                        {a.client?.nom || a.clientLibre || 'Passager'}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-black shadow-inner bg-gray-50/50 underline decoration-double tabular-nums text-blue-900 underline-offset-2">
+                                        {a.montantTotal.toLocaleString()} F
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                            <tfoot>
+                                <tr className="bg-black text-white font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
+                                    <td colSpan={3} className="px-3 py-6 text-right tracking-[0.22em] underline decoration-orange-500 decoration-2">TOTAL CUMULÉ DES ARCHIVES ANALYSÉES</td>
+                                    <td className="px-3 py-6 text-right bg-slate-900 ring-2 ring-white text-[18px] font-mono">
+                                        {filteredArchives.reduce((acc, a) => acc + a.montantTotal, 0).toLocaleString()} F
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        )}
+                    </table>
+                </ListPrintWrapper>
+            </div>
+        ))}
+      </div>
+
+      {/* MODALE D'APERÇU IMPRESSION ARCHIVES */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[110] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans text-slate-900 uppercase italic tracking-tighter shadow-2xl">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl not-italic tracking-normal">
+              <div className="flex items-center gap-6">
+                 <div>
+                   <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Journal Archives</h2>
+                   <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                     Audit Historique des Transactions pré-système
+                   </p>
+                 </div>
+                 <div className="h-10 w-px bg-gray-200" />
+                 <div className="flex flex-col">
+                   <span className="text-xs font-black text-orange-600 italic uppercase">Période Archives</span>
+                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest italic leading-none">{filterDateDebut || '...'} au {filterDateFin || '...'}</span>
+                 </div>
+              </div>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+                >
+                  Fermer
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+                >
+                  <Printer className="h-4 w-4" />
+                  Imprimer le journal
+                </button>
+              </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+              <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-12 text-slate-900 not-italic tracking-normal">
+                {chunkArray(filteredArchives, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                  <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-12 pb-12 last:border-0 last:mb-0 last:pb-0 shadow-sm">
+                    <ListPrintWrapper
+                      title="JOURNAL DES ARCHIVES DÉTAILLÉ"
+                      subtitle={`Analyse de l'historique de facturation - ${filteredArchives.length} Pièces`}
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      hideVisa={index < allChunks.length - 1}
+                    >
+                      <table className="w-full text-[14px] border-collapse border-4 border-black font-sans shadow-2xl">
+                        <thead>
+                          <tr className="bg-black text-white uppercase font-black border-2 border-black">
+                            <th className="border-r-2 border-white px-4 py-4 text-left">Date / Réf</th>
+                            <th className="border-r-2 border-white px-4 py-4 text-left italic">Client & Identité</th>
+                            <th className="border-r-2 border-white px-4 py-4 text-right tabular-nums tracking-tighter">Valorisation Brute</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((a, idx) => (
+                            <tr key={idx} className="border-b-2 border-black hover:bg-orange-50/30 transition-colors">
+                              <td className="border-r-2 border-black px-4 py-3">
+                                <div className="font-black text-slate-800 tracking-tighter">{new Date(a.date).toLocaleDateString('fr-FR')}</div>
+                                <div className="text-[10px] font-bold text-orange-700 uppercase tracking-widest bg-orange-50 px-2 rounded-md w-max mt-1 border border-orange-100 shadow-sm">{a.numeroFactureOrigine}</div>
+                              </td>
+                              <td className="border-r-2 border-black px-4 py-3">
+                                <div className="font-black uppercase leading-tight italic text-slate-700 tracking-tighter text-[13px]">{a.client?.nom || a.clientLibre || 'Passager'}</div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 flex items-center gap-1"><History className="h-2 w-2" /> DATA ARCHIVE</div>
+                              </td>
+                              <td className="px-4 py-3 text-right font-black tabular-nums text-lg text-blue-900 bg-gray-50/50 underline decoration-double decoration-gray-300 shadow-inner italic">{a.montantTotal.toLocaleString()} F</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-black text-white font-black text-[18px] border-t-4 border-black uppercase italic shadow-2xl">
+                                <td colSpan={2} className="px-4 py-8 text-right tracking-[0.3em] underline decoration-orange-500 decoration-4 underline-offset-8">CHIFFRE D'AFFAIRES ARCHIVÉ CUMULÉ</td>
+                                <td className="px-4 py-8 text-right text-3xl tabular-nums bg-slate-900 border-x-4 border-white shadow-inner font-mono ring-4 ring-slate-800">
+                                  {filteredArchives.reduce((acc, a) => acc + a.montantTotal, 0).toLocaleString()} F
+                                </td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ))}
+              </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+

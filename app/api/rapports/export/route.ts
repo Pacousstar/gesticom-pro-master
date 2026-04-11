@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx-prototype-pollution-fixed')
@@ -14,9 +15,24 @@ export async function GET(request: NextRequest) {
   const deb = hasDates ? new Date(dateDebut + 'T00:00:00') : null
   const fin = hasDates ? new Date(dateFin + 'T23:59:59') : null
 
+  const entiteId = await getEntiteId(session)
+  const where: any = {}
+
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
+    }
+  } else if (entiteId > 0) {
+    where.entiteId = entiteId
+  }
+
   const [stocks, topData, mouvements] = await Promise.all([
     prisma.stock.findMany({
-      where: { produit: { actif: true } },
+      where: { ...where, produit: { actif: true } },
       include: {
         produit: { select: { id: true, code: true, designation: true, categorie: true, seuilMin: true } },
         magasin: { select: { id: true, code: true, nom: true } },
@@ -26,15 +42,20 @@ export async function GET(request: NextRequest) {
       ? prisma.venteLigne.findMany({
           where: {
             vente: {
+              ...where,
               date: { gte: deb, lte: fin },
               statut: 'VALIDEE',
             },
           },
           select: { produitId: true, quantite: true },
         })
-      : prisma.venteLigne.groupBy({ by: ['produitId'], _sum: { quantite: true } }),
+      : prisma.venteLigne.groupBy({ 
+          by: ['produitId'], 
+          where: where,
+          _sum: { quantite: true } 
+        }),
     prisma.mouvement.findMany({
-      where: deb && fin ? { date: { gte: deb, lte: fin } } : undefined,
+      where: { ...where, ...(deb && fin ? { date: { gte: deb, lte: fin } } : {}) },
       take: 500,
       orderBy: { date: 'desc' },
       include: {
@@ -80,7 +101,7 @@ export async function GET(request: NextRequest) {
     const sorted = topGroup.sort((a, b) => (b._sum.quantite ?? 0) - (a._sum.quantite ?? 0)).slice(0, 50)
     const ids = sorted.map((x) => x.produitId)
     const prods = await prisma.produit.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, ...where },
       select: { id: true, code: true, designation: true },
     })
     const prodMap = new Map(prods.map((p) => [p.id, p]))

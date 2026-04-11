@@ -8,6 +8,7 @@ import { MESSAGES } from '@/lib/messages'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type Magasin = { id: number; code: string; nom: string }
 type OperationCaisse = {
@@ -58,6 +59,8 @@ export default function CaissePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
   const [isPrinting, setIsPrinting] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [allOperationsForPrint, setAllOperationsForPrint] = useState<OperationCaisse[]>([])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -217,12 +220,34 @@ export default function CaissePage() {
           </button>
           <button
             type="button"
-            onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
+            onClick={async () => {
+              setIsPrinting(true)
+              try {
+                const params = new URLSearchParams({ limit: '10000' })
+                if (dateDebut) params.set('dateDebut', dateDebut)
+                if (dateFin) params.set('dateFin', dateFin)
+                if (filtreMagasin) params.set('magasinId', filtreMagasin)
+                if (filtreType) params.set('type', filtreType)
+                if (searchTerm) params.set('search', searchTerm)
+
+                const res = await fetch('/api/caisse?' + params.toString())
+                if (res.ok) {
+                  const data = await res.json()
+                  setAllOperationsForPrint(data.data || [])
+                  setIsPreviewOpen(true)
+                }
+              } catch (e) {
+                console.error(e)
+                showError("Erreur lors de la préparation de l'aperçu.")
+              } finally {
+                setIsPrinting(false)
+              }
+            }}
             disabled={isPrinting}
             className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Imprimer
+            Aperçu Impression
           </button>
           <button
             type="button"
@@ -608,71 +633,174 @@ export default function CaissePage() {
           </div>
         </div>
       )}
-      {/* Zone d'impression professionnelle standardisée */}
-      <ListPrintWrapper
-        title="Journal de Caisse"
-        subtitle={filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
-        dateRange={{ start: dateDebut, end: dateFin }}
-      >
-        <table className="w-full text-[10px] border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100 uppercase font-black text-gray-700">
-              <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Type</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Magasin / Utilisateur</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Motif</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Montant</th>
-            </tr>
-          </thead>
-          <tbody>
-            {operations.map((o, idx) => (
-              <tr key={idx} className="border-b border-gray-200">
-                <td className="border border-gray-300 px-3 py-2">
-                  {new Date(o.date).toLocaleString('fr-FR')}
-                </td>
-                <td className="border border-gray-300 px-3 py-2 font-bold uppercase italic text-[9px]">
-                  {o.type}
-                </td>
-                <td className="border border-gray-300 px-3 py-2 uppercase">
-                   {o.magasin.code}<br/>
-                   <small className="font-normal italic text-gray-500">{o.utilisateur.nom}</small>
-                </td>
-                <td className="border border-gray-300 px-3 py-2 text-[9px]">{o.motif}</td>
-                <td className={`border border-gray-300 px-3 py-2 text-right font-black ${o.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
-                  {o.type === 'SORTIE' ? '-' : '+'}{o.montant.toLocaleString('fr-FR')} F
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-             <tr className="bg-gray-100 font-black text-[10px] border-t-2 border-black uppercase italic">
-                <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right bg-white">RÉCAPITULATIF MOUVEMENTS</td>
-                <td className="border border-gray-300 px-3 py-4 text-right bg-white leading-relaxed">
-                   TOTAL ENTRÉES: +{totalEntrees.toLocaleString('fr-FR')} F<br/>
-                   TOTAL SORTIES: -{totalSorties.toLocaleString('fr-FR')} F
-                </td>
-                <td className={`border border-gray-300 px-3 py-4 text-right text-sm bg-white underline decoration-double ${soldeMouvements >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                   SOLDE PÉRIODE:<br/>
-                   {soldeMouvements.toLocaleString('fr-FR')} F
-                </td>
-             </tr>
-          </tfoot>
-        </table>
-      </ListPrintWrapper>
 
-      <style jsx global>{`
-        @media print {
-          @page { size: portrait; margin: 10mm; }
-          nav, aside, header, .no-print, button, form, .Pagination { display: none !important; }
-          body, main { background: white !important; margin: 0 !important; padding: 0 !important; }
-          table { width: 100% !important; border-collapse: collapse !important; border: 1px solid #000 !important; }
-          th { background-color: #f3f4f6 !important; border: 1px solid #000 !important; padding: 4px !important; font-size: 8px !important; font-weight: 900 !important; text-transform: uppercase; }
-          td { border: 1px solid #ccc !important; padding: 4px !important; font-size: 7px !important; }
-          tr { page-break-inside: avoid; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-        }
-      `}</style>
+      {/* MODALE D'APERÇU IMPRESSION CAISSE */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Journal de Caisse</h2>
+                 <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                   {filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
+                 </p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
+                 {allOperationsForPrint.length} OPÉRATIONS
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
+               {(() => {
+                  const dataToPrint = allOperationsForPrint.length > 0 ? allOperationsForPrint : operations;
+                  const chunks = chunkArray(dataToPrint, ITEMS_PER_PRINT_PAGE);
+                  
+                  return chunks.map((chunk, index, allChunks) => (
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
+                       <ListPrintWrapper
+                        title="JOURNAL DE CAISSE"
+                        subtitle={filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
+                        dateRange={{ start: dateDebut, end: dateFin }}
+                        pageNumber={index + 1}
+                        totalPages={allChunks.length}
+                        hideHeader={index > 0}
+                        hideVisa={index < allChunks.length - 1}
+                      >
+                         <table className="w-full text-[14px] border-collapse border-2 border-black">
+                          <thead>
+                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Magasin / Utilisateur</th>
+                              <th className="border-r-2 border-black px-3 py-3 text-left">Motif</th>
+                              <th className="px-3 py-3 text-right">Montant</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chunk.map((o, idx) => (
+                              <tr key={idx} className="border-b border-black">
+                                <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">
+                                  {new Date(o.date).toLocaleDateString('fr-FR')}
+                                </td>
+                                <td className="border-r-2 border-black px-3 py-2 font-bold uppercase italic text-[11px]">
+                                   {o.type}
+                                </td>
+                                <td className="border-r-2 border-black px-3 py-2 uppercase leading-snug">
+                                   <div className="font-bold text-[11px]">{o.magasin.code}</div>
+                                   <div className="text-[10px] italic text-gray-500">{o.utilisateur.nom}</div>
+                                </td>
+                                <td className="border-r-2 border-black px-3 py-2 text-[12px]">{o.motif}</td>
+                                <td className={`px-3 py-2 text-right font-black ${o.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
+                                  {o.type === 'SORTIE' ? '-' : '+'}{o.montant.toLocaleString('fr-FR')} F
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {index === allChunks.length - 1 && (
+                            <tfoot>
+                              <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
+                                  <td colSpan={3} className="border-r-2 border-black px-3 py-5 text-right bg-white tracking-widest">RÉCAPITULATIF PÉRIODE</td>
+                                  <td className="border-r-2 border-black px-3 py-5 text-right bg-white leading-relaxed text-[12px]">
+                                    TOTAL ENTRÉES: +{totalEntrees.toLocaleString('fr-FR')} F<br/>
+                                    TOTAL SORTIES: -{totalSorties.toLocaleString('fr-FR')} F
+                                  </td>
+                                  <td className={`px-3 py-5 text-right bg-slate-50 underline decoration-double shadow-inner ${soldeMouvements >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                                    SOLDE:<br/>
+                                    {soldeMouvements.toLocaleString('fr-FR')} F
+                                  </td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </ListPrintWrapper>
+                    </div>
+                  ));
+               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rendu Système (Impression Native) */}
+      <div className="hidden print:block absolute inset-0 bg-white">
+        {chunkArray(allOperationsForPrint.length > 0 ? allOperationsForPrint : operations, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+            <ListPrintWrapper
+              title="JOURNAL DE CAISSE"
+              subtitle={filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
+              dateRange={{ start: dateDebut, end: dateFin }}
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+              hideHeader={index > 0}
+              hideVisa={index < allChunks.length - 1}
+            >
+              <table className="w-full text-[14px] border-collapse border-2 border-black">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-700 border-b-2 border-black">
+                    <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
+                    <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
+                    <th className="border-r-2 border-black px-3 py-3 text-left">Magasin / Utilisateur</th>
+                    <th className="border-r-2 border-black px-3 py-3 text-left">Motif</th>
+                    <th className="px-3 py-3 text-right">Montant</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((o, idx) => (
+                    <tr key={idx} className="border-b border-black">
+                      <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">
+                        {new Date(o.date).toLocaleDateString('fr-FR')}
+                      </td>
+                      <td className="border-r-2 border-black px-3 py-2 font-bold uppercase italic text-[11px]">
+                        {o.type}
+                      </td>
+                      <td className="border-r-2 border-black px-3 py-2 uppercase">
+                        {o.magasin.code} / {o.utilisateur.nom}
+                      </td>
+                      <td className="border-r-2 border-black px-3 py-2 text-[12px]">{o.motif}</td>
+                      <td className={`px-3 py-2 text-right font-black ${o.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
+                        {o.type === 'SORTIE' ? '-' : '+'}{o.montant.toLocaleString('fr-FR')} F
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {index === allChunks.length - 1 && (
+                  <tfoot>
+                    <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
+                        <td colSpan={3} className="border-r-2 border-black px-3 py-5 text-right bg-white">RÉCAPITULATIF MOUVEMENTS</td>
+                        <td className="border-r-2 border-black px-3 py-5 text-right bg-white leading-relaxed">
+                          TOTAL ENTRÉES: +{totalEntrees.toLocaleString('fr-FR')} F<br/>
+                          TOTAL SORTIES: -{totalSorties.toLocaleString('fr-FR')} F
+                        </td>
+                        <td className={`px-3 py-5 text-right text-sm bg-white underline decoration-double ${soldeMouvements >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          SOLDE:<br/>
+                          {soldeMouvements.toLocaleString('fr-FR')} F
+                        </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </ListPrintWrapper>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

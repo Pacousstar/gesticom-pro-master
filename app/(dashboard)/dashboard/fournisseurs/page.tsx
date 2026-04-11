@@ -12,6 +12,7 @@ import Pagination from '@/components/ui/Pagination'
 import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type Fournisseur = {
   id: number
@@ -281,8 +282,19 @@ export default function FournisseursPage() {
             onSuccess={() => fetchList()}
           />
           <button
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (q) params.set('q', q)
+              window.location.href = `/api/fournisseurs/export-excel?${params.toString()}`
+            }}
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-orange-600 transition-colors shadow-sm"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Exporter Excel
+          </button>
+          <button
             onClick={() => openForm()}
-            className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+            className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 shadow-sm"
           >
             <Plus className="h-4 w-4" />
             Nouveau
@@ -317,65 +329,61 @@ export default function FournisseursPage() {
         </div>
       </div>
 
-      <ListPrintWrapper
-        title="Répertoire des Fournisseurs"
-        subtitle={q ? `Filtre: "${q}"` : "Liste Globale"}
-      >
-        <table className="w-full text-[10px] border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100 uppercase font-black text-gray-700">
-              <th className="border border-gray-300 px-3 py-3 text-left">Code</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Nom du Fournisseur</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Contact / Tél.</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Localisation</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Camion</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Dette Init.</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Dette Actuelle</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list).map((f, idx) => (
-              <tr key={idx} className="border-b border-gray-200">
-                <td className="border border-gray-300 px-3 py-2 font-mono">{f.code || '-'}</td>
-                <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{f.nom}</td>
-                <td className="border border-gray-300 px-3 py-2 italic">{f.telephone || '-'}</td>
-                <td className="border border-gray-300 px-3 py-2">{f.localisation || '-'}</td>
-                <td className="border border-gray-300 px-3 py-2 font-medium">{f.numeroCamion || '-'}</td>
-                <td className="border border-gray-300 px-3 py-2 text-right text-[10px]">{(f.soldeInitial || 0).toLocaleString()} F</td>
-                <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(f.dette ?? 0) > 0 ? 'text-red-700 bg-red-50' : 'text-emerald-700'}`}>
-                  {(f.dette ?? 0).toLocaleString()} F
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-             <tr className="bg-gray-100 font-black text-[10px] border-t-2 border-black uppercase italic">
-                <td colSpan={5} className="border border-gray-300 px-3 py-4 text-right bg-white tracking-widest text-xs">SOLDE TOTAL FOURNISSEURS</td>
-                <td colSpan={2} className="border border-gray-300 px-3 py-4 text-right bg-white text-sm">
-                   <div className="flex flex-col gap-1">
-                      <div className="font-black underline decoration-double">
-                         ENCOURS TOTAL: {((allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list).reduce((acc, f) => acc + (f.dette ?? 0), 0)).toLocaleString()} F
-                      </div>
-                   </div>
-                </td>
-             </tr>
-          </tfoot>
-        </table>
-      </ListPrintWrapper>
-
-      <style jsx global>{`
-        @media print {
-          @page { size: portrait; margin: 10mm; }
-          nav, aside, header, .no-print, button, form, .Pagination { display: none !important; }
-          body, main { background: white !important; margin: 0 !important; padding: 0 !important; }
-          table { width: 100% !important; border-collapse: collapse !important; border: 1px solid #000 !important; }
-          th { background-color: #f3f4f6 !important; border: 1px solid #000 !important; padding: 4px !important; font-size: 8px !important; font-weight: 900 !important; text-transform: uppercase; }
-          td { border: 1px solid #ccc !important; padding: 4px !important; font-size: 7px !important; }
-          tr { page-break-inside: avoid; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-        }
-      `}</style>
+      <div className="hidden print:block">
+        {chunkArray(allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+            <ListPrintWrapper
+              title="Répertoire des Fournisseurs"
+              subtitle={q ? `Filtre: "${q}"` : "Liste Globale"}
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+            >
+              <table className="w-full text-[14px] border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                    <th className="border border-gray-300 px-3 py-3 text-left">Code</th>
+                    <th className="border border-gray-300 px-3 py-3 text-left">Nom du Fournisseur</th>
+                    <th className="border border-gray-300 px-3 py-3 text-left">Contact / Tél.</th>
+                    <th className="border border-gray-300 px-3 py-3 text-left">Localisation</th>
+                    <th className="border border-gray-300 px-3 py-3 text-left">Camion</th>
+                    <th className="border border-gray-300 px-3 py-3 text-right">Dette Init.</th>
+                    <th className="border border-gray-300 px-3 py-3 text-right">Dette Actuelle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((f, idx) => (
+                    <tr key={idx} className="border-b border-gray-200">
+                      <td className="border border-gray-300 px-3 py-2 font-mono">{f.code || '-'}</td>
+                      <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{f.nom}</td>
+                      <td className="border border-gray-300 px-3 py-2 italic">{f.telephone || '-'}</td>
+                      <td className="border border-gray-300 px-3 py-2">{f.localisation || '-'}</td>
+                      <td className="border border-gray-300 px-3 py-2 font-medium">{f.numeroCamion || '-'}</td>
+                      <td className="border border-gray-300 px-3 py-2 text-right text-[12px]">{(f.soldeInitial || 0).toLocaleString()} F</td>
+                      <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(f.dette ?? 0) > 0 ? 'text-red-700 bg-red-50' : 'text-emerald-700'}`}>
+                        {(f.dette ?? 0).toLocaleString()} F
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {index === allChunks.length - 1 && (
+                  <tfoot>
+                    <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black uppercase italic">
+                        <td colSpan={5} className="border border-gray-300 px-3 py-4 text-right bg-white tracking-widest text-xs">SOLDE TOTAL FOURNISSEURS</td>
+                        <td colSpan={2} className="border border-gray-300 px-3 py-4 text-right bg-white text-sm">
+                          <div className="flex flex-col gap-1">
+                              <div className="font-black underline decoration-double">
+                                ENCOURS TOTAL: {((allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list).reduce((acc, f) => acc + (f.dette ?? 0), 0)).toLocaleString()} F
+                              </div>
+                          </div>
+                        </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </ListPrintWrapper>
+          </div>
+        ))}
+      </div>
 
       {form && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-6">

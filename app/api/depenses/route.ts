@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
+  const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
   const limit = Math.min(200, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 100))
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
@@ -19,18 +20,19 @@ export async function GET(request: NextRequest) {
   const magasinId = request.nextUrl.searchParams.get('magasinId')?.trim()
   const search = request.nextUrl.searchParams.get('search')?.trim()
 
+  const entiteId = await getEntiteId(session)
   const where: any = {}
 
-  // Filtrer par entité de la session (sauf SUPER_ADMIN qui voit tout)
-  if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-    where.AND = [
-      {
-        OR: [
-          { entiteId: session.entiteId },
-          { entiteId: 0 }
-        ]
-      }
-    ]
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
+    }
+  } else if (entiteId > 0) {
+    where.entiteId = entiteId
   }
 
   if (dateDebut && dateFin) {
@@ -65,18 +67,37 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const depenses = await prisma.depense.findMany({
-    where,
-    take: limit,
-    orderBy: { date: 'desc' },
-    include: {
-      magasin: { select: { id: true, code: true, nom: true } },
-      entite: { select: { code: true, nom: true } },
-      utilisateur: { select: { nom: true, login: true } },
-    },
-  })
+  const [total, depenses, aggregates] = await Promise.all([
+    prisma.depense.count({ where }),
+    prisma.depense.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      // Tri chronologique inverse : la dépense la plus récente en premier.
+      // Le tri secondaire par id garantit un ordre stable quand plusieurs dépenses ont la même date.
+      orderBy: [{ createdAt: 'desc' }],
+      include: {
+        magasin: { select: { id: true, code: true, nom: true } },
+        entite: { select: { code: true, nom: true } },
+        utilisateur: { select: { nom: true, login: true } },
+      },
+    }),
+    prisma.depense.aggregate({
+      where,
+      _sum: { montant: true }
+    })
+  ])
 
-  return NextResponse.json(depenses, {
+  return NextResponse.json({
+    data: depenses,
+    totalAmount: aggregates._sum.montant || 0,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  }, {
     headers: {
       'Cache-Control': 'no-store, max-age=0',
     },
@@ -164,8 +185,6 @@ export async function POST(request: NextRequest) {
 
       // Comptabilisation automatique (seulement si payé)
       if (statutPaiement === 'PAYE' || montantPaye > 0) {
-        // Note: On utilise ici un appel interne qui devra utiliser 'tx' si on veut une transaction totale.
-        // Pour l'instant, on se concentre sur le lien Dépense <-> Caisse.
         await comptabiliserDepense({
           depenseId: d.id,
           date,
@@ -175,15 +194,29 @@ export async function POST(request: NextRequest) {
           modePaiement,
           utilisateurId: session.userId,
           magasinId,
-        })
+          entiteId: d.entiteId,
+        }, tx)
 
         // ✅ SYNCHRO CAISSE : Si paiement CASH/ESPECES, enregistrer en caisse (SORTIE)
         if (montantPaye > 0 && estModeEspeces(modePaiement)) {
+          let targetMagasinId = magasinId;
+          
+          if (!targetMagasinId) {
+            const firstMag = await tx.magasin.findFirst({
+              where: { entiteId },
+              select: { id: true }
+            });
+            if (!firstMag) {
+              throw new Error("Impossible d'enregistrer en caisse : aucun point de vente (magasin) n'est configuré pour cette entité.");
+            }
+            targetMagasinId = firstMag.id;
+          }
+
           // On évite le helper 'enregistrerMouvementCaisse' pour pouvoir utiliser 'tx' directement
           // et garantir que l'erreur fait échouer la transaction.
           await tx.caisse.create({
             data: {
-              magasinId: magasinId || 1,
+              magasinId: targetMagasinId,
               entiteId: entiteId || 1,
               utilisateurId: session.userId,
               montant: montantPaye,
@@ -195,7 +228,7 @@ export async function POST(request: NextRequest) {
         }
       }
       return d
-    })
+    }, { timeout: 20000 })
 
     revalidatePath('/dashboard/depenses')
     revalidatePath('/api/depenses')

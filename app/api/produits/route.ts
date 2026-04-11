@@ -9,22 +9,35 @@ import { ensureActivated } from '@/lib/security'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const forbidden = requirePermission(session, 'produits:view')
   if (forbidden) return forbidden
 
   const complet = request.nextUrl.searchParams.get('complet') === '1'
 
   const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
-  const where = q
-    ? {
-      actif: true,
-      OR: [
-        { code: { contains: q } },
-        { designation: { contains: q } },
-        { categorie: { contains: q } },
-      ],
+  const entiteId = await getEntiteId(session)
+  const where: any = complet ? {} : { actif: true } // En mode complet (rapports), on inclut tout pour vérifier le stock résiduel
+
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
     }
-    : { actif: true }
+  } else if (entiteId > 0) {
+    where.entiteId = entiteId
+  }
+
+  if (q) {
+    where.OR = [
+      { code: { contains: q } },
+      { designation: { contains: q } },
+      { categorie: { contains: q } },
+    ]
+  }
 
   // Mode complet : retourner tous les produits sans pagination (utilisé dans les sélecteurs)
   if (complet) {
@@ -60,7 +73,7 @@ export async function GET(request: NextRequest) {
 
   // Mode paginé (utilisé dans la liste des produits)
   const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
-  const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
+  const limit = Math.min(50000, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
   const skip = (page - 1) * limit
 
   const [produits, total] = await Promise.all([

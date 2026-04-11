@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Loader2, Download, Filter, Package, Warehouse, User, ArrowUpRight, ArrowDownLeft, RefreshCcw, AlertTriangle, Printer, TrendingUp } from 'lucide-react'
+import { Search, Loader2, Download, Filter, Package, Warehouse, User, ArrowUpRight, ArrowDownLeft, RefreshCcw, AlertTriangle, Printer, TrendingUp, X, FileText, HelpCircle } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
@@ -62,7 +62,6 @@ export default function MouvementsStockPage() {
       ])
       if (prodRes.ok) {
         const prodData = await prodRes.json()
-        // L'API produits retourne { data: [...], pagination: {...} } (paginé)
         setProducts(Array.isArray(prodData) ? prodData : (prodData.data || []))
       }
       if (magRes.ok) {
@@ -111,7 +110,6 @@ export default function MouvementsStockPage() {
     return prodName.includes(searchLow) || prodCode.includes(searchLow);
   }) : []
 
-  // MODIF POINT 10 : Calcul des totaux sécurisé
   const totalEntrees = filteredData
     .filter(m => m && m.type === 'ENTREE')
     .reduce((acc, m) => acc + (Number(m.quantite) || 0), 0)
@@ -162,7 +160,7 @@ export default function MouvementsStockPage() {
             IMPRIMER LA LISTE
           </button>
           <button 
-            onClick={() => {/* Logique export excel si besoin */}}
+            onClick={() => {}}
             className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
           >
             <Download className="h-4 w-4" /> Excel
@@ -170,7 +168,6 @@ export default function MouvementsStockPage() {
         </div>
       </div>
 
-      {/* COMPTEURS (Point 10) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
         <div className="bg-white/10 backdrop-blur-md p-6 rounded-[2rem] border border-white/20 shadow-2xl flex items-center gap-6 group hover:bg-white/20 transition-all duration-300">
           <div className="h-16 w-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-300 shadow-inner group-hover:scale-110 transition-transform">
@@ -209,58 +206,59 @@ export default function MouvementsStockPage() {
         </div>
       </div>
 
-      {/* Zone d'impression professionnelle standardisée */}
-      <ListPrintWrapper
-        title="Journal des Mouvements de Stock"
-        subtitle="Rapport technique des flux"
-        dateRange={{ start: startDate, end: endDate }}
-      >
-        <table className="w-full text-[10px] border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100 uppercase font-black text-gray-700">
-              <th className="border border-gray-300 px-3 py-3 text-left">Date Opération</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Produit / Magasin</th>
-              <th className="border border-gray-300 px-3 py-3 text-center">Type</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Quantité</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Obs / Utilisateur</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((m, idx) => (
-              <tr key={idx} className="border-b border-gray-200">
-                <td className="border border-gray-300 px-3 py-2">
-                  {new Date(m.dateOperation).toLocaleString('fr-FR')}
-                </td>
-                <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
-                  {m.produit}<br/>
-                  <small className="font-normal italic text-gray-500">{m.magasin}</small>
-                </td>
-                <td className="border border-gray-300 px-3 py-2 text-center font-black uppercase italic text-[9px]">
-                  {m.type}
-                </td>
-                <td className={`border border-gray-300 px-3 py-2 text-right font-black ${m.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
-                  {m.type === 'SORTIE' ? '-' : '+'}{m.quantite.toLocaleString()} {m.unite}
-                </td>
-                <td className="border border-gray-300 px-3 py-2 text-[8px]">
-                  <p className="font-bold uppercase tracking-tighter">{m.utilisateur}</p>
-                  <p className="italic text-gray-500">{m.observation || '-'}</p>
-                </td>
+      <div className="hidden print:block">
+        <ListPrintWrapper
+          title="Journal des Mouvements de Stock"
+          subtitle="Rapport technique des flux"
+          dateRange={{ start: startDate, end: endDate }}
+        >
+          <table className="w-full text-[10px] border-collapse border border-gray-300">
+            <thead>
+              <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                <th className="border border-gray-300 px-3 py-3 text-left">Date Opération</th>
+                <th className="border border-gray-300 px-3 py-3 text-left">Produit / Magasin</th>
+                <th className="border border-gray-300 px-3 py-3 text-center">Type</th>
+                <th className="border border-gray-300 px-3 py-3 text-right">Quantité</th>
+                <th className="border border-gray-300 px-3 py-3 text-left">Obs / Utilisateur</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-             <tr className="bg-gray-50 font-black text-sm">
-                <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Bilan des Flux (Période)</td>
-                <td className="border border-gray-300 px-3 py-4 text-right text-orange-700">
-                   {netFlux > 0 ? '+' : ''}{netFlux.toLocaleString()} UNITÉS
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-[9px] text-gray-500 font-normal">
-                   E: {totalEntrees.toLocaleString()} / S: {totalSorties.toLocaleString()}
-                </td>
-             </tr>
-          </tfoot>
-        </table>
-      </ListPrintWrapper>
+            </thead>
+            <tbody>
+              {filteredData.map((m, idx) => (
+                <tr key={idx} className="border-b border-gray-200">
+                  <td className="border border-gray-300 px-3 py-2">
+                    {new Date(m.dateOperation).toLocaleString('fr-FR')}
+                  </td>
+                  <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
+                    {m.produit}<br/>
+                    <small className="font-normal italic text-gray-500">{m.magasin}</small>
+                  </td>
+                  <td className="border border-gray-300 px-3 py-2 text-center font-black uppercase italic text-[9px]">
+                    {m.type}
+                  </td>
+                  <td className={`border border-gray-300 px-3 py-2 text-right font-black ${m.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {m.type === 'SORTIE' ? '-' : '+'}{m.quantite.toLocaleString()} {m.unite}
+                  </td>
+                  <td className="border border-gray-300 px-3 py-2 text-[8px]">
+                    <p className="font-bold uppercase tracking-tighter">{m.utilisateur}</p>
+                    <p className="italic text-gray-500">{m.observation || '-'}</p>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+               <tr className="bg-gray-50 font-black text-sm">
+                  <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Bilan des Flux (Période)</td>
+                  <td className="border border-gray-300 px-3 py-4 text-right text-orange-700">
+                     {netFlux > 0 ? '+' : ''}{netFlux.toLocaleString()} UNITÉS
+                  </td>
+                  <td className="border border-gray-300 px-3 py-4 text-[9px] text-gray-500 font-normal">
+                     E: {totalEntrees.toLocaleString()} / S: {totalSorties.toLocaleString()}
+                  </td>
+               </tr>
+            </tfoot>
+          </table>
+        </ListPrintWrapper>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
         <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end">
@@ -361,22 +359,10 @@ export default function MouvementsStockPage() {
                 {paginatedData.map((m) => (
                   <tr key={m.id} className="hover:bg-gray-50 transition-colors group">
                     <td className="whitespace-nowrap px-6 py-4 text-[10px] text-gray-400 italic font-medium">
-                      {m.date ? new Date(m.date).toLocaleString('fr-FR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      }) : 'Date inconnue'}
+                      {m.date ? new Date(m.date).toLocaleString('fr-FR') : 'Date inconnue'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-black text-slate-800">
-                      {m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      }) : 'Non spécifiée'}
+                      {m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR') : 'Non spécifiée'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-400 uppercase">{m.code || 'SANS CODE'}</td>
                     <td className="px-6 py-4 text-sm font-bold text-gray-900">{m.produit || 'Produit inconnu'}</td>
@@ -391,21 +377,11 @@ export default function MouvementsStockPage() {
                         {m.type || 'INCONNU'}
                       </span>
                     </td>
-                    <td className={`whitespace-nowrap px-6 py-4 text-right text-sm font-black ${m.type === 'SORTIE' ? 'text-red-600' : 'text-emerald-600'}`}>
-                      <div className="flex flex-col items-end">
-                        <button 
-                          onClick={() => setSelectedMouvement(m)}
-                          className="hover:scale-110 transition-transform cursor-pointer flex flex-col items-end bg-gray-50 px-2 py-1 rounded border border-gray-100 hover:border-blue-200"
-                          title="Cliquez pour voir le détail complet"
-                        >
-                          <span>{m.type === 'SORTIE' ? '-' : '+'}{(m.quantite || 0).toLocaleString()} {m.unite || 'u'}</span>
-                          {m.observation && (
-                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">
-                              {m.observation.substring(0, 15)}...
-                            </span>
-                          )}
-                        </button>
-                      </div>
+                    <td 
+                      onClick={() => setSelectedMouvement(m)}
+                      className={`whitespace-nowrap px-6 py-4 text-right text-sm font-black cursor-pointer hover:underline decoration-2 underline-offset-4 ${m.type === 'SORTIE' ? 'text-red-600' : 'text-emerald-600'}`}
+                    >
+                      {m.type === 'SORTIE' ? '-' : '+'}{(m.quantite || 0).toLocaleString()} {m.unite || 'u'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       <div className="flex items-center gap-2">
@@ -429,82 +405,139 @@ export default function MouvementsStockPage() {
         )}
       </div>
 
-      {/* MODAL DÉTAIL MOUVEMENT (Point 3) */}
-      {selectedMouvement && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-           <div className="w-full max-w-lg rounded-[2.5rem] bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 border border-gray-100">
-              <div className="bg-gray-50 px-8 py-6 border-b border-gray-100 flex items-center justify-between">
-                 <div>
-                    <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter italic">Détail du Flux</h2>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Identification du mouvement #{selectedMouvement.id}</p>
-                 </div>
-                 <button 
-                   onClick={() => setSelectedMouvement(null)}
-                   className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 text-gray-400 hover:text-red-500 hover:border-red-100 transition-all"
-                 >
-                    <RefreshCcw className="h-5 w-5" />
-                 </button>
-              </div>
-              <div className="p-8 space-y-6">
-                 <div className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
-                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${getTypeStyle(selectedMouvement.type)}`}>
-                       {getTypeIcon(selectedMouvement.type)}
-                    </div>
-                    <div>
-                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Type d'opération</p>
-                       <p className="text-lg font-black text-gray-900">{selectedMouvement.type}</p>
-                    </div>
-                 </div>
+      {selectedMouvement && (() => {
+        const obs = selectedMouvement.observation || ''
+        const refMatch = obs.match(/(Vente|Achat|Transfert|Ajustement|Inventaire)\s+([A-Z0-9]+)/i)
+        const docType = refMatch ? refMatch[1] : null
+        const docRef = refMatch ? refMatch[2] : null
 
-                 <div className="grid grid-cols-2 gap-6">
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
+             <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden border border-white/20 transform animate-in zoom-in-95 duration-300">
+                <div className={`p-8 text-white flex items-center justify-between ${selectedMouvement.type === 'SORTIE' ? 'bg-gradient-to-r from-red-600 to-rose-500' : 'bg-gradient-to-r from-emerald-600 to-teal-500'}`}>
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md shadow-inner">
+                      {getTypeIcon(selectedMouvement.type)}
+                    </div>
                     <div>
-                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Produit concerné</p>
-                       <p className="text-sm font-black text-gray-800">{selectedMouvement.produit}</p>
-                       <p className="text-[10px] font-bold text-gray-500">{selectedMouvement.code}</p>
+                      <h2 className="text-2xl font-black uppercase italic tracking-tighter">Détail du Flux</h2>
+                      <p className="text-white/80 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                        <Package className="h-3 w-3" /> {selectedMouvement.type} DE STOCK
+                      </p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedMouvement(null)}
+                    className="h-12 w-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all active:scale-90"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="p-8 space-y-8">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Produit concerné</p>
+                      <p className="text-xl font-black text-gray-900 uppercase leading-none">{selectedMouvement.produit}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded uppercase tracking-wider border border-gray-200">
+                          Code: {selectedMouvement.code}
+                        </span>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded uppercase tracking-wider border border-gray-200">
+                          Unité: {selectedMouvement.unite}
+                        </span>
+                      </div>
                     </div>
                     <div className="text-right">
-                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Quantité impactée</p>
-                       <p className={`text-2xl font-black ${selectedMouvement.type === 'SORTIE' ? 'text-red-600' : 'text-emerald-600'}`}>
-                          {selectedMouvement.type === 'SORTIE' ? '-' : '+'}{selectedMouvement.quantite} {selectedMouvement.unite}
-                       </p>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Impact Stock</p>
+                      <p className={`text-4xl font-black tabular-nums transition-all ${selectedMouvement.type === 'SORTIE' ? 'text-red-600' : 'text-emerald-600'}`}>
+                        {selectedMouvement.type === 'SORTIE' ? '-' : '+'}{selectedMouvement.quantite.toLocaleString()}
+                      </p>
+                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Unités sorties</p>
                     </div>
-                 </div>
+                  </div>
 
-                 <div className="space-y-4 pt-4 border-t border-gray-100">
-                    <div className="flex justify-between items-center bg-gray-50/50 p-3 rounded-xl border border-dashed border-gray-200">
-                       <p className="text-[10px] font-black text-gray-500 uppercase">Date d'Enregistrement :</p>
-                       <p className="text-xs font-bold text-gray-800">{new Date(selectedMouvement.date).toLocaleString('fr-FR')}</p>
+                  <div className="grid grid-cols-2 gap-8 py-6 border-y border-gray-100">
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-1 h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                          <Warehouse className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Lieu de stockage</p>
+                          <p className="text-sm font-bold text-gray-700">{selectedMouvement.magasin}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="mt-1 h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Responsable Saisie</p>
+                          <p className="text-sm font-bold text-gray-700">{selectedMouvement.utilisateur}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center bg-gray-50/50 p-3 rounded-xl border border-dashed border-gray-200">
-                       <p className="text-[10px] font-black text-blue-600 uppercase">Date réelle d'opération :</p>
-                       <p className="text-xs font-black text-blue-700">{new Date(selectedMouvement.dateOperation).toLocaleString('fr-FR')}</p>
+                    
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-3 justify-end text-right">
+                        <div>
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Date effective</p>
+                          <p className="text-sm font-bold text-gray-700">{new Date(selectedMouvement.dateOperation).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                          <p className="text-[10px] text-gray-400 font-mono italic">{new Date(selectedMouvement.dateOperation).toLocaleTimeString('fr-FR')}</p>
+                        </div>
+                        <div className="mt-1 h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                           <RefreshCcw className="h-4 w-4" />
+                        </div>
+                      </div>
+                      
+                      {docRef && (
+                        <div className="flex items-start gap-3 justify-end text-right">
+                          <div>
+                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Référence Document</p>
+                            <p className="text-sm font-black text-gray-900 uppercase underline decoration-orange-300 underline-offset-2">{docRef}</p>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase">{docType}</p>
+                          </div>
+                          <div className="mt-1 h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+                             <FileText className="h-4 w-4" />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                 </div>
+                  </div>
 
-                 <div>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Observation / Source</p>
-                    <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 text-sm font-medium text-orange-900 italic">
-                       "{selectedMouvement.observation || 'Aucune observation saisie.'}"
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 shadow-inner">
+                    <div className="flex items-center gap-2 mb-2">
+                       <HelpCircle className="h-3.5 w-3.5 text-slate-400" />
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observation système complète</p>
                     </div>
-                 </div>
+                    <p className="text-sm font-medium text-slate-600 leading-relaxed italic">
+                      {selectedMouvement.observation || "Aucune observation détaillée disponible pour ce mouvement."}
+                    </p>
+                  </div>
 
-                 <div className="flex justify-between items-center pt-2">
-                    <div className="flex items-center gap-2">
-                       <User className="h-4 w-4 text-gray-400" />
-                       <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Saisi par {selectedMouvement.utilisateur}</span>
+                  <div className="flex items-center justify-between pt-2">
+                    <p className="text-[9px] font-mono text-gray-300 uppercase tracking-widest">ID Mouvement: #{selectedMouvement.id}</p>
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => setSelectedMouvement(null)}
+                        className="bg-slate-100 text-slate-600 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
+                      >
+                        Fermer
+                      </button>
+                      <button 
+                        onClick={() => setSelectedMouvement(null)}
+                        className="bg-slate-900 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-[0_10px_30px_rgba(15,23,42,0.3)] flex items-center gap-2"
+                      >
+                        <RefreshCcw className="h-3.5 w-3.5" /> Terminer
+                      </button>
                     </div>
-                    <button 
-                       onClick={() => setSelectedMouvement(null)}
-                       className="px-6 py-3 rounded-xl bg-gray-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
-                    >
-                       Fermer
-                    </button>
-                 </div>
-              </div>
-           </div>
-        </div>
-      )}
-      {/* Styles Print */}
+                  </div>
+                </div>
+             </div>
+          </div>
+        )
+      })()}
       <style jsx global>{`
         @media print {
           nav, aside, header, .no-print, button, form { display: none !important; }

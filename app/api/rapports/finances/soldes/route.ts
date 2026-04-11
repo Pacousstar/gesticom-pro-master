@@ -40,20 +40,21 @@ export async function GET(request: NextRequest) {
 
       const report = clients.map(c => {
         const totalDu = c.ventes.reduce((acc, v) => acc + (v.montantTotal || 0), 0)
-        // La dette tient compte de montantPaye sur les factures de ventes
-        const totalPayeFactures = c.ventes.reduce((acc, v) => acc + (v.montantPaye || 0), 0)
-        const totalPaye = totalPayeFactures
+        // Correction : On utilise la somme de TOUS les règlements (y compris les acomptes)
+        const totalPayeComplet = c.reglements.reduce((acc, r) => acc + (r.montant || 0), 0)
         
         // Solde = (Dette Factures + Solde Initial) - (Total Règlements + Avoir Initial)
-        const solde = (totalDu + (c.soldeInitial || 0)) - (totalPaye + (c.avoirInitial || 0))
+        const totalFactures = totalDu + (c.soldeInitial || 0)
+        const totalEncaisse = totalPayeComplet + (c.avoirInitial || 0)
+        const solde = totalFactures - totalEncaisse
         
         return {
           id: c.id,
           code: c.code,
           nom: c.nom,
           type: c.type,
-          totalDu: totalDu + (c.soldeInitial || 0),
-          totalPaye: totalPaye + (c.avoirInitial || 0),
+          totalDu: totalFactures,
+          totalPaye: totalEncaisse,
           solde
         }
       }).filter(c => Math.abs(c.solde) > 0.01)
@@ -87,19 +88,20 @@ export async function GET(request: NextRequest) {
 
       const report = fournisseurs.map(f => {
         const totalDu = f.achats.reduce((acc, a) => acc + (a.montantTotal || 0), 0)
-        const totalPayeFactures = f.achats.reduce((acc, a) => acc + (a.montantPaye || 0), 0)
-        // Les règlements isolés non liés à une facture ne doivent pas dédoubler le montant payé d'une facture existante
-        const totalPaye = totalPayeFactures
+        // Correction : Utiliser la somme réelle de tous les règlements fournisseurs
+        const totalPayeComplet = f.reglements.reduce((acc, r) => acc + (r.montant || 0), 0)
         
         // Solde = (Dette Factures + Solde Initial) - (Total Règlements + Avoir Initial)
-        const solde = (totalDu + (f.soldeInitial || 0)) - (totalPaye + (f.avoirInitial || 0))
+        const totalFactures = totalDu + (f.soldeInitial || 0)
+        const totalDecaisse = totalPayeComplet + (f.avoirInitial || 0)
+        const solde = totalFactures - totalDecaisse
         
         return {
           id: f.id,
           code: f.code,
           nom: f.nom,
-          totalDu: totalDu + (f.soldeInitial || 0),
-          totalPaye: totalPaye + (f.avoirInitial || 0),
+          totalDu: totalFactures,
+          totalPaye: totalDecaisse,
           solde
         }
       }).filter(f => Math.abs(f.solde) > 0.01)

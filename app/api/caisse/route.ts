@@ -25,7 +25,15 @@ export async function GET(request: NextRequest) {
   const entiteId = await getEntiteId(session)
   const where: any = {}
 
-  if (entiteId) {
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.magasin = { entiteId: Number(entiteIdFromParams) }
+    } else if (entiteId > 0) {
+      where.magasin = { entiteId }
+    }
+  } else if (entiteId > 0) {
     where.magasin = { entiteId }
   }
 
@@ -59,7 +67,7 @@ export async function GET(request: NextRequest) {
       where,
       skip,
       take: limit,
-      orderBy: { date: 'desc' },
+      orderBy: { createdAt: 'desc' },
       include: {
         magasin: { select: { id: true, code: true, nom: true } },
         utilisateur: { select: { nom: true, login: true } },
@@ -155,6 +163,7 @@ export async function POST(request: NextRequest) {
         montant,
         motif,
         utilisateurId: session.userId,
+        entiteId: magasin.entiteId,
       })
     } catch (comptaError) {
       console.error('Erreur comptabilisation caisse:', comptaError)

@@ -8,6 +8,7 @@ import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import Pagination from '@/components/ui/Pagination'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 type Magasin = { id: number; code: string; nom: string }
 type Produit = { id: number; code: string; designation: string; prixAchat?: number | null }
 type StockRow = {
@@ -108,6 +109,7 @@ export default function StockPage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [allStocksForPrint, setAllStocksForPrint] = useState<StockRow[]>([])
   const [entreprise, setEntreprise] = useState<any>(null)
+  const ITEMS_PER_PAGE_REPORT = 25
   const [showTransferAssistant, setShowTransferAssistant] = useState(false)
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [loadingRecommendations, setLoadingRecommendations] = useState(false)
@@ -705,8 +707,10 @@ export default function StockPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="pb-12">
+      {/* VUE ÉCRAN (Masquée à l'impression) */}
+      <div className="print:hidden space-y-6">
+        <div>
         <h1 className="text-3xl font-bold text-white">Stock</h1>
         <p className="mt-1 text-white/90">Stocks par magasin, quantités, entrées et inventaire</p>
         <p className="mt-1 text-sm font-medium text-white/80">
@@ -718,7 +722,7 @@ export default function StockPage() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4 no-print">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
@@ -777,14 +781,38 @@ export default function StockPage() {
           <ArrowRightLeft className="h-4 w-4" />
           Assistant de Transfert
         </button>
+        <button 
+          onClick={() => {
+            const params = new URLSearchParams()
+            if (magasinId) params.set('magasinId', magasinId)
+            window.location.href = `/api/stock/export-excel?${params.toString()}`
+          }}
+          disabled={loading || list.length === 0}
+          className="flex items-center gap-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 px-6 py-3 text-sm font-black text-emerald-800 hover:bg-emerald-100 shadow-lg transition-all active:scale-95 disabled:opacity-50 uppercase tracking-widest no-print"
+        >
+          <FileSpreadsheet className="h-5 w-5" />
+          EXCEL
+        </button>
         <button
           onClick={handlePrintAll}
           disabled={isPrinting}
-          className="flex items-center gap-2 rounded-lg border-2 border-slate-700 bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900 shadow-lg active:scale-95 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl border-2 border-slate-700 bg-slate-800 px-6 py-3 text-sm font-black text-white hover:bg-slate-900 shadow-xl transition-all active:scale-95 disabled:opacity-50 uppercase tracking-widest"
         >
-          {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-          IMPRIMER L'ÉTAT DU STOCK
+          {isPrinting ? <Loader2 className="h-5 w-5 animate-spin mx-auto text-orange-500" /> : <Printer className="h-5 w-5" />}
+          IMPRIMER
         </button>
+
+        {isPrinting && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md no-print">
+            <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm border-4 border-orange-500 transform scale-110">
+              <Loader2 className="h-16 w-16 animate-spin mx-auto text-orange-500 mb-6" />
+              <h3 className="text-2xl font-black text-gray-900 uppercase italic">Génération du Rapport Stock</h3>
+              <p className="mt-2 text-gray-600 font-bold uppercase text-[11px] tracking-widest">
+                Veuillez patienter pendant la préparation du document...
+              </p>
+            </div>
+          </div>
+        )}
         {alertes.length > 0 && (
           <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             <AlertTriangle className="h-5 w-5" />
@@ -1131,7 +1159,7 @@ export default function StockPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white no-print">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
@@ -1546,7 +1574,10 @@ export default function StockPage() {
               </button>
             </div>
           </div>
-          {/* Modal Confirmation Suppression Stock */}
+        </div>
+      )}
+
+      {/* Modal Confirmation Suppression Stock */}
       {deletingStock && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDeletingStock(null)}>
           <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -1577,8 +1608,6 @@ export default function StockPage() {
             </div>
           </div>
         </div>
-      )}
-    </div>
       )}
       {/* Modal Assistant de Transfert */}
       {showTransferAssistant && (
@@ -1734,72 +1763,79 @@ export default function StockPage() {
         </div>
       )}
 
-      {/* Zone d'impression professionnelle standardisée */}
-      <ListPrintWrapper
-        title="État du Stock"
-        subtitle={magasinId ? `Magasin: ${magasins.find(m => String(m.id) === magasinId)?.nom || magasinId}` : "Inventaire Global"}
-      >
-        <table className="w-full text-[10px] border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100 uppercase font-black text-gray-700">
-              <th className="border border-gray-300 px-3 py-3 text-left">Magasin</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Code</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Désignation</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Qté</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">P. Achat</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Valorisation</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(allStocksForPrint.length > 0 ? allStocksForPrint : list).map((s, idx) => (
-              <tr key={idx} className="border-b border-gray-200">
-                <td className="border border-gray-300 px-3 py-2 font-bold">{s.magasin.code}</td>
-                <td className="border border-gray-300 px-3 py-2 font-mono">{s.produit.code}</td>
-                <td className="border border-gray-300 px-3 py-2 uppercase font-medium">{s.produit.designation}</td>
-                <td className="border border-gray-300 px-3 py-2 text-right font-black">{s.quantite.toLocaleString()}</td>
-                <td className="border border-gray-300 px-3 py-2 text-right">{(s.produit.pamp || s.produit.prixAchat || 0).toLocaleString()} F</td>
-                <td className="border border-gray-300 px-3 py-2 text-right font-bold">
-                  {(s.quantite * (s.produit.pamp || s.produit.prixAchat || 0)).toLocaleString()} F
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-             <tr className="bg-gray-100 font-black text-[10px] border-t-2 border-black uppercase italic">
-                <td colSpan={2} className="border border-gray-300 px-3 py-4 text-right bg-white">RÉCAPITULATIF SÉLECTION</td>
-                <td className="border border-gray-300 px-3 py-4 text-center bg-white">
-                   Lignes: {totalLignes}<br/>
-                   Produits Actifs: {produitsAvecStock}
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-right bg-white">
-                   QUANTITÉ TOTALE<br/>
-                   {(allStocksForPrint.length > 0 ? allStocksForPrint : list).reduce((acc, s) => acc + s.quantite, 0).toLocaleString()}
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-right bg-white">
-                   —
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-right text-emerald-700 bg-white underline decoration-double">
-                   VALEUR STOCK (PAMP)<br/>
-                   {(allStocksForPrint.length > 0 ? allStocksForPrint : list).reduce((acc, s) => acc + (s.quantite * (s.produit.pamp || s.produit.prixAchat || 0)), 0).toLocaleString()} F
-                </td>
-             </tr>
-          </tfoot>
-        </table>
-      </ListPrintWrapper>
+      </div>
 
-      <style jsx global>{`
-        @media print {
-          @page { size: portrait; margin: 10mm; }
-          nav, aside, header, .no-print, button, form, .Pagination { display: none !important; }
-          body, main { background: white !important; margin: 0 !important; padding: 0 !important; }
-          table { width: 100% !important; border-collapse: collapse !important; border: 1px solid #000 !important; }
-          th { background-color: #f3f4f6 !important; border: 1px solid #000 !important; padding: 4px !important; font-size: 8px !important; font-weight: 900 !important; text-transform: uppercase; }
-          td { border: 1px solid #ccc !important; padding: 4px !important; font-size: 7px !important; }
-          tr { page-break-inside: avoid; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-        }
-      `}</style>
+      {/* Rendu Système (Impression Native) */}
+      <div className="hidden print:block absolute inset-0 bg-white">
+          {(() => {
+                const dataToPrint = allStocksForPrint.length > 0 ? allStocksForPrint : list;
+                const chunks = chunkArray(dataToPrint, ITEMS_PER_PRINT_PAGE);
+                
+                return chunks.map((chunk, index, allChunks) => (
+                  <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                    <ListPrintWrapper
+                      title="ÉTAT PHYSIQUE DES STOCKS"
+                      subtitle={magasinId ? `Dépôt : ${magasins.find(m => String(m.id) === magasinId)?.nom || magasinId}` : "Inventaire Multisites Global"}
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      enterprise={entreprise}
+                    >
+                       <table className="w-full text-[14px] border-collapse border-2 border-black font-sans">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                            <th className="border border-black px-1 py-3 text-center w-10">N°</th>
+                            <th className="border border-black px-2 py-3 text-left">Article</th>
+                            <th className="border border-black px-2 py-3 text-left">Code / Réf</th>
+                            <th className="border border-black px-2 py-3 text-left">Établissement</th>
+                            <th className="border border-black px-2 py-3 text-right">Quantité</th>
+                            <th className="border border-black px-2 py-3 text-right">Seuil Min</th>
+                            <th className="border border-black px-2 py-3 text-center uppercase text-[10px]">Statut</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((s, idx) => {
+                            const isAlerte = s.quantite < s.produit.seuilMin;
+                            return (
+                              <tr key={idx} className="border border-black">
+                                <td className="border border-black px-1 py-2 text-center font-bold">
+                                  {index * ITEMS_PER_PRINT_PAGE + idx + 1}
+                                </td>
+                                <td className="border border-black px-2 py-2">
+                                  <div className="font-black uppercase text-[13px]">{s.produit.designation}</div>
+                                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{s.produit.categorie}</div>
+                                </td>
+                                <td className="border border-black px-2 py-2 font-mono text-[11px] font-bold">{s.produit.code}</td>
+                                <td className="border border-black px-2 py-2 uppercase font-bold text-gray-600 text-[11px]">{s.magasin.nom}</td>
+                                <td className="border border-black px-2 py-2 text-right font-black text-[15px]">{s.quantite.toLocaleString()}</td>
+                                <td className="border border-black px-2 py-2 text-right italic text-gray-500">{s.produit.seuilMin}</td>
+                                <td className="border border-black px-2 py-2 text-center">
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${isAlerte ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'}`}>
+                                    {isAlerte ? 'Alerte' : 'Ok'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic shadow-inner">
+                              <td colSpan={4} className="border border-black px-3 py-6 text-right tracking-widest bg-white">RÉCAPITULATIF DU STOCK ({dataToPrint.length} RÉFÉRENCES) :</td>
+                              <td className="border border-black px-3 py-6 text-right tabular-nums bg-slate-900 text-white shadow-2xl">
+                                {dataToPrint.reduce((acc, s) => acc + s.quantite, 0).toLocaleString()}
+                              </td>
+                              <td colSpan={2} className="border border-black px-3 py-6 text-center text-[10px] bg-white font-bold text-gray-400 italic">
+                                --- Fin du rapport ---
+                              </td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ));
+          })()}
+      </div>
     </div>
   )
 }

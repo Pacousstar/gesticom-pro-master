@@ -25,6 +25,7 @@ import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ModificationAchatModal from '@/components/dashboard/achats/ModificationAchatModal'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 interface AchatListe {
   id: number
@@ -48,7 +49,7 @@ export default function TousLesAchatsPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const { error: showError } = useToast()
-  const [isPrinting, setIsPrinting] = useState(false)
+  const [printType, setPrintType] = useState<'GLOBAL' | 'DETAIL' | null>(null)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [entreprise, setEntreprise] = useState<any>(null)
@@ -61,6 +62,7 @@ export default function TousLesAchatsPage() {
     
     const start = thirtyDaysAgo.toISOString().split('T')[0]
     const end = now.toISOString().split('T')[0]
+
     setStartDate(start)
     setEndDate(end)
     fetchData(start, end)
@@ -108,6 +110,14 @@ export default function TousLesAchatsPage() {
     fetchData(startDate, endDate)
   }
 
+  const handlePrint = (type: 'GLOBAL' | 'DETAIL') => {
+    setPrintType(type)
+    setTimeout(() => {
+      window.print()
+      setPrintType(null)
+    }, 500)
+  }
+
   const filteredData = data.filter(a => 
     a.numero.toLowerCase().includes(search.toLowerCase()) || 
     a.fournisseur.toLowerCase().includes(search.toLowerCase()) ||
@@ -127,118 +137,206 @@ export default function TousLesAchatsPage() {
   const formatFcfa = (val: number) => val.toLocaleString('fr-FR') + ' F'
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* HEADER BLEU/VIOLET PREMIUM */}
-      <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-800 p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-white/10 blur-3xl opacity-50" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <h1 className="text-4xl font-black text-white uppercase tracking-tighter italic">Tous les Achats</h1>
-            <p className="mt-2 text-white/90 font-medium max-w-2xl">
-              Suivi exhaustif des approvisionnements et engagements envers les fournisseurs.
-            </p>
-          </div>
-          <div className="flex gap-3 no-print">
-             <button 
-              onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
-              className="flex items-center gap-2 rounded-xl bg-indigo-600 border-2 border-indigo-400 px-6 py-3 text-sm font-black text-white hover:bg-indigo-700 transition-all uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50"
-              disabled={isPrinting}
-            >
-              {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-              IMPRIMER LE JOURNAL
-            </button>
+    <div className="pb-12">
+      {/* VUE ÉCRAN (Masquée à l'impression) */}
+      <div className="print:hidden space-y-6">
+        {/* HEADER BLEU/VIOLET PREMIUM */}
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-800 p-8 shadow-2xl">
+          <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-white/10 blur-3xl opacity-50" />
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <h1 className="text-4xl font-black text-white uppercase tracking-tighter italic">Tous les Achats</h1>
+              <p className="mt-2 text-white/90 font-medium max-w-2xl">
+                Suivi exhaustif des approvisionnements et engagements envers les fournisseurs.
+              </p>
+            </div>
+            <div className="flex gap-3 no-print">
+               <button 
+                onClick={() => handlePrint('GLOBAL')}
+                className="flex items-center gap-2 rounded-xl bg-indigo-600 border-2 border-indigo-400 px-6 py-3 text-sm font-black text-white hover:bg-indigo-700 transition-all uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50"
+                disabled={printType !== null}
+              >
+                {printType === 'GLOBAL' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                JOURNAL GLOBAL
+              </button>
+               <button 
+                onClick={() => handlePrint('DETAIL')}
+                className="flex items-center gap-2 rounded-xl bg-gray-900 border-2 border-gray-700 px-6 py-3 text-sm font-black text-white hover:bg-black transition-all uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50"
+                disabled={printType !== null}
+              >
+                {printType === 'DETAIL' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                JOURNAL DÉTAILLÉ
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* COMPTEURS DE PERFORMANCE */}
       </div>
 
-      {/* Zone d'impression professionnelle standardisée */}
-      <ListPrintWrapper
-        title="Journal Global des Achats"
-        subtitle="Rapport des approvisionnements"
-        dateRange={{ start: startDate, end: endDate }}
-      >
-        <table className="w-full text-[10px] border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100 uppercase font-black text-gray-700">
-              <th className="border border-gray-300 px-3 py-3 text-left">Réf / Date</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Fournisseur / Magasin</th>
-              <th className="border border-gray-300 px-3 py-3 text-center">Paiement</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Total Achat</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Décaissé</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Solde Dû</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((a) => (
-              <tr key={a.id} className="border-b border-gray-200">
-                <td className="border border-gray-300 px-3 py-2">
-                  <span className="font-bold">{a.numero}</span><br/>
-                  {new Date(a.date).toLocaleDateString('fr-FR')}
-                </td>
-                <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
-                  {a.fournisseur}<br/>
-                  <small className="font-normal italic text-gray-500">{a.magasin}</small>
-                </td>
-                <td className="border border-gray-300 px-3 py-2 text-center text-[9px] uppercase font-bold">
-                  {a.modePaiement}<br/>
-                  <span className={a.statutPaiement === 'PAYE' ? 'text-emerald-600' : 'text-rose-600'}>{a.statutPaiement}</span>
-                </td>
-                <td className="border border-gray-300 px-3 py-2 text-right font-bold">
-                  {a.montantTotal.toLocaleString()} F
-                </td>
-                <td className="border border-gray-300 px-3 py-2 text-right text-emerald-700 font-bold">
-                  {a.montantPaye.toLocaleString()} F
-                </td>
-                <td className="border border-gray-300 px-3 py-2 text-right font-black text-rose-700">
-                  {(a.montantTotal - a.montantPaye).toLocaleString()} F
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-             <tr className="bg-gray-100 font-black text-[10px] border-t-2 border-black uppercase italic">
-                <td colSpan={2} className="border border-gray-300 px-3 py-4 text-right">RÉCAPITULATIF SÉLECTION</td>
-                <td className="border border-gray-300 px-3 py-4 text-center">
-                   Factures: {nbAchatsMonth}<br/>
-                   Ex: {data.filter(a => a.modePaiement === 'ESPECE').length} | Ch: {data.filter(a => a.modePaiement === 'CHEQUE').length}
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-right bg-white">
-                   VOLUME ACHATS<br/>
-                   <span className="text-sm">{caMonth.toLocaleString()} F</span>
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-right text-emerald-700 bg-white">
-                   TOTAL PAYÉ<br/>
-                   <span className="text-sm">{decaisseMonth.toLocaleString()} F</span>
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-right text-rose-700 bg-white underline decoration-double">
-                   RESTE À PAYER<br/>
-                   <span className="text-sm">{(caMonth - decaisseMonth).toLocaleString()} F</span>
-                </td>
-             </tr>
-          </tfoot>
-        </table>
-      </ListPrintWrapper>
-
-      {/* COMPTEURS DE PERFORMANCE */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 no-print">
-        {[
-          { label: "VOLUME ACHATS", val: formatFcfa(caMonth), sub: `${nbAchatsMonth} factures f.`, icon: ShoppingBag, color: "bg-blue-600" },
-          { label: "TOTAL PAYÉ", val: formatFcfa(decaisseMonth), sub: "Règlements fournisseurs", icon: CheckCircle2, color: "bg-emerald-600" },
-          { label: "RESTE À PAYER", val: formatFcfa(resteAPayer), sub: "Dettes en suspens", icon: CreditCard, color: "bg-rose-600" },
-          { label: "NB OPÉRATIONS", val: String(nbAchatsMonth), sub: "Volume de la période", icon: Tag, color: "bg-indigo-700" },
-        ].map((c, i) => (
-          <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group`}>
-             <div className="relative z-10 text-white flex flex-col justify-between h-full">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
-                <div>
-                  <h3 className="text-2xl font-black tracking-tighter">{c.val}</h3>
-                  <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
-                </div>
-             </div>
-             <c.icon className="absolute right-4 bottom-4 h-12 w-12 text-white opacity-10 group-hover:scale-110 transition-transform" />
+      {/* IMPRESSION : JOURNAL GLOBAL */}
+      <div className={printType === 'GLOBAL' ? 'hidden print:block' : 'hidden'}>
+        {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+            <ListPrintWrapper
+              title="Journal Global des Achats"
+              subtitle="Rapport des approvisionnements"
+              dateRange={{ start: startDate, end: endDate }}
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+            >
+              <table className="w-full text-[14px] border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                    <th className="border border-gray-300 px-3 py-3 text-left">Réf / Date</th>
+                    <th className="border border-gray-300 px-3 py-3 text-left">Fournisseur / Magasin</th>
+                    <th className="border border-gray-300 px-3 py-3 text-center">Paiement</th>
+                    <th className="border border-gray-300 px-3 py-3 text-right">Total Achat</th>
+                    <th className="border border-gray-300 px-3 py-3 text-right">Décaissé</th>
+                    <th className="border border-gray-300 px-3 py-3 text-right">Solde Dû</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((a) => (
+                    <tr key={a.id} className="border-b border-gray-200">
+                      <td className="border border-gray-300 px-3 py-2">
+                        <span className="font-bold">{a.numero}</span><br/>
+                        {new Date(a.date).toLocaleDateString('fr-FR')}
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
+                        {a.fournisseur}<br/>
+                        <small className="font-normal italic text-gray-500">{a.magasin}</small>
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2 text-center text-[12px] uppercase font-bold">
+                        {a.modePaiement}<br/>
+                        <span className={a.statutPaiement === 'PAYE' ? 'text-emerald-600' : 'text-rose-600'}>{a.statutPaiement}</span>
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2 text-right font-bold">
+                        {a.montantTotal.toLocaleString()} F
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2 text-right text-emerald-700 font-bold">
+                        {a.montantPaye.toLocaleString()} F
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2 text-right font-black text-rose-700">
+                        {(a.montantTotal - a.montantPaye).toLocaleString()} F
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {index === allChunks.length - 1 && (
+                  <tfoot>
+                    <tr className="bg-gray-100 font-black text-[12px] border-t-2 border-black uppercase italic">
+                        <td colSpan={2} className="border border-gray-300 px-3 py-4 text-right">RÉCAPITULATIF SÉLECTION</td>
+                        <td className="border border-gray-300 px-3 py-4 text-center">
+                          Factures: {nbAchatsMonth}<br/>
+                          Ex: {data.filter(a => a.modePaiement === 'ESPECES').length} | Ch: {data.filter(a => a.modePaiement === 'CHEQUE').length}
+                        </td>
+                        <td className="border border-gray-300 px-3 py-4 text-right bg-white">
+                          VOLUME ACHATS<br/>
+                          <span className="text-sm">{caMonth.toLocaleString()} F</span>
+                        </td>
+                        <td className="border border-gray-300 px-3 py-4 text-right text-emerald-700 bg-white">
+                          TOTAL PAYÉ<br/>
+                          <span className="text-sm">{decaisseMonth.toLocaleString()} F</span>
+                        </td>
+                        <td className="border border-gray-300 px-3 py-4 text-right text-rose-700 bg-white underline decoration-double">
+                          RESTE À PAYER<br/>
+                          <span className="text-sm">{(caMonth - decaisseMonth).toLocaleString()} F</span>
+                        </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </ListPrintWrapper>
           </div>
         ))}
       </div>
+
+      {/* IMPRESSION : JOURNAL DÉTAILLÉ */}
+      <div className={printType === 'DETAIL' ? 'hidden print:block' : 'hidden'}>
+        {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+            <ListPrintWrapper
+              title="Journal Détaillé des Achats"
+              subtitle="Détail des achats comprenant les produits"
+              dateRange={{ start: startDate, end: endDate }}
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+            >
+              <table className="w-full text-[14px] border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                    <th className="border border-gray-300 px-2 py-2 text-left">Réf / Date</th>
+                    <th className="border border-gray-300 px-2 py-2 text-left w-1/4">Fournisseur / Magasin</th>
+                    <th className="border border-gray-300 px-2 py-2 text-left w-1/3">Produits & Quantités</th>
+                    <th className="border border-gray-300 px-2 py-2 text-center">Paiement</th>
+                    <th className="border border-gray-300 px-2 py-2 text-right">Montant</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((a) => (
+                    <tr key={a.id} className="border-b border-gray-200">
+                      <td className="border border-gray-300 px-2 py-1">
+                        <span className="font-bold">{a.numero}</span><br/>
+                        {new Date(a.date).toLocaleDateString('fr-FR')}
+                      </td>
+                      <td className="border border-gray-300 px-2 py-1 font-bold uppercase">
+                        {a.fournisseur}<br/>
+                        <small className="font-normal italic text-gray-500">{a.magasin}</small>
+                      </td>
+                      <td className="border border-gray-300 px-2 py-1 text-[11px] whitespace-pre-wrap leading-tight">
+                        {(a as any).produits || '-'}
+                      </td>
+                      <td className="border border-gray-300 px-2 py-1 text-center font-bold">
+                        {a.modePaiement}<br/>
+                        <span className={a.statutPaiement === 'PAYE' ? 'text-emerald-600' : 'text-rose-600'}>{a.statutPaiement}</span>
+                      </td>
+                      <td className="border border-gray-300 px-2 py-1 text-right font-black text-[14px]">
+                        {a.montantTotal.toLocaleString()} F
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {index === allChunks.length - 1 && (
+                  <tfoot>
+                    <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black uppercase italic">
+                        <td colSpan={4} className="border border-gray-300 px-2 py-3 text-right">VOLUME CUMULÉ DÉTAILLÉ</td>
+                        <td className="border border-gray-300 px-2 py-3 text-right bg-white text-[16px]">
+                          {caMonth.toLocaleString()} F
+                        </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </ListPrintWrapper>
+          </div>
+        ))}
+      </div>
+
+      {/* COMPTEURS DE PERFORMANCE (Analyse de Compteur) */}
+      <div className="space-y-2 no-print">
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6">Analyse de Compteur : 1 / 4</p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "VOLUME ACHATS", val: formatFcfa(caMonth), sub: `${nbAchatsMonth} factures f.`, icon: ShoppingBag, color: "bg-blue-600" },
+            { label: "TOTAL PAYÉ", val: formatFcfa(decaisseMonth), sub: "Règlements fournisseurs", icon: CheckCircle2, color: "bg-emerald-600" },
+            { label: "RESTE À PAYER", val: formatFcfa(resteAPayer), sub: "Dettes en suspens", icon: CreditCard, color: "bg-rose-600" },
+            { label: "NB OPÉRATIONS", val: String(nbAchatsMonth), sub: "Volume de la période", icon: Tag, color: "bg-indigo-700" },
+          ].map((c, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group`}>
+               <div className="relative z-10 text-white flex flex-col justify-between h-full">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
+                  <div>
+                    <h3 className="text-2xl font-black tracking-tighter">{c.val}</h3>
+                    <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
+                  </div>
+               </div>
+               <c.icon className="absolute right-4 bottom-4 h-12 w-12 text-white opacity-10 group-hover:scale-110 transition-transform" />
+            </div>
+          ))}
+        </div>
+      </div>
+
 
       {/* FILTRES & RECHERCHE */}
       <div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex flex-col md:flex-row gap-6 items-end no-print">
@@ -398,20 +496,6 @@ export default function TousLesAchatsPage() {
         onSuccess={() => fetchData(startDate, endDate)}
       />
 
-      {/* Styles Print */}
-      <style jsx global>{`
-        @media print {
-          @page { size: portrait; margin: 10mm; }
-          nav, aside, header, .no-print, button, form, .Pagination { display: none !important; }
-          body, main { background: white !important; margin: 0 !important; padding: 0 !important; }
-          table { width: 100% !important; border-collapse: collapse !important; border: 1px solid #000 !important; }
-          th { background-color: #f3f4f6 !important; border: 1px solid #000 !important; padding: 4px !important; font-size: 8px !important; font-weight: 900 !important; text-transform: uppercase; }
-          td { border: 1px solid #ccc !important; padding: 4px !important; font-size: 7px !important; }
-          tr { page-break-inside: avoid; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-        }
-      `}</style>
     </div>
   )
 }

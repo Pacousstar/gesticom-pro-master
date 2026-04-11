@@ -89,12 +89,36 @@ export default function VenteRapidePage() {
 
   const handleSearch = (val: string) => {
     setSearch(val)
-    const p = produits.find(p => p.code.toLowerCase() === val.toLowerCase() || (p as any).codeBarres === val)
-    if (p) {
-      addToCart(p)
-      setSearch('')
+  }
+
+  // Support Barcode Scanners (Enter key)
+  const handleKeyDownInput = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && search.trim()) {
+      const val = search.trim()
+      const p = produits.find(p => p.code.toLowerCase() === val.toLowerCase() || (p as any).codeBarres === val)
+      if (p) {
+        addToCart(p)
+        setSearch('')
+      } else {
+        showError(`Produit non trouvé : ${val}`)
+        setSearch('')
+      }
     }
   }
+
+  // Auto-search for short codes with debounce (optional but safer)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search.length >= 3) {
+        const p = produits.find(p => p.code.toLowerCase() === search.toLowerCase() || (p as any).codeBarres === search)
+        if (p) {
+          addToCart(p)
+          setSearch('')
+        }
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const addToCart = (p: any) => {
     // Vérification du stock (Point 2)
@@ -226,7 +250,8 @@ export default function VenteRapidePage() {
                     type="text"
                     value={search}
                     onChange={e => handleSearch(e.target.value)}
-                    placeholder="Scanner ou saisir code produit..."
+                    onKeyDown={handleKeyDownInput}
+                    placeholder="Scanner ou saisir code produit... (ENTRÉE)"
                     className="w-full rounded-2xl bg-slate-900 border-2 border-slate-700 py-4 pl-12 pr-4 text-xl font-bold placeholder:text-slate-600 focus:border-orange-500 outline-none transition-all"
                 />
              </div>
@@ -409,8 +434,8 @@ export default function VenteRapidePage() {
 
                   <button 
                     onClick={handleValidate}
-                    disabled={submitting}
-                    className="w-full flex items-center justify-center gap-4 rounded-[30px] bg-emerald-600 py-8 text-4xl font-black shadow-2xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-50"
+                    disabled={submitting || (modePaiement === 'CREDIT' && !clientId)}
+                    className="w-full flex items-center justify-center gap-4 rounded-[30px] bg-emerald-600 py-8 text-4xl font-black shadow-2xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale"
                   >
                       {submitting ? <Loader2 className="h-12 w-12 animate-spin" /> : (
                           <>

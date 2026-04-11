@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 // Utilisation directe du client Prisma pour éviter les erreurs de type complexes
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const forbidden = requirePermission(session, 'clients:view')
   if (forbidden) return forbidden
 
@@ -16,13 +18,26 @@ export async function GET(request: NextRequest) {
   const skip = (page - 1) * limit
 
   const q = String(request.nextUrl.searchParams.get('q') || '').trim()
-  
+  const entiteId = await getEntiteId(session)
   const where: any = { actif: true }
+
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
+    }
+  } else if (entiteId > 0) {
+    where.entiteId = entiteId
+  }
+
   if (q) {
     where.OR = [
-      { nom: { contains: q } },
-      { code: { contains: q } },
-      { telephone: { contains: q } }
+      { nom: { contains: q, mode: 'insensitive' } },
+      { code: { contains: q, mode: 'insensitive' } },
+      { telephone: { contains: q, mode: 'insensitive' } }
     ]
   }
 
@@ -82,23 +97,30 @@ export async function GET(request: NextRequest) {
 
     // 2. Dette sur la PÉRIODE (uniquement entre dateDebut et dateFin)
     if (dateDebut && dateFin) {
+      const wherePeriode: any = {
+        clientId: { in: clientIds },
+        entiteId: where.entiteId, // Appliquer l'entité si filtrée
+        statut: { in: ['VALIDE', 'VALIDEE'] },
+        date: { gte: new Date(dateDebut + 'T00:00:00'), lte: new Date(dateFin + 'T23:59:59') }
+      }
+      if (where.entiteId) wherePeriode.entiteId = where.entiteId
+
       const sumsPeriode = await prisma.vente.groupBy({
         by: ['clientId'],
-        where: {
-          clientId: { in: clientIds },
-          statut: { in: ['VALIDE', 'VALIDEE'] },
-          date: { gte: new Date(dateDebut + 'T00:00:00'), lte: new Date(dateFin + 'T23:59:59') }
-        },
+        where: wherePeriode,
         _sum: { montantTotal: true, montantPaye: true },
       })
       
+      const whereRegPeriode: any = { 
+        clientId: { in: clientIds }, 
+        venteId: null,
+        date: { gte: new Date(dateDebut + 'T00:00:00'), lte: new Date(dateFin + 'T23:59:59') }
+      }
+      if (where.entiteId) whereRegPeriode.entiteId = where.entiteId
+
       const reglementsLibresPeriode = await prisma.reglementVente.groupBy({
         by: ['clientId'],
-        where: { 
-          clientId: { in: clientIds }, 
-          venteId: null,
-          date: { gte: new Date(dateDebut + 'T00:00:00'), lte: new Date(dateFin + 'T23:59:59') }
-        },
+        where: whereRegPeriode,
         _sum: { montant: true }
       })
 

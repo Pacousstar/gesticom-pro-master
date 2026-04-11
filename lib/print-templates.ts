@@ -36,11 +36,13 @@ export type TemplateData = {
   TOTAL_HT?: string
   TOTAL_TVA?: string
   TOTAL_REMISE?: string
+  TOTAL_HT_NET?: string
   REMISE_GLOBALE?: string
   TOTAL?: string
   MONTANT_PAYE?: string
   RESTE?: string
   MODE_PAIEMENT?: string
+  NUMERO_BON?: string
   OBSERVATION?: string
 }
 
@@ -51,18 +53,28 @@ export type TemplateData = {
 export function replaceTemplateVariables(template: string, data: TemplateData): string {
   let result = template
 
-  // 1. Remplacer les conditions {VAR ? 'oui' : 'non'} AVANT les variables (sinon {VAR} dans le texte casse la regex)
-  result = result.replace(/\{([^?}]+)\s*\?\s*'([^']*)'\s*:\s*'([^']*)'\}/g, (_match, varName, ifTrue, ifFalse) => {
-    const value = data[varName.trim() as keyof TemplateData]
-    const hasValue = value != null && String(value).trim() !== ''
-    return hasValue ? ifTrue : ifFalse
-  })
+  // 1. Remplacer les conditions {VAR ? 'oui' : 'non'} AVANT les variables
+  try {
+    // Regex améliorée pour capturer les contenus même s'ils contiennent des quotes
+    // On cherche {VAR ? '...' : '...'} où le contenu entre quotes peut être n'importe quoi tant que la quote n'est pas suivie de ' : ' ou '}'
+    result = result.replace(/\{(\w+)\s*\?\s*'((?:[^']|'(?!\s*[:}] ))*)'\s*:\s*'((?:[^']|'(?!\s*\}))*)'\}/g, (_match, varName, ifTrue, ifFalse) => {
+      const key = varName.trim() as keyof TemplateData
+      const value = data[key]
+      const hasValue = value != null && String(value).trim() !== '' && String(value).trim() !== 'undefined'
+      return hasValue ? ifTrue : ifFalse
+    })
+  } catch (e) {
+    console.error("Erreur replacement conditions:", e)
+  }
 
-  // 2. Remplacer toutes les variables simples
+  // 2. Remplacer toutes les variables simples transmises dans data
   Object.entries(data).forEach(([key, value]) => {
     const regex = new RegExp(`\\{${key}\\}`, 'g')
-    result = result.replace(regex, value != null ? String(value) : '')
+    result = result.replace(regex, value != null && value !== 'undefined' ? String(value) : '')
   })
+
+  // 3. Nettoyage final : supprimer toutes les variables {NOM_VAR} restantes non remplies
+  result = result.replace(/\{[A-Z0-9_]+\}/g, '')
 
   return result
 }
@@ -122,169 +134,176 @@ function escapeHtml(s: string): string {
 export function getPrintStyles(format: 'TICKET' | 'A4' = 'TICKET'): string {
     const isA4 = format === 'A4'
     return `
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @page {
+      size: ${isA4 ? 'A4 portrait' : '80mm auto'};
+      margin: ${isA4 ? '10mm' : '2mm'};
+    }
     body {
       margin: 0;
-      padding: ${isA4 ? '40px' : '16px'};
-      font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
-      font-size: ${isA4 ? '14px' : '13px'};
-      line-height: 1.5;
-      color: #1f2937;
-      background: #f9fafb;
+      padding: ${isA4 ? '0' : '5px'};
+      font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: ${isA4 ? '12px' : '11px'};
+      line-height: 1.4;
+      color: #000;
+      background: #fff;
     }
     .print-document {
-      max-width: ${isA4 ? '800px' : '320px'};
+      width: 100%;
       margin: 0 auto;
-      padding: ${isA4 ? '40px' : '24px'};
-      background: #fff;
-      border-radius: ${isA4 ? '0' : '8px'};
-      box-shadow: ${isA4 ? 'none' : '0 1px 3px rgba(0,0,0,0.08)'};
-      min-height: ${isA4 ? '1120px' : 'auto'};
-    }
-    .print-document h1, .print-document h2 { margin: 0 0 8px; font-size: 1.1em; }
-    .print-document p { margin: 4px 0; }
-    .print-document .print-header {
+      padding: ${isA4 ? '15mm' : '5mm'};
       display: flex;
+      flex-direction: column;
+      min-height: ${isA4 ? '277mm' : 'auto'};
+    }
+    .print-content {
+      flex: 1;
+    }
+    .print-header {
+      display: flex;
+      justify-content: space-between;
       align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 2px solid #e5e7eb;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 3px solid #000;
     }
-    .print-document .print-header-logo {
-      flex-shrink: 0;
-    }
-    .print-document .print-header-logo img {
-      max-width: 80px;
-      max-height: 70px;
-      width: auto;
-      height: auto;
-      display: block;
+    .print-header-logo img {
+      max-width: 180px;
+      max-height: 80px;
       object-fit: contain;
     }
-    .print-document .print-header-text {
-      flex: 1;
-      min-width: 0;
-    }
-    .print-document .print-header h1,
-    .print-document .print-header .print-entreprise-nom {
-      margin: 0 0 4px;
-      font-size: 18px;
-      font-weight: 700;
-      color: #111827;
-    }
-    .print-document .print-header .print-contact,
-    .print-document .print-header .print-localisation {
+    .print-header-text h1 {
       margin: 0;
-      font-size: 12px;
+      font-size: 24px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: -0.5px;
+    }
+    .print-header-text p {
+      margin: 2px 0;
+      font-size: 10px;
+      font-weight: 600;
+      color: #4b5563;
+    }
+    .print-title-box {
+      text-align: right;
+    }
+    .print-title-box h2 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 900;
+      color: #111827;
+      font-style: italic;
+      text-transform: uppercase;
+    }
+    .print-title-box .doc-number {
+      font-size: 14px;
+      font-weight: 800;
+      color: #dc2626;
+      margin-top: 5px;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+    .info-block {
+      padding: 15px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #f9fafb;
+    }
+    .info-block h3 {
+      margin: 0 0 8px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
       color: #6b7280;
+      border-bottom: 1px solid #d1d5db;
+      padding-bottom: 4px;
     }
-    .print-document .print-meta {
-      margin-bottom: 16px;
-      padding: 12px;
-      background: #f3f4f6;
-      border-radius: 6px;
-      font-size: 12px;
+    .info-block p {
+      margin: 3px 0;
+      font-weight: 700;
     }
-    .print-document .print-meta p { margin: 4px 0; }
-    .print-document .print-meta strong { color: #374151; }
-    .print-document table {
+    table.print-lignes {
       width: 100%;
       border-collapse: collapse;
-      margin: 16px 0;
-      font-size: 12px;
+      margin: 20px 0;
     }
-    .print-document table thead {
-      background: #f9fafb;
-      border-bottom: 2px solid #e5e7eb;
-    }
-    .print-document table th {
+    table.print-lignes thead th {
+      background: #000 !important;
+      color: #fff !important;
       padding: 10px 8px;
       text-align: left;
-      font-weight: 600;
-      color: #374151;
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 900;
     }
-    .print-document table th:nth-child(2) { text-align: center; }
-    .print-document table th:nth-child(3),
-    .print-document table th:nth-child(4) { text-align: right; }
-    .print-document table td {
+    table.print-lignes tbody td {
       padding: 8px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid #ccc;
+      font-size: 11px;
     }
-    .print-document table td:nth-child(2) { text-align: center; }
-    .print-document table td:nth-child(3),
-    .print-document table td:nth-child(4) { text-align: right; }
-    .print-document table tbody tr:last-child td { border-bottom: none; }
-    .print-document table.print-lignes tbody tr { page-break-inside: avoid; }
-    .print-document .print-totals {
-      margin-top: 16px;
-      padding: 12px 0;
-      border-top: 2px solid #e5e7eb;
-      text-align: right;
-      font-size: 13px;
-    }
-    .print-document .print-totals p { margin: 6px 0; }
-    .print-document .print-totals .print-total { font-weight: 700; font-size: 14px; color: #111827; }
-    .print-document .print-footer {
+    table.print-lignes tbody tr:nth-child(even) { background: #f9fafb; }
+    .print-totals-wrapper {
+      display: flex;
+      justify-content: flex-end;
       margin-top: 20px;
-      padding-top: 16px;
-      border-top: 1px solid #e5e7eb;
-      text-align: center;
-      font-size: 11px;
-      color: #6b7280;
     }
-    .print-document hr {
-      border: none;
-      border-top: 1px solid #e5e7eb;
-      margin: 16px 0;
+    .print-totals {
+      width: 250px;
+      background: #f3f4f6;
+      padding: 15px;
+      border-radius: 8px;
     }
-    .print-document .print-obs {
-      margin-top: 12px;
-      font-size: 11px;
-      color: #6b7280;
+    .print-totals p {
+      display: flex;
+      justify-content: space-between;
+      margin: 5px 0;
+      font-size: 12px;
     }
-
-    @media print {
-      body {
-        margin: 0;
-        padding: 0;
-        background: #fff;
-      }
-      .print-document {
-        max-width: none;
-        width: 100%;
-        margin: 0;
-        padding: ${isA4 ? '20mm' : '5mm'};
-        box-shadow: none;
-        border: none;
-        border-radius: 0;
-      }
-      .print-document * { color-adjust: exact; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      @page {
-        size: ${isA4 ? 'A4' : '80mm auto'};
-        margin: 0;
-      }
+    .print-totals .grand-total {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 2px solid #000;
+      font-size: 16px;
+      font-weight: 900;
+      color: #000;
     }
-
-    /* Styles spécifiques A4 */
-    .a4-grid {
+    .print-visas {
+      margin-top: 50px;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 40px;
-      margin-bottom: 40px;
     }
-    .a4-company-info h1 { font-size: 24px; color: #1e40af; margin-bottom: 8px; }
-    .a4-client-info { 
-      background: #f8fafc; 
-      padding: 20px; 
-      border-radius: 8px; 
-      border-left: 4px solid #1e40af;
+    .visa-box {
+      border: 1px solid #000;
+      height: 120px;
+      padding: 10px;
+      text-align: center;
+      border-radius: 4px;
     }
-    .a4-client-info h3 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; color: #64748b; }
-    .a4-client-info p { margin: 4px 0; font-size: 15px; font-weight: 600; }
-    .a4-invoice-meta { text-align: right; }
-    .a4-invoice-meta h2 { font-size: 28px; color: #1e40af; text-transform: uppercase; margin: 0; }
-    .a4-invoice-meta p { font-size: 14px; color: #64748b; margin: 4px 0; }
+    .visa-box h4 {
+      margin: 0;
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 900;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 5px;
+    }
+    .print-footer {
+      margin-top: auto;
+      padding-top: 30px;
+      text-align: center;
+      font-size: 9px;
+      color: #6b7280;
+      border-top: 1px solid #e5e7eb;
+    }
+    @media print {
+      .no-print { display: none !important; }
+    }
   `
 }
 
@@ -297,7 +316,7 @@ export async function printDocument(templateId: number | null, type: 'VENTE' | '
   try {
     // Récupérer les paramètres de l'entreprise
     const paramsRes = await fetch('/api/parametres')
-    let entrepriseData: { nomEntreprise?: string; contact?: string; localisation?: string; logo?: string | null; logoLocal?: string | null; piedDePage?: string | null; numNCC?: string | null; registreCommerce?: string | null; mentionSpeciale?: string | null } = {}
+    let entrepriseData: any = {}
     if (paramsRes.ok) {
       entrepriseData = await paramsRes.json()
     }
@@ -317,76 +336,60 @@ export async function printDocument(templateId: number | null, type: 'VENTE' | '
 
     // Si pas de template, utiliser le template par défaut approprié
     if (!templateContent) {
-      if (type === 'BON_COMMANDE' as any) {
-        templateContent = format === 'A4' ? getDefaultA4Template('ACHAT') : getDefaultTemplate('ACHAT')
-        // Remplacer "FACTURE" ou "Bon" par "BON DE COMMANDE"
-        templateContent = templateContent.replace('FACTURE', 'BON DE COMMANDE').replace('Bon N', 'Bon de Commande N')
-      } else {
-        templateContent = format === 'A4' ? getDefaultA4Template(type) : getDefaultTemplate(type)
-      }
+      templateContent = format === 'A4' ? getDefaultA4Template(type) : getDefaultTemplate(type)
     }
 
     // Ajouter les données de l'entreprise aux données du template
-    data.ENTREPRISE_NOM = entrepriseData.nomEntreprise || data.ENTREPRISE_NOM || ''
+    data.ENTREPRISE_NOM = entrepriseData.nomEntreprise || data.ENTREPRISE_NOM || 'GESTICOM PRO'
     data.ENTREPRISE_CONTACT = entrepriseData.contact || data.ENTREPRISE_CONTACT || ''
     data.ENTREPRISE_LOCALISATION = entrepriseData.localisation || data.ENTREPRISE_LOCALISATION || ''
     data.ENTREPRISE_NCC = entrepriseData.numNCC || ''
     data.ENTREPRISE_RC = entrepriseData.registreCommerce || ''
     data.ENTREPRISE_PIED_DE_PAGE = entrepriseData.piedDePage || data.ENTREPRISE_PIED_DE_PAGE || ''
-    data.ENTREPRISE_MENTION_SPECIALE = entrepriseData.mentionSpeciale || 'Les produits sortis du magasin ne seront plus repris. Veuillez exiger votre facture avant de partir.'
+    data.ENTREPRISE_MENTION_SPECIALE = entrepriseData.mentionSpeciale || 'Les produits sortis ne sont plus repris. Veuillez exiger votre facture.'
 
-    // Ajouter le logo si disponible (priorité au local, puis template, puis URL paramètres)
-    let logoFinal = logo || entrepriseData.logoLocal || entrepriseData.logo
-    
-    if (logoFinal) {
-      if (logoFinal.startsWith('data:') || logoFinal.startsWith('http') || logoFinal.startsWith('/') || logoFinal.length > 500) {
-        data.ENTREPRISE_LOGO = `<img src="${logoFinal}" alt="Logo" style="max-width: 150px; height: auto; display: block; margin: 0 auto;" />`
-      } else {
-        data.ENTREPRISE_LOGO = logoFinal // Texte ou HTML direct si pas URL/Base64
-      }
+    // Traitement du Logo (Respect de la règle : logo uniquement si présent ou paramètres)
+    let logoUrl = logo || entrepriseData.logoLocal || entrepriseData.logo
+    if (logoUrl) {
+       data.ENTREPRISE_LOGO = `<img src="${logoUrl}" alt="Logo" />`
     } else {
-      data.ENTREPRISE_LOGO = ''
+       data.ENTREPRISE_LOGO = ''
     }
 
     // Remplacer les variables
     const html = replaceTemplateVariables(templateContent, data)
     
-    // Créer une nouvelle fenêtre pour l'impression
+    // Fenêtre d'impression
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
-      alert('Veuillez autoriser les popups pour imprimer.')
+      alert('Popups bloqués.')
       return
     }
 
     const printStyles = getPrintStyles(format)
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html lang="fr">
+      <html>
         <head>
           <meta charset="utf-8">
-          <title>Impression - ${(data.NUMERO || 'Document').replace(/</g, '&lt;')}</title>
+          <title>${data.NUMERO || 'Document'}</title>
           <style>${printStyles}</style>
         </head>
         <body>
-          <div class="print-document">
-            ${html}
-          </div>
+          ${html}
         </body>
       </html>
     `)
 
     printWindow.document.close()
-
-    // Attendre que le contenu soit chargé puis imprimer
     printWindow.onload = () => {
       setTimeout(() => {
         printWindow.print()
         printWindow.close()
-      }, 250)
+      }, 500)
     }
   } catch (error) {
-    console.error('Erreur impression:', error)
-    alert('Erreur lors de l\'impression.')
+    console.error('Erreur:', error)
   }
 }
 
@@ -395,62 +398,51 @@ export async function printDocument(templateId: number | null, type: 'VENTE' | '
  */
 export function getDefaultTemplate(type: 'VENTE' | 'ACHAT' | 'BON_COMMANDE'): string {
   const isVente = type === 'VENTE'
-  const isBC = type === 'BON_COMMANDE'
-  const title = isBC ? 'BON DE COMMANDE' : isVente ? 'Ticket' : 'Bon'
+  const title = isVente ? 'TICKET DE VENTE' : 'BON D\'ACHAT'
   return `
-<div class="print-header">
-  <div class="print-header-logo">{ENTREPRISE_LOGO}</div>
-  <div class="print-header-text">
-    <h1 class="print-entreprise-nom">{ENTREPRISE_NOM}</h1>
-    <p class="print-contact">{ENTREPRISE_CONTACT}</p>
-    <p class="print-localisation">{ENTREPRISE_LOCALISATION}</p>
-    {ENTREPRISE_NCC ? '<p class="print-contact" style="font-size: 10px;">NCC: {ENTREPRISE_NCC}</p>' : ''}
-    {ENTREPRISE_RC ? '<p class="print-contact" style="font-size: 10px;">RC: {ENTREPRISE_RC}</p>' : ''}
+<div class="print-document">
+  <div class="print-header">
+    <div class="print-header-logo">{ENTREPRISE_LOGO}</div>
+    <div class="print-header-text">
+      <h1>{ENTREPRISE_NOM}</h1>
+      <p>{ENTREPRISE_LOCALISATION}</p>
+      <p>{ENTREPRISE_CONTACT}</p>
+    </div>
   </div>
-</div>
-<hr>
-<div class="print-meta">
-  <p><strong>${title} N°:</strong> {NUMERO}</p>
-  <p><strong>Date:</strong> {DATE} {HEURE}</p>
-  <p><strong>Magasin:</strong> {MAGASIN_CODE} – {MAGASIN_NOM}</p>
-  ${isBC || !isVente ? `
-  <p><strong>Fournisseur:</strong> {FOURNISSEUR_NOM}</p>
-  {NUMERO_CAMION ? '<p><strong>N° Camion:</strong> {NUMERO_CAMION}</p>' : ''}
-  ` : `
-  <p><strong>Client:</strong> {CLIENT_NOM}</p>
-  {CLIENT_CONTACT ? '<p><strong>Contact:</strong> {CLIENT_CONTACT}</p>' : ''}
-  {CLIENT_LOCALISATION ? '<p><strong>Localisation:</strong> {CLIENT_LOCALISATION}</p>' : ''}
-  {CLIENT_NCC ? '<p><strong>NCC:</strong> {CLIENT_NCC}</p>' : ''}
-  `}
-</div>
-<hr>
-{LIGNES}
-<div class="print-totals">
-  {TOTAL_HT ? '<p><strong>Total HT Brut:</strong> {TOTAL_HT}</p>' : ''}
-  {TOTAL_REMISE ? '<p style="color: #ef4444;"><strong>Total Remises:</strong> -{TOTAL_REMISE}</p>' : ''}
-  {REMISE_GLOBALE ? '<p style="color: #ef4444;"><strong>Remise Globale:</strong> -{REMISE_GLOBALE}</p>' : ''}
-  {TOTAL_TVA ? '<p><strong>Total TVA:</strong> {TOTAL_TVA}</p>' : ''}
-  <p class="print-total"><strong>TOTAL TTC:</strong> {TOTAL}</p>
-  <p><strong>Mode de paiement:</strong> {MODE_PAIEMENT}</p>
-</div>
-{OBSERVATION ? '<p class="print-obs">{OBSERVATION}</p>' : ''}
-<hr>
-<div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-  <div style="text-align: center; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; height: 80px; display: flex; flex-direction: column; justify-content: space-between;">
-    <span style="font-size: 10px; font-weight: bold; text-transform: uppercase; color: #9ca3af; border-bottom: 1px solid #f3f4f6; padding-bottom: 4px;">Client</span>
-    <span style="font-size: 9px; color: #d1d5db; font-style: italic;">Lu et approuvé</span>
+  
+  <div style="text-align: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; font-size: 18px; font-weight: 900; text-decoration: underline;">${title}</h2>
+    <p class="doc-number" style="font-weight: 1000; color: #f97316;">N° {NUMERO}</p>
+    {NUMERO_BON ? '<p style="font-size: 11px; font-weight: 900; color: #f97316; margin: 0;">BON N° {NUMERO_BON}</p>' : ''}
+    <p style="font-size: 10px;">Le {DATE} à {HEURE}</p>
   </div>
-  <div style="text-align: center; border: 1px solid #1e40af; border-radius: 6px; padding: 10px; height: 80px; display: flex; flex-direction: column; justify-content: space-between;">
-    <span style="font-size: 10px; font-weight: bold; text-transform: uppercase; color: #1e40af; border-bottom: 1px solid #bfdbfe; padding-bottom: 4px;">La Direction</span>
-    <span style="font-size: 9px; color: #93c5fd; font-style: italic;">Cachet & Signature</span>
+
+  <div class="info-block" style="margin-bottom: 10px;">
+    <h3>${isVente ? 'Client' : 'Fournisseur'}</h3>
+    <p>${isVente ? '{CLIENT_NOM}' : '{FOURNISSEUR_NOM}'}</p>
   </div>
-</div>
-<hr>
-<div class="print-footer">
-    <p style="font-style: italic; font-size: 10px; margin-top: 10px;">{ENTREPRISE_MENTION_SPECIALE}</p>
-    <p>Merci de votre visite !</p>
-    <p><strong>{ENTREPRISE_NOM}</strong></p>
-  {ENTREPRISE_PIED_DE_PAGE ? '<p style="margin-top: 8px; font-size: 10px;">{ENTREPRISE_PIED_DE_PAGE}</p>' : ''}
+
+  <div class="print-content">
+    {LIGNES}
+    
+    <div class="print-totals-wrapper">
+      <div class="print-totals">
+        {TOTAL_HT ? '<p><span>TOTAL HT BRUT :</span> {TOTAL_HT}</p>' : ''}
+        {TOTAL_REMISE ? '<p style="color: red;"><span>REMISE :</span> -{TOTAL_REMISE}</p>' : ''}
+        {REMISE_GLOBALE ? '<p style="color: red;"><span>REMISE FINALE :</span> -{REMISE_GLOBALE}</p>' : ''}
+        {TOTAL_HT_NET ? '<p><span>TOTAL HT NET :</span> {TOTAL_HT_NET}</p>' : ''}
+        {TOTAL_TVA ? '<p><span>TVA :</span> {TOTAL_TVA}</p>' : ''}
+        <p class="grand-total"><span>A PAYER :</span> {TOTAL}</p>
+        <p style="font-size: 10px; margin-top: 10px;">Mode : {MODE_PAIEMENT}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="print-footer">
+    <p style="font-weight: 900; margin-bottom: 5px;">{ENTREPRISE_MENTION_SPECIALE}</p>
+    <p>MERCI DE VOTRE CONFIANCE !</p>
+    {ENTREPRISE_PIED_DE_PAGE ? '<p style="margin-top: 10px;">{ENTREPRISE_PIED_DE_PAGE}</p>' : ''}
+  </div>
 </div>
 `
 }
@@ -460,96 +452,81 @@ export function getDefaultTemplate(type: 'VENTE' | 'ACHAT' | 'BON_COMMANDE'): st
  */
 export function getDefaultA4Template(type: 'VENTE' | 'ACHAT' | 'BON_COMMANDE'): string {
     const isVente = type === 'VENTE'
-    const isBC = type === 'BON_COMMANDE'
-    const docTitle = isBC ? 'BON DE COMMANDE' : 'FACTURE'
+    const docType = isVente ? 'FACTURE' : (type === 'BON_COMMANDE' ? 'BON DE COMMANDE' : 'BON D\'ACHAT')
+    
     return `
-<div class="a4-grid" style="align-items: center;">
-  <div class="a4-company-info">
-    <div style="margin-bottom: 20px;">{ENTREPRISE_LOGO}</div>
-    <h1 style="border-left: 4px solid #1e40af; padding-left: 15px;">{ENTREPRISE_NOM}</h1>
-    <p style="padding-left: 19px; color: #475569;">📍 {ENTREPRISE_LOCALISATION}</p>
-    <p style="padding-left: 19px; color: #475569;">📞 {ENTREPRISE_CONTACT}</p>
-    <div style="margin-top: 10px; padding-left: 19px;">
-       {ENTREPRISE_NCC ? '<span style="font-size: 11px; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; margin-right: 10px;"><strong>NCC:</strong> {ENTREPRISE_NCC}</span>' : ''}
-       {ENTREPRISE_RC ? '<span style="font-size: 11px; background: #f1f5f9; padding: 2px 8px; border-radius: 4px;"><strong>RC:</strong> {ENTREPRISE_RC}</span>' : ''}
+<div class="print-document">
+  <div class="print-header">
+    <div class="print-header-logo">{ENTREPRISE_LOGO}</div>
+    <div class="print-header-text">
+       <h1>{ENTREPRISE_NOM}</h1>
+       <p>📍 {ENTREPRISE_LOCALISATION}</p>
+       <p>📞 {ENTREPRISE_CONTACT}</p>
+       <p>📄 {ENTREPRISE_NCC ? 'NCC: {ENTREPRISE_NCC}' : ''} {ENTREPRISE_RC ? ' | RC: {ENTREPRISE_RC}' : ''}</p>
+    </div>
+    <div class="print-title-box">
+       <h2>${docType}</h2>
+       <p class="doc-number">N° {NUMERO}</p>
+       {NUMERO_BON ? '<p style="font-size: 12px; font-weight: 900; color: #f97316; margin-top: 2px;">BON COMMANDE N° {NUMERO_BON}</p>' : ''}
+       <p style="font-weight: bold; margin-top: 5px;">Date: {DATE}</p>
     </div>
   </div>
-  <div class="a4-invoice-meta">
-    <div style="background: #1e40af; color: white; padding: 10px 20px; border-radius: 8px 8px 0 0; display: inline-block;">
-        <h2 style="color: white; font-size: 24px;">${docTitle}</h2>
+
+  <div class="info-grid">
+    <div class="info-block">
+       <h3>Émetteur</h3>
+       <p>{ENTREPRISE_NOM}</p>
+       <p style="font-size: 10px; font-weight: normal; color: #666;">Magasin: {MAGASIN_NOM} ({MAGASIN_CODE})</p>
     </div>
-    <div style="border: 1px solid #e2e8f0; border-top: none; padding: 15px; border-radius: 0 0 8px 8px;">
-        <p><strong>N° :</strong> <span style="color: #1e40af; font-weight: bold;">{NUMERO}</span></p>
-        <p><strong>Date :</strong> {DATE}</p>
-        <p><strong>Heure :</strong> {HEURE}</p>
-    </div>
-    <div style="margin-top: 20px;" class="a4-client-info">
-      <h3>${isVente ? 'Destinataire' : isBC ? 'Fournisseur' : 'Fournisseur / Expéditeur'}</h3>
-      <p style="font-size: 19px; color: #1e40af; margin-bottom: 10px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">${isVente ? '{CLIENT_NOM}' : '{FOURNISSEUR_NOM}'}</p>
-      <div style="font-size: 14px; color: #334155; line-height: 1.6;">
-        ${isVente ? `
-        {CLIENT_CONTACT ? '<p><strong>📞 Contact :</strong> {CLIENT_CONTACT}</p>' : ''}
-        {CLIENT_LOCALISATION ? '<p><strong>📍 Adresse :</strong> {CLIENT_LOCALISATION}</p>' : ''}
-        {CLIENT_NCC ? '<p><strong>📄 NCC :</strong> {CLIENT_NCC}</p>' : ''}
-        ` : `
-        {CLIENT_CONTACT ? '<p><strong>📞 Contact :</strong> {CLIENT_CONTACT}</p>' : ''}
-        {CLIENT_LOCALISATION ? '<p><strong>📍 Localisation :</strong> {CLIENT_LOCALISATION}</p>' : ''}
-        {CLIENT_NCC ? '<p><strong>📄 NCC :</strong> {CLIENT_NCC}</p>' : ''}
-        {NUMERO_CAMION ? '<p><strong>🚚 Camion :</strong> <span style="background: #fef3c7; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid #f59e0b;">{NUMERO_CAMION}</span></p>' : ''}
-        `}
-      </div>
+    <div class="info-block">
+       <h3>${isVente ? 'Destinataire' : 'Fournisseur'}</h3>
+       <p style="font-size: 16px; color: #000;">${isVente ? '{CLIENT_NOM}' : '{FOURNISSEUR_NOM}'}</p>
+       ${isVente ? `
+       <p style="font-size: 11px; font-weight: normal;">📞 {CLIENT_CONTACT}</p>
+       <p style="font-size: 11px; font-weight: normal;">📍 {CLIENT_LOCALISATION}</p>
+       ` : `
+       <p style="font-size: 11px; font-weight: normal;">📞 {FOURNISSEUR_TELEPHONE}</p>
+       {NUMERO_CAMION ? '<p style="font-size: 11px; font-weight: bold;">🚚 Camion N°: {NUMERO_CAMION}</p>' : ''}
+       `}
     </div>
   </div>
-</div>
 
-<div style="margin: 30px 0;">
-  <p style="font-size: 14px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">
-    <strong>Objet :</strong> ${isVente ? 'Vente de marchandises / prestations' : 'Approvisionnement / Achat de marchandises'} du {DATE}
-  </p>
-  {LIGNES}
-</div>
-
-<div style="display: flex; justify-content: flex-end; margin-top: 30px;">
-  <div style="width: 320px; background: #f8fafc; padding: 20px; border-radius: 8px;">
-    {TOTAL_HT ? '<div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;"><span>Total HT Brut :</span><span>{TOTAL_HT}</span></div>' : ''}
-    {TOTAL_REMISE ? '<div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: #ef4444;"><span>Total Remises :</span><span>-{TOTAL_REMISE}</span></div>' : ''}
-    {REMISE_GLOBALE ? '<div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: #ef4444;"><span>Remise Globale :</span><span>-{REMISE_GLOBALE}</span></div>' : ''}
-    {TOTAL_TVA ? '<div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;"><span>Total TVA :</span><span>{TOTAL_TVA}</span></div>' : ''}
-    <div style="display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 2px solid #e2e8f0; margin-bottom: 10px;">
-      <span style="font-weight: 700;">TOTAL TTC :</span>
-      <span style="font-weight: 700; font-size: 18px; color: #1e40af;">{TOTAL}</span>
+  <div class="print-content">
+    {LIGNES}
+    
+    <div class="print-totals-wrapper">
+       <div class="print-totals">
+          {TOTAL_HT ? '<p><span>Total HT Brut :</span> <span>{TOTAL_HT}</span></p>' : ''}
+          {TOTAL_REMISE ? '<p style="color: #dc2626;"><span>Remises :</span> <span>-{TOTAL_REMISE}</span></p>' : ''}
+          {REMISE_GLOBALE ? '<p style="color: #dc2626;"><span>Remise Finale :</span> <span>-{REMISE_GLOBALE}</span></p>' : ''}
+          {TOTAL_HT_NET ? '<p><span>Total HT Net :</span> <span>{TOTAL_HT_NET}</span></p>' : ''}
+          {TOTAL_TVA ? '<p><span>TVA :</span> <span>{TOTAL_TVA}</span></p>' : ''}
+          <p class="grand-total"><span>TOTAL TTC :</span> <span>{TOTAL}</span></p>
+          <div style="margin-top: 15px; font-size: 10px; color: #4b5563; border-top: 1px solid #d1d5db; padding-top: 5px; text-align: center;">
+            Mode de Règlement : <strong>{MODE_PAIEMENT}</strong>
+          </div>
+       </div>
     </div>
-    <div style="border-top: 1px solid #e2e8f0; margin-top: 10px; padding-top: 10px; font-size: 12px; color: #64748b; text-align: center;">
-      Mode de paiement : {MODE_PAIEMENT}
-    </div>
-  </div>
-</div>
 
-{OBSERVATION ? '<div style="margin-top: 40px; padding: 15px; background: #fffbeb; border: 1px dashed #f59e0b; border-radius: 6px; font-size: 13px;"><p style="margin:0"><strong>Note :</strong> {OBSERVATION}</p></div>' : ''}
+    {OBSERVATION ? '<div style="margin-top: 20px; padding: 10px; border-left: 4px solid #f59e0b; background: #fffbeb; font-size: 11px;"><strong>Note:</strong> {OBSERVATION}</div>' : ''}
 
-<div style="margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
-  <div style="text-align: center; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; height: 120px; display: flex; flex-direction: column; justify-content: space-between;">
-    <span style="font-size: 12px; font-weight: bold; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px;">Signature Client</span>
-    <span style="font-size: 10px; color: #cbd5e1;">(Précédée de la mention "Lu et approuvé")</span>
-  </div>
-  <div style="text-align: center; border: 1px solid #1e40af; border-radius: 8px; padding: 15px; height: 120px; bg: #f8fafc; display: flex; flex-direction: column; justify-content: space-between;">
-    <span style="font-size: 12px; font-weight: bold; text-transform: uppercase; color: #1e40af; border-bottom: 1px solid #1e40af; padding-bottom: 5px; margin-bottom: 10px;">La Direction</span>
-    <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
-       <span style="font-size: 10px; color: #94a3b8; font-style: italic;">Cachet et Signature</span>
+    <div class="print-visas">
+       <div class="visa-box">
+          <h4>Visa Client</h4>
+          <p style="font-size: 8px; color: #999; margin-top: 70px;">(Signature précédée de la mention "Reçu conforme")</p>
+       </div>
+       <div class="visa-box">
+          <h4>La Direction</h4>
+          <p style="font-size: 8px; color: #999; margin-top: 70px;">(Cachet et Signature)</p>
+       </div>
     </div>
   </div>
-</div>
 
-<div style="margin-top: 30px; padding: 12px; background: #f1f5f9; border-radius: 6px; text-align: center;">
-  <p style="margin: 0; font-size: 11px; font-weight: bold; color: #475569;">
-    AVIS IMPORTANT : {ENTREPRISE_MENTION_SPECIALE}
-  </p>
-</div>
-
-<div class="print-footer" style="margin-top: 100px;">
-  <hr>
-  <p>{ENTREPRISE_NOM} • {ENTREPRISE_CONTACT} • {ENTREPRISE_LOCALISATION}</p>
-  {ENTREPRISE_PIED_DE_PAGE ? '<p style="font-size: 11px;">{ENTREPRISE_PIED_DE_PAGE}</p>' : ''}
+  <div class="print-footer">
+    <p style="font-weight: 800; font-size: 10px; color: #000; margin-bottom: 5px;">{ENTREPRISE_MENTION_SPECIALE}</p>
+    <p>© Gesticom Pro - {ENTREPRISE_NOM} - Tous droits réservés.</p>
+    {ENTREPRISE_PIED_DE_PAGE ? '<p style="margin-top: 5px;">{ENTREPRISE_PIED_DE_PAGE}</p>' : ''}
+  </div>
 </div>
 `
 }
@@ -642,6 +619,7 @@ export const PRINT_VARIABLES = {
   '{MODE_PAIEMENT}': 'Mode de paiement',
 
   // Divers
+  '{NUMERO_BON}': 'Numéro de bon de commande',
   '{OBSERVATION}': 'Observation',
   '{LIGNES}': 'Liste des lignes (tableau)',
 } as const

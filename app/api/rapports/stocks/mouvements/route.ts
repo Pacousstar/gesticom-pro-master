@@ -7,7 +7,6 @@ export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  const entiteId = await getEntiteId(session)
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')
   const dateFin = request.nextUrl.searchParams.get('dateFin')
   const magasinId = request.nextUrl.searchParams.get('magasinId')
@@ -18,9 +17,18 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
   const skip = (page - 1) * limit
 
+  const entiteId = await getEntiteId(session)
   const where: any = {}
 
-  if (entiteId && session.role !== 'SUPER_ADMIN') {
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
+    }
+  } else if (entiteId > 0) {
     where.entiteId = entiteId
   }
 

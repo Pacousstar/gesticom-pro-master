@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
 
@@ -20,11 +21,26 @@ export async function GET(request: NextRequest) {
   const type = request.nextUrl.searchParams.get('type') || 'balance' // 'balance' ou 'grand-livre'
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
+  const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
 
   try {
+    const eId = await getEntiteId(session)
+    const whereEntite: any = {}
+
+    // Filtrage par entité
+    if (session.role === 'SUPER_ADMIN') {
+      if (entiteIdFromParams) {
+        whereEntite.entiteId = Number(entiteIdFromParams)
+      } else if (eId > 0) {
+        whereEntite.entiteId = eId
+      }
+    } else if (eId > 0) {
+      whereEntite.entiteId = eId
+    }
+
     if (type === 'balance') {
       // Export Balance
-      const where: { date?: { gte: Date; lte: Date } } = {}
+      const where: any = { ...whereEntite }
       if (dateDebut && dateFin) {
         where.date = {
           gte: new Date(dateDebut + 'T00:00:00'),
@@ -152,7 +168,7 @@ export async function GET(request: NextRequest) {
       })
     } else {
       // Export Grand Livre
-      const where: { date?: { gte: Date; lte: Date }; compteId?: number } = {}
+      const where: any = { ...whereEntite }
       if (dateDebut && dateFin) {
         where.date = {
           gte: new Date(dateDebut + 'T00:00:00'),

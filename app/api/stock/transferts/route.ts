@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       }
 
       return transfert
-    })
+    }, { timeout: 20000 })
 
     // Invalider le cache
     revalidatePath('/dashboard/stock')

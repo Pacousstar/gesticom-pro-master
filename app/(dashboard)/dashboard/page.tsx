@@ -42,6 +42,9 @@ type DashboardData = {
   repartition: Array<{ name: string; percent: number }>
   lowStock: Array<{ name: string; stock: number; min: number; category: string }>
   recentSales: Array<{ id: string; client: string; montant: number; time: string }>
+  totalDepensesCount: number
+  totalDepensesAmount: number
+  tresorerieReelle: number
   _timeout?: boolean
 }
 

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { UserPlus, Users, Edit, Trash2, Shield, Loader2, CheckCircle2, XCircle, Eye, EyeOff, Lock, X, Save, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 import { ROLE_PERMISSIONS, type Role, type Permission } from '@/lib/roles-permissions'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -63,6 +64,7 @@ export default function UtilisateursPage() {
   const [deleting, setDeleting] = useState<number | null>(null)
   /** Rôles supplémentaires (droits en plus du rôle principal), ex. ASSISTANTE + COMPTABLE */
   const [editRolesSupplementaires, setEditRolesSupplementaires] = useState<Role[]>([])
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   useEffect(() => {
     if (success === 'created') {
@@ -300,50 +302,155 @@ export default function UtilisateursPage() {
           <p className="text-white/90 mt-1">Créer et gérer les utilisateurs du système</p>
         </div>
         <div className="flex items-center gap-2">
-          <ListPrintWrapper
-            title="Répertoire du Personnel"
-            subtitle="Organigramme et Accès Système"
-          >
-            <table className="w-full text-[10px] border-collapse border border-gray-300">
-              <thead>
-                <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                  <th className="border border-gray-300 px-3 py-3 text-left">Nom</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Login</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Rôle</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Entité</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Email</th>
-                  <th className="border border-gray-300 px-3 py-3 text-center">Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                {utilisateurs.map((u, idx) => (
-                  <tr key={idx} className="border-b border-gray-200">
-                    <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{u.nom}</td>
-                    <td className="border border-gray-300 px-3 py-2 font-mono text-[9px]">{u.login}</td>
-                    <td className="border border-gray-300 px-3 py-2">{getRoleLabel(u.role)}</td>
-                    <td className="border border-gray-300 px-3 py-2">{u.entite.nom}</td>
-                    <td className="border border-gray-300 px-3 py-2 italic">{u.email || '-'}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-center font-bold">
-                       {u.actif ? 'ACTIF' : 'INACTIF'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ListPrintWrapper>
+                <div className="hidden print:block absolute inset-0 bg-white">
+                    {chunkArray(utilisateurs, ITEMS_PER_PRINT_PAGE).map((chunk: Utilisateur[], index: number, allChunks: Utilisateur[][]) => (
+                        <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                            <ListPrintWrapper
+                                title="Répertoire du Personnel"
+                                subtitle={`Organigramme et Accès Système - ${utilisateurs.length} Utilisateurs`}
+                                pageNumber={index + 1}
+                                totalPages={allChunks.length}
+                                hideHeader={index > 0}
+                                hideVisa={index < allChunks.length - 1}
+                            >
+                                <table className="w-full text-[14px] border-collapse border-2 border-black">
+                                    <thead>
+                                        <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                                            <th className="border-r-2 border-black px-3 py-3 text-left">Nom & Prénom</th>
+                                            <th className="border-r-2 border-black px-3 py-3 text-left">Identifiant</th>
+                                            <th className="border-r-2 border-black px-3 py-3 text-left">Rôle Système</th>
+                                            <th className="border-r-2 border-black px-3 py-3 text-left">Affectation</th>
+                                            <th className="px-3 py-3 text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {chunk.map((u: Utilisateur, idx: number) => (
+                                            <tr key={idx} className="border-b border-black">
+                                                <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{u.nom}</td>
+                                                <td className="border-r-2 border-black px-3 py-2 font-mono text-xs">{u.login}</td>
+                                                <td className="border-r-2 border-black px-3 py-2 font-black">{getRoleLabel(u.role)}</td>
+                                                <td className="border-r-2 border-black px-3 py-2 italic">{u.entite.nom}</td>
+                                                <td className="px-3 py-2 text-center">
+                                                    <span className={`font-black uppercase text-[10px] ${u.actif ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                        {u.actif ? 'OPÉRATIONNEL' : 'SUSPENDU'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    {index === allChunks.length - 1 && (
+                                        <tfoot>
+                                            <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
+                                                <td colSpan={3} className="border-r-2 border-black px-3 py-4 text-right bg-white shadow-inner">Total Effectif Système</td>
+                                                <td colSpan={2} className="px-3 py-4 bg-white text-blue-900 underline decoration-double">{utilisateurs.length} Agents répertoriés</td>
+                                            </tr>
+                                        </tfoot>
+                                    )}
+                                </table>
+                            </ListPrintWrapper>
+                        </div>
+                    ))}
+                </div>
+
+                {/* MODALE D'APERÇU IMPRESSION RÉPERTOIRE PERSONNEL */}
+                {isPreviewOpen && (
+                  <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans text-slate-900 uppercase italic tracking-tighter">
+                    <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl not-italic tracking-normal">
+                        <div className="flex items-center gap-6">
+                           <div>
+                             <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Répertoire Personnel</h2>
+                             <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                               Contrôle des Accès et Identités Système
+                             </p>
+                           </div>
+                           <div className="h-10 w-px bg-gray-200" />
+                           <div className="flex items-center gap-2">
+                             <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
+                               {utilisateurs.length} Profils
+                             </span>
+                           </div>
+                        </div>
+                        <div className="flex gap-4">
+                          <button
+                            onClick={() => setIsPreviewOpen(false)}
+                            className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+                          >
+                            Fermer
+                          </button>
+                          <button
+                            onClick={() => window.print()}
+                            className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+                          >
+                            <Printer className="h-4 w-4" />
+                            Lancer l'impression
+                          </button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+                        <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
+                            {chunkArray(utilisateurs, ITEMS_PER_PRINT_PAGE).map((chunk: Utilisateur[], index: number, allChunks: Utilisateur[][]) => (
+                                <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                                    <ListPrintWrapper
+                                        title="RÉPERTOIRE DU PERSONNEL"
+                                        subtitle="Audit des Accès et Droits Utilisateurs"
+                                        pageNumber={index + 1}
+                                        totalPages={allChunks.length}
+                                        hideHeader={index > 0}
+                                        hideVisa={index < allChunks.length - 1}
+                                    >
+                                        <table className="w-full text-[14px] border-collapse border-2 border-black">
+                                            <thead>
+                                                <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                                                    <th className="border-r-2 border-black px-3 py-3 text-left">Agent / Identité</th>
+                                                    <th className="border-r-2 border-black px-3 py-3 text-left">Login</th>
+                                                    <th className="border-r-2 border-black px-3 py-3 text-left">Rôle</th>
+                                                    <th className="border-r-2 border-black px-3 py-3 text-left">Affectation</th>
+                                                    <th className="px-3 py-3 text-center">Statut</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {chunk.map((u: Utilisateur, idx: number) => (
+                                                    <tr key={idx} className="border-b border-black">
+                                                        <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{u.nom}</td>
+                                                        <td className="border-r-2 border-black px-3 py-2 font-mono text-xs">{u.login}</td>
+                                                        <td className="border-r-2 border-black px-3 py-2 font-black">{getRoleLabel(u.role)}</td>
+                                                        <td className="border-r-2 border-black px-3 py-2 italic tabular-nums">{u.entite.nom}</td>
+                                                        <td className="px-3 py-2 text-center font-black text-[10px]">
+                                                            {u.actif ? 'ACTIF' : 'INACTIF'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            {index === allChunks.length - 1 && (
+                                                <tfoot>
+                                                    <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
+                                                        <td colSpan={3} className="border-r-2 border-black px-3 py-4 text-right bg-white">Volume Personnel Répertorié</td>
+                                                        <td colSpan={2} className="px-3 py-4 bg-white text-blue-900 underline decoration-double shadow-inner">{utilisateurs.length} Utilisateurs</td>
+                                                    </tr>
+                                                </tfoot>
+                                            )}
+                                        </table>
+                                    </ListPrintWrapper>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                  </div>
+                )}
           <button
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-2 border-2 border-orange-600 bg-orange-50 text-orange-800 hover:bg-orange-100 font-semibold px-4 py-3 rounded-xl transition-all shadow-lg hover:shadow-xl"
+            onClick={() => setIsPreviewOpen(true)}
+            className="inline-flex items-center gap-2 border-2 border-slate-800 bg-slate-100 text-slate-900 hover:bg-slate-200 font-black px-4 py-3 rounded-xl transition-all shadow-lg hover:shadow-xl uppercase text-xs no-print"
           >
             <Printer className="h-5 w-5" />
-            Imprimer
+            Aperçu Impression
           </button>
           <Link
             href="/register"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white font-semibold px-6 py-3 rounded-xl transition-all shadow-lg hover:shadow-xl"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white font-black px-6 py-3 rounded-xl transition-all shadow-lg hover:shadow-xl uppercase text-xs no-print"
           >
             <UserPlus className="h-5 w-5" />
-            Créer un utilisateur
+            Nouveau
           </Link>
         </div>
       </div>

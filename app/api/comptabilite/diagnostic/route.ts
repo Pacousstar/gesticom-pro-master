@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 /**
  * GET /api/comptabilite/diagnostic — Diagnostic des données comptables
@@ -10,7 +11,10 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
-    // Compter les comptes
+    const eId = await getEntiteId(session)
+    const whereEntite: any = eId > 0 ? { entiteId: eId } : {}
+
+    // Compter les comptes (Global)
     const nbComptes = await prisma.planCompte.count({ where: { actif: true } })
     const comptesParClasse = await prisma.planCompte.groupBy({
       by: ['classe'],
@@ -18,7 +22,7 @@ export async function GET() {
       _count: { id: true },
     })
 
-    // Compter les journaux
+    // Compter les journaux (Global)
     const nbJournaux = await prisma.journal.count({ where: { actif: true } })
     const journaux = await prisma.journal.findMany({
       where: { actif: true },
@@ -26,31 +30,35 @@ export async function GET() {
       orderBy: { code: 'asc' },
     })
 
-    // Compter les opérations (ventes, achats, dépenses, charges)
+    // Compter les opérations (Filtré par entité)
     const [nbVentes, nbAchats, nbDepenses, nbCharges] = await Promise.all([
-      prisma.vente.count({ where: { statut: 'VALIDEE' } }),
-      prisma.achat.count(),
-      prisma.depense.count(),
-      prisma.charge.count(),
+      prisma.vente.count({ where: { statut: 'VALIDEE', ...whereEntite } }),
+      prisma.achat.count({ where: whereEntite }),
+      prisma.depense.count({ where: whereEntite }),
+      prisma.charge.count({ where: { ...whereEntite } }),
     ])
 
-    // Compter les écritures
-    const nbEcritures = await prisma.ecritureComptable.count()
+    // Compter les écritures (Filtré par entité)
+    const nbEcritures = await prisma.ecritureComptable.count({ where: whereEntite })
     const ecrituresDateRange = await prisma.ecritureComptable.aggregate({
+      where: whereEntite,
       _min: { date: true },
       _max: { date: true },
     })
     const ecrituresParJournal = await prisma.ecritureComptable.groupBy({
       by: ['journalId'],
+      where: whereEntite,
       _count: { id: true },
     })
     const ecrituresParType = await prisma.ecritureComptable.groupBy({
       by: ['referenceType'],
+      where: whereEntite,
       _count: { id: true },
     })
 
-    // Récupérer les dernières écritures
+    // Récupérer les dernières écritures (Filtré par entité)
     const dernieresEcritures = await prisma.ecritureComptable.findMany({
+      where: whereEntite,
       take: 5,
       orderBy: { date: 'desc' },
       include: {
@@ -90,16 +98,16 @@ export async function GET() {
       j => !journauxExistants.includes(j)
     )
 
-    // Audit de Caisse : Comparaison Règlements Espèces vs Table Caisse
+    // Audit de Caisse (Filtré par entité)
     const [totalRegsEspVente, totalCaisseEntree, totalRegsEspAchat, totalCaisseSortie] = await Promise.all([
-      prisma.reglementVente.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] } }, _sum: { montant: true } }),
-      prisma.caisse.aggregate({ where: { type: 'ENTREE' }, _sum: { montant: true } }),
-      prisma.reglementAchat.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] } }, _sum: { montant: true } }),
-      prisma.caisse.aggregate({ where: { type: 'SORTIE' }, _sum: { montant: true } }),
+      prisma.reglementVente.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] }, ...whereEntite }, _sum: { montant: true } }),
+      prisma.caisse.aggregate({ where: { type: 'ENTREE', ...whereEntite }, _sum: { montant: true } }),
+      prisma.reglementAchat.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] }, ...whereEntite }, _sum: { montant: true } }),
+      prisma.caisse.aggregate({ where: { type: 'SORTIE', ...whereEntite }, _sum: { montant: true } }),
     ])
 
-    const totalDepensesEsp = await prisma.depense.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] } }, _sum: { montantPaye: true } })
-    const totalChargesEsp = await prisma.charge.aggregate({ _sum: { montant: true } })
+    const totalDepensesEsp = await prisma.depense.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] }, ...whereEntite }, _sum: { montantPaye: true } })
+    const totalChargesEsp = await prisma.charge.aggregate({ where: whereEntite, _sum: { montant: true } })
 
     return NextResponse.json({
       operations: {

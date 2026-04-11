@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -11,12 +12,22 @@ export async function GET(request: NextRequest) {
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const journalId = request.nextUrl.searchParams.get('journalId')?.trim()
   const compteId = request.nextUrl.searchParams.get('compteId')?.trim()
+  const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
 
-  const where: {
-    date?: { gte?: Date; lte?: Date }
-    journalId?: number
-    compteId?: number
-  } = {}
+  const where: any = {}
+
+  // Filtrage par entité
+  if (session.role === 'SUPER_ADMIN') {
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else {
+      const eId = await getEntiteId(session)
+      if (eId > 0) where.entiteId = eId
+    }
+  } else {
+    const eId = await getEntiteId(session)
+    if (eId > 0) where.entiteId = eId
+  }
 
   if (dateDebut || dateFin) {
     if (dateDebut && dateFin) {
@@ -48,7 +59,7 @@ export async function GET(request: NextRequest) {
   const ecritures = await prisma.ecritureComptable.findMany({
     where,
     take: limit,
-    orderBy: { date: 'desc' },
+    orderBy: { createdAt: 'desc' },
     include: {
       journal: { select: { code: true, libelle: true } },
       compte: { select: { numero: true, libelle: true } },
@@ -104,6 +115,10 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now()
     const numero = `ECR-${timestamp}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
 
+    // Récupérer l'entité appropriée
+    const eId = await getEntiteId(session)
+    if (eId <= 0) return NextResponse.json({ error: 'Entité non définie.' }, { status: 400 })
+
     const ecriture = await prisma.ecritureComptable.create({
       data: {
         numero,
@@ -118,6 +133,7 @@ export async function POST(request: NextRequest) {
         referenceType,
         referenceId,
         utilisateurId: session.userId,
+        entiteId: eId,
       },
       include: {
         journal: { select: { code: true, libelle: true } },

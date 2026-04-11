@@ -11,6 +11,7 @@ import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { paginateArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type Produit = {
   id: number
@@ -20,6 +21,7 @@ type Produit = {
   categorie: string
   unite: string
   prixAchat: number | null
+  pamp: number | null
   prixVente: number | null
   prixMinimum: number | null
   seuilMin: number
@@ -54,6 +56,7 @@ export default function ProduitsPage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE_REPORT = 25
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
   const [formData, setFormData] = useState({
     code: '',
@@ -119,22 +122,19 @@ export default function ProduitsPage() {
     fetchList()
   }, [currentPage])
 
-  const handlePrintAll = async () => {
+  const handleDirectPrint = async () => {
     setIsPrinting(true)
     try {
-      const params = new URLSearchParams()
-      if (q) params.set('q', q)
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
-      params.set('limit', '10000') 
-      
-      const res = await fetch('/api/produits?' + params.toString())
+      const p = new URLSearchParams()
+      if (q) p.set('q', q)
+      if (dateDebut) p.set('dateDebut', dateDebut)
+      if (dateFin) p.set('dateFin', dateFin)
+      p.set('limit', '10000')
+
+      const res = await fetch('/api/produits?complet=1&' + p.toString())
       if (res.ok) {
         const response = await res.json()
-        const dataToPrint = response.data || (Array.isArray(response) ? response : [])
-        setAllProductsForPrint(dataToPrint)
-        
-        // Petit délai pour laisser React mettre à jour l'affichage caché avant l'impression
+        setAllProductsForPrint(Array.isArray(response) ? response : (response.data || []))
         setTimeout(() => {
           window.print()
           setIsPrinting(false)
@@ -144,7 +144,6 @@ export default function ProduitsPage() {
         setIsPrinting(false)
       }
     } catch (e) {
-      console.error(e)
       showError("Erreur réseau lors de la préparation de l'impression.")
       setIsPrinting(false)
     }
@@ -451,43 +450,11 @@ export default function ProduitsPage() {
     }
   }
 
-  const handlePrint = async () => {
-    setIsPrinting(true)
-    try {
-      // Récupérer TOUS les produits sans pagination pour l'impression
-      const res = await fetch('/api/produits?limit=10000')
-      if (res.ok) {
-        const response = await res.json()
-        setAllProductsForPrint(response.data || response)
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 500)
-      }
-    } catch (e) {
-      showError("Erreur lors de la préparation de l'impression")
-      setIsPrinting(false)
-    }
-  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <style jsx global>{`
-            @media print {
-              @page { size: portrait; margin: 10mm; }
-              nav, aside, header, .no-print, button, form, .flex-wrap, .Pagination { display: none !important; }
-              body, main { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; }
-              .print-document { display: block !important; }
-              table { width: 100% !important; border-collapse: collapse !important; border: 1px solid #000 !important; }
-              th { background-color: #f3f4f6 !important; border: 1px solid #000 !important; padding: 4px !important; font-size: 8px !important; font-weight: 900 !important; text-transform: uppercase; }
-              td { border: 1px solid #ccc !important; padding: 4px !important; font-size: 8px !important; }
-              tr { page-break-inside: avoid; }
-              thead { display: table-header-group; }
-              tfoot { display: table-footer-group; }
-            }
-          `}</style>
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Produits</h1>
           <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Catalogue et gestion des articles</p>
           <p className="mt-1 text-sm font-medium text-white/60">
@@ -496,11 +463,11 @@ export default function ProduitsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ImportExcelButton 
-            endpoint="/api/produits/import" 
+          <ImportExcelButton
+            endpoint="/api/produits/import"
             onSuccess={() => {
-                fetchList()
-                window.dispatchEvent(new CustomEvent('produit-created'))
+              fetchList()
+              window.dispatchEvent(new CustomEvent('produit-created'))
             }}
           />
           <button
@@ -512,12 +479,12 @@ export default function ProduitsPage() {
             Exporter Excel
           </button>
           <button
-            onClick={handlePrintAll}
+            onClick={handleDirectPrint}
             disabled={isPrinting}
             className="flex items-center gap-2 rounded-xl border-2 border-orange-600 bg-orange-50 px-6 py-3 text-sm font-black text-orange-900 hover:bg-orange-100 disabled:opacity-50 transition-all shadow-xl active:scale-95 no-print"
           >
             {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-            IMPRIMER LA LISTE COMPLÈTE
+            IMPRIMER
           </button>
           <button
             onClick={() => {
@@ -535,72 +502,98 @@ export default function ProduitsPage() {
         </div>
       </div>
 
-      {/* Zone d'impression professionnelle standardisée */}
-      {allProductsForPrint.length > 0 && (
-        <ListPrintWrapper
-          title="Catalogue des Produits"
-          subtitle={q ? `Filtre : "${q}"` : "Liste intégrale des articles"}
-          dateRange={(dateDebut || dateFin) ? { start: dateDebut, end: dateFin } : undefined}
-        >
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gray-100 uppercase font-black border-y-2 border-black">
-                <th className="px-1 py-2 text-center w-8">N°</th>
-                <th className="px-2 py-2">Code</th>
-                <th className="px-2 py-2">Désignation</th>
-                <th className="px-2 py-2 text-center">Catégorie</th>
-                <th className="px-2 py-2 text-right">P. Achat</th>
-                <th className="px-2 py-2 text-right">P. Vente</th>
-                <th className="px-4 py-2 text-right text-red-700 font-black italic">P. Min.</th>
-                <th className="px-2 py-2 text-right">Stock</th>
-                <th className="px-2 py-2 text-right">Valeur Stock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allProductsForPrint.map((p, idx) => {
-                const stock = p.stockConsolide ?? 0
-                return (
-                  <tr key={p.id} className="border-b border-gray-100">
-                    <td className="px-1 py-1 text-center font-bold text-gray-500 bg-gray-50/50">{idx + 1}</td>
-                    <td className="px-2 py-1 font-mono text-[7px]">{p.code}</td>
-                    <td className="px-2 py-1 font-bold uppercase">{p.designation}</td>
-                    <td className="px-2 py-1 text-center text-[7px] italic">{p.categorie}</td>
-                    <td className="px-2 py-1 text-right tabular-nums">{(p.prixAchat || 0).toLocaleString('fr-FR')}</td>
-                    <td className="px-2 py-1 text-right tabular-nums">{(p.prixVente || 0).toLocaleString('fr-FR')}</td>
-                    <td className="px-2 py-1 text-right tabular-nums text-red-700 italic">{(p.prixMinimum || 0).toLocaleString('fr-FR')}</td>
-                    <td className={`px-2 py-1 text-right font-black ${stock <= p.seuilMin ? 'text-red-600 underline' : ''}`}>
-                      {stock.toLocaleString('fr-FR')}
-                    </td>
-                    <td className="px-2 py-1 text-right font-bold tabular-nums">
-                      {(stock * (p.prixVente || 0)).toLocaleString('fr-FR')}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-100 border-t-2 border-black font-black uppercase italic">
-                <td colSpan={4} className="px-2 py-4 text-right text-[10px]">RÉCAPITULATIF DE LA SÉLECTION</td>
-                <td className="px-2 py-4 text-right text-[10px]">
-                  Réf: {allProductsForPrint.length}
-                </td>
-                <td className="px-2 py-4 text-right text-[10px]">
-                  —
-                </td>
-                <td className="px-2 py-4 text-right text-[10px]">
-                  —
-                </td>
-                <td className="px-2 py-4 text-right text-sm border-x border-black bg-white">
-                  Stock: {allProductsForPrint.reduce((acc, p) => acc + (p.stockConsolide ?? 0), 0).toLocaleString('fr-FR')}
-                </td>
-                <td className="px-2 py-4 text-right text-base underline decoration-double bg-white">
-                  Valeur: {allProductsForPrint.reduce((acc, p) => acc + ((p.stockConsolide ?? 0) * (p.prixVente || 0)), 0).toLocaleString('fr-FR')} F
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </ListPrintWrapper>
+      {isPrinting && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md no-print">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm border-4 border-orange-500 transform scale-110">
+            <Loader2 className="h-16 w-16 animate-spin mx-auto text-orange-500 mb-6" />
+            <h3 className="text-2xl font-black text-gray-900 uppercase italic">Génération du Rapport</h3>
+            <p className="mt-2 text-gray-600 font-bold uppercase text-[11px] tracking-widest">
+              Veuillez patienter pendant la préparation de l'impression...
+            </p>
+          </div>
+        </div>
       )}
+
+      {/* Rendu masqué pour l'impression système direct */}
+      <div className="hidden print:block bg-white w-full">
+        {paginateArray(allProductsForPrint.length > 0 ? allProductsForPrint : list, 15, 23).map((chunk, index, allChunks) => (
+          <div key={index} className="page-break">
+            <ListPrintWrapper
+              title="CATALOGUE GÉNÉRAL DES PRODUITS"
+              subtitle={q ? `Recherche : "${q}"` : "Inventaire complet du catalogue"}
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+              enterprise={params}
+              layout="landscape"
+              hideVisa={index < allChunks.length - 1}
+            >
+              <table className="w-full text-[14px] border-collapse border-2 border-black">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                    <th className="border border-black px-1 py-3 text-center w-10">N°</th>
+                    <th className="border border-black px-1 py-3 text-left">Code</th>
+                    <th className="border border-black px-2 py-3 text-left">Désignation de l'Article</th>
+                    <th className="border border-black px-1 py-3 text-left">Catégorie</th>
+                    <th className="border border-black px-1 py-3 text-right">Qté</th>
+                    <th className="border border-black px-1 py-3 text-right">P. Achat</th>
+                    <th className="border border-black px-1 py-3 text-right">P. Vente</th>
+                    <th className="border border-black px-1 py-3 text-right">P. Min</th>
+                    <th className="border border-black px-2 py-3 text-right bg-gray-50 uppercase text-[10px]">Val. Achat</th>
+                    <th className="border border-black px-2 py-3 text-right bg-gray-50 uppercase text-[10px]">Val. Vente</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((p, idx) => {
+                    const stock = p.stockConsolide ?? 0
+                    const pAchat = p.pamp || p.prixAchat || 0
+                    const pVente = p.prixVente || 0
+                    const pMin = p.prixMinimum || 0
+                    const valAchat = stock * pAchat
+                    const valVente = stock * pVente
+                    return (
+                      <tr key={idx} className="border border-black font-medium">
+                        <td className="border border-black px-1 py-2 text-center font-bold">
+                          {index * ITEMS_PER_PRINT_PAGE + idx + 1}
+                        </td>
+                        <td className="border border-black px-1 py-2 font-mono text-[11px] font-bold">{p.code}</td>
+                        <td className="border border-black px-2 py-2 uppercase font-black text-[13px] leading-tight">{p.designation}</td>
+                        <td className="border border-black px-1 py-2 text-[11px] italic font-bold">{p.categorie}</td>
+                        <td className="border border-black px-1 py-2 text-right font-black text-[15px]">{stock.toLocaleString('fr-FR')}</td>
+                        <td className="border border-black px-1 py-2 text-right">{pAchat.toLocaleString('fr-FR')}</td>
+                        <td className="border border-black px-1 py-2 text-right font-bold">{pVente.toLocaleString('fr-FR')}</td>
+                        <td className="border border-black px-1 py-2 text-right italic text-gray-500">{pMin.toLocaleString('fr-FR')}</td>
+                        <td className="border border-black px-2 py-2 text-right font-bold bg-gray-50/50">{valAchat.toLocaleString('fr-FR')}</td>
+                        <td className="border border-black px-2 py-2 text-right font-black bg-gray-50/50 uppercase tracking-tighter italic">{valVente.toLocaleString('fr-FR')}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                {index === allChunks.length - 1 && (
+                  <tfoot>
+                    <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-lg">
+                      <td colSpan={4} className="border border-black px-2 py-4 text-right">
+                        BILAN GÉNÉRAL ({ (allProductsForPrint.length > 0 ? allProductsForPrint : list).length } RÉFÉRENCES) :
+                      </td>
+                      <td className="border border-black px-2 py-4 text-right bg-white shadow-inner">
+                        {(allProductsForPrint.length > 0 ? allProductsForPrint : list).reduce((acc, p) => acc + (p.stockConsolide ?? 0), 0).toLocaleString()}
+                      </td>
+                      <td colSpan={3} className="border border-black px-2 py-4 text-right bg-gray-50/50 text-[12px] font-bold tracking-widest leading-none">
+                        VALEUR TOTALE DU CATALOGUE <br/><span className="text-[9px] font-normal italic">(Calculée sur stock actuel)</span>
+                      </td>
+                      <td className="border border-black px-2 py-4 text-right bg-white text-orange-800">
+                        {(allProductsForPrint.length > 0 ? allProductsForPrint : list).reduce((acc, p) => acc + ((p.stockConsolide ?? 0) * (p.pamp && p.pamp > 0 ? p.pamp : (p.prixAchat || 0))), 0).toLocaleString()} F
+                      </td>
+                      <td className="border border-black px-2 py-4 text-right bg-slate-900 text-white shadow-2xl">
+                        {(allProductsForPrint.length > 0 ? allProductsForPrint : list).reduce((acc, p) => acc + ((p.stockConsolide ?? 0) * (p.prixVente || 0)), 0).toLocaleString()} F
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </ListPrintWrapper>
+          </div>
+        ))}
+      </div>
 
       <div className="flex flex-col md:flex-row gap-4 no-print items-end bg-white/10 p-3 rounded-xl border border-white/20">
         <div className="flex-1 relative">
@@ -616,7 +609,7 @@ export default function ProduitsPage() {
         <div className="flex gap-2 items-end">
           <div>
             <label className="block text-[10px] font-black text-white uppercase mb-1">Depuis le</label>
-            <input 
+            <input
               type="date"
               value={dateDebut}
               onChange={e => setDateDebut(e.target.value)}
@@ -625,7 +618,7 @@ export default function ProduitsPage() {
           </div>
           <div>
             <label className="block text-[10px] font-black text-white uppercase mb-1">Jusqu'au</label>
-            <input 
+            <input
               type="date"
               value={dateFin}
               onChange={e => setDateFin(e.target.value)}
@@ -633,7 +626,7 @@ export default function ProduitsPage() {
             />
           </div>
           {(dateDebut || dateFin) && (
-            <button 
+            <button
               onClick={() => { setDateDebut(''); setDateFin(''); }}
               className="bg-white/20 hover:bg-white/30 text-white rounded-lg p-2 text-xs font-bold transition-all"
             >
@@ -859,7 +852,7 @@ export default function ProduitsPage() {
                       {p.prixAchat != null ? `${Number(p.prixAchat).toLocaleString('fr-FR')} F` : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-gray-600">
-                      <input 
+                      <input
                         type="number"
                         defaultValue={p.prixVente || 0}
                         onBlur={async (e) => {
@@ -876,7 +869,7 @@ export default function ProduitsPage() {
                       />
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-black text-red-700 bg-red-50 italic">
-                      <input 
+                      <input
                         type="number"
                         defaultValue={p.prixMinimum || 0}
                         onBlur={async (e) => {
@@ -1018,18 +1011,18 @@ export default function ProduitsPage() {
               </div>
 
               {err && <p className="text-xs font-bold text-red-600 bg-red-50 p-3 rounded-xl border border-red-100">{err}</p>}
-              
+
               <div className="flex gap-3 pt-4">
-                <button 
-                  type="submit" 
-                  disabled={savingPrix} 
+                <button
+                  type="submit"
+                  disabled={savingPrix}
                   className="flex-1 rounded-2xl bg-orange-600 py-4 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60 shadow-lg shadow-orange-500/30 uppercase tracking-widest transition-all hover:-translate-y-1"
                 >
                   {savingPrix ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : "Mettre à jour"}
                 </button>
-                <button 
-                  type="button" 
-                  onClick={() => setEditing(null)} 
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
                   className="flex-1 rounded-2xl border-2 border-gray-200 bg-white py-4 text-sm font-black text-gray-700 hover:bg-gray-50 uppercase tracking-widest transition-all"
                 >
                   Annuler
@@ -1050,7 +1043,7 @@ export default function ProduitsPage() {
               <h3 className="text-lg font-bold">Confirmer la suppression</h3>
             </div>
             <p className="mb-6 text-sm text-gray-600">
-              Voulez-vous vraiment supprimer le produit **{deleting.designation}** ({deleting.code}) ? 
+              Voulez-vous vraiment supprimer le produit **{deleting.designation}** ({deleting.code}) ?
               **Attention :** Cette opération est définitive et supprimera également tout l'historique associé (stocks, ventes, achats, mouvements) via la suppression en cascade.
             </p>
             <div className="flex gap-3">

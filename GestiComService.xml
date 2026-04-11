@@ -3,7 +3,7 @@
   <name>GestiCom Pro Server</name>
   <description>Serveur de gestion commerciale GestiCom Pro (GSN EXPERTISES GROUP)</description>
   <executable>%BASE%\node.exe</executable>
-  <arguments>server.js</arguments>
+  <arguments>scripts/standalone-launcher.js</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   <log mode="roll"></log>
   <env name="NODE_ENV" value="production"/>

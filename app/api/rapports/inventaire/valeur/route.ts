@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -11,8 +12,22 @@ export async function GET(request: NextRequest) {
   const magasinId = searchParams.get('magasinId')
 
   try {
-    const entiteId = session.entiteId
-    if (!entiteId) return NextResponse.json({ error: 'Entité non définie.' }, { status: 400 })
+    const entiteId = await getEntiteId(session)
+    const where: any = {}
+
+    // Filtrage par entité (support SUPER_ADMIN)
+    if (session.role === 'SUPER_ADMIN') {
+      const entiteIdFromParams = searchParams.get('entiteId')?.trim()
+      if (entiteIdFromParams) {
+        where.entiteId = Number(entiteIdFromParams)
+      } else if (entiteId > 0) {
+        where.entiteId = entiteId
+      }
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
+    }
+
+    if (!where.entiteId) return NextResponse.json({ error: 'Entité non définie.' }, { status: 400 })
 
     // Validation du magasinId
     let parsedMagasinId: number | undefined = undefined

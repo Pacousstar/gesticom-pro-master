@@ -18,25 +18,26 @@ if (process.env.NODE_ENV !== 'production' && process.platform === 'win32') {
   }
 }
 // On utilise la DATABASE_URL du .env en priorité absolue.
-// Si rien n'est défini, on tente une détection intelligente.
-if (!process.env.DATABASE_URL) {
-  // En production, on laisse le lanceur ou le service définir cette variable.
-  // En dev, on peut avoir un fallback relatif si besoin, mais pas un chemin C: en dur qui écrase tout.
+const dbUrlRaw = process.env.DATABASE_URL || '';
+let dbUrl = dbUrlRaw;
+
+// Correction Windows : Remplacer backslashes par slashes pour Prisma et s'assurer du prefixe file:
+if (dbUrl.startsWith('file:')) {
+  const filePath = dbUrl.replace('file:', '');
+  dbUrl = `file:${filePath.replace(/\\/g, '/')}`;
 }
 
-const dbUrl = process.env.DATABASE_URL;
-
-if (dbUrl) {
-  console.log(`[Prisma] Connexion à : ${dbUrl}`);
-} else if (process.env.NODE_ENV === 'production') {
+if (dbUrl && process.env.NEXT_PHASE !== 'phase-production-build') {
+  console.log(`[Prisma] Connexion active : ${dbUrl}`);
+} else if (process.env.NODE_ENV === 'production' && !dbUrl) {
   console.error('[lib/db] ERREUR FATALE : DATABASE_URL non définie !');
 }
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  log: ['error'], 
+  log: process.env.NODE_ENV === 'production' ? ['error'] : ['query', 'error', 'warn'], 
   datasources: {
     db: {
-      url: dbUrl, // On utilise uniquement dbUrl (pas de fallback en dur)
+      url: dbUrl,
     },
   },
 })

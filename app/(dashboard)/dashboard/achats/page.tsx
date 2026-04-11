@@ -14,11 +14,12 @@ import { validateForm } from '@/lib/validation-helpers'
 import Pagination from '@/components/ui/Pagination'
 import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import PrintPreview from '@/components/print/PrintPreview'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 
 type Magasin = { id: number; code: string; nom: string }
-type Fournisseur = { id: number; nom: string }
+type Fournisseur = { id: number; nom: string; code?: string | null }
 type Produit = { 
   id: number; 
   code: string; 
@@ -80,6 +81,7 @@ export default function AchatsPage() {
     reglements: [{ mode: 'ESPECES', montant: '' }] as { mode: string; montant: string }[], // Multi-Paiement
     numeroCamion: '',
     fraisApproche: '',
+    observation: '',
     lignes: [] as Ligne[],
   })
   const [ajoutProduit, setAjoutProduit] = useState({
@@ -112,8 +114,6 @@ export default function AchatsPage() {
   const [formFournisseurSearch, setFormFournisseurSearch] = useState('')
   const [showFournisseurList, setShowFournisseurList] = useState(false)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
-  const [isPrinting, setIsPrinting] = useState(false)
-  const [printAchats, setPrintAchats] = useState<any[]>([])
   const [entreprise, setEntreprise] = useState<any>(null)
 
   useEffect(() => {
@@ -181,28 +181,6 @@ export default function AchatsPage() {
     fetchAchats()
   }, [currentPage])
 
-  const handlePrintAll = async () => {
-    setIsPrinting(true)
-    try {
-      const params = new URLSearchParams()
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
-      params.set('limit', '10000') 
-      
-      const res = await fetch('/api/achats?' + params.toString())
-      if (res.ok) {
-        const response = await res.json()
-        setPrintAchats(response.data || [])
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 500)
-      }
-    } catch (e) {
-      console.error(e)
-      setIsPrinting(false)
-    }
-  }
 
   // Raccourcis clavier
   useEffect(() => {
@@ -333,7 +311,7 @@ export default function AchatsPage() {
     }
   }
 
-  const { totalHT, totalTVA, totalRemise, totalHTNet } = formData.lignes.reduce(
+  const { totalHT, totalTVA, totalRemise, totalHTNet, totalAchatTTC } = formData.lignes.reduce(
     (acc, val) => {
       const q = val.quantite
       const pu = val.prixUnitaire
@@ -342,16 +320,18 @@ export default function AchatsPage() {
       const ht = q * pu
       const htNet = ht - r
       const tvaMontant = htNet * (t / 100)
+      const montantLigne = Math.round(htNet + tvaMontant) // Arrondi par ligne comme au backend
       
       acc.totalHT += ht
       acc.totalTVA += tvaMontant
       acc.totalRemise += r
       acc.totalHTNet += htNet
+      acc.totalAchatTTC += montantLigne
       return acc
     },
-    { totalHT: 0, totalTVA: 0, totalRemise: 0, totalHTNet: 0 }
+    { totalHT: 0, totalTVA: 0, totalRemise: 0, totalHTNet: 0, totalAchatTTC: 0 }
   )
-  const total = Math.round(totalHTNet + totalTVA)
+  const total = totalAchatTTC
 
   // Récupérer le templateId par défaut pour ACHAT
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
@@ -380,7 +360,7 @@ export default function AchatsPage() {
       const q = l.quantite
       const pu = l.prixUnitaire
       const r = Number(l.remise) || 0
-      const t = l.tvaPerc || 0
+      const t = Number(l.tvaPerc) || Number(l.tva) || 0
       const ht = q * pu
       const htNet = ht - r
       const tva = htNet * (t / 100)
@@ -415,6 +395,7 @@ export default function AchatsPage() {
       LIGNES: lignesHtml,
       TOTAL_HT: `${totalCalc.ht.toLocaleString('fr-FR')} FCFA`,
       TOTAL_REMISE: totalCalc.remise > 0 ? `${totalCalc.remise.toLocaleString('fr-FR')} FCFA` : undefined,
+      TOTAL_HT_NET: `${(totalCalc.ht - totalCalc.remise).toLocaleString('fr-FR')} FCFA`,
       TOTAL_TVA: totalCalc.tva > 0 ? `${Math.round(totalCalc.tva).toLocaleString('fr-FR')} FCFA` : undefined,
       TOTAL: `${Number(d.montantTotal).toLocaleString('fr-FR')} FCFA`,
       MONTANT_PAYE: d.montantPaye ? `${Number(d.montantPaye).toLocaleString('fr-FR')} FCFA` : undefined,
@@ -447,6 +428,7 @@ export default function AchatsPage() {
       reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
       fraisApproche: Number(formData.fraisApproche) || 0,
       numeroCamion: formData.numeroCamion.trim() || null,
+      observation: formData.observation.trim() || null,
       lignes: formData.lignes.map((l) => ({
         produitId: l.produitId,
         quantite: l.quantite,
@@ -523,6 +505,7 @@ export default function AchatsPage() {
       reglements: [{ mode: 'ESPECES', montant: '' }],
       numeroCamion: '',
       fraisApproche: '',
+      observation: '',
       lignes: [],
     })
     setAchats((a) => [data, ...a.filter(x => x.id !== data.id)])
@@ -607,14 +590,6 @@ export default function AchatsPage() {
             label="Importer Achats"
           />
           <button
-            onClick={handlePrintAll}
-            disabled={isPrinting || loading}
-            className="flex items-center gap-2 rounded-xl border-2 border-blue-500 bg-blue-50 px-6 py-3 text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50 transition-all shadow-lg active:scale-95"
-          >
-            {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-            IMPRIMER LA LISTE
-          </button>
-          <button
             onClick={() => setForm(true)}
             className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-3 text-sm font-bold text-white hover:bg-orange-700 shadow-lg shadow-orange-900/20 transition-all hover:scale-105"
             title="Nouvel achat (Ctrl+N)"
@@ -625,21 +600,30 @@ export default function AchatsPage() {
         </div>
       </div>
 
-      {/* KPIs Professionnels */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <div className="rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 p-5 shadow-xl">
-           <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-1">Total Facturé</p>
-           <p className="text-2xl font-black text-white tabular-nums">{(totals?.montantTotal || 0).toLocaleString('fr-FR')} F</p>
-        </div>
-        <div className="rounded-2xl bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 p-5 shadow-xl">
-           <p className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mb-1">Total Décaissé</p>
-           <p className="text-2xl font-black text-emerald-400 tabular-nums">{(totals?.montantPaye || 0).toLocaleString('fr-FR')} F</p>
-        </div>
-        <div className="rounded-2xl bg-red-500/20 backdrop-blur-md border border-red-500/30 p-5 shadow-xl">
-           <p className="text-[10px] font-black text-red-300 uppercase tracking-widest mb-1">Reste à Payer</p>
-           <p className="text-2xl font-black text-red-400 tabular-nums">{(totals?.resteAPayer || 0).toLocaleString('fr-FR')} F</p>
-        </div>
+      {/* COMPTEURS DE PERFORMANCE (Analyse de Compteur) */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6">Analyse de Compteur : 1 / 3</p>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 no-print">
+
+        {[
+          { label: "Total Facturé", val: (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F', sub: "Volume achat période", icon: ShoppingBag, color: "bg-indigo-600" },
+          { label: "Total Décaissé", val: (totals?.montantPaye || 0).toLocaleString('fr-FR') + ' F', sub: "Paiements effectués", icon: Wallet, color: "bg-emerald-600" },
+          { label: "Reste à Payer", val: (totals?.resteAPayer || 0).toLocaleString('fr-FR') + ' F', sub: "Engagements fournisseurs", icon: AlertTriangle, color: "bg-rose-600" },
+        ].map((c, i) => (
+          <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group shadow-indigo-900/10`}>
+             <div className="relative z-10 text-white flex flex-col justify-between h-full">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
+                <div>
+                  <h3 className="text-2xl font-black tracking-tighter">{c.val}</h3>
+                  <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
+                </div>
+             </div>
+             <c.icon className="absolute right-4 bottom-4 h-12 w-12 text-white opacity-10 group-hover:scale-110 transition-transform" />
+          </div>
+        ))}
       </div>
+    </div>
+
 
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -690,10 +674,10 @@ export default function AchatsPage() {
         <button
           type="button"
           onClick={() => {
-            const params = new URLSearchParams({ limit: '1000' })
+            const params = new URLSearchParams()
             if (dateDebut) params.set('dateDebut', dateDebut)
             if (dateFin) params.set('dateFin', dateFin)
-            window.open('/api/achats/export?' + params.toString(), '_blank')
+            window.location.href = `/api/achats/export?${params.toString()}`
           }}
           className="rounded-lg border-2 border-green-500 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 flex items-center gap-1.5"
           title="Exporter la liste des achats en Excel"
@@ -704,10 +688,10 @@ export default function AchatsPage() {
         <button
           type="button"
           onClick={() => {
-            const params = new URLSearchParams({ limit: '1000' })
+            const params = new URLSearchParams()
             if (dateDebut) params.set('dateDebut', dateDebut)
             if (dateFin) params.set('dateFin', dateFin)
-            window.open('/api/achats/export-pdf?' + params.toString(), '_blank')
+            window.location.href = `/api/achats/export-pdf?${params.toString()}`
           }}
           className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 flex items-center gap-1.5"
           title="Exporter la liste des achats en PDF"
@@ -772,20 +756,28 @@ export default function AchatsPage() {
                         </div>
                         {fournisseurs
                           .filter(f => f.nom.toLowerCase().includes(formFournisseurSearch.toLowerCase()))
+                          .slice(0, 30)
                           .map((f) => (
                             <div
                               key={f.id}
-                              onClick={() => {
+                              onMouseDown={(e) => {
+                                e.preventDefault(); // Bloque le onBlur de l'input
                                 setFormData(fod => ({ ...fod, fournisseurId: String(f.id), fournisseurLibre: '' }))
                                 setFormFournisseurSearch(f.nom)
                                 setShowFournisseurList(false)
                               }}
                               className="cursor-pointer px-4 py-3 text-sm hover:bg-orange-50 font-bold text-slate-900 border-b border-gray-50 last:border-0 transition-colors"
                             >
-                              {f.nom}
+                              <div className="flex items-center justify-between">
+                                <span>{f.nom}</span>
+                                <span className="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-mono">#{f.code || f.id}</span>
+                              </div>
                             </div>
                           ))
                         }
+                        {fournisseurs.filter(f => f.nom.toLowerCase().includes(formFournisseurSearch.toLowerCase())).length > 30 && (
+                          <div className="px-4 py-2 text-[10px] text-gray-400 italic bg-gray-50 uppercase font-black text-center">Affinez votre recherche...</div>
+                        )}
                         {fournisseurs.filter(f => f.nom.toLowerCase().includes(formFournisseurSearch.toLowerCase())).length === 0 && (
                           <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun fournisseur trouvé.</div>
                         )}
@@ -848,7 +840,15 @@ export default function AchatsPage() {
                   value={formData.numeroCamion}
                   onChange={(e) => setFormData((f) => ({ ...f, numeroCamion: e.target.value }))}
                   placeholder="Ex: LG 4422 A"
-                  className="mt-1 w-full rounded-lg border-2 border-blue-100 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none bg-blue-50/30 font-bold"
+                />
+              </div>
+              <div className="sm:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 uppercase text-[11px] font-black">Observations / Notes</label>
+                <textarea
+                  value={formData.observation}
+                  onChange={(e) => setFormData((f) => ({ ...f, observation: e.target.value }))}
+                  placeholder="Notes complémentaires sur cet achat..."
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 focus:border-orange-500 focus:outline-none bg-white min-h-[60px]"
                 />
               </div>
             </div>
@@ -1145,14 +1145,14 @@ export default function AchatsPage() {
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-gray-200 bg-gray-50/50 font-bold">
-                       <td className="py-3 px-2 text-gray-600">TOTAL HT BRUT</td>
+                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-black text-sm">
+                       <td className="py-3 px-2 text-slate-900 uppercase italic">TOTAL HT BRUT</td>
                        <td className="py-3 px-2 text-right"></td>
                        <td className="py-3 px-2 text-right"></td>
-                       <td className="py-3 px-2 text-right">{totalHT.toLocaleString('fr-FR')} F</td>
+                       <td className="py-3 px-2 text-right text-slate-900">{totalHT.toLocaleString('fr-FR')} F</td>
                        <td className="py-3 px-2 text-right text-red-600">-{totalRemise.toLocaleString('fr-FR')} F</td>
-                       <td className="py-3 px-2 text-right">{totalTVA.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} F</td>
-                       <td className="py-3 px-2 text-right text-emerald-700 bg-emerald-50">{total.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} F</td>
+                       <td className="py-3 px-2 text-right text-blue-700">{totalTVA.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} F</td>
+                       <td className="py-3 px-2 text-right text-emerald-700 bg-emerald-50/50">{total.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} F</td>
                        <td></td>
                     </tr>
                     {totalRemise > 0 && (
@@ -1301,11 +1301,15 @@ export default function AchatsPage() {
               {totals && (
                 <tfoot className="bg-orange-50 font-bold text-gray-900 border-t-2 border-orange-200">
                   <tr>
-                    <td colSpan={5} className="px-4 py-3 uppercase text-xs tracking-wider text-gray-700">Total Période</td>
-                    <td className="px-4 py-3 text-right text-orange-700">{totals.montantTotal.toLocaleString('fr-FR')} F</td>
-                    <td colSpan={2}></td>
-                    <td className="px-4 py-3 text-right text-red-700">{totals.resteAPayer.toLocaleString('fr-FR')} F</td>
-                    <td></td>
+                    <td colSpan={5} className="px-4 py-3 uppercase text-[10px] tracking-wider text-orange-800 font-black italic">Total de la Période</td>
+                    <td className="px-4 py-3 text-right text-orange-700 bg-orange-100/50">
+                      {totals.montantTotal.toLocaleString('fr-FR')} F
+                    </td>
+                    <td colSpan={2} className="px-4 py-3 bg-gray-50/30"></td>
+                    <td className="px-4 py-3 text-right text-red-700 bg-red-50/50">
+                      {totals.resteAPayer.toLocaleString('fr-FR')} F
+                    </td>
+                    <td className="px-4 py-3 bg-gray-50/30"></td>
                   </tr>
                 </tfoot>
               )}
@@ -1355,6 +1359,7 @@ export default function AchatsPage() {
                         reglements: (detailAchat as any).reglements?.map((r: any) => ({ mode: r.mode, montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: '' }],
                         numeroCamion: detailAchat.numeroCamion || '',
                         fraisApproche: String((detailAchat as any).fraisApproche || '0'),
+                        observation: detailAchat.observation || '',
                         lignes: detailAchat.lignes.map((l: any) => ({
                           produitId: l.produitId,
                           designation: l.designation,
@@ -1588,69 +1593,6 @@ export default function AchatsPage() {
           defaultTemplateId={defaultTemplateId}
         />
       )}
-      {/* Zone d'impression de la liste */}
-      <div className="hidden print:block font-sans text-black bg-white p-4">
-        <div className="flex justify-between items-center mb-6 border-b-4 border-black pb-4">
-          <div>
-            <h1 className="text-3xl font-black uppercase tracking-tighter">{entreprise?.nomEntreprise || 'GESTICOM PRO'}</h1>
-            <p className="text-sm font-bold uppercase">{entreprise?.localisation || 'Localisation'}</p>
-            <p className="text-xs font-medium text-gray-700">{entreprise?.contact || 'Contact'}</p>
-          </div>
-          <div className="text-right">
-            <h2 className="text-xl font-black text-gray-800 uppercase italic">Liste des Achats</h2>
-            <p className="text-sm font-bold">{new Date().toLocaleDateString('fr-FR')}</p>
-            <p className="text-[10px] uppercase text-gray-500 font-bold">
-              {dateDebut && dateFin ? `Période: du ${dateDebut} au ${dateFin}` : 'Tous les achats'}
-            </p>
-          </div>
-        </div>
-
-        <table className="w-full text-xs border-collapse border-2 border-black">
-          <thead>
-            <tr className="bg-gray-200 uppercase font-black">
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">N°</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Date</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Fournisseur</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Magasin</th>
-              <th className="border-2 border-black px-2 py-2 text-right uppercase">Montant</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Mode</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Statut</th>
-            </tr>
-          </thead>
-          <tbody>
-            {printAchats.map((v) => (
-              <tr key={v.id} className="border-b border-gray-300">
-                <td className="border-2 border-black px-2 py-1 font-mono font-bold">{v.numero}</td>
-                <td className="border-2 border-black px-2 py-1">{new Date(v.date).toLocaleString('fr-FR')}</td>
-                <td className="border-2 border-black px-2 py-1 font-medium">{v.fournisseur?.nom || v.fournisseurLibre || '-'}</td>
-                <td className="border-2 border-black px-2 py-1">{v.magasin.code}</td>
-                <td className="border-2 border-black px-2 py-1 text-right font-black">{v.montantTotal.toLocaleString()} F</td>
-                <td className="border-2 border-black px-2 py-1">{v.modePaiement}</td>
-                <td className="border-2 border-black px-2 py-1 font-bold">Validé</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot className="font-bold">
-            <tr className="bg-gray-900 text-white font-black">
-              <td colSpan={4} className="border-2 border-black px-3 py-4 text-right uppercase text-sm italic">Total Général des Achats sélectionnés</td>
-              <td className="border-2 border-black px-3 py-4 text-right text-2xl underline decoration-double tracking-tighter">
-                {printAchats.reduce((acc, v) => acc + v.montantTotal, 0).toLocaleString()} F
-              </td>
-              <td colSpan={2} className="border-2 border-black px-3 py-4"></td>
-            </tr>
-          </tfoot>
-        </table>
-        
-        <div className="mt-12 flex justify-between items-end">
-           <div>
-              <p className="text-[10px] italic text-gray-500 mb-1">Rapport généré par GestiCom Pro. Document comptable.</p>
-           </div>
-           <div className="text-center w-64 border-t-2 border-black pt-2">
-              <p className="text-xs font-black uppercase">Visa Direction des Achats</p>
-              <div className="h-20"></div>
-           </div>
-        </div>
-      </div>
     </div>
   )
 }

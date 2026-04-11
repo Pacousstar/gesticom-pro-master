@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const entiteId = await getEntiteId(session)
-    const magasinId = 1 // Magasin principal par défaut pour les compteurs de rassurance
+    // Filtre pour le Super Admin : si entité 0, on voit tout
+    const where = entiteId && entiteId > 0 ? { entiteId } : {}
+    const whereStock = entiteId && entiteId > 0 ? { magasin: { entiteId } } : {}
 
     const [
       ventes,
@@ -19,25 +21,27 @@ export async function GET(request: NextRequest) {
       clients,
       fournisseurs,
       caisse,
+      banque,
       depenses,
       charges,
       ecritures,
     ] = await Promise.all([
-      prisma.vente.count({ where: { entiteId } }),
-      prisma.achat.count({ where: { entiteId } }),
-      prisma.produit.count({ where: { entiteId } }),
-      prisma.stock.count({ where: { magasinId } }),
-      prisma.client.count({ where: { entiteId } }),
-      prisma.fournisseur.count({ where: { entiteId } }),
-      prisma.caisse.count({ where: { entiteId } }),
-      prisma.depense.count({ where: { entiteId } }),
-      prisma.charge.count({ where: { entiteId } }),
-      prisma.ecritureComptable.count({ where: { entiteId } }),
+      prisma.vente.count({ where }),
+      prisma.achat.count({ where }),
+      prisma.produit.count({ where }),
+      prisma.stock.count({ where: whereStock }),
+      prisma.client.count({ where }),
+      prisma.fournisseur.count({ where }),
+      prisma.caisse.count({ where }),
+      prisma.banque.count({ where }),
+      prisma.depense.count({ where }),
+      prisma.charge.count({ where }),
+      prisma.ecritureComptable.count({ where }),
     ])
 
     // Calcul simplifié du bilan (Actif / Passif) pour le menu
     const ecrituresBilan = await prisma.ecritureComptable.findMany({
-        where: { entiteId },
+        where,
         select: { debit: true, credit: true, compte: { select: { classe: true } } }
     })
 
@@ -60,6 +64,7 @@ export async function GET(request: NextRequest) {
       clients,
       fournisseurs,
       caisse,
+      banque,
       depenses,
       charges,
       ecritures,

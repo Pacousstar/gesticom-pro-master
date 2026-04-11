@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
@@ -9,10 +10,26 @@ export async function GET(request: NextRequest) {
   const forbidden = requirePermission(session, 'fournisseurs:view')
   if (forbidden) return forbidden
 
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const entiteId = await getEntiteId(session)
+  const where: any = { actif: true }
+
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
+    }
+  } else if (entiteId > 0) {
+    where.entiteId = entiteId
+  }
+
   const complet = request.nextUrl.searchParams.get('complet') === '1'
   if (complet) {
     const list = await prisma.fournisseur.findMany({
-      where: { actif: true },
+      where,
       orderBy: { nom: 'asc' },
       select: { id: true, nom: true }
     })
@@ -27,13 +44,12 @@ export async function GET(request: NextRequest) {
 
   const q = String(request.nextUrl.searchParams.get('q') || '').trim()
   
-  const where: any = { actif: true }
   if (q) {
     where.OR = [
-      { nom: { contains: q } },
-      { code: { contains: q } },
-      { telephone: { contains: q } },
-      { email: { contains: q } }
+      { nom: { contains: q, mode: 'insensitive' } },
+      { code: { contains: q, mode: 'insensitive' } },
+      { telephone: { contains: q, mode: 'insensitive' } },
+      { email: { contains: q, mode: 'insensitive' } }
     ]
   }
 
@@ -54,12 +70,15 @@ export async function GET(request: NextRequest) {
   let detteByFournisseur: Record<number, number> = {}
   
   if (fournisseurIds.length > 0) {
+    const whereAchat: any = {
+      fournisseurId: { in: fournisseurIds },
+      statut: { in: ['VALIDE', 'VALIDEE'] },
+    }
+    if (where.entiteId) whereAchat.entiteId = where.entiteId
+
     const sums = await prisma.achat.groupBy({
       by: ['fournisseurId'],
-      where: {
-        fournisseurId: { in: fournisseurIds },
-        statut: { in: ['VALIDE', 'VALIDEE'] },
-      },
+      where: whereAchat,
       _sum: { montantTotal: true, montantPaye: true },
     })
     for (const r of sums) {
@@ -70,9 +89,12 @@ export async function GET(request: NextRequest) {
       }
     }
     // Inclure aussi les règlements LIBRES (non liés à un achat spécifique)
+    const whereReg: any = { fournisseurId: { in: fournisseurIds }, achatId: null }
+    if (where.entiteId) whereReg.entiteId = where.entiteId
+
     const reglementsLibres = await prisma.reglementAchat.groupBy({
       by: ['fournisseurId'],
-      where: { fournisseurId: { in: fournisseurIds }, achatId: null },
+      where: whereReg,
       _sum: { montant: true }
     })
     for (const rl of reglementsLibres) {

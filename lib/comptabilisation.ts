@@ -130,7 +130,8 @@ export async function comptabiliserVente(data: {
   const compteVariationStock = await getOrCreateCompte(COMPTES_DEFAUT.VARIATION_STOCKS, 'Variation de stocks', '6', 'CHARGES', tx)
   const compteStock = await getOrCreateCompte(COMPTES_DEFAUT.STOCK_MARCHANDISES, 'Stock de marchandises', '3', 'ACTIF', tx)
   
-  const entiteId = data.entiteId || 1
+  const entiteId = data.entiteId
+  if (!entiteId) throw new Error('[Comptabilisation] entiteId requis')
   
   // Calcul TVA et HT global (GestiCom travaille en prix unitaires HT)
   let montantTTC = data.montantTotal
@@ -330,7 +331,8 @@ export async function comptabiliserReglementVente(data: {
     'ACTIF',
     tx
   )
-  const entiteId = data.entiteId || 1
+  const entiteId = data.entiteId
+  if (!entiteId) throw new Error('[Comptabilisation] entiteId requis')
   
   // Déterminer le compte de trésorerie dynamiquement
   let compteTresorerie: { id: number }
@@ -438,7 +440,8 @@ export async function comptabiliserAchat(data: {
   const compteStock = await getOrCreateCompte(COMPTES_DEFAUT.STOCK_MARCHANDISES, 'Stock de marchandises', '3', 'ACTIF', tx)
   const compteVariationStock = await getOrCreateCompte(COMPTES_DEFAUT.VARIATION_STOCKS, 'Variation de stocks', '6', 'CHARGES', tx)
   
-  const entiteId = data.entiteId || 1
+  const entiteId = data.entiteId
+  if (!entiteId) throw new Error('[Comptabilisation] entiteId requis')
   
   // Calcul TVA et HT (GestiCom travaille en prix unitaires HT)
   let montantTTC = data.montantTotal
@@ -764,46 +767,52 @@ export async function comptabiliserDepense(data: {
   libelle: string
   modePaiement: string
   utilisateurId: number
+  entiteId: number
   magasinId?: number | null
-}) {
-  const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD')
+}, tx?: any) {
+  const p = tx || prisma
+  const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
+  const entiteId = data.entiteId
   
   // Déterminer le compte de charge selon la catégorie
   let compteCharge: { id: number }
   const categorieUpper = data.categorie.toUpperCase()
   
   if (categorieUpper.includes('LOYER')) {
-    compteCharge = await getOrCreateCompte('613', 'Loyers', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('613', 'Loyers', '6', 'CHARGES', tx)
   } else if (categorieUpper.includes('SALAIRE')) {
     compteCharge = await getOrCreateCompte(
       COMPTES_DEFAUT.CHARGES_PERSONNEL,
       'Charges de personnel',
       '6',
-      'CHARGES'
+      'CHARGES',
+      tx
     )
   } else if (categorieUpper.includes('TRANSPORT')) {
-    compteCharge = await getOrCreateCompte('624', 'Transports', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('624', 'Transports', '6', 'CHARGES', tx)
   } else if (categorieUpper.includes('COMMUNICATION')) {
-    compteCharge = await getOrCreateCompte('626', 'Services bancaires et assimilés', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('626', 'Services bancaires et assimilés', '6', 'CHARGES', tx)
   } else if (categorieUpper.includes('MAINTENANCE')) {
-    compteCharge = await getOrCreateCompte('615', 'Entretien et réparations', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('615', 'Entretien et réparations', '6', 'CHARGES', tx)
   } else if (categorieUpper.includes('PUBLICITE')) {
-    compteCharge = await getOrCreateCompte('612', 'Publicité, publications, relations publiques', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('612', 'Publicité, publications, relations publiques', '6', 'CHARGES', tx)
   } else if (categorieUpper.includes('ASSURANCE')) {
-    compteCharge = await getOrCreateCompte('616', 'Primes d\'assurances', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('616', 'Primes d\'assurances', '6', 'CHARGES', tx)
   } else if (categorieUpper.includes('IMPOT')) {
     compteCharge = await getOrCreateCompte(
       COMPTES_DEFAUT.IMPOTS_TAXES,
       'Impôts, taxes et versements assimilés',
       '6',
-      'CHARGES'
+      'CHARGES',
+      tx
     )
   } else {
     compteCharge = await getOrCreateCompte(
       COMPTES_DEFAUT.AUTRES_CHARGES,
       'Autres charges',
       '6',
-      'CHARGES'
+      'CHARGES',
+      tx
     )
   }
   
@@ -812,15 +821,16 @@ export async function comptabiliserDepense(data: {
   let compteReglement: { id: number }
   
   if (m === 'ESPECES' || m === 'CASH') {
-    compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF')
+    compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
   } else {
-    compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF')
+    compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
   }
   
   // Écriture 1 : Débit Charge, Crédit Caisse
   await createEcriture({
     date: data.date,
     journalId: journal.id,
+    entiteId: entiteId,
     piece: null,
     libelle: data.libelle,
     compteId: compteCharge.id,
@@ -830,11 +840,12 @@ export async function comptabiliserDepense(data: {
     referenceType: 'DEPENSE',
     referenceId: data.depenseId,
     utilisateurId: data.utilisateurId,
-  })
+  }, tx)
   
   await createEcriture({
     date: data.date,
     journalId: journal.id,
+    entiteId: entiteId,
     piece: null,
     libelle: data.libelle,
     compteId: compteReglement.id,
@@ -844,7 +855,7 @@ export async function comptabiliserDepense(data: {
     referenceType: 'DEPENSE',
     referenceId: data.depenseId,
     utilisateurId: data.utilisateurId,
-  })
+  }, tx)
 
 
 }
@@ -859,49 +870,54 @@ export async function comptabiliserCharge(data: {
   rubrique: string
   libelle?: string | null
   utilisateurId: number
+  entiteId: number
   magasinId?: number | null
   modePaiement?: string
-}) {
-  const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD')
+}, tx?: any) {
+  const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
+  const entiteId = data.entiteId
   
   // Déterminer le compte de charge selon la rubrique
   let compteCharge: { id: number }
   const rubriqueUpper = data.rubrique.toUpperCase()
   
   if (rubriqueUpper.includes('LOYER')) {
-    compteCharge = await getOrCreateCompte('613', 'Loyers', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('613', 'Loyers', '6', 'CHARGES', tx)
   } else if (rubriqueUpper.includes('SALAIRE')) {
     compteCharge = await getOrCreateCompte(
       COMPTES_DEFAUT.CHARGES_PERSONNEL,
       'Charges de personnel',
       '6',
-      'CHARGES'
+      'CHARGES',
+      tx
     )
   } else if (rubriqueUpper.includes('ELECTRICITE') || rubriqueUpper.includes('EAU')) {
-    compteCharge = await getOrCreateCompte('614', 'Charges locatives et de copropriété', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('614', 'Charges locatives et de copropriété', '6', 'CHARGES', tx)
   } else if (rubriqueUpper.includes('TRANSPORT')) {
-    compteCharge = await getOrCreateCompte('624', 'Transports', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('624', 'Transports', '6', 'CHARGES', tx)
   } else if (rubriqueUpper.includes('COMMUNICATION')) {
-    compteCharge = await getOrCreateCompte('626', 'Services bancaires et assimilés', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('626', 'Services bancaires et assimilés', '6', 'CHARGES', tx)
   } else if (rubriqueUpper.includes('MAINTENANCE')) {
-    compteCharge = await getOrCreateCompte('615', 'Entretien et réparations', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('615', 'Entretien et réparations', '6', 'CHARGES', tx)
   } else if (rubriqueUpper.includes('PUBLICITE')) {
-    compteCharge = await getOrCreateCompte('612', 'Publicité, publications, relations publiques', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('612', 'Publicité, publications, relations publiques', '6', 'CHARGES', tx)
   } else if (rubriqueUpper.includes('ASSURANCE')) {
-    compteCharge = await getOrCreateCompte('616', 'Primes d\'assurances', '6', 'CHARGES')
+    compteCharge = await getOrCreateCompte('616', 'Primes d\'assurances', '6', 'CHARGES', tx)
   } else if (rubriqueUpper.includes('IMPOT')) {
     compteCharge = await getOrCreateCompte(
       COMPTES_DEFAUT.IMPOTS_TAXES,
       'Impôts, taxes et versements assimilés',
       '6',
-      'CHARGES'
+      'CHARGES',
+      tx
     )
   } else {
     compteCharge = await getOrCreateCompte(
       COMPTES_DEFAUT.AUTRES_CHARGES,
       'Autres charges',
       '6',
-      'CHARGES'
+      'CHARGES',
+      tx
     )
   }
   
@@ -912,7 +928,8 @@ export async function comptabiliserCharge(data: {
     isCash ? COMPTES_DEFAUT.CAISSE : COMPTES_DEFAUT.BANQUE,
     isCash ? 'Caisse' : 'Banque/MM',
     '5',
-    'ACTIF'
+    'ACTIF',
+    tx
   )
   
   const libelle = data.libelle || `Charge: ${data.rubrique}`
@@ -930,7 +947,7 @@ export async function comptabiliserCharge(data: {
     referenceType: 'CHARGE',
     referenceId: data.chargeId,
     utilisateurId: data.utilisateurId,
-  })
+  }, tx)
   
   await createEcriture({
     date: data.date,
@@ -944,7 +961,7 @@ export async function comptabiliserCharge(data: {
     referenceType: 'CHARGE',
     referenceId: data.chargeId,
     utilisateurId: data.utilisateurId,
-  })
+  }, tx)
 
 
 }
@@ -960,14 +977,17 @@ export async function comptabiliserCaisse(data: {
   motif: string
   modePaiement?: string
   utilisateurId: number
-}) {
-  const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE')
+  entiteId: number
+}, tx?: any) {
+  const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
+  const entiteId = data.entiteId
   
   const compteCaisse = await getOrCreateCompte(
     COMPTES_DEFAUT.CAISSE,
     'Caisse',
     '5',
-    'ACTIF'
+    'ACTIF',
+    tx
   )
   
   if (data.type === 'ENTREE') {
@@ -976,7 +996,8 @@ export async function comptabiliserCaisse(data: {
       COMPTES_DEFAUT.PRODUITS_DIVERS,
       'Produits divers',
       '7',
-      'PRODUITS'
+      'PRODUITS',
+      tx
     )
     
     await createEcriture({
@@ -991,7 +1012,7 @@ export async function comptabiliserCaisse(data: {
       referenceType: 'CAISSE',
       referenceId: data.caisseId,
       utilisateurId: data.utilisateurId,
-    })
+    }, tx)
     
     await createEcriture({
       date: data.date,
@@ -1005,14 +1026,15 @@ export async function comptabiliserCaisse(data: {
       referenceType: 'CAISSE',
       referenceId: data.caisseId,
       utilisateurId: data.utilisateurId,
-    })
+    }, tx)
   } else {
     // Sortie de caisse : Débit Charges diverses, Crédit Caisse
     const compteCharges = await getOrCreateCompte(
       COMPTES_DEFAUT.AUTRES_CHARGES,
       'Autres charges',
       '6',
-      'CHARGES'
+      'CHARGES',
+      tx
     )
     
     await createEcriture({
@@ -1027,11 +1049,12 @@ export async function comptabiliserCaisse(data: {
       referenceType: 'CAISSE',
       referenceId: data.caisseId,
       utilisateurId: data.utilisateurId,
-    })
+    }, tx)
     
     await createEcriture({
       date: data.date,
       journalId: journal.id,
+      entiteId,
       piece: null,
       libelle: `Sortie caisse: ${data.motif}`,
       compteId: compteCaisse.id,
@@ -1041,7 +1064,7 @@ export async function comptabiliserCaisse(data: {
       referenceType: 'CAISSE',
       referenceId: data.caisseId,
       utilisateurId: data.utilisateurId,
-    })
+    }, tx)
   }
 }
 
@@ -1057,9 +1080,11 @@ export async function comptabiliserOperationBancaire(data: {
   libelle: string
   compteId: number | null
   utilisateurId: number
-}) {
+  entiteId: number
+}, tx?: any) {
+  const entiteId = data.entiteId
   // Journal Banque
-  const journal = await getOrCreateJournal('BA', 'Journal de Banque', 'BANQUE')
+  const journal = await getOrCreateJournal('BA', 'Journal de Banque', 'BANQUE', tx)
   
   // Compte bancaire (utiliser le compte lié ou le compte par défaut)
   let compteBanque
@@ -1071,7 +1096,8 @@ export async function comptabiliserOperationBancaire(data: {
       COMPTES_DEFAUT.BANQUE,
       'Banque',
       '5',
-      'ACTIF'
+      'ACTIF',
+      tx
     )
   }
   
@@ -1086,7 +1112,8 @@ export async function comptabiliserOperationBancaire(data: {
         COMPTES_DEFAUT.PRODUITS_DIVERS,
         'Produits divers',
         '7',
-        'PRODUITS'
+        'PRODUITS',
+        tx
       )
     } else if (data.type === 'VIREMENT_ENTRANT') {
       // Virement entrant : depuis un autre compte bancaire ou tiers
@@ -1094,7 +1121,8 @@ export async function comptabiliserOperationBancaire(data: {
         '411', // Clients ou autre compte selon le contexte
         'Clients',
         '4',
-        'PASSIF'
+        'PASSIF',
+        tx
       )
     } else if (data.type === 'INTERETS') {
       // Intérêts : Produits financiers
@@ -1102,20 +1130,23 @@ export async function comptabiliserOperationBancaire(data: {
         '758',
         'Produits divers',
         '7',
-        'PRODUITS'
+        'PRODUITS',
+        tx
       )
     } else {
       compteCredit = await getOrCreateCompte(
         COMPTES_DEFAUT.PRODUITS_DIVERS,
         'Produits divers',
         '7',
-        'PRODUITS'
+        'PRODUITS',
+        tx
       )
     }
     
     await createEcriture({
       date: data.date,
       journalId: journal.id,
+      entiteId,
       piece: null,
       libelle: data.libelle,
       compteId: compteBanque.id,
@@ -1125,11 +1156,12 @@ export async function comptabiliserOperationBancaire(data: {
       referenceType: 'BANQUE',
       referenceId: data.operationId,
       utilisateurId: data.utilisateurId,
-    })
+    }, tx)
     
     await createEcriture({
       date: data.date,
       journalId: journal.id,
+      entiteId,
       piece: null,
       libelle: data.libelle,
       compteId: compteCredit.id,
@@ -1139,7 +1171,7 @@ export async function comptabiliserOperationBancaire(data: {
       referenceType: 'BANQUE',
       referenceId: data.operationId,
       utilisateurId: data.utilisateurId,
-    })
+    }, tx)
   } else {
     // Sortie bancaire : Débit selon le type, Crédit Banque
     let compteDebit
@@ -1149,7 +1181,8 @@ export async function comptabiliserOperationBancaire(data: {
         COMPTES_DEFAUT.CAISSE,
         'Caisse',
         '5',
-        'ACTIF'
+        'ACTIF',
+        tx
       )
     } else if (data.type === 'VIREMENT_SORTANT') {
       // Virement sortant : vers un autre compte bancaire ou tiers
@@ -1157,7 +1190,8 @@ export async function comptabiliserOperationBancaire(data: {
         '401', // Fournisseurs ou autre compte selon le contexte
         'Fournisseurs',
         '4',
-        'PASSIF'
+        'PASSIF',
+        tx
       )
     } else if (data.type === 'FRAIS') {
       // Frais bancaires : Charges financières
@@ -1165,20 +1199,23 @@ export async function comptabiliserOperationBancaire(data: {
         '658',
         'Autres charges',
         '6',
-        'CHARGES'
+        'CHARGES',
+        tx
       )
     } else {
       compteDebit = await getOrCreateCompte(
         COMPTES_DEFAUT.AUTRES_CHARGES,
         'Autres charges',
         '6',
-        'CHARGES'
+        'CHARGES',
+        tx
       )
     }
     
     await createEcriture({
       date: data.date,
       journalId: journal.id,
+      entiteId,
       piece: null,
       libelle: data.libelle,
       compteId: compteDebit.id,
@@ -1188,11 +1225,12 @@ export async function comptabiliserOperationBancaire(data: {
       referenceType: 'BANQUE',
       referenceId: data.operationId,
       utilisateurId: data.utilisateurId,
-    })
+    }, tx)
     
     await createEcriture({
       date: data.date,
       journalId: journal.id,
+      entiteId,
       piece: null,
       libelle: data.libelle,
       compteId: compteBanque.id,
@@ -1202,7 +1240,7 @@ export async function comptabiliserOperationBancaire(data: {
       referenceType: 'BANQUE',
       referenceId: data.operationId,
       utilisateurId: data.utilisateurId,
-    })
+    }, tx)
   }
 }
 
@@ -1217,14 +1255,15 @@ export async function comptabiliserTransfert(data: {
   magasinDestNom: string
   montantTotal: number
   utilisateurId: number
-}) {
+}, tx?: any) {
   if (data.montantTotal <= 0) return
-  const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD')
+  const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const compteStock = await getOrCreateCompte(
     COMPTES_DEFAUT.STOCK_MARCHANDISES,
     'Stock de marchandises',
     '3',
-    'ACTIF'
+    'ACTIF',
+    tx
   )
   const libelle = `Transfert ${data.numero} ${data.magasinOrigineNom} → ${data.magasinDestNom}`
   await createEcriture({
@@ -1239,7 +1278,7 @@ export async function comptabiliserTransfert(data: {
     referenceType: 'TRANSFERT',
     referenceId: data.transfertId,
     utilisateurId: data.utilisateurId,
-  })
+  }, tx)
   await createEcriture({
     date: data.date,
     journalId: journal.id,
@@ -1252,7 +1291,7 @@ export async function comptabiliserTransfert(data: {
     referenceType: 'TRANSFERT',
     referenceId: data.transfertId,
     utilisateurId: data.utilisateurId,
-  })
+  }, tx)
 }
 
 /**

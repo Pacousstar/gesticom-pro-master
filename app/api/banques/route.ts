@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    return NextResponse.json(banquesAvecSolde)
+    return NextResponse.json({ data: banquesAvecSolde })
   } catch (error) {
     console.error('GET /api/banques:', error)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

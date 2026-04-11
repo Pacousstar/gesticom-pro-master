@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Dossier de sauvegarde introuvable.' }, { status: 404 })
   }
 
-  const filePath = path.join(backupDir, name)
+  const filePath = path.join(/*turbopackIgnore: true*/ backupDir, name)
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     return NextResponse.json({ error: 'Sauvegarde introuvable.' }, { status: 404 })
   }

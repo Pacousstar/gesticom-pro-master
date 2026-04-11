@@ -9,7 +9,6 @@ export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  const limit = Math.min(5000, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 1000))
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const where: { date?: { gte: Date; lte: Date }; entiteId?: number } = {}
@@ -25,57 +24,55 @@ export async function GET(request: NextRequest) {
 
   const achats = await prisma.achat.findMany({
     where,
-    take: limit,
     orderBy: { date: 'desc' },
     include: {
       magasin: { select: { code: true, nom: true } },
       fournisseur: { select: { nom: true } },
-      lignes: { include: { produit: { select: { code: true, designation: true } } } },
     },
   })
 
-  const rows: Array<Record<string, string | number>> = []
+  const rows: any[] = []
+  let totalMontant = 0
+  let totalPaye = 0
+  let totalReste = 0
+
   for (const a of achats) {
     const dateStr = a.date.toISOString().slice(0, 10)
-    const magasin = a.magasin ? `${a.magasin.code} - ${a.magasin.nom}` : ''
-    const fournisseur = a.fournisseur?.nom ?? a.fournisseurLibre ?? ''
-    for (const l of a.lignes) {
-      rows.push({
-        Date: dateStr,
-        Numéro: a.numero,
-        Magasin: magasin,
-        Fournisseur: fournisseur,
-        'Montant total': a.montantTotal,
-        'Montant payé': a.montantPaye ?? 0,
-        'Statut paiement': a.statutPaiement ?? 'PAYE',
-        Mode: a.modePaiement,
-        'Code produit': l.produit?.code ?? '',
-        Désignation: l.designation,
-        Quantité: l.quantite,
-        'Prix unit.': l.prixUnitaire,
-        Montant: l.montant,
-      })
-    }
-    if (a.lignes.length === 0) {
-      rows.push({
-        Date: dateStr,
-        Numéro: a.numero,
-        Magasin: magasin,
-        Fournisseur: fournisseur,
-        'Montant total': a.montantTotal,
-        'Montant payé': a.montantPaye ?? 0,
-        'Statut paiement': a.statutPaiement ?? 'PAYE',
-        Mode: a.modePaiement,
-        'Code produit': '',
-        Désignation: '',
-        Quantité: 0,
-        'Prix unit.': 0,
-        Montant: 0,
-      })
-    }
+    const fournisseur = a.fournisseur?.nom ?? a.fournisseurLibre ?? '—'
+    const reste = a.montantTotal - (a.montantPaye || 0)
+
+    totalMontant += a.montantTotal
+    totalPaye += a.montantPaye || 0
+    totalReste += reste
+
+    rows.push({
+      'N°': a.numero,
+      Date: dateStr,
+      Magasin: a.magasin?.code || '—',
+      Fournisseur: fournisseur,
+      'N° Camion': a.numeroCamion || '—',
+      Montant: a.montantTotal,
+      Paiement: a.modePaiement,
+      'Statut paiement': a.statutPaiement === 'PAYE' ? 'Payé' : a.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit',
+      'Reste à payer': reste,
+    })
   }
 
-  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Date: '', Numéro: '', Magasin: '', Fournisseur: '', 'Montant total': '', 'Montant payé': '', 'Statut paiement': '', Mode: '', 'Code produit': '', Désignation: '', Quantité: '', 'Prix unit.': '', Montant: '' }])
+  if (rows.length > 0) {
+    rows.push({
+      'N°': 'TOTAL',
+      Date: '',
+      Magasin: '',
+      Fournisseur: '',
+      'N° Camion': '',
+      Montant: totalMontant,
+      Paiement: '',
+      'Statut paiement': '',
+      'Reste à payer': totalReste,
+    })
+  }
+
+  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'N°': '', Date: '', Magasin: '', Fournisseur: '', 'N° Camion': '', Montant: '', Paiement: '', 'Statut paiement': '', 'Reste à payer': '' }])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Achats')
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })

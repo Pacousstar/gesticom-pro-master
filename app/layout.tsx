@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: "GestiCom - Gestion de Commerce",
   description: "Application professionnelle de gestion - Stocks, Ventes, Achats, Comptabilité",
@@ -34,10 +36,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
-      <body className="antialiased bg-gray-50">
+    <html lang="fr" suppressHydrationWarning>
+      <body className="antialiased bg-gray-50 bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 min-h-screen">
         {children}
       </body>
     </html>
   );
 }
+

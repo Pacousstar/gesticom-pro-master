@@ -11,52 +11,75 @@ export async function GET(request: NextRequest) {
   try {
     const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
     
-    const list = await prisma.client.findMany({
+    // Récupérer tous les clients actifs
+    const clients = await prisma.client.findMany({
       where: { actif: true },
       orderBy: { nom: 'asc' },
-      select: { id: true, nom: true, telephone: true, type: true, plafondCredit: true, ncc: true },
+      select: { 
+        id: true, 
+        code: true, 
+        nom: true, 
+        telephone: true, 
+        type: true, 
+        ncc: true, 
+        localisation: true, 
+        plafondCredit: true,
+        soldeInitial: true,
+        ventes: {
+          where: { statut: 'VALIDEE' },
+          select: { montantTotal: true, montantPaye: true }
+        }
+      },
     })
     
-    const filtered = q
-      ? list.filter(
-          (c) =>
-            c.nom.toLowerCase().includes(q) ||
-            (c.telephone || '').toLowerCase().includes(q)
-        )
-      : list
+    const data: any[] = []
+    let totalSolde = 0
 
-    const creditIds = filtered.filter((c) => c.type === 'CREDIT').map((c) => c.id)
-    let detteByClient: Record<number, number> = {}
-    if (creditIds.length > 0) {
-      const sums = await prisma.vente.groupBy({
-        by: ['clientId'],
-        where: {
-          clientId: { in: creditIds },
-          statut: 'VALIDEE',
-          modePaiement: 'CREDIT',
-        },
-        _sum: { montantTotal: true },
-      })
-      for (const r of sums) {
-        if (r.clientId != null) detteByClient[r.clientId] = r._sum.montantTotal ?? 0
+    for (const c of clients) {
+      // Filtrer éventuellement par recherche si q est présent
+      if (q && !c.nom.toLowerCase().includes(q) && !(c.telephone || '').toLowerCase().includes(q) && !(c.code || '').toLowerCase().includes(q)) {
+        continue
       }
+
+      // Calcul du solde global
+      // Note: Dans cette application, le solde semble être (Engagements - Paiements) + soldeInitial
+      const engagements = c.ventes.reduce((sum, v) => sum + v.montantTotal, 0)
+      const paiements = c.ventes.reduce((sum, v) => sum + (v.montantPaye || 0), 0)
+      const soldeNet = (c.soldeInitial || 0) + (engagements - paiements)
+
+      totalSolde += soldeNet
+
+      data.push({
+        Code: c.code || '—',
+        Nom: c.nom,
+        'Tél.': c.telephone || '—',
+        Type: c.type === 'CASH' ? 'Cash' : 'Crédit',
+        NCC: c.ncc || '—',
+        Localisation: c.localisation || '—',
+        Plafond: c.plafondCredit || 0,
+        'Solde Global': soldeNet
+      })
     }
 
-    const data = filtered.map((c) => ({
-      Nom: c.nom,
-      Téléphone: c.telephone || '',
-      Type: c.type === 'CASH' ? 'Cash' : 'Crédit',
-      'Plafond crédit': c.plafondCredit || 0,
-      'Dette actuelle': detteByClient[c.id] || 0,
-      NCC: c.ncc || '',
-    }))
+    if (data.length > 0) {
+      data.push({
+        Code: 'TOTAL',
+        Nom: '',
+        'Tél.': '',
+        Type: '',
+        NCC: '',
+        Localisation: '',
+        Plafond: '',
+        'Solde Global': totalSolde
+      })
+    }
 
-    const worksheet = XLSX.utils.json_to_sheet(data)
+    const worksheet = XLSX.utils.json_to_sheet(data.length ? data : [{ Code: '', Nom: '', 'Tél.': '', Type: '', NCC: '', Localisation: '', Plafond: '', 'Solde Global': '' }])
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Clients')
 
     const colWidths = [
-      { wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+      { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 15 },
     ]
     worksheet['!cols'] = colWidths
 

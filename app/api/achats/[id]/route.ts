@@ -63,19 +63,21 @@ export async function DELETE(
     await prisma.$transaction(async (tx) => {
       const a = await tx.achat.findUnique({
         where: { id },
-        include: { lignes: true },
+        include: { lignes: true, reglements: true },
       })
       if (!a) throw new Error('Achat introuvable.')
 
-      // 1. Nettoyer compta
+      // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('ACHAT', id, tx)
+      await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
+      await deleteEcrituresByReference('ACHAT_STOCK', id, tx)
 
-      // 2. Nettoyage des mouvements de stocks (Entrées à annuler)
+      // 2. Nettoyage des mouvements de stocks (Annulation de l'entrée)
       await tx.mouvement.deleteMany({
         where: { observation: { contains: a.numero } }
       })
 
-      // 3. Retrait des produits du stock (décrément car c'était un achat)
+      // 3. Retrait des produits du stock (Décrément car c'était un achat)
       for (const l of a.lignes) {
         await tx.stock.updateMany({
           where: { produitId: l.produitId, magasinId: a.magasinId },
@@ -83,32 +85,38 @@ export async function DELETE(
         })
       }
 
-      // 4. Nettoyage Trésorerie
+      // 4. Nettoyage Trésorerie : CAISSE
       await tx.caisse.deleteMany({
-        where: { motif: { contains: a.numero } }
+        where: {
+          OR: [
+            { motif: { contains: a.numero } },
+            { motif: { contains: `REGLEMENT ACHAT ${a.numero}` } }
+          ]
+        }
       })
 
-      // Re-ajustement banque
-      const regls = await tx.reglementAchat.findMany({ where: { achatId: id } })
-      for (const r of regls) {
-        if (['CHEQUE', 'VIREMENT', 'MOBILE_MONEY'].includes(r.modePaiement)) {
-          const banque = await tx.banque.findFirst({ where: { actif: true } })
-          if (banque) {
-            await tx.banque.update({
-              where: { id: banque.id },
-              data: { soldeActuel: { increment: r.montant } } // Remboursement de banque
-            })
-          }
-        }
+      // 5. Nettoyage Trésorerie : BANQUE (Opérations Bancaires)
+      const opsBancaires = await tx.operationBancaire.findMany({
+        where: { reference: a.numero }
+      })
+
+      for (const op of opsBancaires) {
+        // MAJ du solde de la banque concernée (on rajoute le montant car c'était une sortie / remboursement)
+        await tx.banque.update({
+          where: { id: op.banqueId },
+          data: { soldeActuel: { increment: op.montant } }
+        })
+        // Suppression de l'opération
+        await tx.operationBancaire.delete({ where: { id: op.id } })
       }
 
-      // 5. Supprimer règlements et achat
+      // 6. Supprimer règlements et achat
       await tx.reglementAchat.deleteMany({ where: { achatId: id } })
       await tx.achat.delete({ where: { id: id } })
       
-      // 6. LOG D'AUDIT : Mouchard de suppression (Indélébile)
-      await logSuppression(session, 'ACHAT', id, `Suppression d'achat fournisseur ${a.numero}`, { numero: a.numero, montant: a.montantTotal }, getIpAddress(_request))
-    }, { timeout: 20000 })
+      // 7. LOG D'AUDIT : Mouchard de suppression (Indélébile)
+      await logSuppression(session, 'ACHAT', id, `SUPPRESSION RADICALE : Achat fournisseur ${a.numero} effacé avec régul. stocks et trésorerie par Super Admin`, { numero: a.numero, montant: a.montantTotal }, getIpAddress(_request))
+    }, { timeout: 30000 })
     
     // Invalider le cache pour affichage immédiat
     revalidatePath('/dashboard/achats')

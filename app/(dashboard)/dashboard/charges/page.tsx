@@ -9,6 +9,7 @@ import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type Charge = {
   id: number
@@ -95,6 +96,9 @@ export default function ChargesPage() {
   const [userRole, setUserRole] = useState<string>('')
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState({ totalPages: 1, total: 0 })
+  const [isPrinting, setIsPrinting] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [allChargesForPrint, setAllChargesForPrint] = useState<Charge[]>([])
   const itemsPerPage = 20
 
   useEffect(() => {
@@ -131,7 +135,33 @@ export default function ChargesPage() {
 
   useEffect(() => {
     fetchCharges()
-  }, [dateDebut, dateFin, filtreType, filtreRubrique, filtreMagasin, searchTerm])
+  }, [dateDebut, dateFin, filtreType, filtreRubrique, filtreMagasin, searchTerm, currentPage])
+
+  const handlePrintAll = async () => {
+    setIsPrinting(true)
+    try {
+      const params = new URLSearchParams({ limit: '10000' })
+      if (searchTerm) params.set('q', searchTerm)
+      if (dateDebut) params.set('dateDebut', dateDebut)
+      if (dateFin) params.set('dateFin', dateFin)
+      if (filtreType) params.set('type', filtreType)
+      if (filtreRubrique) params.set('rubrique', filtreRubrique)
+      if (filtreMagasin) params.set('magasinId', filtreMagasin)
+
+      const res = await fetch('/api/charges?' + params.toString())
+      if (res.ok) {
+        const data = await res.json()
+        setAllChargesForPrint(data.charges || [])
+        setTimeout(() => {
+          window.print()
+          setIsPrinting(false)
+        }, 500)
+      }
+    } catch (e) {
+      console.error(e)
+      setIsPrinting(false)
+    }
+  }
 
   const resetForm = () => {
     setFormData({
@@ -413,51 +443,38 @@ export default function ChargesPage() {
             PDF
           </button>
 
-          <ListPrintWrapper
-            title="État des Charges d'Exploitation"
-            subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les charges"}
-          >
-            <table className="w-full text-[10px] border-collapse border border-gray-300">
-              <thead>
-                <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                  <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Rubrique</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Type</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Bénéficiaire</th>
-                  <th className="border border-gray-300 px-3 py-3 text-right">Montant (F)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {charges.map((c, idx) => (
-                  <tr key={idx} className="border-b border-gray-200">
-                    <td className="border border-gray-300 px-3 py-2">{new Date(c.date).toLocaleDateString('fr-FR')}</td>
-                    <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{c.rubrique}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-[9px]">{c.type}</td>
-                    <td className="border border-gray-300 px-3 py-2 italic">{c.beneficiaire || '-'}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-right font-black">
-                      {(c.montant || 0).toLocaleString('fr-FR')} F
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-gray-50 font-black">
-                  <td colSpan={4} className="border border-gray-300 px-3 py-3 text-right uppercase">Total cumulé</td>
-                  <td className="border border-gray-300 px-3 py-3 text-right text-sm">
-                    {charges.reduce((acc, c) => acc + (c.montant || 0), 0).toLocaleString('fr-FR')} F
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </ListPrintWrapper>
 
           <button
             type="button"
-            onClick={() => window.print()}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100"
-            title="Imprimer Liste Professionnelle"
+            onClick={async () => {
+              setIsPrinting(true)
+              try {
+                const params = new URLSearchParams({ limit: '10000' })
+                if (searchTerm) params.set('q', searchTerm)
+                if (dateDebut) params.set('dateDebut', dateDebut)
+                if (dateFin) params.set('dateFin', dateFin)
+                if (filtreType) params.set('type', filtreType)
+                if (filtreRubrique) params.set('rubrique', filtreRubrique)
+                if (filtreMagasin) params.set('magasinId', filtreMagasin)
+
+                const res = await fetch('/api/charges?' + params.toString())
+                if (res.ok) {
+                  const data = await res.json()
+                  setAllChargesForPrint(data.charges || [])
+                  setIsPreviewOpen(true)
+                }
+              } catch (e) {
+                console.error(e)
+                showError("Erreur lors de la préparation de l'aperçu.")
+              } finally {
+                setIsPrinting(false)
+              }
+            }}
+            disabled={isPrinting}
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 disabled:opacity-50"
+            title="Aperçu avant impression"
           >
-            <Printer className="h-4 w-4" />
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
             Imprimer
           </button>
         </div>
@@ -537,22 +554,6 @@ export default function ChargesPage() {
                       </td>
                     </tr>
                   ))}
-                  {pagination.totalPages > 1 && (
-                    <tr>
-                      <td colSpan={8} className="px-0 py-0 border-t border-gray-200">
-                        <div className="bg-white px-4 py-3">
-                          <Pagination
-                            currentPage={currentPage}
-                            totalPages={pagination.totalPages}
-                            onPageChange={(p) => {
-                              setCurrentPage(p)
-                              fetchCharges(p)
-                            }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  )}
                     </>
                   )
                 })()}
@@ -562,8 +563,155 @@ export default function ChargesPage() {
         )}
       </div>
 
+      {pagination.totalPages > 1 && (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={itemsPerPage}
+            onPageChange={(p) => {
+              setCurrentPage(p)
+              scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          />
+        </div>
+      )}
+
+      {/* Modale d'Aperçu Impression */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/90 backdrop-blur-sm no-print">
+          <div className="flex items-center justify-between bg-white px-6 py-4 shadow-lg">
+            <div className="flex items-center gap-4">
+               <h2 className="text-xl font-black text-gray-900 uppercase italic">Aperçu du Rapport des Charges</h2>
+               <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-600 uppercase tracking-widest">
+                 {allChargesForPrint.length} Éléments
+               </span>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border border-gray-300 px-6 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => {
+                  window.print()
+                }}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-8 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95"
+              >
+                <Printer className="h-4 w-4" />
+                LANCER L'IMPRESSION
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-8">
+            <div className="mx-auto max-w-[210mm] bg-white p-2 shadow-2xl">
+               {chunkArray(allChargesForPrint, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                <div key={index} className={index < allChunks.length - 1 ? 'page-break mb-8 border-b-2 border-dashed border-gray-100 pb-8' : ''}>
+                  <ListPrintWrapper
+                    title="ÉTAT DES CHARGES D'EXPLOITATION"
+                    subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les charges"}
+                    pageNumber={index + 1}
+                    totalPages={allChunks.length}
+                    hideHeader={index > 0}
+                    hideVisa={index < allChunks.length - 1}
+                  >
+                    <table className="w-full text-[14px] border-collapse border-2 border-black">
+                      <thead>
+                        <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                          <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
+                          <th className="border-r-2 border-black px-3 py-3 text-left">Rubrique</th>
+                          <th className="border-r-2 border-black px-3 py-3 text-left">Observation</th>
+                          <th className="border-r-2 border-black px-3 py-3 text-left">Bénéficiaire</th>
+                          <th className="px-3 py-4 text-right">Montant (F)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {chunk.map((c, idx) => (
+                          <tr key={idx} className="border-b border-black">
+                            <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">{new Date(c.date).toLocaleDateString('fr-FR')}</td>
+                            <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{c.rubrique}</td>
+                            <td className="border-r-2 border-black px-3 py-2 text-[12px]">{c.observation || '-'}</td>
+                            <td className="border-r-2 border-black px-3 py-2 italic whitespace-nowrap">{c.beneficiaire || '-'}</td>
+                            <td className="px-3 py-2 text-right font-black">
+                              {(c.montant || 0).toLocaleString('fr-FR')} F
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      {index === allChunks.length - 1 && (
+                        <tfoot>
+                          <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic shadow-inner">
+                            <td colSpan={4} className="border-r-2 border-black px-3 py-5 text-right uppercase tracking-widest bg-white">Total Cumulé (Période Sélectionnée)</td>
+                            <td className="px-3 py-5 text-right bg-slate-50 underline decoration-double">
+                              {allChargesForPrint.reduce((acc, c) => acc + (c.montant || 0), 0).toLocaleString('fr-FR')} F
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </ListPrintWrapper>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Zone cachée pour l'impression système (Browser Print) */}
+      <div className="hidden print:block fixed inset-0 z-0 bg-white p-0 m-0">
+          {chunkArray(allChargesForPrint, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+              <ListPrintWrapper
+                title="ÉTAT DES CHARGES D'EXPLOITATION"
+                subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les charges"}
+                pageNumber={index + 1}
+                totalPages={allChunks.length}
+                hideHeader={index > 0}
+                hideVisa={index < allChunks.length - 1}
+              >
+                <table className="w-full text-[14px] border-collapse border-2 border-black">
+                  <thead>
+                    <tr className="bg-gray-100 uppercase font-black text-gray-700 border-b-2 border-black">
+                      <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
+                      <th className="border-r-2 border-black px-3 py-3 text-left">Rubrique</th>
+                      <th className="border-r-2 border-black px-3 py-3 text-left">Observation</th>
+                      <th className="border-r-2 border-black px-3 py-3 text-left">Bénéficiaire</th>
+                      <th className="px-3 py-3 text-right">Montant (F)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chunk.map((c, idx) => (
+                      <tr key={idx} className="border-b border-black">
+                        <td className="border-r-2 border-black px-3 py-2">{new Date(c.date).toLocaleDateString('fr-FR')}</td>
+                        <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{c.rubrique}</td>
+                        <td className="border-r-2 border-black px-3 py-2 text-[12px]">{c.observation || '-'}</td>
+                        <td className="border-r-2 border-black px-3 py-2 italic">{c.beneficiaire || '-'}</td>
+                        <td className="px-3 py-2 text-right font-black">
+                          {(c.montant || 0).toLocaleString('fr-FR')} F
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {index === allChunks.length - 1 && (
+                    <tfoot>
+                      <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
+                        <td colSpan={4} className="border-r-2 border-black px-3 py-5 text-right uppercase bg-white">Total cumulé</td>
+                        <td className="px-3 py-5 text-right bg-white">
+                          {allChargesForPrint.reduce((acc, c) => acc + (c.montant || 0), 0).toLocaleString('fr-FR')} F
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </ListPrintWrapper>
+            </div>
+          ))}
+      </div>
       {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
@@ -688,16 +836,6 @@ export default function ChargesPage() {
         </div>
       )}
       {/* Styles Print */}
-      <style jsx global>{`
-        @media print {
-          nav, aside, button, .no-print { display: none !important; }
-          .print-document, body { background: white !important; padding: 10px !important; margin: 0 !important; }
-          .rounded-xl { border: none !important; box-shadow: none !important; }
-          table { width: 100% !important; border-collapse: collapse !important; }
-          th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
-          td, th { border: 1px solid #e5e7eb !important; padding: 8px !important; font-size: 10px !important; }
-        }
-      `}</style>
     </div>
   )
 }

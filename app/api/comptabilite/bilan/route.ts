@@ -13,15 +13,23 @@ export async function GET(request: Request) {
 
         const finAnnee = new Date(annee, 11, 31, 23, 59, 59, 999)
         // 1. Déterminer l'entité
-        let entiteId = await getEntiteId(session)
+        const entiteIdFromParams = searchParams.get('entiteId')
+        let entiteId: number | null = null
         
-        // SECURITÉ : Si Super Admin et pas d'entité, on force l'Entité 1 ou on ne filtre pas
-        if (session.role === 'SUPER_ADMIN' && (!entiteId || entiteId <= 0)) {
-            console.log(`[BILAN] Super Admin détecté sans entité spécifique. Utilisation de l'ENTITÉ 1 par défaut.`)
-            entiteId = 1
+        if (session.role === 'SUPER_ADMIN') {
+            // Pour le Super Admin, on filtre uniquement si demandé explicitement
+            entiteId = entiteIdFromParams ? parseInt(entiteIdFromParams) : null
+        } else {
+            // Pour les autres, on force l'entité de leur profil
+            entiteId = await getEntiteId(session)
+        }
+
+        const whereEcritures: any = {}
+        if (entiteId && entiteId > 0) {
+            whereEcritures.entiteId = entiteId
         }
         
-        console.log(`[BILAN] Calcul pour l'année ${annee}, Entité ID: ${entiteId}`)
+        console.log(`[BILAN] Calcul pour l'année ${annee}, Rôle: ${session.role}, Filtre Entité:`, entiteId || 'TOUTES')
 
         // 2. Récupérer tous les comptes actifs avec les écritures
         const comptes = await prisma.planCompte.findMany({
@@ -30,7 +38,7 @@ export async function GET(request: Request) {
                 ecritures: {
                     where: {
                         date: { lte: finAnnee },
-                        ...(entiteId && entiteId > 0 ? { entiteId } : {})
+                        ...whereEcritures
                     }
                 }
             }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -9,11 +10,21 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const compteId = request.nextUrl.searchParams.get('compteId')?.trim()
+  const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
 
-  const where: {
-    date?: { gte: Date; lte: Date }
-    compteId?: number
-  } = {}
+  const where: any = {}
+
+  if (session.role === 'SUPER_ADMIN') {
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else {
+      const eId = await getEntiteId(session)
+      if (eId > 0) where.entiteId = eId
+    }
+  } else {
+    const eId = await getEntiteId(session)
+    if (eId > 0) where.entiteId = eId
+  }
 
   if (dateDebut && dateFin) {
     where.date = {

@@ -12,7 +12,18 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   const periode = request.nextUrl.searchParams.get('periode') || '30' // 7, 30, 90, ou 'mois'
-  const entiteId = await getEntiteId(session)
+  const entiteIdFromSession = await getEntiteId(session)
+  let entiteId = entiteIdFromSession
+
+  // Support Super Admin override
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      entiteId = Number(entiteIdFromParams)
+    }
+  }
+
+  const magasinId = request.nextUrl.searchParams.get('magasinId')
 
   try {
     const now = new Date()
@@ -28,18 +39,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Filtre par entité
-    const whereVentes: { date: { gte: Date; lte: Date }; statut: any; entiteId?: number } = {
+    const whereVentes: any = {
       date: { gte: dateDebut, lte: dateFin },
       statut: { in: ['VALIDE', 'VALIDEE'] },
     }
-    const whereAchats: { date: { gte: Date; lte: Date }; statut: any; entiteId?: number } = {
+    const whereAchats: any = {
       date: { gte: dateDebut, lte: dateFin },
       statut: { in: ['VALIDE', 'VALIDEE'] },
     }
-    const whereMouvements: { date: { gte: Date; lte: Date }; entiteId?: number } = {
+    const whereMouvements: any = {
       date: { gte: dateDebut, lte: dateFin },
     }
-    const whereFinance: { date: { gte: Date; lte: Date }; statut: any; entiteId?: number } = {
+    const whereFinance: any = {
       date: { gte: dateDebut, lte: dateFin },
       statut: { in: ['VALIDE', 'VALIDEE'] },
     }
@@ -49,6 +60,12 @@ export async function GET(request: NextRequest) {
       whereAchats.entiteId = entiteId
       whereMouvements.entiteId = entiteId
       whereFinance.entiteId = entiteId
+    }
+    if (magasinId) {
+      whereVentes.magasinId = Number(magasinId)
+      whereAchats.magasinId = Number(magasinId)
+      whereMouvements.magasinId = Number(magasinId)
+      whereFinance.magasinId = Number(magasinId)
     }
 
     // CA par période (Agrégation au lieu de fetch massif)
@@ -89,6 +106,7 @@ export async function GET(request: NextRequest) {
           date: { gte: dateDebut, lte: dateFin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
           ...(entiteId ? { entiteId } : {}),
+          ...(magasinId ? { magasinId: Number(magasinId) } : {}),
         },
       },
       _sum: {

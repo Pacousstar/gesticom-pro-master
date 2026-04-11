@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       }, tx)
 
       return reglement
-    })
+    }, { timeout: 20000 })
 
     revalidatePath('/dashboard/ventes')
     revalidatePath('/dashboard/clients')

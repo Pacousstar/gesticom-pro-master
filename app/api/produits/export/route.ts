@@ -9,89 +9,65 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
-    // Récupérer tous les produits actifs avec leurs stocks
     const produits = await prisma.produit.findMany({
       where: { actif: true },
       orderBy: [{ categorie: 'asc' }, { code: 'asc' }],
       include: {
         stocks: {
-          include: {
-            magasin: {
-              select: {
-                code: true,
-                nom: true,
-              },
-            },
+          select: {
+            quantite: true,
           },
         },
       },
     })
 
-    // Préparer les données pour Excel
-    const rows: Array<Record<string, string | number | null>> = []
+    const rows: any[] = []
+    let totalStock = 0
+    let totalValeurAchat = 0
+    let totalValeurVente = 0
 
     for (const p of produits) {
-      if (p.stocks.length > 0) {
-        // Un produit peut avoir plusieurs stocks (un par magasin)
-        for (const stock of p.stocks) {
-          rows.push({
-            Code: p.code,
-            Désignation: p.designation,
-            Catégorie: p.categorie,
-            'Prix Achat': p.prixAchat,
-            'Prix Vente': p.prixVente,
-            'Seuil Min': p.seuilMin,
-            Magasin: `${stock.magasin.code} - ${stock.magasin.nom}`,
-            Quantité: stock.quantite,
-            'Quantité Initiale': stock.quantiteInitiale,
-            'Date Création': p.createdAt ? new Date(p.createdAt).toISOString().slice(0, 10) : '',
-          })
-        }
-      } else {
-        // Produit sans stock
-        rows.push({
-          Code: p.code,
-          Désignation: p.designation,
-          Catégorie: p.categorie,
-          'Prix Achat': p.prixAchat,
-          'Prix Vente': p.prixVente,
-          'Seuil Min': p.seuilMin,
-          Magasin: '',
-          Quantité: 0,
-          'Quantité Initiale': 0,
-          'Date Création': p.createdAt ? new Date(p.createdAt).toISOString().slice(0, 10) : '',
-        })
-      }
+      const stockActuel = p.stocks.reduce((sum, s) => sum + (s.quantite || 0), 0)
+      const valeurAchat = (p.prixAchat || 0) * stockActuel
+      const valeurVente = (p.prixVente || 0) * stockActuel
+
+      totalStock += stockActuel
+      totalValeurAchat += valeurAchat
+      totalValeurVente += valeurVente
+
+      rows.push({
+        Code: p.code,
+        Désignation: p.designation,
+        Catégorie: p.categorie,
+        'Prix achat': p.prixAchat || 0,
+        'Prix vente': p.prixVente || 0,
+        'Prix Min.': p.prixMinimum || 0,
+        'Stock Actuel': stockActuel,
+        'Valeur Achat': valeurAchat,
+        'Valeur Vente': valeurVente,
+        'Date Création': p.createdAt ? new Date(p.createdAt).toISOString().slice(0, 10) : '',
+      })
     }
 
-    // Créer le fichier Excel
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [
-      {
-        Code: '',
+    if (rows.length > 0) {
+      rows.push({
+        Code: 'TOTAL',
         Désignation: '',
         Catégorie: '',
-        'Prix Achat': '',
-        'Prix Vente': '',
-        'Seuil Min': '',
-        Magasin: '',
-        Quantité: '',
-        'Quantité Initiale': '',
+        'Prix achat': '',
+        'Prix vente': '',
+        'Prix Min.': '',
+        'Stock Actuel': totalStock,
+        'Valeur Achat': totalValeurAchat,
+        'Valeur Vente': totalValeurVente,
         'Date Création': '',
-      }
-    ])
+      })
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Code: '', Désignation: '', Catégorie: '', 'Prix achat': '', 'Prix vente': '', 'Prix Min.': '', 'Stock Actuel': '', 'Valeur Achat': '', 'Valeur Vente': '', 'Date Création': '' }])
     
-    // Ajuster la largeur des colonnes
     const colWidths = [
-      { wch: 15 }, // Code
-      { wch: 40 }, // Désignation
-      { wch: 20 }, // Catégorie
-      { wch: 12 }, // Prix Achat
-      { wch: 12 }, // Prix Vente
-      { wch: 10 }, // Seuil Min
-      { wch: 25 }, // Magasin
-      { wch: 10 }, // Quantité
-      { wch: 15 }, // Quantité Initiale
-      { wch: 12 }, // Date Création
+      { wch: 15 }, { wch: 40 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
     ]
     ws['!cols'] = colWidths
 

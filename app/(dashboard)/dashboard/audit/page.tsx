@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Loader2, Search, Filter, Download, Calendar, User, Activity, FileSpreadsheet, FileText, X, ChevronDown, ChevronUp, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type AuditLog = {
   id: number
@@ -41,6 +42,7 @@ export default function AuditPage() {
     dateFrom: '',
     dateTo: '',
   })
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   const loadLogs = async () => {
     setLoading(true)
@@ -190,40 +192,143 @@ export default function AuditPage() {
             <FileText className="h-4 w-4" />
             PDF
           </button>
-          <ListPrintWrapper
-            title="Journal d'Audit Transféré"
-            subtitle="Traçabilité des actions utilisateurs"
-          >
-            <table className="w-full text-[10px] border-collapse border border-gray-300">
-              <thead>
-                <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                  <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Utilisateur</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Action</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Type</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((log, idx) => (
-                  <tr key={idx} className="border-b border-gray-200">
-                    <td className="border border-gray-300 px-3 py-2 whitespace-nowrap">{formatDate(log.date)}</td>
-                    <td className="border border-gray-300 px-3 py-2">{log.utilisateur.nom} ({log.utilisateur.login})</td>
-                    <td className="border border-gray-300 px-3 py-2 font-bold">{log.action}</td>
-                    <td className="border border-gray-300 px-3 py-2">{log.type}</td>
-                    <td className="border border-gray-300 px-3 py-2">{log.description}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ListPrintWrapper>
+                <div className="hidden print:block absolute inset-0 bg-white">
+                    {chunkArray(logs, ITEMS_PER_PRINT_PAGE).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
+                        <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                            <ListPrintWrapper
+                                title="Journal d'Audit Transféré"
+                                subtitle="Traçabilité des actions utilisateurs"
+                                pageNumber={index + 1}
+                                totalPages={allChunks.length}
+                                hideHeader={index > 0}
+                                hideVisa={index < allChunks.length - 1}
+                            >
+                                <table className="w-full text-[14px] border-collapse border-2 border-black">
+                                    <thead>
+                                        <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                                            <th className="border-r-2 border-black px-3 py-3 text-left">Horodatage</th>
+                                            <th className="border-r-2 border-black px-3 py-3 text-left">Opérateur</th>
+                                            <th className="border-r-2 border-black px-3 py-3 text-left">Action</th>
+                                            <th className="border-r-2 border-black px-3 py-3 text-left">Module</th>
+                                            <th className="px-3 py-3 text-left">Détails de l'évènement</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {chunk.map((log: AuditLog, idx: number) => (
+                                            <tr key={idx} className="border-b border-black">
+                                                <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap font-mono text-xs">{formatDate(log.date)}</td>
+                                                <td className="border-r-2 border-black px-3 py-2 font-black">{log.utilisateur.nom}</td>
+                                                <td className="border-r-2 border-black px-3 py-2 underline">{log.action}</td>
+                                                <td className="border-r-2 border-black px-3 py-2">{log.type}</td>
+                                                <td className="px-3 py-2 italic lowercase font-medium text-[12px]">{log.description}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    {index === allChunks.length - 1 && (
+                                        <tfoot>
+                                            <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
+                                                <td colSpan={3} className="border-r-2 border-black px-3 py-4 text-right bg-white shadow-inner">Total Transactions Audités</td>
+                                                <td colSpan={2} className="px-3 py-4 bg-white text-blue-900 underline decoration-double">{totalLogs} évènements capturés</td>
+                                            </tr>
+                                        </tfoot>
+                                    )}
+                                </table>
+                            </ListPrintWrapper>
+                        </div>
+                    ))}
+                </div>
+
+                {/* MODALE D'APERÇU IMPRESSION JOURNAL AUDIT */}
+                {isPreviewOpen && (
+                  <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans text-slate-900 uppercase italic tracking-tighter">
+                    <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl not-italic tracking-normal">
+                        <div className="flex items-center gap-6">
+                           <div>
+                             <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Journal d'Audit</h2>
+                             <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                               Contrôle de l'Intégrité et de la Traçabilité
+                             </p>
+                           </div>
+                           <div className="h-10 w-px bg-gray-200" />
+                           <div className="flex items-center gap-2">
+                             <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
+                               {totalLogs} Évènements
+                             </span>
+                           </div>
+                        </div>
+                        <div className="flex gap-4">
+                          <button
+                            onClick={() => setIsPreviewOpen(false)}
+                            className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+                          >
+                            Fermer
+                          </button>
+                          <button
+                            onClick={() => window.print()}
+                            className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+                          >
+                            <Printer className="h-4 w-4" />
+                            Lancer l'impression
+                          </button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+                        <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
+                            {chunkArray(logs, ITEMS_PER_PRINT_PAGE).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
+                                <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                                    <ListPrintWrapper
+                                        title="JOURNAL D'AUDIT SYSTÈME"
+                                        subtitle={`Rapport de traçabilité consolidé - ${totalLogs} entrées`}
+                                        pageNumber={index + 1}
+                                        totalPages={allChunks.length}
+                                        hideHeader={index > 0}
+                                        hideVisa={index < allChunks.length - 1}
+                                    >
+                                        <table className="w-full text-[14px] border-collapse border-2 border-black">
+                                            <thead>
+                                                <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                                                    <th className="border-r-2 border-black px-3 py-3 text-left">Horodatage</th>
+                                                    <th className="border-r-2 border-black px-3 py-3 text-left">Opérateur</th>
+                                                    <th className="border-r-2 border-black px-3 py-3 text-left tabular-nums">Action</th>
+                                                    <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
+                                                    <th className="px-3 py-3 text-left">Description</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {chunk.map((log: AuditLog, idx: number) => (
+                                                    <tr key={idx} className="border-b border-black text-[13px]">
+                                                        <td className="border-r-2 border-black px-3 py-2 font-mono whitespace-nowrap text-xs">{formatDate(log.date)}</td>
+                                                        <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{log.utilisateur.nom}</td>
+                                                        <td className="border-r-2 border-black px-3 py-2 font-black">{log.action}</td>
+                                                        <td className="border-r-2 border-black px-3 py-2 italic">{log.type}</td>
+                                                        <td className="px-3 py-2 font-medium leading-tight">{log.description}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            {index === allChunks.length - 1 && (
+                                                <tfoot>
+                                                    <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
+                                                        <td colSpan={3} className="border-r-2 border-black px-3 py-4 text-right bg-white shadow-inner italic">VOLUME LOGS AUDITÉS</td>
+                                                        <td colSpan={2} className="px-3 py-4 bg-white text-blue-900 underline underline-offset-4 decoration-double">{totalLogs} TRANSACTION(S)</td>
+                                                    </tr>
+                                                </tfoot>
+                                            )}
+                                        </table>
+                                    </ListPrintWrapper>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                  </div>
+                )}
           <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100"
-            title="Imprimer le journal"
+            onClick={() => setIsPreviewOpen(true)}
+            className="flex items-center gap-2 rounded-lg border-2 border-slate-800 bg-slate-100 px-4 py-2 text-sm font-black text-slate-900 hover:bg-slate-200 shadow-lg no-print uppercase transition-all active:scale-95"
+            title="Aperçu avant impression"
           >
             <Printer className="h-4 w-4" />
-            Imprimer
+            Aperçu Impression
           </button>
         </div>
       </div>

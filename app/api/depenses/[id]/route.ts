@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import { logSuppression, getIpAddress } from '@/lib/audit'
 
 export async function GET(
   _request: NextRequest,
@@ -28,6 +31,12 @@ export async function GET(
     return NextResponse.json({ error: 'Dépense introuvable.' }, { status: 404 })
   }
 
+  // Sécurité Multi-Entité
+  const entiteId = await getEntiteId(session)
+  if (session.role !== 'SUPER_ADMIN' && depense.entiteId !== entiteId) {
+    return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
+  }
+
   return NextResponse.json(depense)
 }
 
@@ -44,9 +53,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
     }
 
-    const body = await request.json()
+    const entiteId = await getEntiteId(session)
     const oldDepense = await prisma.depense.findUnique({ where: { id } })
     if (!oldDepense) return NextResponse.json({ error: 'Dépense introuvable.' }, { status: 404 })
+
+    // Sécurité Multi-Entité
+    if (session.role !== 'SUPER_ADMIN' && oldDepense.entiteId !== entiteId) {
+      return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
+    }
+
+    const body = await request.json()
 
     const updateData: {
       date?: Date
@@ -112,6 +128,9 @@ export async function PATCH(
       },
     })
 
+    revalidatePath('/dashboard/depenses')
+    revalidatePath('/api/depenses')
+
     return NextResponse.json(depense)
   } catch (e) {
     console.error('PATCH /api/depenses/[id]:', e)
@@ -137,11 +156,65 @@ export async function DELETE(
       return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
     }
 
-    await deleteEcrituresByReference('DEPENSE', id)
-    await prisma.depense.delete({ where: { id } })
+    await prisma.$transaction(async (tx) => {
+      const entiteId = await getEntiteId(session)
+      const d = await tx.depense.findUnique({ where: { id } })
+      if (!d) throw new Error('Dépense introuvable.')
+
+      // Sécurité Multi-Entité
+      if (session.role !== 'SUPER_ADMIN' && d.entiteId !== entiteId) {
+        throw new Error('Non autorisé : Cette dépense ne vous appartient pas.')
+      }
+
+      // 1. Nettoyer compta (Grand Livre)
+      await deleteEcrituresByReference('DEPENSE', id, tx)
+
+      // 2. Nettoyage Trésorerie : CAISSE
+      // On cherche les mouvements de caisse type SORTIE dont le motif correspond au format standard d'une dépense
+      await tx.caisse.deleteMany({
+        where: {
+          entiteId: d.entiteId,
+          type: 'SORTIE',
+          OR: [
+             { motif: { contains: `Dépense : ${d.libelle}` } },
+             { motif: { contains: d.libelle } }
+          ]
+        }
+      })
+
+      // 3. Nettoyage Trésorerie : BANQUE
+      // On cherche les opérations bancaires de cette entité dont le libellé contient le motif de la dépense
+      const opsBancaires = await tx.operationBancaire.findMany({
+        where: { 
+          libelle: { contains: d.libelle },
+          banque: { entiteId: d.entiteId }
+        }
+      })
+
+      for (const op of opsBancaires) {
+        // MAJ du solde de la banque concernée (on rajoute le montant car c'était une sortie)
+        await tx.banque.update({
+          where: { id: op.banqueId },
+          data: { soldeActuel: { increment: op.montant } }
+        })
+        // Suppression de l'opération
+        await tx.operationBancaire.delete({ where: { id: op.id } })
+      }
+
+      // 4. Supprimer la dépense
+      await tx.depense.delete({ where: { id } })
+
+      // 5. LOG D'AUDIT (Correction : entiteId correct)
+      await logSuppression(session, 'DEPENSE', d.entiteId, `SUPPRESSION RADICALE : Dépense "${d.libelle}" (${d.montant} F) annulée avec régul. trésorerie`, { id, libelle: d.libelle, montant: d.montant }, getIpAddress(_request))
+    }, { timeout: 20000 })
+
+    revalidatePath('/dashboard/depenses')
+    revalidatePath('/api/depenses')
+
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/depenses/[id]:', e)
-    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+    const errorMsg = e instanceof Error ? e.message : 'Erreur lors de la suppression.'
+    return NextResponse.json({ error: errorMsg }, { status: 500 })
   }
 }

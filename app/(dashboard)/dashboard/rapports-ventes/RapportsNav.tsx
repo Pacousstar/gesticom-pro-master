@@ -15,7 +15,7 @@ export default function RapportsNav() {
     ]
 
     return (
-        <div className="mb-8 flex space-x-3 border-b border-gray-100 pb-4 overflow-x-auto custom-scrollbar scrollbar-hide">
+        <div className="mb-8 flex space-x-3 border-b border-gray-100 pb-4 overflow-x-auto custom-scrollbar scrollbar-hide no-print">
             {tabs.map((tab) => {
                 const isActive = pathname === tab.href
                 const Icon = tab.icon

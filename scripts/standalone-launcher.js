@@ -8,7 +8,18 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 
-const projectRoot = process.cwd();
+// Détection robuste du dossier racine
+const findProjectRoot = () => {
+    // 1. Essayer le dossier actuel
+    if (fs.existsSync(path.join(process.cwd(), '.next'))) return process.cwd();
+    // 2. Essayer le dossier parent si on est dans /scripts
+    const parentDir = path.dirname(__dirname);
+    if (fs.existsSync(path.join(parentDir, '.next'))) return parentDir;
+    // 3. Fallback sur le dossier actuel par défaut
+    return process.cwd();
+};
+const projectRoot = findProjectRoot();
+console.log(`[Launcher] Dossier racine détecté : ${projectRoot}`);
 
 // Configuration des variables d'environnement depuis le .env
 const envPath = path.join(projectRoot, '.env');
@@ -45,7 +56,53 @@ if (!fs.existsSync(centralDbDir)) {
 const dbPath = centralDbPath.replace(/\\/g, '/');
 process.env.DATABASE_URL = `file:${dbPath}`;
 
+// --- MIGRATION AUTOMATIQUE DE LA BASE DE DONNÉES ---
+async function migrateDatabase() {
+    console.log('[GestiCom] Vérification des mises à jour de la base de données...');
+    const { execSync } = require('child_process');
+    
+    // Localiser le CLI Prisma (dans node_modules du standalone ou racine)
+    let prismaCliPath = path.join(projectRoot, 'node_modules', 'prisma', 'build', 'index.js');
+    if (!fs.existsSync(prismaCliPath)) {
+        prismaCliPath = path.join(projectRoot, '.next', 'standalone', 'node_modules', 'prisma', 'build', 'index.js');
+    }
+
+    if (fs.existsSync(prismaCliPath)) {
+        try {
+            console.log('[GestiCom] Analyse et synchronisation de la base de données...');
+            // On utilise db push pour garantir que les index de performance sont appliqués 
+            // SANS risque de perte de données (--accept-data-loss=false)
+            // C'est plus robuste que migrate deploy pour les ajouts d'index simples.
+            const cmd = `"${process.execPath}" "${prismaCliPath}" db push --schema="${path.join(projectRoot, 'prisma', 'schema.prisma')}" --accept-data-loss=false`;
+            
+            execSync(cmd, { 
+                env: { ...process.env, DATABASE_URL: `file:${dbPath}`, PRISMA_SKIP_POSTINSTALL_GENERATE: 'true' },
+                stdio: 'inherit' 
+            });
+            console.log('[GestiCom] Base de données et index de performance à jour.');
+        } catch (error) {
+            console.warn('[GestiCom] Note : La base était probablement déjà synchronisée ou une migration est nécessaire.');
+        }
+    } else {
+        console.warn('[GestiCom] CLI Prisma introuvable. Assurez-vous que l\'installation est complète.');
+    }
+}
+
+// Lancer la migration avant de démarrer le reste
+migrateDatabase().then(() => {
+    console.log(`[GestiCom Pro] Prêt à démarrer.`);
+});
+
 console.log(`[GestiCom Pro] Base de données : ${dbPath}`);
+
+// --- AUDIT DES FICHIERS STATIQUES (Diagnostic) ---
+const cssDir = path.join(projectRoot, '.next', 'static', 'css');
+if (fs.existsSync(cssDir)) {
+    const files = fs.readdirSync(cssDir);
+    console.log(`[Launcher] CSS détectés (${files.length}) : ${files.slice(0, 3).join(', ')}...`);
+} else {
+    console.warn(`[Launcher] ATTENTION : Dossier CSS introuvable dans ${cssDir}`);
+}
 // ---------------------------------------------------
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -102,50 +159,54 @@ const mimeTypes = {
 
 const proxyServer = http.createServer((req, res) => {
     const rawUrl = req.url;
-    const parsedUrl = rawUrl.split('?')[0].replace(/\/\//g, '/');
-    
-    // Journal de bord (En option pour debug)
-    // console.log(`[Proxy] ${req.method} ${rawUrl}`);
+    const parsedUrl = rawUrl.split('?')[0]; 
+    console.log(`[Proxy] ${req.method} ${rawUrl}`);
 
-    // LOGIQUE DE SERVICE STATIQUE (FORCE BRUTE)
+    // 1. Tenter de servir les fichiers statiques (CSS, JS, Images)
     let filePath = null;
-
     if (parsedUrl.startsWith('/_next/static/')) {
-        // Intercepter les styles et scripts internes
-        const relativePart = parsedUrl.replace('/_next/static/', '').split('/').join(path.sep);
-        filePath = path.join(projectRoot, '.next', 'static', relativePart);
-    } else if (parsedUrl === '/favicon.ico' || parsedUrl.startsWith('/public/')) {
-        const relativePart = (parsedUrl === '/favicon.ico' ? 'favicon.ico' : parsedUrl.replace('/public/', '')).split('/').join(path.sep);
-        filePath = path.join(projectRoot, 'public', relativePart);
+        const relativePath = parsedUrl.replace('/_next/static/', '');
+        // Tentative 1 : Racine du projet (Standard Inno Setup)
+        const path1 = path.join(projectRoot, '.next', 'static', relativePath);
+        // Tentative 2 : Dans le dossier standalone (Standard Next.js)
+        const path2 = path.join(projectRoot, '.next', 'standalone', '.next', 'static', relativePath);
+        
+        if (fs.existsSync(path1)) filePath = path1;
+        else if (fs.existsSync(path2)) filePath = path2;
     } else {
-        // Tenter dans public par défaut pour tout ce qui a une extension (images, fonts)
-        const ext = path.extname(parsedUrl);
-        if (ext && ext !== '.js' && ext !== '.html') {
-             const publicPath = path.join(projectRoot, 'public', parsedUrl.split('/').join(path.sep));
-             if (fs.existsSync(publicPath)) filePath = publicPath;
+        // Tenter dans public (Favicon, Logo, etc.)
+        const fileName = (parsedUrl === '/' || parsedUrl === '') ? 'index.html' : parsedUrl;
+        const publicPath = path.join(projectRoot, 'public', fileName);
+        if (fs.existsSync(publicPath) && !fs.statSync(publicPath).isDirectory()) {
+            filePath = publicPath;
         }
     }
 
-    // Si on a identifié un fichier statique et qu'il existe
-    if (filePath && fs.existsSync(filePath) && !fs.statSync(filePath).isDirectory()) {
+    if (filePath && fs.existsSync(filePath)) {
         const extname = String(path.extname(filePath)).toLowerCase();
         const contentType = mimeTypes[extname] || 'application/octet-stream';
         
-        try {
-            const content = fs.readFileSync(filePath);
-            res.setHeader('Content-Type', contentType);
-            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.writeHead(200);
-            res.end(content);
-            // console.log(`[OK] ${cleanPath}`);
-            return;
-        } catch (error) {
-            console.error(`[ERR] ${filePath}`, error);
-        }
+        fs.readFile(filePath, (error, content) => {
+            if (error) {
+                console.error(`[Proxy] Erreur 500 sur ${parsedUrl} : ${error.message}`);
+                res.writeHead(500);
+                res.end('Erreur Interne');
+            } else {
+                res.writeHead(200, { 
+                    'Content-Type': contentType, 
+                    'Cache-Control': 'public, max-age=31536000, immutable',
+                    'Access-Control-Allow-Origin': '*' 
+                });
+                res.end(content);
+            }
+        });
+        return;
+    } else if (parsedUrl.startsWith('/_next/static/')) {
+        console.warn(`[Proxy 404] STATIQUE INTROUVABLE : ${parsedUrl}`);
+        console.warn(`   - Tente dans : ${path.join(projectRoot, '.next', 'static', parsedUrl.replace('/_next/static/', ''))}`);
     }
 
-    // RELAIS VERS LE SERVEUR NEXT.JS (APIS ET PAGES)
+    // 2. Sinon, proxy vers le serveur Next.js
     const proxyReq = http.request({
         host: '127.0.0.1',
         port: NEXT_INTERNAL_PORT,
@@ -153,23 +214,21 @@ const proxyServer = http.createServer((req, res) => {
         method: req.method,
         headers: req.headers
     }, (proxyRes) => {
-        // Gérer les en-têtes
         res.writeHead(proxyRes.statusCode, proxyRes.headers);
         proxyRes.pipe(res, { end: true });
     });
 
     proxyReq.on('error', (err) => {
-        console.error(`[Proxy Error] Next.js non accessible sur port ${NEXT_INTERNAL_PORT} : ${err.message}`);
+        console.error(`[Proxy Error] 127.0.0.1:${NEXT_INTERNAL_PORT} - ${err.message}`);
         res.writeHead(502);
-        res.end('<h1>Serveur GestiCom Pro en cours de démarrage...</h1><p>Veuillez rafraîchir la page dans quelques secondes.</p>');
+        res.end('Serveur Next.js en cours de démarrage ou non accessible...');
     });
 
     req.pipe(proxyReq, { end: true });
 });
 
 proxyServer.listen(PORT, HOST, () => {
-    console.log(`[Master-Shield] GestiCom Pro actif sur http://localhost:${PORT}`);
-    console.log(`[Log] Proxy (3001) -> Standalone (3002)`);
+    console.log(`[GestiCom] Serveur PROXY + STATIC prêt sur http://localhost:${PORT}`);
 });
 
 process.on('SIGINT', () => {

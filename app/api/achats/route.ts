@@ -20,16 +20,27 @@ export async function GET(request: NextRequest) {
 
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
-  const where: { date?: { gte: Date; lte: Date }; entiteId?: number } = {}
+  
+  const entiteId = await getEntiteId(session)
+  const where: any = {}
+
   if (dateDebut && dateFin) {
     where.date = {
       gte: new Date(dateDebut + 'T00:00:00'),
       lte: new Date(dateFin + 'T23:59:59'),
     }
   }
-  // Filtrer par entité de la session (sauf SUPER_ADMIN qui voit tout)
-  if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-    where.entiteId = session.entiteId
+
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
+    }
+  } else if (entiteId > 0) {
+    where.entiteId = entiteId
   }
 
   const [achats, total, aggregates] = await Promise.all([
@@ -37,7 +48,7 @@ export async function GET(request: NextRequest) {
       where,
       skip,
       take: limit,
-      orderBy: { date: 'desc' },
+      orderBy: { createdAt: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },
         fournisseur: { select: { id: true, code: true, nom: true, telephone: true, email: true, localisation: true, ncc: true } },
@@ -158,7 +169,7 @@ export async function POST(request: NextRequest) {
       const produitId = Number(l?.produitId)
       const quantite = Math.max(0, Number(l?.quantite) || 0) // Supprimé Math.floor
       const prixUnitaire = Math.max(0, Number(l?.prixUnitaire) || 0)
-      const tva = Math.max(0, Number(l?.tva) || 0)
+      const tva = Math.max(0, Number(l?.tva ?? l?.tvaPerc) || 0)
       const remise = Math.max(0, Number(l?.remise) || 0)
       if (!produitId || quantite <= 0) continue
 
@@ -181,7 +192,7 @@ export async function POST(request: NextRequest) {
     
     // --- SECURITE : Gestion des Trop-perçus et Avoirs Fournisseurs ---
     let surplusAvoir = 0
-    if (montantPaye > montantTotal + 0.1) {
+    if (montantPaye > montantTotal + 1) {
        if (fournisseurId) {
           // Fournisseur identifié : On accepte le surplus et on le transforme en avoir
           surplusAvoir = Math.round(montantPaye - montantTotal)
@@ -376,7 +387,7 @@ export async function POST(request: NextRequest) {
       }, tx)
 
       return a
-    })
+    }, { timeout: 20000 })
 
     // Invalider le cache pour affichage immédiat
     revalidatePath('/dashboard/achats')

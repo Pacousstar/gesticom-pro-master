@@ -6,6 +6,7 @@ import { Scale, Loader2, Filter, FileSpreadsheet, Download, Search, Printer } fr
 import ComptabiliteNav from '../ComptabiliteNav'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type BalanceEntry = {
   compte: { id: number; numero: string; libelle: string; classe: string; type: string }
@@ -28,6 +29,7 @@ export default function BalancePage() {
   const [dateFin, setDateFin] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   // Filtre et Pagination
   const [rechTextuelle, setRechTextuelle] = useState('')
@@ -86,12 +88,12 @@ export default function BalancePage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
-            disabled={isPrinting}
+            onClick={() => setIsPreviewOpen(true)}
+            disabled={isPrinting || !data}
             className="flex items-center gap-2 rounded-xl border-2 border-orange-500 bg-orange-50 px-5 py-2.5 text-xs font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50 no-print"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
-            Imprimer Balance
+            Aperçu Impression
           </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -348,63 +350,165 @@ export default function BalancePage() {
           )}
         </div>
       )}
-      {/* Zone d'impression professionnelle standardisée */}
-      {data && (
-        <ListPrintWrapper
-          title="Balance des Comptes SYSCOHADA"
-          subtitle="Balance générale de synthèse"
-          dateRange={{ start: dateDebut, end: dateFin }}
-        >
-          <table className="w-full text-[9px] border-collapse border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                <th className="border border-gray-300 px-2 py-3 text-left">N° Compte</th>
-                <th className="border border-gray-300 px-2 py-3 text-left">Intitulé du Compte</th>
-                <th className="border border-gray-300 px-2 py-3 text-right">Mouvement Débit</th>
-                <th className="border border-gray-300 px-2 py-3 text-right">Mouvement Crédit</th>
-                <th className="border border-gray-300 px-2 py-3 text-right">Solde Débiteur</th>
-                <th className="border border-gray-300 px-2 py-3 text-right">Solde Créditeur</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.balance.map((e, idx) => (
-                <tr key={idx} className="border-b border-gray-200">
-                  <td className="border border-gray-300 px-2 py-2 font-bold">{e.compte.numero}</td>
-                  <td className="border border-gray-300 px-2 py-2 uppercase font-medium">{e.compte.libelle}</td>
-                  <td className="border border-gray-300 px-2 py-2 text-right">{e.soldeDebit.toLocaleString('fr-FR')}</td>
-                  <td className="border border-gray-300 px-2 py-2 text-right">{e.soldeCredit.toLocaleString('fr-FR')}</td>
-                  <td className="border border-gray-300 px-2 py-2 text-right font-bold text-blue-800">
-                    {e.solde >= 0 ? e.solde.toLocaleString('fr-FR') : '—'}
-                  </td>
-                  <td className="border border-gray-300 px-2 py-2 text-right font-bold text-rose-800">
-                    {e.solde < 0 ? Math.abs(e.solde).toLocaleString('fr-FR') : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-50 font-black text-[10px]">
-                <td colSpan={2} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Totaux Balance</td>
-                <td className="border border-gray-300 px-3 py-4 text-right">{data.totalDebit.toLocaleString('fr-FR')}</td>
-                <td className="border border-gray-300 px-3 py-4 text-right">{data.totalCredit.toLocaleString('fr-FR')}</td>
-                <td className="border border-gray-300 px-3 py-4 text-right text-blue-900">
-                   {data.balance.filter(x => x.solde >= 0).reduce((acc, x) => acc + x.solde, 0).toLocaleString('fr-FR')}
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-right text-rose-900">
-                   {data.balance.filter(x => x.solde < 0).reduce((acc, x) => acc + Math.abs(x.solde), 0).toLocaleString('fr-FR')}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </ListPrintWrapper>
+      {/* MODALE D'APERÇU IMPRESSION BALANCE */}
+      {isPreviewOpen && data && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Balance Générale</h2>
+                 <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                   SYSCOHADA - {dateDebut && dateFin ? `DU ${new Date(dateDebut).toLocaleDateString()} AU ${new Date(dateFin).toLocaleDateString()}` : "Toutes périodes"}
+                 </p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-blue-100 px-4 py-2 text-xs font-black text-blue-600 uppercase">
+                 {data.balance.length} Comptes Audités
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4">
+                {chunkArray(data.balance, 18).map((chunk, index, allChunks) => (
+                  <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                    <ListPrintWrapper
+                      title="BALANCE DES COMPTES RÉVISÉE"
+                      subtitle="SYSCOHADA - Balance de synthèse des soldes et mouvements"
+                      dateRange={{ start: dateDebut, end: dateFin }}
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      hideVisa={index < allChunks.length - 1}
+                    >
+                      <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                            <th className="border-r-2 border-black px-2 py-3 text-left">N° Compte</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-left italic">Intitulé Officiel</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-right">MVT Débit</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-right">MVT Crédit</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-right">Solde Déb</th>
+                            <th className="px-2 py-3 text-right italic shadow-inner">Solde Cré</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((e, idx) => (
+                            <tr key={idx} className="border-b border-black hover:bg-gray-50 transition-colors shadow-sm italic">
+                              <td className="border-r-2 border-black px-2 py-2 font-black whitespace-nowrap text-blue-900">{e.compte.numero}</td>
+                              <td className="border-r-2 border-black px-2 py-2 uppercase font-black text-[12px] leading-tight truncate max-w-[200px] text-slate-700">{e.compte.libelle}</td>
+                              <td className="border-r-2 border-black px-2 py-2 text-right tabular-nums font-black">{e.soldeDebit > 0 ? e.soldeDebit.toLocaleString('fr-FR') : '—'}</td>
+                              <td className="border-r-2 border-black px-2 py-2 text-right tabular-nums font-black text-emerald-800 bg-emerald-50/10 shadow-inner">{e.soldeCredit > 0 ? e.soldeCredit.toLocaleString('fr-FR') : '—'}</td>
+                              <td className="border-r-2 border-black px-2 py-2 text-right font-black tabular-nums text-rose-800">
+                                {e.solde >= 0 ? e.solde.toLocaleString('fr-FR') : '—'}
+                              </td>
+                              <td className="px-2 py-2 text-right font-black tabular-nums text-emerald-800 underline decoration-double underline-offset-2">
+                                {e.solde < 0 ? Math.abs(e.solde).toLocaleString('fr-FR') : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
+                              <td colSpan={2} className="px-3 py-6 text-right tracking-[0.2em] underline decoration-slate-400">ARRÊTÉ DE LA BALANCE GÉNÉRALE</td>
+                              <td className="border-r-2 border-black px-3 py-6 text-right bg-white ring-2 ring-black font-mono shadow-inner">{data.totalDebit.toLocaleString()} F</td>
+                              <td className="border-r-2 border-black px-3 py-6 text-right bg-white text-emerald-800 font-mono shadow-inner italic">{data.totalCredit.toLocaleString()} F</td>
+                              <td className="border-r-2 border-black px-3 py-6 text-right bg-slate-900 text-white font-mono shadow-2xl">
+                                {data.balance.filter(x => x.solde >= 0).reduce((acc, x) => acc + x.solde,0).toLocaleString()} F
+                              </td>
+                              <td className="px-3 py-6 text-right bg-slate-800 text-emerald-400 font-mono shadow-2xl italic border-l-2 border-white">
+                                {data.balance.filter(x => x.solde < 0).reduce((acc, x) => acc + Math.abs(x.solde),0).toLocaleString()} F
+                              </td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
       )}
 
-      <style jsx global>{`
-        @media print {
-          nav, aside, header, .no-print, button, form { display: none !important; }
-          body, main { background: white !important; margin: 0 !important; padding: 0 !important; }
-        }
-      `}</style>
+      {/* Rendu masqué pour l'impression système direct */}
+      <div className="hidden print:block absolute inset-0 bg-white shadow-2xl">
+        {data && chunkArray(data.balance, 18).map((chunk, index, allChunks) => (
+          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+            <ListPrintWrapper
+              title="BALANCE DES COMPTES RÉVISÉE"
+              subtitle="SYSCOHADA - Synthèse des soldes — Impression Directe"
+              dateRange={{ start: dateDebut, end: dateFin }}
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+              hideHeader={index > 0}
+              hideVisa={index < allChunks.length - 1}
+            >
+              <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner font-sans">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                    <th className="border-r-2 border-black px-2 py-3 text-left">N° Compte</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-left italic">Intitulé Officiel</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-right">MVT Débit</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-right">MVT Crédit</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-right">Solde Déb</th>
+                    <th className="px-2 py-3 text-right italic shadow-inner">Solde Cré</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((e, idx) => (
+                    <tr key={idx} className="border-b border-black hover:bg-gray-50 transition-colors shadow-sm italic">
+                      <td className="border-r-2 border-black px-2 py-2 font-black whitespace-nowrap text-blue-900">{e.compte.numero}</td>
+                      <td className="border-r-2 border-black px-2 py-2 font-black uppercase text-[12px] leading-tight truncate max-w-[200px] text-slate-700">{e.compte.libelle}</td>
+                      <td className="border-r-2 border-black px-2 py-2 text-right tabular-nums font-black">{e.soldeDebit.toLocaleString()} F</td>
+                      <td className="border-r-2 border-black px-2 py-2 text-right font-black tabular-nums text-emerald-800 bg-emerald-50/10 shadow-inner">{e.soldeCredit.toLocaleString()} F</td>
+                      <td className="border-r-2 border-black px-2 py-2 text-right font-black tabular-nums text-rose-800">
+                        {e.solde >= 0 ? e.solde.toLocaleString() : '—'}
+                      </td>
+                      <td className="px-2 py-2 text-right font-black tabular-nums text-emerald-800 underline decoration-double shadow-inner">
+                        {e.solde < 0 ? Math.abs(e.solde).toLocaleString() : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {index === allChunks.length - 1 && (
+                  <tfoot>
+                    <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
+                      <td colSpan={2} className="px-3 py-6 text-right tracking-[0.2em] underline decoration-slate-400">ARRÊTÉ DE LA BALANCE GÉNÉRALE</td>
+                      <td className="border-r-2 border-black px-3 py-6 text-right bg-white ring-2 ring-black font-mono shadow-inner">{data.totalDebit.toLocaleString()} F</td>
+                      <td className="border-r-2 border-black px-3 py-6 text-right bg-white text-emerald-800 font-mono shadow-inner italic">{data.totalCredit.toLocaleString()} F</td>
+                      <td className="border-r-2 border-black px-3 py-6 text-right bg-slate-900 text-white font-mono shadow-2xl">
+                        {data.balance.filter(x => x.solde >= 0).reduce((acc, x) => acc + x.solde, 0).toLocaleString()} F
+                      </td>
+                      <td className="px-3 py-6 text-right bg-slate-800 text-emerald-400 font-mono shadow-2xl italic border-l-2 border-white">
+                        {data.balance.filter(x => x.solde < 0).reduce((acc, x) => acc + Math.abs(x.solde), 0).toLocaleString()} F
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </ListPrintWrapper>
+          </div>
+        ))}
+      </div>
+
+
     </div>
   )
 }

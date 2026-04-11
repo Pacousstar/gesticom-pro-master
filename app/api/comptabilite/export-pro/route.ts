@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { genererExportSage } from '@/lib/formats/sage'
 import { requirePermission } from '@/lib/require-role'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -16,8 +17,22 @@ export async function GET(request: NextRequest) {
     const dateDebut = searchParams.get('dateDebut')
     const dateFin = searchParams.get('dateFin')
     const type = searchParams.get('type') // "SAGE" | "EXCEL"
+    const entiteIdFromParams = searchParams.get('entiteId')?.trim()
 
+    const eId = await getEntiteId(session)
     const where: any = {}
+
+    // Filtrage par entité
+    if (session.role === 'SUPER_ADMIN') {
+      if (entiteIdFromParams) {
+        where.entiteId = Number(entiteIdFromParams)
+      } else if (eId > 0) {
+        where.entiteId = eId
+      }
+    } else if (eId > 0) {
+      where.entiteId = eId
+    }
+
     if (dateDebut && dateFin) {
       where.date = {
         gte: new Date(dateDebut + 'T00:00:00'),

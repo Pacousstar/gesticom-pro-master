@@ -9,6 +9,7 @@ import {
   AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent, DollarSign
 } from 'lucide-react'
 import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import PrintPreview from '@/components/print/PrintPreview'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -151,8 +152,6 @@ export default function VentesPage() {
   const [formClientSearch, setFormClientSearch] = useState('')
   const [showClientList, setShowClientList] = useState(false)
   const [editingVenteId, setEditingVenteId] = useState<number | null>(null)
-  const [isPrinting, setIsPrinting] = useState(false)
-  const [printVentes, setPrintVentes] = useState<any[]>([])
   const [entreprise, setEntreprise] = useState<any>(null)
 
   const addReglement = () => {
@@ -203,60 +202,66 @@ export default function VentesPage() {
 
   const imprimerVente = async () => {
     if (!detailVente) return
-    const d = detailVente
-    const dateDoc = new Date(d.date)
-    // Toutes les lignes (articles) de la vente sont affichées sur une même facture
-    const lignes = Array.isArray(d.lignes) ? d.lignes : []
-    // Calculs conformes (TTC = HT Net + TVA sur Net)
-    const totalCalc = lignes.reduce((acc, l: any) => {
-      const q = l.quantite
-      const pu = l.prixUnitaire
-      const r = Number(l.remise) || 0
-      const t = l.tvaPerc || 0
-      const ht = q * pu
-      const htNet = ht - r
-      const tva = htNet * (t / 100)
-      acc.ht += ht
-      acc.remise += r
-      acc.tva += tva
-      return acc
-    }, { ht: 0, remise: 0, tva: 0 })
-    
-    const lignesHtml = generateLignesHTML(lignes.map((l) => ({
-      designation: l.designation,
-      quantite: l.quantite,
-      prixUnitaire: l.prixUnitaire,
-      remise: l.remise,
-      montant: l.montant,
-    })))
+    try {
+      const d = detailVente
+      const dateDoc = new Date(d.date)
+      // Toutes les lignes (articles) de la vente sont affichées sur une même facture
+      const lignes = Array.isArray(d.lignes) ? d.lignes : []
+      // Calculs conformes (TTC = HT Net + TVA sur Net)
+      const totalCalc = lignes.reduce((acc, l: any) => {
+        const q = l.quantite
+        const pu = l.prixUnitaire
+        const r = Number(l.remise) || 0
+        const t = Number(l.tvaPerc) || Number(l.tva) || 0
+        const ht = q * pu
+        const htNet = ht - r
+        const tva = htNet * (t / 100)
+        acc.ht += ht
+        acc.remise += r
+        acc.tva += tva
+        return acc
+      }, { ht: 0, remise: 0, tva: 0 })
+      
+      const lignesHtml = generateLignesHTML(lignes.map((l) => ({
+        designation: l.designation,
+        quantite: l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        remise: l.remise,
+        montant: l.montant,
+      })))
 
-    const templateData: TemplateData = {
-      NUMERO: d.numero,
-      DATE: formatDate(d.date),
-      HEURE: dateDoc.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      MAGASIN_CODE: d.magasin.code,
-      MAGASIN_NOM: d.magasin.nom,
-      CLIENT_NOM: d.client?.nom || d.clientLibre || undefined,
-      CLIENT_CODE: (d.client as any)?.code || undefined,
-      CLIENT_CONTACT: d.client?.telephone || undefined,
-      CLIENT_LOCALISATION: d.client?.adresse || undefined,
-      CLIENT_NCC: d.client?.ncc || undefined,
-      LIGNES: lignesHtml,
-      TOTAL_HT: `${totalCalc.ht.toLocaleString('fr-FR')} FCFA`,
-      TOTAL_TVA: totalCalc.tva > 0 ? `${Math.round(totalCalc.tva).toLocaleString('fr-FR')} FCFA` : undefined,
-      TOTAL_REMISE: totalCalc.remise > 0 ? `${totalCalc.remise.toLocaleString('fr-FR')} FCFA` : undefined,
-      REMISE_GLOBALE: d.remiseGlobale > 0 ? `${Number(d.remiseGlobale).toLocaleString('fr-FR')} FCFA` : undefined,
-      TOTAL: `${Number(d.montantTotal).toLocaleString('fr-FR')} FCFA`,
-      MONTANT_PAYE: d.montantPaye ? `${Number(d.montantPaye).toLocaleString('fr-FR')} FCFA` : undefined,
-      RESTE: d.statutPaiement !== 'PAYE' ? `${(Number(d.montantTotal) - (Number(d.montantPaye) || 0)).toLocaleString('fr-FR')} FCFA` : undefined,
-      MODE_PAIEMENT: d.modePaiement,
-      OBSERVATION: d.observation || undefined,
+      // Construction des données du template
+      const templateData: TemplateData = {
+        NUMERO: d.numero,
+        DATE: formatDate(d.date),
+        HEURE: dateDoc.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        MAGASIN_CODE: d.magasin.code,
+        MAGASIN_NOM: d.magasin.nom,
+        CLIENT_NOM: d.client?.nom || d.clientLibre || undefined,
+        CLIENT_CODE: (d.client as any)?.code || undefined,
+        CLIENT_CONTACT: d.client?.telephone || undefined,
+        CLIENT_LOCALISATION: d.client?.adresse || undefined,
+        CLIENT_NCC: d.client?.ncc || undefined,
+        LIGNES: lignesHtml,
+        TOTAL_HT: `${totalCalc.ht.toLocaleString('fr-FR')} FCFA`,
+        TOTAL_REMISE: totalCalc.remise > 0 ? `${totalCalc.remise.toLocaleString('fr-FR')} FCFA` : undefined,
+        REMISE_GLOBALE: d.remiseGlobale > 0 ? `${Number(d.remiseGlobale).toLocaleString('fr-FR')} FCFA` : undefined,
+        TOTAL_HT_NET: `${(totalCalc.ht - totalCalc.remise - (Number(d.remiseGlobale) || 0)).toLocaleString('fr-FR')} FCFA`,
+        TOTAL_TVA: totalCalc.tva > 0 ? `${Math.round(totalCalc.tva).toLocaleString('fr-FR')} FCFA` : undefined,
+        TOTAL: `${Number(d.montantTotal).toLocaleString('fr-FR')} FCFA`,
+        MONTANT_PAYE: d.montantPaye ? `${Number(d.montantPaye).toLocaleString('fr-FR')} FCFA` : undefined,
+        RESTE: d.statutPaiement !== 'PAYE' ? `${(Number(d.montantTotal) - (Number(d.montantPaye) || 0)).toLocaleString('fr-FR')} FCFA` : undefined,
+        MODE_PAIEMENT: d.modePaiement,
+        NUMERO_BON: d.numeroBon || undefined,
+        OBSERVATION: d.observation || undefined,
+      }
+
+      setPrintData(templateData)
+      setPrintPreviewOpen(true)
+    } catch (e) {
+      console.error("Erreur impression:", e)
+      showError("Impossible d'ouvrir l'aperçu avant impression. Une erreur est survenue lors de la préparation du document.")
     }
-
-
-
-    setPrintData(templateData)
-    setPrintPreviewOpen(true)
   }
 
   const refetchProduits = () => {
@@ -322,14 +327,14 @@ export default function VentesPage() {
     fetch('/api/ventes?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [], pagination: null, totals: null }))
       .then((response) => {
-        if (response.data) {
+        if (response && response.data) {
           setVentes(response.data)
-          setPagination(response.pagination)
+          setPagination(response.pagination || { page: 1, limit: 20, total: response.data.length, totalPages: 1 })
           setTotals(response.totals)
         } else {
-          // Compatibilité avec l'ancien format
-          setVentes(Array.isArray(response) ? response : [])
-          setPagination(null)
+          const arr = Array.isArray(response) ? response : []
+          setVentes(arr)
+          setPagination({ page: 1, limit: 20, total: arr.length, totalPages: 1 })
           setTotals(null)
         }
       })
@@ -340,29 +345,6 @@ export default function VentesPage() {
     fetchVentes()
   }, [currentPage])
 
-  const handlePrintAll = async () => {
-    setIsPrinting(true)
-    try {
-      const params = new URLSearchParams()
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
-      if (filterClientId) params.set('clientId', filterClientId)
-      params.set('limit', '10000') // Charger tout pour l'impression
-      
-      const res = await fetch('/api/ventes?' + params.toString())
-      if (res.ok) {
-        const response = await res.json()
-        setPrintVentes(response.data || [])
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 500)
-      }
-    } catch (e) {
-      console.error(e)
-      setIsPrinting(false)
-    }
-  }
 
   // Raccourcis clavier
   useEffect(() => {
@@ -479,7 +461,7 @@ export default function VentesPage() {
       const ht = q * pu
       const htNet = ht - r
       const tvaMontant = htNet * (t / 100)
-      const montantLigne = htNet + tvaMontant
+      const montantLigne = Math.round(htNet + tvaMontant) // Arrondi par ligne comme au backend
 
       acc.totalHT += ht
       acc.totalTVA += tvaMontant
@@ -489,7 +471,7 @@ export default function VentesPage() {
     },
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalAvantRemiseGlobale: 0 }
   )
-  const total = Math.max(0, totalAvantRemiseGlobale)
+  const total = Math.max(0, totalAvantRemiseGlobale - (Number(formData.remiseGlobale) || 0))
   const pointsGagnes = Math.floor(total)
 
   const popupTotal = popupLignes.reduce((s, l) => s + ( (l.quantite * l.prixUnitaire) - (l.remise || 0) ) * (1 + (l.tvaPerc || 0) / 100), 0)
@@ -508,13 +490,14 @@ export default function VentesPage() {
       numeroBon: formData.numeroBon.trim() || null,
       modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
       reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
-      remiseGlobale: 0,
+      remiseGlobale: Number(formData.remiseGlobale) || 0,
+      observation: formData.observation.trim() || null,
       lignes: lignes.map((l) => ({
         produitId: l.produitId,
         quantite: l.quantite,
         prixUnitaire: l.prixUnitaire,
-        tvaPerc: l.tvaPerc || 0,
-        remise: l.remise || 0,
+        tva: Number(l.tvaPerc) || 0,
+        remise: Number(l.remise) || 0,
       })),
     }
 
@@ -636,7 +619,7 @@ export default function VentesPage() {
             produitId: l.produitId,
             quantite: l.quantite,
             prixUnitaire: l.prixUnitaire,
-            tvaPerc: l.tvaPerc || 0,
+            tva: l.tvaPerc || 0,
             remise: l.remise || 0,
           })),
         }),
@@ -892,6 +875,25 @@ export default function VentesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Configuration d'impression globale pour la page */}
+      <style jsx global>{`
+        @media print {
+          @page { size: portrait; margin: 10mm; }
+          nav, aside, header, footer, .no-print, button, form, .flex-wrap, .Pagination, [role="pagination"], .fixed { 
+            display: none !important; 
+          }
+          body, main, .min-h-screen { 
+            background: white !important; 
+            color: black !important; 
+            padding: 0 !important; 
+            margin: 0 !important; 
+            overflow: visible !important;
+          }
+          .lg\\:pl-72 { padding-left: 0 !important; }
+          main { width: 100% !important; display: block !important; }
+        }
+      `}</style>
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Ventes</h1>
@@ -920,6 +922,29 @@ export default function VentesPage() {
           Vente Rapide (PRO)
         </a>
       </div>
+
+      {/* KPIs Professionnels - Ventes (Style Achats) */}
+      <div className="space-y-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 no-print">
+          {[
+            { label: "Chiffre d'Affaires", val: (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F', sub: "Volume de ventes période", icon: ShoppingBag, color: "bg-indigo-600" },
+            { label: "Total Encaissé", val: (totals?.montantPaye || 0).toLocaleString('fr-FR') + ' F', sub: "Encaissements réels", icon: Wallet, color: "bg-emerald-600" },
+            { label: "Reste à Recouvrer", val: (totals?.resteAPayer || 0).toLocaleString('fr-FR') + ' F', sub: "Créances clients en cours", icon: AlertTriangle, color: "bg-amber-600" },
+          ].map((c, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group shadow-indigo-900/10`}>
+              <div className="relative z-10 text-white flex flex-col justify-between h-full">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
+                <div>
+                  <h3 className="text-2xl font-black tracking-tighter">{c.val}</h3>
+                  <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
+                </div>
+              </div>
+              <c.icon className="absolute right-4 bottom-4 h-12 w-12 text-white opacity-10 group-hover:scale-110 transition-transform" />
+            </div>
+          ))}
+        </div>
+      </div>
+
 
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
         <div>
@@ -954,28 +979,40 @@ export default function VentesPage() {
               className="w-full min-w-[200px] rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-8 text-sm font-bold text-slate-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none transition-all shadow-sm placeholder:text-gray-300"
             />
             {filterClientSearch && !filterClientId && (
-              <div className="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+              <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-lg border border-gray-200 bg-white shadow-xl">
                 <div 
                   className="cursor-pointer px-4 py-3 text-xs hover:bg-orange-50 font-black text-slate-900 border-b border-gray-100 uppercase tracking-tighter"
-                  onClick={() => { setFilterClientId(''); setFilterClientSearch('') }}
+                  onMouseDown={(e) => { 
+                    e.preventDefault(); // Empêche le focus de sortir de l'input
+                    setFilterClientId(''); 
+                    setFilterClientSearch('');
+                  }}
                 >
                   Tous les clients
                 </div>
                 {clients
                   .filter(c => c.nom.toLowerCase().includes(filterClientSearch.toLowerCase()))
+                  .slice(0, 30) // Limiter pour la performance
                   .map(c => (
                     <div
                       key={c.id}
-                      onClick={() => {
-                        setFilterClientId(String(c.id))
-                        setFilterClientSearch(c.nom)
+                      onMouseDown={(e) => {
+                        e.preventDefault(); // Empêche le focus de sortir de l'input
+                        setFilterClientId(String(c.id));
+                        setFilterClientSearch(c.nom);
                       }}
                       className="cursor-pointer px-4 py-3 text-sm hover:bg-orange-50 font-bold text-slate-900 border-b border-gray-50 last:border-0 transition-colors"
                     >
-                      {c.nom}
+                      <div className="flex justify-between items-center">
+                        <span>{c.nom}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">#{c.code || c.id}</span>
+                      </div>
                     </div>
                   ))
                 }
+                {clients.filter(c => c.nom.toLowerCase().includes(filterClientSearch.toLowerCase())).length > 30 && (
+                  <div className="px-4 py-2 text-[10px] text-gray-400 italic bg-gray-50 uppercase font-black text-center border-t border-gray-200">Affiner votre recherche...</div>
+                )}
               </div>
             )}
             {filterClientId && (
@@ -1005,10 +1042,11 @@ export default function VentesPage() {
         <button
           type="button"
           onClick={() => {
-            const params = new URLSearchParams({ limit: '1000' })
+            const params = new URLSearchParams()
             if (dateDebut) params.set('dateDebut', dateDebut)
             if (dateFin) params.set('dateFin', dateFin)
-            window.open('/api/ventes/export?' + params.toString(), '_blank')
+            params.set('statut', 'VALIDEE')
+            window.location.href = `/api/ventes/export?${params.toString()}`
           }}
           className="rounded-lg border-2 border-green-500 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 flex items-center gap-1.5"
           title="Exporter la liste des ventes en Excel"
@@ -1019,10 +1057,11 @@ export default function VentesPage() {
         <button
           type="button"
           onClick={() => {
-            const params = new URLSearchParams({ limit: '1000' })
+            const params = new URLSearchParams()
             if (dateDebut) params.set('dateDebut', dateDebut)
             if (dateFin) params.set('dateFin', dateFin)
-            window.open('/api/ventes/export-pdf?' + params.toString(), '_blank')
+            params.set('statut', 'VALIDEE')
+            window.location.href = `/api/ventes/export-pdf?${params.toString()}`
           }}
           className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 flex items-center gap-1.5"
           title="Exporter la liste des ventes en PDF"
@@ -1089,10 +1128,12 @@ export default function VentesPage() {
                         </div>
                         {clients
                           .filter(c => c.nom.toLowerCase().includes(formClientSearch.toLowerCase()) || (c.code && c.code.toLowerCase().includes(formClientSearch.toLowerCase())))
+                          .slice(0, 30) // Performance
                           .map((c) => (
                             <div
                               key={c.id}
-                              onClick={() => {
+                              onMouseDown={(e) => {
+                                e.preventDefault(); // Indispensable : bloque le onBlur de l'input
                                 setFormData(fod => ({ ...fod, clientId: String(c.id), clientLibre: '' }))
                                 setFormClientSearch(c.nom)
                                 setShowClientList(false)
@@ -1106,6 +1147,9 @@ export default function VentesPage() {
                             </div>
                           ))
                         }
+                        {clients.filter(c => c.nom.toLowerCase().includes(formClientSearch.toLowerCase())).length > 30 && (
+                          <div className="px-4 py-2 text-[10px] text-gray-400 italic bg-gray-50 uppercase font-black text-center">Affinez votre recherche...</div>
+                        )}
                         {clients.filter(c => c.nom.toLowerCase().includes(formClientSearch.toLowerCase())).length === 0 && (
                           <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun client trouvé.</div>
                         )}
@@ -1409,13 +1453,13 @@ export default function VentesPage() {
                 </div>
               )}
               <div className="mt-4 flex flex-col items-end text-sm gap-2 border-t border-gray-200 pt-3">
-                <p className="text-gray-600 flex justify-between w-64"><span>Total HT Brut :</span> <span className="font-bold">{totalHT.toLocaleString('fr-FR')} F</span></p>
+                <p className="text-slate-900 flex justify-between w-64"><span>Total HT Brut :</span> <span className="font-black text-lg">{totalHT.toLocaleString('fr-FR')} F</span></p>
                 
                 {totalRemise > 0 && (
-                  <p className="text-red-500 flex justify-between w-64"><span>Total Remises :</span> <span>-{totalRemise.toLocaleString('fr-FR')} F</span></p>
+                  <p className="text-red-500 flex justify-between w-64"><span>Total Remises :</span> <span className="font-bold">-{totalRemise.toLocaleString('fr-FR')} F</span></p>
                 )}
 
-                <p className="text-gray-600 flex justify-between w-64"><span>Total TVA :</span> <span className="font-bold">{totalTVA.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} F</span></p>
+                <p className="text-blue-800 flex justify-between w-64"><span>Total TVA :</span> <span className="font-black text-lg">{totalTVA.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} F</span></p>
                 
                 <p className="text-lg font-black text-white mt-2 bg-emerald-600 px-4 py-2 rounded shadow-lg w-64 flex justify-between ring-2 ring-emerald-500 ring-offset-2">
                   <span>TOTAL TTC :</span> <span>{total.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
@@ -1739,6 +1783,7 @@ export default function VentesPage() {
               <thead>
                 <tr className="bg-gray-50">
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">N°</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-orange-600">Bon N°</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Date</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 text-blue-600">Code Client</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Client</th>
@@ -1757,6 +1802,7 @@ export default function VentesPage() {
                   return (
                     <tr key={v.id} className={v.statut === 'ANNULEE' ? 'bg-gray-100' : 'hover:bg-gray-50'}>
                       <td className="px-4 py-3 font-mono text-sm text-gray-900">{v.numero}</td>
+                      <td className="px-4 py-3 text-sm font-bold text-orange-600">{(v as any).numeroBon || '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {formatDate(v.date, { includeTime: true })}
                       </td>
@@ -1809,6 +1855,45 @@ export default function VentesPage() {
                               <Wallet className="h-4 w-4" />
                             </button>
                           )}
+                          {v.statut !== 'ANNULEE' && (
+                            <button
+                              onClick={() => {
+                                // @ts-ignore
+                                setFormData({
+                                  date: new Date(v.date).toLocaleDateString('en-CA'),
+                                  magasinId: String((v as any).magasinId || v.magasin.id),
+                                  clientId: (v as any).clientId ? String((v as any).clientId) : '',
+                                  clientLibre: (v as any).clientLibre || '',
+                                  modePaiement: v.modePaiement || 'ESPECES',
+                                  montantPaye: String(v.montantPaye || ''),
+                                  // @ts-ignore
+                                  remiseGlobale: String((v as any).remiseGlobale || ''),
+                                  // @ts-ignore
+                                  observation: (v as any).observation || '',
+                                  // @ts-ignore
+                                  numeroBon: (v as any).numeroBon || '',
+                                  lignes: v.lignes.map((l: any) => ({
+                                    produitId: l.produitId,
+                                    designation: l.designation,
+                                    quantite: l.quantite,
+                                    prixUnitaire: l.prixUnitaire,
+                                    tvaPerc: l.tvaPerc || 0,
+                                    remise: l.remise || 0,
+                                  })),
+                                  // @ts-ignore
+                                  reglements: (v as any).reglements?.map((r: any) => ({ mode: r.mode, montant: String(r.montant) })) || [{ mode: v.modePaiement, montant: String(v.montantPaye || '') }],
+                                  pointsGagnes: 0,
+                                })
+                                setFormClientSearch((v as any).client?.nom || '')
+                                setEditingVenteId(v.id)
+                                setForm(true)
+                              }}
+                              className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+                              title="Modifier la facture"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleVoirDetail(v.id)}
                             disabled={loadingDetail === v.id}
@@ -1846,11 +1931,15 @@ export default function VentesPage() {
               {totals && (
                 <tfoot className="bg-orange-50 font-bold text-gray-900 border-t-2 border-orange-200">
                   <tr>
-                    <td colSpan={5} className="px-4 py-3 uppercase text-xs tracking-wider text-orange-800 font-black">Total de la Période</td>
-                    <td className="px-4 py-3 text-right text-orange-700">{totals.montantTotal.toLocaleString('fr-FR')} F</td>
-                    <td colSpan={2}></td>
-                    <td className="px-4 py-3 text-right text-red-700">{totals.resteAPayer.toLocaleString('fr-FR')} F</td>
-                    <td colSpan={2}></td>
+                    <td colSpan={6} className="px-4 py-3 uppercase text-[10px] tracking-wider text-orange-800 font-black italic">Total de la Période</td>
+                    <td className="px-4 py-3 text-right text-orange-700 bg-orange-100/50">
+                      {totals.montantTotal.toLocaleString('fr-FR')} F
+                    </td>
+                    <td colSpan={2} className="px-4 py-3 bg-gray-50/30"></td>
+                    <td className="px-4 py-3 text-right text-red-700 bg-red-50/50">
+                      {totals.resteAPayer.toLocaleString('fr-FR')} F
+                    </td>
+                    <td colSpan={2} className="px-4 py-3 bg-gray-50/30"></td>
                   </tr>
                 </tfoot>
               )}
@@ -1881,9 +1970,10 @@ export default function VentesPage() {
                 {detailVente.statut !== 'ANNULEE' && (
                   <button
                     onClick={() => {
+                      // Préparer les données pour le formulaire de modification
                       setFormData({
                         date: new Date(detailVente.date).toLocaleDateString('en-CA'),
-                        magasinId: String(detailVente.magasinId || detailVente.magasin.id),
+                        magasinId: String(detailVente.magasinId || (detailVente as any).magasin?.id || ''),
                         clientId: detailVente.clientId ? String(detailVente.clientId) : '',
                         clientLibre: detailVente.clientLibre || '',
                         modePaiement: detailVente.modePaiement || 'ESPECES',
@@ -1899,7 +1989,8 @@ export default function VentesPage() {
                           tvaPerc: l.tvaPerc || 0,
                           remise: l.remise || 0,
                         })),
-                        reglements: detailVente.reglements.map((r: any) => ({ mode: r.mode, montant: String(r.montant) })),
+                        // @ts-ignore
+                        reglements: detailVente.reglements?.map((r: any) => ({ mode: r.mode, montant: String(r.montant) })) || [{ mode: detailVente.modePaiement, montant: String(detailVente.montantPaye || '') }],
                         pointsGagnes: 0,
                       })
                       setFormClientSearch(detailVente.client?.nom || '')
@@ -2265,70 +2356,6 @@ export default function VentesPage() {
           onClose={() => setScannerOpen(false)}
         />
       )}
-      {/* Zone d'impression de la liste */}
-      <div className="hidden print:block font-sans text-black bg-white p-4">
-        <div className="flex justify-between items-center mb-6 border-b-4 border-black pb-4">
-          <div>
-            <h1 className="text-3xl font-black uppercase tracking-tighter">{entreprise?.nomEntreprise || 'GESTICOM PRO'}</h1>
-            <p className="text-sm font-bold uppercase">{entreprise?.localisation || 'Localisation'}</p>
-            <p className="text-xs font-medium text-gray-700">{entreprise?.contact || 'Contact'}</p>
-          </div>
-          <div className="text-right">
-            <h2 className="text-xl font-black text-gray-800 uppercase italic">Liste des Ventes</h2>
-            <p className="text-sm font-bold">{new Date().toLocaleDateString('fr-FR')}</p>
-            <p className="text-[10px] uppercase text-gray-500 font-bold">
-              {dateDebut && dateFin ? `Période: du ${formatDate(dateDebut)} au ${formatDate(dateFin)}` : 'Toutes les ventes'}
-            </p>
-          </div>
-        </div>
-
-        <table className="w-full text-xs border-collapse border-2 border-black">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">N°</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Date</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Client</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Magasin</th>
-              <th className="border-2 border-black px-2 py-2 text-right uppercase">Montant</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Mode</th>
-              <th className="border-2 border-black px-2 py-2 text-left uppercase">Statut</th>
-            </tr>
-          </thead>
-          <tbody>
-            {printVentes.map((v) => (
-              <tr key={v.id} className="border-b border-gray-300">
-                <td className="border-2 border-black px-2 py-1 font-mono font-bold">{v.numero}</td>
-                <td className="border-2 border-black px-2 py-1">{formatDate(v.date, { includeTime: true })}</td>
-                <td className="border-2 border-black px-2 py-1 font-medium">{v.client?.nom || v.clientLibre || '-'}</td>
-                <td className="border-2 border-black px-2 py-1">{v.magasin.code}</td>
-                <td className="border-2 border-black px-2 py-1 text-right font-black">{v.montantTotal.toLocaleString()} F</td>
-                <td className="border-2 border-black px-2 py-1">{v.modePaiement}</td>
-                <td className="border-2 border-black px-2 py-1 font-bold">{v.statut}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-900 text-white font-black">
-              <td colSpan={4} className="border-2 border-black px-3 py-4 text-right uppercase text-sm italic">Total Général des Ventes sélectionnés</td>
-              <td className="border-2 border-black px-3 py-4 text-right text-2xl underline decoration-double tracking-tighter">
-                {printVentes.reduce((acc, v) => acc + v.montantTotal, 0).toLocaleString()} F
-              </td>
-              <td colSpan={2} className="border-2 border-black px-3 py-4"></td>
-            </tr>
-          </tfoot>
-        </table>
-        
-        <div className="mt-12 flex justify-between items-end">
-           <div>
-              <p className="text-[10px] italic text-gray-500 mb-1">Extrait généré par GestiCom Pro. Document officiel.</p>
-              <p className="text-[8px] text-gray-400">ID Session: {new Date().getTime()}</p>
-           </div>
-           <div className="text-center w-64 border-t-2 border-black pt-2">
-              <p className="text-xs font-black uppercase">Signature & Cachet Autorisé</p>
-              <div className="h-20"></div>
-           </div>
-        </div>
-      </div>
     </div>
   )
 }

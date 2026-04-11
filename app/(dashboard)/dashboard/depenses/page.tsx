@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { DollarSign, Plus, Loader2, Trash2, Edit2, Search, Filter, X, FileSpreadsheet, Download, Printer } from 'lucide-react'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { DollarSign, Plus, Loader2, Trash2, Edit2, Search, Filter, X, FileSpreadsheet, Download, Printer, BookOpen } from 'lucide-react'
+import Link from 'next/link'
 import { useToast } from '@/hooks/useToast'
 import { depenseSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
@@ -106,9 +106,8 @@ export default function DepensesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [isPrinting, setIsPrinting] = useState(false)
-  const [allDepensesForPrint, setAllDepensesForPrint] = useState<Depense[]>([])
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
+  const [totalAmount, setTotalAmount] = useState(0)
   const itemsPerPage = 20
 
   useEffect(() => {
@@ -121,29 +120,6 @@ export default function DepensesPage() {
       .then(setMagasins)
   }, [])
 
-  const handlePrintAll = async () => {
-    setIsPrinting(true)
-    try {
-      const params = new URLSearchParams({ limit: '10000' })
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
-      if (filtreCategorie) params.set('categorie', filtreCategorie)
-      if (filtreMagasin) params.set('magasinId', filtreMagasin)
-      if (searchTerm) params.set('search', searchTerm)
-
-      const res = await fetch('/api/depenses?' + params.toString())
-      if (res.ok) {
-        setAllDepensesForPrint(await res.json())
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 500)
-      }
-    } catch (e) {
-      console.error(e)
-      setIsPrinting(false)
-    }
-  }
 
   const fetchDepenses = async () => {
     setLoading(true)
@@ -158,11 +134,12 @@ export default function DepensesPage() {
       if (filtreMagasin) params.set('magasinId', filtreMagasin)
       if (searchTerm) params.set('search', searchTerm)
 
-      const res = await fetch('/api/depenses?' + params.toString())
+      const res = await fetch(`/api/depenses?${params.toString()}&t=${Date.now()}`)
       if (res.ok) {
         const data = await res.json()
         setDepenses(data.data || [])
         setPagination(data.pagination || null)
+        setTotalAmount(data.totalAmount || 0)
       }
     } catch (e) {
       console.error(e)
@@ -278,8 +255,9 @@ export default function DepensesPage() {
     try {
       const res = await fetch(`/api/depenses/${id}`, { method: 'DELETE' })
       if (res.ok) {
-        fetchDepenses()
         showSuccess(MESSAGES.DEPENSE_SUPPRIMEE)
+        fetchDepenses()
+        setTimeout(() => fetchDepenses(), 500)
       } else {
         const data = await res.json()
         showError(res.status === 403 ? (data.error || MESSAGES.RESERVE_SUPER_ADMIN) : formatApiError(data.error || 'Erreur lors de la suppression.'))
@@ -404,17 +382,17 @@ export default function DepensesPage() {
         <div className="rounded-xl bg-gradient-to-br from-red-500 to-pink-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <div className="text-sm font-medium text-white/90">Total dépenses</div>
           <div className="mt-1 text-2xl font-bold text-white">
-            {total.toLocaleString('fr-FR')} FCFA
+            {totalAmount.toLocaleString('fr-FR')} FCFA
           </div>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <div className="text-sm font-medium text-white/90">Nombre de dépenses</div>
-          <div className="mt-1 text-2xl font-bold text-white">{depenses.length}</div>
+          <div className="mt-1 text-2xl font-bold text-white">{pagination?.total || 0}</div>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <div className="text-sm font-medium text-white/90">Moyenne</div>
           <div className="mt-1 text-2xl font-bold text-white">
-            {depenses.length > 0 ? Math.round(total / depenses.length).toLocaleString('fr-FR') : 0} FCFA
+            {pagination && pagination.total > 0 ? Math.round(totalAmount / pagination.total).toLocaleString('fr-FR') : 0} FCFA
           </div>
         </div>
       </div>
@@ -453,56 +431,19 @@ export default function DepensesPage() {
           <Download className="h-4 w-4" />
           PDF
         </button>
-        <button
-          type="button"
-          onClick={handlePrintAll}
-          disabled={isPrinting}
-          className="flex items-center gap-2 rounded-lg border-2 border-slate-700 bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900 shadow-lg active:scale-95 disabled:opacity-50"
-          title="Imprimer la liste filtrée"
+        <Link
+          href="/dashboard/depenses/journal"
+          className="flex items-center gap-2 rounded-lg border-2 border-slate-700 bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900 shadow-lg active:scale-95 transition-all"
+          title="Consulter le journal pour impression"
         >
-          {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-          IMPRIMER LA LISTE
-        </button>
+          <BookOpen className="h-4 w-4" />
+          JOURNAL DES DÉPENSES
+        </Link>
       </div>
 
-      <ListPrintWrapper
-        title="Journal des Dépenses"
-        subtitle={(dateDebut || dateFin) ? `Période du ${dateDebut || '...'} au ${dateFin || '...'}` : "Journal Global"}
-      >
-        <table className="w-full text-[10px] border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100 uppercase font-black text-gray-700">
-              <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Catégorie</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Libellé / Bénéficiaire</th>
-              <th className="border border-gray-300 px-3 py-3 text-right">Montant</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Mode</th>
-              <th className="border border-gray-300 px-3 py-3 text-left">Magasin</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(allDepensesForPrint.length > 0 ? allDepensesForPrint : depenses).map((d, idx) => (
-              <tr key={idx} className="border-b border-gray-200">
-                <td className="border border-gray-300 px-3 py-2">{new Date(d.date).toLocaleDateString('fr-FR')}</td>
-                <td className="border border-gray-300 px-3 py-2 font-bold">{d.categorie}</td>
-                <td className="border border-gray-300 px-3 py-2 uppercase">{d.libelle} {d.beneficiaire ? `(${d.beneficiaire})` : ''}</td>
-                <td className="border border-gray-300 px-3 py-2 text-right font-black">{d.montant.toLocaleString()} F</td>
-                <td className="border border-gray-300 px-3 py-2">{d.modePaiement}</td>
-                <td className="border border-gray-300 px-3 py-2 font-medium">{d.magasin?.code || '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-             <tr className="bg-gray-100 font-black text-[10px] border-t-2 border-black uppercase italic">
-                <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right bg-white tracking-widest text-xs">Total Dépenses (Sélection)</td>
-                <td className="border border-gray-300 px-3 py-4 text-right bg-white text-sm underline decoration-double">
-                   {(allDepensesForPrint.length > 0 ? allDepensesForPrint : depenses).reduce((acc, d) => acc + d.montant, 0).toLocaleString()} F
-                </td>
-                <td colSpan={2} className="border border-gray-300 px-3 py-4 bg-white"></td>
-             </tr>
-          </tfoot>
-        </table>
-      </ListPrintWrapper>
+      <div className="hidden print:block text-center p-8">
+        <p className="text-sm font-bold text-slate-500 italic">Veuillez utiliser la page dédiée &quot;Journal des Dépenses&quot; pour l'impression.</p>
+      </div>
 
       {/* Liste */}
       {loading ? (
@@ -531,98 +472,60 @@ export default function DepensesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {(() => {
-                  const filtered = depenses.filter((d) => {
-                    if (!searchTerm) return true
-                    const search = searchTerm.toLowerCase()
-                    return (
-                      d.libelle.toLowerCase().includes(search) ||
-                      d.categorie.toLowerCase().includes(search) ||
-                      (d.beneficiaire && d.beneficiaire.toLowerCase().includes(search)) ||
-                      (d.magasin && d.magasin.nom.toLowerCase().includes(search)) ||
-                      d.modePaiement.toLowerCase().includes(search)
-                    )
-                  })
-                  const totalPages = Math.ceil(filtered.length / itemsPerPage)
-                  const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-
-                  return (
-                    <>
-                      {paginated.map((d) => (
-                    <tr key={d.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {new Date(d.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex rounded-full bg-purple-100 px-2 py-1 text-xs font-medium text-purple-800">
-                          {d.categorie}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{d.libelle}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-900">
-                        {d.montant.toLocaleString('fr-FR')} FCFA
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{d.modePaiement}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{d.beneficiaire || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{d.magasin?.nom || d.magasin?.code || '—'}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                {depenses.map((d) => (
+                  <tr key={d.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {new Date(d.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full bg-purple-100 px-2 py-1 text-xs font-medium text-purple-800">
+                        {d.categorie}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{d.libelle}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">
+                      {d.montant.toLocaleString('fr-FR')} FCFA
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{d.modePaiement}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{d.beneficiaire || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{d.magasin?.nom || d.magasin?.code || '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEdit(d)}
+                          className="rounded-lg p-1 text-blue-600 hover:bg-blue-50"
+                          title="Modifier"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                           <button
-                            onClick={() => handleEdit(d)}
-                            className="rounded-lg p-1 text-blue-600 hover:bg-blue-50"
-                            title="Modifier"
+                            onClick={() => handleDelete(d.id)}
+                            className="rounded-lg p-1 text-red-600 hover:bg-red-50"
+                            title="Supprimer (Super Admin)"
                           >
-                            <Edit2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
-                          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
-                            <button
-                              onClick={() => handleDelete(d.id)}
-                              className="rounded-lg p-1 text-red-600 hover:bg-red-50"
-                              title="Supprimer (Super Admin)"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {Math.ceil(depenses.filter((d) => {
-                    if (!searchTerm) return true
-                    const search = searchTerm.toLowerCase()
-                    return (
-                      d.libelle.toLowerCase().includes(search) ||
-                      d.categorie.toLowerCase().includes(search) ||
-                      (d.beneficiaire && d.beneficiaire.toLowerCase().includes(search)) ||
-                      (d.magasin && d.magasin.nom.toLowerCase().includes(search)) ||
-                      d.modePaiement.toLowerCase().includes(search)
-                    )
-                  }).length / itemsPerPage) > 1 && (
-                    <tr>
-                      <td colSpan={8} className="px-0 py-0 border-t border-gray-200">
-                        <div className="bg-white px-4 py-3">
-                          <Pagination
-                            currentPage={currentPage}
-                            totalPages={Math.ceil(depenses.filter((d) => {
-                              if (!searchTerm) return true
-                              const search = searchTerm.toLowerCase()
-                              return (
-                                d.libelle.toLowerCase().includes(search) ||
-                                d.categorie.toLowerCase().includes(search) ||
-                                (d.beneficiaire && d.beneficiaire.toLowerCase().includes(search)) ||
-                                (d.magasin && d.magasin.nom.toLowerCase().includes(search)) ||
-                                d.modePaiement.toLowerCase().includes(search)
-                              )
-                            }).length / itemsPerPage)}
-                            onPageChange={setCurrentPage}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                    </>
-                  )
-                })()}
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {pagination && pagination.totalPages > 1 && (
+                  <tr>
+                    <td colSpan={8} className="px-0 py-0 border-t border-gray-200">
+                      <div className="bg-white px-4 py-3">
+                        <Pagination
+                          currentPage={currentPage}
+                          totalPages={pagination.totalPages}
+                          totalItems={pagination.total}
+                          itemsPerPage={pagination.limit || itemsPerPage}
+                          onPageChange={setCurrentPage}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -807,19 +710,6 @@ export default function DepensesPage() {
           </div>
         </div>
       )}
-      <style jsx global>{`
-        @media print {
-          @page { size: portrait; margin: 10mm; }
-          nav, aside, header, .no-print, button, form, .Pagination, .grid { display: none !important; }
-          body, main { background: white !important; margin: 0 !important; padding: 0 !important; }
-          table { width: 100% !important; border-collapse: collapse !important; border: 1px solid #000 !important; }
-          th { background-color: #f3f4f6 !important; border: 1px solid #000 !important; padding: 4px !important; font-size: 8px !important; font-weight: 900 !important; text-transform: uppercase; }
-          td { border: 1px solid #ccc !important; padding: 4px !important; font-size: 7px !important; }
-          tr { page-break-inside: avoid; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-        }
-      `}</style>
     </div>
   )
 }

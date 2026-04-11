@@ -59,7 +59,7 @@ export function getDatabaseFilePath(): string | null {
     resolved = path.normalize(filePath)
   } else {
     // Chemin relatif - résoudre depuis le répertoire de travail
-    resolved = path.resolve(process.cwd(), filePath)
+    resolved = path.resolve(/*turbopackIgnore: true*/ process.cwd(), filePath)
   }
   
   // Normaliser à nouveau pour s'assurer que les séparateurs sont corrects
@@ -89,16 +89,10 @@ function findDatabaseFile(originalPath?: string): string | null {
   const cwd = process.cwd()
   const possiblePaths = [
     // Emplacements relatifs au projet (les plus probables)
-    path.join(cwd, 'prisma', 'gesticom.db'),
-    path.join(cwd, 'prisma', 'prisma', 'gesticom.db'), // Cas où Prisma génère dans prisma/prisma
-    path.join(cwd, 'data', 'gesticom.db'),
-    path.join(cwd, 'gesticom.db'),
-    // Emplacements Windows par défaut - Ignorer pendant le build pour éviter les erreurs de tracing standalone
-    ...(process.env.NEXT_PHASE !== 'phase-production-build' ? [
-      path.join('C:', 'gesticom_portable_data', 'gesticom.db'),
-      path.join('C:', 'Users', 'Public', 'gesticom', 'gesticom.db'),
-      path.join('C:', 'gesticom', 'gesticom.db'),
-    ] : []),
+    path.join(/*turbopackIgnore: true*/ cwd, 'prisma', 'gesticom.db'),
+    path.join(/*turbopackIgnore: true*/ cwd, 'prisma', 'prisma', 'gesticom.db'), // Cas où Prisma génère dans prisma/prisma
+    path.join(/*turbopackIgnore: true*/ cwd, 'data', 'gesticom.db'),
+    path.join(/*turbopackIgnore: true*/ cwd, 'gesticom.db'),
     // Si un chemin original était fourni, l'inclure aussi
     ...(originalPath ? [originalPath] : []),
   ]
@@ -132,7 +126,7 @@ function findDatabaseFile(originalPath?: string): string | null {
 export function getBackupDir(): string | null {
   const dbPath = getDatabaseFilePath()
   if (!dbPath) return null
-  const dir = path.join(path.dirname(dbPath), BACKUP_DIR_NAME)
+  const dir = path.join(/*turbopackIgnore: true*/ path.dirname(dbPath), BACKUP_DIR_NAME)
   return dir
 }
 
@@ -173,7 +167,7 @@ export function listBackups(): Array<{ name: string; size: number; date: string 
   const result: Array<{ name: string; size: number; date: string }> = []
   for (const name of files) {
     if (!name.startsWith(BACKUP_PREFIX) || !name.endsWith(BACKUP_EXT)) continue
-    const fullPath = path.join(dir, name)
+    const fullPath = path.join(/*turbopackIgnore: true*/ dir, name)
     try {
       const stat = fs.statSync(fullPath)
       if (stat.isFile()) {
@@ -202,7 +196,7 @@ export function createBackup(): string {
   if (!dir) throw new Error('Impossible de créer le dossier des sauvegardes.')
   
   const targetName = backupFileName()
-  const targetPath = path.join(dir, targetName)
+  const targetPath = path.join(/*turbopackIgnore: true*/ dir, targetName)
   
   fs.copyFileSync(dbPath, targetPath)
   console.log(`[sauvegarde-db] Sauvegarde créée : ${targetPath}`)

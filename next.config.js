@@ -1,9 +1,12 @@
-const path = require('path');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  /* Mode standalone activé pour un build léger */
+  outputFileTracingExcludes: {
+    '*': [
+      '**/api/sauvegarde/**/*',
+      '**/backups/**/*',
+    ],
+  },
 };
 
 module.exports = nextConfig;

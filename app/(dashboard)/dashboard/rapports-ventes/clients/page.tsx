@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import RapportsNav from '../RapportsNav'
 import { Filter, UserCheck, Loader2, X, Calendar, FileText, ChevronRight, PieChart, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 import { useToast } from '@/hooks/useToast'
 
 interface ClientData {
@@ -23,6 +24,7 @@ export default function ParClientPage() {
     const [loading, setLoading] = useState(true)
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [isPrinting, setIsPrinting] = useState(false)
     const { error: showError } = useToast()
     const [selectedHistory, setSelectedHistory] = useState<{ id: number | null; nom: string } | null>(null)
@@ -100,12 +102,11 @@ export default function ParClientPage() {
                         <div className="flex gap-2">
                             <button 
                                 type="button"
-                                onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
-                                disabled={isPrinting}
-                                className="bg-slate-800 text-white px-6 py-2 rounded-xl text-xs font-black hover:bg-slate-900 flex items-center gap-2 h-[42px] transition-all hover:scale-105 active:scale-95 shadow-lg disabled:opacity-50 uppercase tracking-widest"
+                                onClick={() => setIsPreviewOpen(true)}
+                                className="bg-slate-800 text-white px-6 py-2 rounded-xl text-xs font-black hover:bg-slate-900 flex items-center gap-2 h-[42px] transition-all hover:scale-105 active:scale-95 shadow-lg no-print uppercase tracking-widest"
                             >
-                                {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-                                Imprimer Rapport
+                                <Printer className="h-4 w-4" />
+                                Aperçu Impression
                             </button>
                             <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end bg-gray-50/50 p-6 rounded-2xl border border-gray-100 shadow-inner">
                                 <div className="space-y-1.5">
@@ -271,49 +272,141 @@ export default function ParClientPage() {
                 )}
             </div>
 
-            <ListPrintWrapper
-                title="Fidélité & Rentabilité Clients"
-                subtitle={`Rapport du ${startDate} au ${endDate}`}
-            >
-                <table className="w-full text-[10px] border-collapse border border-gray-300">
-                    <thead>
-                        <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                            <th className="border border-gray-300 px-3 py-3 text-left">Client</th>
-                            <th className="border border-gray-300 px-3 py-3 text-right">CA Réalisé</th>
-                            <th className="border border-gray-300 px-3 py-3 text-right">Vol. Ventes</th>
-                            <th className="border border-gray-300 px-3 py-3 text-right">Solde Dû</th>
-                            <th className="border border-gray-300 px-3 py-3 text-right">Panier Moyen</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {data.map((row, idx) => (
-                            <tr key={idx} className="border-b border-gray-200">
-                                <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{row.client}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-right font-black">{row.caTotal.toLocaleString()} F</td>
-                                <td className="border border-gray-300 px-3 py-2 text-right">{row.nombreVentes}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-right text-rose-700 font-bold">{(row.soldeDu || 0).toLocaleString()} F</td>
-                                <td className="border border-gray-300 px-3 py-2 text-right">{(row.nombreVentes > 0 ? row.caTotal / row.nombreVentes : 0).toLocaleString()} F</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                    <tfoot>
-                        <tr className="bg-gray-100 font-black text-[10px]">
-                            <td className="border border-gray-300 px-3 py-4 text-right uppercase italic">Totaux Sélection</td>
-                            <td className="border border-gray-300 px-3 py-4 text-right underline decoration-double text-blue-700">{totalCA.toLocaleString()} F</td>
-                            <td className="border border-gray-300 px-3 py-4 text-right underline">{totalVentes}</td>
-                            <td className="border border-gray-300 px-3 py-4 text-right underline text-rose-700">{totalDette.toLocaleString()} F</td>
-                            <td className="border border-gray-300 px-3 py-4 text-right">---</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </ListPrintWrapper>
+            <div className="hidden print:block absolute inset-0 bg-white">
+                {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                        <ListPrintWrapper
+                            title="Fidélité & Rentabilité Clients"
+                            subtitle={`Rapport de performance commerciale - Période du ${startDate} au ${endDate}`}
+                            pageNumber={index + 1}
+                            totalPages={allChunks.length}
+                            hideHeader={index > 0}
+                            hideVisa={index < allChunks.length - 1}
+                        >
+                            <table className="w-full text-[14px] border-collapse border-2 border-black">
+                                <thead>
+                                    <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                                        <th className="border-r-2 border-black px-3 py-3 text-left">Partenaire Client</th>
+                                        <th className="border-r-2 border-black px-3 py-3 text-right">CA Réalisé</th>
+                                        <th className="border-r-2 border-black px-3 py-3 text-right tabular-nums">Volume</th>
+                                        <th className="border-r-2 border-black px-3 py-3 text-right">Solde Dû</th>
+                                        <th className="px-3 py-3 text-right">Panier M.</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {chunk.map((row: any, idx) => (
+                                        <tr key={idx} className="border-b border-black">
+                                            <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{row.client}</td>
+                                            <td className="border-r-2 border-black px-3 py-2 text-right font-black">{row.caTotal.toLocaleString()} F</td>
+                                            <td className="border-r-2 border-black px-3 py-2 text-right">{row.nombreVentes} Actes</td>
+                                            <td className="border-r-2 border-black px-3 py-2 text-right text-rose-700 font-bold tabular-nums">{(row.soldeDu || 0).toLocaleString()} F</td>
+                                            <td className="px-3 py-2 text-right italic">{(row.nombreVentes > 0 ? row.caTotal / row.nombreVentes : 0).toLocaleString()} F</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                {index === allChunks.length - 1 && (
+                                    <tfoot>
+                                        <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
+                                            <td className="border-r-2 border-black px-3 py-4 text-right">TOTAUX ANALYSE</td>
+                                            <td className="border-r-2 border-black px-3 py-4 text-right bg-white text-blue-900 underline decoration-double">{totalCA.toLocaleString()} F</td>
+                                            <td className="border-r-2 border-black px-3 py-4 text-right bg-white">{totalVentes} Ventes</td>
+                                            <td className="border-r-2 border-black px-3 py-4 text-right bg-white text-rose-700">{totalDette.toLocaleString()} F</td>
+                                            <td className="px-3 py-4 bg-white">---</td>
+                                        </tr>
+                                    </tfoot>
+                                )}
+                            </table>
+                        </ListPrintWrapper>
+                    </div>
+                ))}
+            </div>
 
-            <style jsx global>{`
-                @media print {
-                    nav, aside, header, .no-print, button, form, .RapportsNav { display: none !important; }
-                    body, main { background: white !important; margin: 0 !important; padding: 0 !important; }
-                }
-            `}</style>
+            {/* MODALE D'APERÇU IMPRESSION RENTABILITÉ CLIENTS */}
+            {isPreviewOpen && (
+              <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans text-slate-900 uppercase italic tracking-tighter">
+                <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl not-italic tracking-normal">
+                    <div className="flex items-center gap-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Fidélité Clients</h2>
+                         <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                           Analyse de Performance et Rentabilité Partenaires
+                         </p>
+                       </div>
+                       <div className="h-10 w-px bg-gray-200" />
+                       <div className="flex flex-col">
+                         <span className="text-xs font-black text-orange-600 italic">Extraction du {startDate}</span>
+                         <span className="text-xs font-black text-orange-600 italic">au {endDate}</span>
+                       </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <button
+                        onClick={() => setIsPreviewOpen(false)}
+                        className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+                      >
+                        Fermer
+                      </button>
+                      <button
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+                      >
+                        <Printer className="h-4 w-4" />
+                        Lancer l'impression
+                      </button>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+                    <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
+                        {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                            <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                                <ListPrintWrapper
+                                    title="FIDÉLITÉ & RENTABILITÉ CLIENTS"
+                                    subtitle={`Analyse commerciale consolidée - Période sous revue`}
+                                    pageNumber={index + 1}
+                                    totalPages={allChunks.length}
+                                    hideHeader={index > 0}
+                                    hideVisa={index < allChunks.length - 1}
+                                >
+                                    <table className="w-full text-[14px] border-collapse border-2 border-black">
+                                        <thead>
+                                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                                                <th className="border-r-2 border-black px-3 py-3 text-left">Client / Partenaire</th>
+                                                <th className="border-r-2 border-black px-3 py-3 text-right">C.A Total</th>
+                                                <th className="border-r-2 border-black px-3 py-3 text-right tabular-nums">Fréq.</th>
+                                                <th className="border-r-2 border-black px-3 py-3 text-right">Engagement (Solde)</th>
+                                                <th className="px-3 py-3 text-right">Rendement</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {chunk.map((row: any, idx) => (
+                                                <tr key={idx} className="border-b border-black text-[13px]">
+                                                    <td className="border-r-2 border-black px-3 py-2 font-black uppercase text-blue-900">{row.client}</td>
+                                                    <td className="border-r-2 border-black px-3 py-2 text-right font-black tabular-nums">{row.caTotal.toLocaleString()} F</td>
+                                                    <td className="border-r-2 border-black px-3 py-2 text-right">{row.nombreVentes}</td>
+                                                    <td className="border-r-2 border-black px-3 py-2 text-right font-black text-rose-600 tabular-nums">{(row.soldeDu || 0).toLocaleString()} F</td>
+                                                    <td className="px-3 py-2 text-right italic font-medium tabular-nums shadow-inner">{(row.nombreVentes > 0 ? row.caTotal / row.nombreVentes : 0).toLocaleString()} F</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        {index === allChunks.length - 1 && (
+                                            <tfoot>
+                                                <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
+                                                    <td className="border-r-2 border-black px-3 py-4 text-right bg-white">VALEUR PORTEFEUILLE CLIENT</td>
+                                                    <td className="border-r-2 border-black px-3 py-4 bg-white text-blue-900 underline underline-offset-4 decoration-double tabular-nums shadow-inner">{totalCA.toLocaleString()} F</td>
+                                                    <td className="border-r-2 border-black px-3 py-4 bg-white italic tabular-nums">{totalVentes} Transaction(s)</td>
+                                                    <td colSpan={2} className="px-3 py-4 bg-white text-rose-700 underline underline-offset-4 decoration-double tabular-nums">{totalDette.toLocaleString()} F cumulés</td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
+                                    </table>
+                                </ListPrintWrapper>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+              </div>
+            )}
+
         </>
     )
 }

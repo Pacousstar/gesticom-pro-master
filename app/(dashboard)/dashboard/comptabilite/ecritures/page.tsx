@@ -7,6 +7,8 @@ import { useToast } from '@/hooks/useToast'
 import { ecritureSchema } from '@/lib/validations'
 import { validateForm, formatApiError, ErrorMessages } from '@/lib/validation-helpers'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import Pagination from '@/components/ui/Pagination'
 
 type Ecriture = {
   id: number
@@ -57,8 +59,11 @@ export default function EcrituresPage() {
   const [filtreCompte, setFiltreCompte] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [backfilling, setBackfilling] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
   const [toutesLesDates, setToutesLesDates] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [diagnostic, setDiagnostic] = useState<{
     operations?: { ventes: number; achats: number; depenses: number; charges: number }
     ecritures?: { total: number; parType?: { type: string; nombre: number }[] }
@@ -106,12 +111,17 @@ export default function EcrituresPage() {
   }
 
   useEffect(() => {
+    setCurrentPage(1)
     fetchEcritures()
   }, [dateDebut, dateFin, filtreJournal, filtreCompte, toutesLesDates])
 
   useEffect(() => {
     fetchDiagnostic()
   }, [])
+
+  const filteredEcritures = ecritures
+  const totalPages = Math.ceil(filteredEcritures.length / itemsPerPage)
+  const paginatedEcritures = filteredEcritures.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
   const resetForm = () => {
     setFormData({
@@ -251,7 +261,7 @@ export default function EcrituresPage() {
               if (filtreCompte) params.set('compteId', filtreCompte)
               window.open(`/api/ecritures/export-excel?${params.toString()}`, '_blank')
             }}
-            className="flex items-center gap-2 rounded-lg border-2 border-green-500 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100"
+            className="flex items-center gap-2 rounded-xl border-2 border-green-500 bg-green-50 px-5 py-2.5 text-xs font-black text-green-800 hover:bg-green-100 shadow-md transition-all active:scale-95 no-print"
             title="Exporter en Excel"
           >
             <FileSpreadsheet className="h-4 w-4" />
@@ -266,23 +276,23 @@ export default function EcrituresPage() {
               if (filtreCompte) params.set('compteId', filtreCompte)
               window.open(`/api/ecritures/export-pdf?${params.toString()}`, '_blank')
             }}
-            className="flex items-center gap-2 rounded-lg border-2 border-red-500 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100"
+            className="flex items-center gap-2 rounded-xl border-2 border-red-500 bg-red-50 px-5 py-2.5 text-xs font-black text-red-800 hover:bg-red-100 shadow-md transition-all active:scale-95 no-print"
             title="Exporter en PDF"
           >
             <Download className="h-4 w-4" />
             PDF
           </button>
           <button
-            onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
-            disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50"
+            onClick={() => setIsPreviewOpen(true)}
+            disabled={isPrinting || ecritures.length === 0}
+            className="flex items-center gap-2 rounded-xl border-2 border-orange-500 bg-orange-50 px-5 py-2.5 text-xs font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50 no-print"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
-            Imprimer Livre-Journal
+            Aperçu Impression
           </button>
           <button
             onClick={() => openForm()}
-            className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
+            className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-2.5 text-xs font-black text-white hover:bg-orange-700 shadow-xl transition-all active:translate-y-1 uppercase tracking-widest no-print"
           >
             <Plus className="h-5 w-5" />
             Nouvelle écriture
@@ -428,29 +438,30 @@ export default function EcrituresPage() {
         <div className="flex min-h-[200px] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
         </div>
-      ) : ecritures.length === 0 ? (
+      ) : filteredEcritures.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
           <FileText className="mx-auto h-12 w-12 text-gray-400" />
           <p className="mt-4 text-gray-600">Aucune écriture trouvée</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Journal</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Pièce</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Libellé</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Compte</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Débit</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Crédit</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {ecritures.map((e) => (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Journal</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Pièce</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Libellé</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Compte</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Débit</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Crédit</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {paginatedEcritures.map((e) => (
                   <tr key={e.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {new Date(e.date).toLocaleDateString('fr-FR')}
@@ -490,6 +501,15 @@ export default function EcrituresPage() {
               </tbody>
             </table>
           </div>
+        </div>
+        
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredEcritures.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
@@ -658,66 +678,168 @@ export default function EcrituresPage() {
           </div>
         </div>
       )}
-      {/* Zone d'impression professionnelle standardisée */}
-      <ListPrintWrapper
-        title="Livre-Journal"
-        subtitle="Journal général des écritures comptables"
-        dateRange={toutesLesDates ? undefined : { start: dateDebut, end: dateFin }}
-      >
-        <table className="w-full text-[9px] border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100 uppercase font-black text-gray-700">
-              <th className="border border-gray-300 px-2 py-3 text-left">Date</th>
-              <th className="border border-gray-300 px-2 py-3 text-left">Journal</th>
-              <th className="border border-gray-300 px-2 py-3 text-left">Pièce</th>
-              <th className="border border-gray-300 px-2 py-3 text-left">Libellé</th>
-              <th className="border border-gray-300 px-2 py-3 text-left">Compte</th>
-              <th className="border border-gray-300 px-2 py-3 text-right">Débit</th>
-              <th className="border border-gray-300 px-2 py-3 text-right">Crédit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ecritures.map((e, idx) => (
-              <tr key={idx} className="border-b border-gray-200">
-                <td className="border border-gray-300 px-2 py-2">
-                  {new Date(e.date).toLocaleDateString('fr-FR')}
-                </td>
-                <td className="border border-gray-300 px-2 py-2 uppercase font-bold text-center">{e.journal.code}</td>
-                <td className="border border-gray-300 px-2 py-2">{e.piece || '—'}</td>
-                <td className="border border-gray-300 px-2 py-2 uppercase font-medium">{e.libelle}</td>
-                <td className="border border-gray-300 px-2 py-2">
-                   <span className="font-bold">{e.compte.numero}</span><br/>
-                   <small className="italic text-gray-500">{e.compte.libelle}</small>
-                </td>
-                <td className="border border-gray-300 px-2 py-2 text-right">
-                   {e.debit > 0 ? e.debit.toLocaleString('fr-FR') : '—'}
-                </td>
-                <td className="border border-gray-300 px-2 py-2 text-right">
-                   {e.credit > 0 ? e.credit.toLocaleString('fr-FR') : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-             <tr className="bg-gray-50 font-black text-[10px]">
-                <td colSpan={5} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Totaux du Période</td>
-                <td className="border border-gray-300 px-3 py-4 text-right">
-                   {ecritures.reduce((acc, e) => acc + e.debit, 0).toLocaleString('fr-FR')} F
-                </td>
-                <td className="border border-gray-300 px-3 py-4 text-right">
-                   {ecritures.reduce((acc, e) => acc + e.credit, 0).toLocaleString('fr-FR')} F
-                </td>
-             </tr>
-          </tfoot>
-        </table>
-      </ListPrintWrapper>
+      {/* MODALE D'APERÇU IMPRESSION LIVRE-JOURNAL */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Livre-Journal</h2>
+                 <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                   SYSCOHADA - {toutesLesDates ? "Toutes périodes" : `DU ${new Date(dateDebut).toLocaleDateString()} AU ${new Date(dateFin).toLocaleDateString()}`}
+                 </p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
+                 {ecritures.length} Écritures Audités
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
 
-      <style jsx global>{`
-        @media print {
-          nav, aside, header, .no-print, button, form { display: none !important; }
-          body, main { background: white !important; margin: 0 !important; padding: 0 !important; }
-        }
-      `}</style>
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4">
+                {chunkArray(ecritures, 18).map((chunk, index, allChunks) => (
+                  <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                    <ListPrintWrapper
+                      title="Livre-Journal Général"
+                      subtitle={`Registre chronologique des opérations comptables - Page ${index + 1}/${allChunks.length}`}
+                      dateRange={toutesLesDates ? undefined : { start: dateDebut, end: dateFin }}
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      hideVisa={index < allChunks.length - 1}
+                    >
+                      <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                            <th className="border-r-2 border-black px-2 py-3 text-left">Date d'Opération</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-left">Jnl</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-left">Pièce Rèf</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-left italic">Libellé d'Opération</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-left">Compte</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-right">MVT Débit</th>
+                            <th className="px-2 py-3 text-right shadow-inner">MVT Crédit</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((e, idx) => (
+                            <tr key={idx} className="border-b border-black hover:bg-gray-50 transition-colors shadow-sm italic font-black text-slate-800">
+                              <td className="border-r-2 border-black px-2 py-2 whitespace-nowrap text-blue-900">{new Date(e.date).toLocaleDateString('fr-FR')}</td>
+                              <td className="border-r-2 border-black px-2 py-2 text-center text-slate-600">{e.journal.code}</td>
+                              <td className="border-r-2 border-black px-2 py-2 font-mono text-[10px] truncate max-w-[60px]">{e.piece || '—'}</td>
+                              <td className="border-r-2 border-black px-2 py-2 uppercase text-[12px] leading-tight truncate max-w-[150px] text-slate-700">{e.libelle}</td>
+                              <td className="border-r-2 border-black px-2 py-2 font-black text-[13px] text-slate-900">{e.compte.numero}</td>
+                              <td className="border-r-2 border-black px-2 py-2 text-right tabular-nums text-rose-800">{e.debit > 0 ? e.debit.toLocaleString('fr-FR') : '—'}</td>
+                              <td className="px-2 py-2 text-right tabular-nums text-emerald-800 shadow-inner">{e.credit > 0 ? e.credit.toLocaleString('fr-FR') : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
+                              <td colSpan={5} className="border-r-2 border-black px-3 py-6 text-right bg-white tracking-widest text-[12px] underline decoration-slate-400">TOTAUX GÉNÉRAUX ANALYTIQUES DE LA PÉRIODE</td>
+                              <td className="border-r-2 border-black px-3 py-6 text-right bg-white ring-2 ring-black font-mono shadow-inner text-rose-800">
+                                {ecritures.reduce((acc, e) => acc + e.debit, 0).toLocaleString('fr-FR')}
+                              </td>
+                              <td className="px-3 py-6 text-right bg-white text-emerald-800 shadow-inner italic font-mono">
+                                {ecritures.reduce((acc, e) => acc + e.credit, 0).toLocaleString('fr-FR')}
+                              </td>
+                            </tr>
+                            <tr className="bg-slate-900 font-black text-[15px] border-t-2 border-white uppercase shadow-2xl">
+                              <td colSpan={5} className="border-r-2 border-white px-3 py-6 text-right italic text-[11px] text-slate-300">ÉQUART DE BALANCE DES ÉCRITURES</td>
+                              <td colSpan={2} className="px-3 py-6 text-right text-xl underline decoration-double shadow-inner text-white">
+                                {Math.abs(ecritures.reduce((acc, e) => acc + e.debit, 0) - ecritures.reduce((acc, e) => acc + e.credit, 0)).toLocaleString('fr-FR')} FCFA
+                              </td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rendu masqué pour l'impression système direct */}
+      <div className="hidden print:block absolute inset-0 bg-white shadow-none">
+        {chunkArray(ecritures, 18).map((chunk, index, allChunks) => (
+          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+            <ListPrintWrapper
+              title="Livre-Journal Général"
+              subtitle={`Registre chronologique des opérations comptables - Page ${index + 1}/${allChunks.length}`}
+              dateRange={toutesLesDates ? undefined : { start: dateDebut, end: dateFin }}
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+              hideHeader={index > 0}
+              hideVisa={index < allChunks.length - 1}
+            >
+              <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                    <th className="border-r-2 border-black px-2 py-3 text-left">Date d'Opération</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-left">Jnl</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-left">Pièce Rèf</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-left italic">Libellé d'Opération</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-left">Compte</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-right">MVT Débit</th>
+                    <th className="px-2 py-3 text-right shadow-inner">MVT Crédit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((e, idx) => (
+                    <tr key={idx} className="border-b border-black shadow-sm italic font-black text-slate-800">
+                      <td className="border-r-2 border-black px-2 py-2 whitespace-nowrap text-blue-900">{new Date(e.date).toLocaleDateString('fr-FR')}</td>
+                      <td className="border-r-2 border-black px-2 py-2 text-center text-slate-600 font-black">{e.journal.code}</td>
+                      <td className="border-r-2 border-black px-2 py-2 font-mono text-[10px]">{e.piece || '—'}</td>
+                      <td className="border-r-2 border-black px-2 py-2 uppercase text-[12px] leading-tight text-slate-700 font-black">{e.libelle}</td>
+                      <td className="border-r-2 border-black px-2 py-2 font-black text-[13px] text-slate-900">{e.compte.numero}</td>
+                      <td className="border-r-2 border-black px-2 py-2 text-right tabular-nums text-rose-800 font-black">{e.debit > 0 ? e.debit.toLocaleString('fr-FR') : '—'}</td>
+                      <td className="px-2 py-2 text-right tabular-nums text-emerald-800 shadow-inner font-black">{e.credit > 0 ? e.credit.toLocaleString('fr-FR') : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {index === allChunks.length - 1 && (
+                  <tfoot>
+                    <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
+                      <td colSpan={5} className="border-r-2 border-black px-3 py-6 text-right bg-white tracking-widest text-[12px] underline decoration-slate-400">TOTAUX GÉNÉRAUX ANALYTIQUES DE LA PÉRIODE</td>
+                      <td className="border-r-2 border-black px-3 py-6 text-right bg-white ring-2 ring-black font-mono shadow-inner text-rose-800">
+                        {ecritures.reduce((acc, e) => acc + e.debit, 0).toLocaleString('fr-FR')}
+                      </td>
+                      <td className="px-3 py-6 text-right bg-white text-emerald-800 shadow-inner italic font-mono">
+                        {ecritures.reduce((acc, e) => acc + e.credit, 0).toLocaleString('fr-FR')}
+                      </td>
+                    </tr>
+                    <tr className="bg-slate-900 font-black text-[15px] border-t-2 border-white uppercase shadow-2xl">
+                      <td colSpan={5} className="border-r-2 border-white px-3 py-6 text-right italic text-[11px] text-slate-300">ÉQUART DE BALANCE DES ÉCRITURES</td>
+                      <td colSpan={2} className="px-3 py-6 text-right text-xl underline decoration-double shadow-inner text-white font-mono">
+                        {Math.abs(ecritures.reduce((acc, e) => acc + e.debit, 0) - ecritures.reduce((acc, e) => acc + e.credit, 0)).toLocaleString('fr-FR')} FCFA
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </ListPrintWrapper>
+          </div>
+        ))}
+      </div>
+
     </div>
   )
 }

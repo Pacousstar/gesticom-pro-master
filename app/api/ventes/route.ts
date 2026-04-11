@@ -22,16 +22,25 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const clientId = request.nextUrl.searchParams.get('clientId')
-  const where: { date?: { gte: Date; lte: Date }; entiteId?: number; clientId?: number } = {}
-  if (dateDebut && dateFin) {
-    where.date = {
-      gte: new Date(dateDebut + 'T00:00:00'),
-      lte: new Date(dateFin + 'T23:59:59'),
+  const where: { date?: { gte?: Date; lte?: Date }; entiteId?: number; clientId?: number } = {}
+  if (dateDebut || dateFin) {
+    where.date = {}
+    if (dateDebut) where.date.gte = new Date(dateDebut + 'T00:00:00')
+    if (dateFin) where.date.lte = new Date(dateFin + 'T23:59:59')
+  }
+  // Filtrer par entité (support SUPER_ADMIN)
+  const entiteId = await getEntiteId(session)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
     }
+  } else if (entiteId > 0) {
+    where.entiteId = entiteId
   }
-  if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-    where.entiteId = session.entiteId
-  }
+  
   if (clientId) {
     where.clientId = Number(clientId)
   }
@@ -41,7 +50,7 @@ export async function GET(request: NextRequest) {
       where,
       skip,
       take: limit,
-      orderBy: { date: 'desc' },
+      orderBy: [{ createdAt: 'desc' }],
       include: {
         magasin: { select: { code: true, nom: true } },
         client: { select: { code: true, nom: true } },
@@ -143,17 +152,20 @@ export async function POST(request: NextRequest) {
     }
 
     const entiteId = await getEntiteId(session)
+    if (!entiteId) return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+
     const magasin = await prisma.magasin.findUnique({ where: { id: magasinId } })
     if (!magasin) return NextResponse.json({ error: 'Magasin introuvable.' }, { status: 400 })
+    if (magasin.entiteId !== entiteId) return NextResponse.json({ error: 'Accès au magasin refusé (Entité différente).' }, { status: 403 })
 
     let montantTotalAVantRemise = 0
     const lignesValides: any[] = []
 
     for (const l of lignes) {
       const produitId = Number(l?.produitId)
-      const quantite = Math.max(0, Number(l?.quantite) || 0) // Supprimé Math.floor pour autoriser KG/Litre
+      const quantite = Math.max(0, Number(l?.quantite) || 0)
       const prixUnitaire = Math.max(0, Number(l?.prixUnitaire) || 0)
-      const tva = Math.max(0, Number(l?.tva) || 0)
+      const tva = Math.max(0, Number(l?.tva ?? l?.tvaPerc) || 0)
       const remise = Math.max(0, Number(l?.remise) || 0)
       
       if (isNaN(produitId) || isNaN(quantite) || isNaN(prixUnitaire)) continue
@@ -162,18 +174,16 @@ export async function POST(request: NextRequest) {
       const produit = await prisma.produit.findUnique({ where: { id: produitId } })
       if (!produit) continue
 
-      // Validation du prix minimum (PVM) - BLOCAGE STRICT (Même pour le Patron)
+      // Validation du prix minimum (PVM)
       const prixMin = produit.prixMinimum || 0
       if (prixMin > 0 && prixUnitaire < prixMin) {
         const ip = getIpAddress(request)
-        // Log de la tentative suspecte
         await logAction(session, 'ANNULATION', 'VENTE', 
           `TENTATIVE PRIX BAS : ${session.nom} a tenté de vendre ${produit.designation} à ${prixUnitaire} F (Prix Mini: ${prixMin} F)`,
           produit.id, { prixSaisi: prixUnitaire, prixMini: prixMin }, ip
         )
-        // Blocage sans exception
         return NextResponse.json({ 
-          error: `Action interdite : Le prix pour ${produit.designation} (${prixUnitaire.toLocaleString('fr-FR')} F) est inférieur au prix minimum de sécurité (${prixMin.toLocaleString('fr-FR')} F) défini dans le catalogue.` 
+          error: `Action interdite : Le prix pour ${produit.designation} (${prixUnitaire.toLocaleString('fr-FR')} F) est inférieur au prix minimum de sécurité (${prixMin.toLocaleString('fr-FR')} F).` 
         }, { status: 400 })
       }
 
@@ -192,15 +202,13 @@ export async function POST(request: NextRequest) {
 
     const montantTotal = Math.max(0, Math.round(montantTotalAVantRemise - remiseGlobale + fraisApproche))
     
-    // --- SECURITE : Gestion des Trop-perçus et Avoirs ---
+    // --- SECURITE : Gestion des Trop-perçus ---
     let surplusAvoir = 0
-    if (montantPaye > montantTotal + 0.1) {
+    if (montantPaye > montantTotal + 1) {
        if (clientId) {
-          // Client identifié : On accepte le surplus et on le transforme en avoir
           surplusAvoir = Math.round(montantPaye - montantTotal)
-          montantPaye = montantTotal // Le montant payé "sur la facture" est le total TTC
+          montantPaye = montantTotal
        } else {
-          // Client anonyme : Pas d'endroit où stocker l'avoir => Blocage
           return NextResponse.json({ 
             error: `Paiement invalide : Pas d'avoir possible pour un client anonyme. Le total versé (${montantPaye.toLocaleString()} F) dépasse la facture (${montantTotal.toLocaleString()} F).` 
           }, { status: 400 })
@@ -208,32 +216,28 @@ export async function POST(request: NextRequest) {
     }
 
     if (reglementsPayload.length === 0 && modePaiementPrincipal !== 'CREDIT' && montantPaye === 0) {
-        // Fallback pour compatibilité si montantPaye non envoyé
         montantPaye = montantTotal
         listReglements = [{ mode: modePaiementPrincipal, montant: montantPaye }]
     }
     
     const statutPaiement = montantPaye >= montantTotal ? 'PAYE' : montantPaye > 0 ? 'PARTIEL' : 'CREDIT'
-    
-    // --- PRECISION : Points calculés sur le TOTAL de la facture ---
     const pointsGagnes = Math.floor(montantTotal)
 
     if (statutPaiement === 'CREDIT' || statutPaiement === 'PARTIEL') {
       if (clientId == null) return NextResponse.json({ error: 'Vente à crédit : un client doit être sélectionné.' }, { status: 400 })
       const client = await prisma.client.findUnique({ where: { id: clientId } })
       if (!client) return NextResponse.json({ error: 'Client introuvable.' }, { status: 400 })
+      if (client.entiteId !== entiteId) return NextResponse.json({ error: 'Accès client refusé (Entité différente).' }, { status: 403 })
       if (client.type !== 'CREDIT') return NextResponse.json({ error: 'Le client doit être de type CREDIT.' }, { status: 400 })
       if (client.plafondCredit == null) return NextResponse.json({ error: 'Le client doit avoir un plafond de crédit.' }, { status: 400 })
       
       const ventesClient = await prisma.vente.findMany({ where: { clientId, statut: 'VALIDEE' }})
       const detteFactures = ventesClient.reduce((s: number, v: any) => s + (v.montantTotal - (v.montantPaye ?? 0)), 0)
-      
       const regsLibres = await prisma.reglementVente.aggregate({
         where: { clientId, venteId: null },
         _sum: { montant: true }
       })
       const totalRegsLibres = regsLibres._sum?.montant || 0
-      
       const detteReelle = (detteFactures + (client.soldeInitial || 0)) - (totalRegsLibres + (client.avoirInitial || 0))
       
       if (detteReelle + (montantTotal - montantPaye) > client.plafondCredit) {
@@ -241,17 +245,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    for (const l of lignesValides) {
-      const st = await prisma.stock.findUnique({ where: { produitId_magasinId: { produitId: l.produitId, magasinId } } })
-      if ((st?.quantite ?? 0) < l.quantite) {
-        return NextResponse.json({ error: `Stock insuffisant pour ${l.designation}.` }, { status: 400 })
-      }
-    }
-
     const num = `V${Date.now()}`
     
     const vente = await prisma.$transaction(async (tx) => {
-      // 1. Créer la vente et ses lignes
+      // --- FINAL STOCK AUTO-CHECK INSIDE TRANSACTION (Concurrency Safety) ---
+      for (const l of lignesValides) {
+        const st = await tx.stock.findUnique({ 
+          where: { produitId_magasinId: { produitId: l.produitId, magasinId } } 
+        })
+        if ((st?.quantite ?? 0) < l.quantite) {
+          throw new Error(`Stock insuffisant pour ${l.designation} (${st?.quantite || 0} dispo, ${l.quantite} requis).`)
+        }
+      }
+
+      // 1. Créer la vente
       const v = await tx.vente.create({
         data: {
           numero: num,
@@ -291,8 +298,8 @@ export async function POST(request: NextRequest) {
 
       // 2. Mettre à jour les stocks et créer les mouvements
       for (const l of lignesValides) {
-        await tx.stock.updateMany({
-          where: { produitId: l.produitId, magasinId },
+        await tx.stock.update({
+          where: { produitId_magasinId: { produitId: l.produitId, magasinId } },
           data: { quantite: { decrement: l.quantite } },
         })
         await tx.mouvement.create({
@@ -309,13 +316,17 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // 3. Fidélité
+      // 3. Fidélité (UNQUEMENT SI CLIENT IDENTIFIÉ)
       if (clientId && pointsGagnes > 0) {
-        await tx.client.update({
-          where: { id: clientId },
-          // @ts-ignore
-          data: { pointsFidelite: { increment: pointsGagnes } }
-        })
+        // Double vérification que le client n'est pas "de passage"
+        const clientObj = await tx.client.findUnique({ where: { id: clientId } })
+        if (clientObj && clientObj.code !== 'PASSAGE' && clientObj.code !== 'ANONYME') {
+          await tx.client.update({
+            where: { id: clientId },
+            // @ts-ignore
+            data: { pointsFidelite: { increment: pointsGagnes } }
+          })
+        }
       }
 
       // 4. Règlement(s) automatique(s) - MULTI-PAIEMENT
@@ -384,7 +395,7 @@ export async function POST(request: NextRequest) {
       }, tx)
 
       return v
-    })
+    }, { timeout: 20000 })
 
     revalidatePath('/dashboard/ventes')
     revalidatePath('/api/ventes')

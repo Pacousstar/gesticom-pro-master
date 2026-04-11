@@ -33,11 +33,8 @@ export async function GET(request: NextRequest) {
     }
     
     const whereReglement: any = {
+      entiteId,
       statut: { in: ['VALIDE', 'VALIDEE'] },
-      OR: [
-        { achat: { entiteId } },
-        { achatId: null, utilisateur: { entiteId } }
-      ]
     }
 
     if (dateDebut && dateFin) {
@@ -71,11 +68,8 @@ export async function GET(request: NextRequest) {
     const reglementsGlobaux = await prisma.reglementAchat.groupBy({
       by: ['fournisseurId'],
       where: {
+        entiteId,
         statut: 'VALIDE',
-        OR: [
-          { achat: { entiteId } },
-          { achatId: null, utilisateur: { entiteId } }
-        ]
       },
       _sum: { montant: true },
     })

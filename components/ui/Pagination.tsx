@@ -17,8 +17,8 @@ export default function Pagination({
   totalItems,
   itemsPerPage,
 }: PaginationProps) {
-  // Afficher la barre dès qu'on a au moins une page (pour cohérence Achats / Ventes)
-  if (totalPages < 1) return null
+  // Afficher la barre dès qu'on a des données
+  if (totalPages === undefined || totalPages === null) return null
 
   const getPageNumbers = () => {
     const pages: (number | string)[] = []

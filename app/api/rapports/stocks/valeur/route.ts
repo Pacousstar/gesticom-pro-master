@@ -6,15 +6,25 @@ export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  const entiteId = session.entiteId
+  const entiteIdFromSession = session.entiteId
+  let entiteId = entiteIdFromSession
+  
+  // Support Super Admin override
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      entiteId = Number(entiteIdFromParams)
+    }
+  }
+
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')
   const dateFin = request.nextUrl.searchParams.get('dateFin')
   const magasinId = request.nextUrl.searchParams.get('magasinId')
 
   try {
-    // Récupérer tous les produits actifs
+    // Récupérer tous les produits de l'entité (y compris archivés s'ils ont du stock)
     const produits = await prisma.produit.findMany({
-      where: { actif: true },
+      where: { entiteId: entiteId || undefined },
       select: {
         id: true,
         code: true,
@@ -29,7 +39,7 @@ export async function GET(request: NextRequest) {
     const stocksActuels = await prisma.stock.findMany({
       where: {
         ...(magasinId ? { magasinId: Number(magasinId) } : {}),
-        ...(entiteId && session.role !== 'SUPER_ADMIN' ? { magasin: { entiteId } } : {}),
+        ...(entiteId ? { entiteId } : {}),
       },
       select: { produitId: true, quantite: true }
     })
@@ -48,7 +58,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gt: fin },
           ...(magasinId ? { magasinId: Number(magasinId) } : {}),
-          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
+          ...(entiteId ? { entiteId } : {}),
         },
         select: { produitId: true, quantite: true, type: true }
       })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(
   _request: NextRequest,
@@ -14,8 +15,14 @@ export async function GET(
     return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
   }
 
-  const ecriture = await prisma.ecritureComptable.findUnique({
-    where: { id },
+  const where: any = { id }
+  if (session.role !== 'SUPER_ADMIN') {
+    const eId = await getEntiteId(session)
+    if (eId > 0) where.entiteId = eId
+  }
+
+  const ecriture = await prisma.ecritureComptable.findFirst({
+    where,
     include: {
       journal: { select: { code: true, libelle: true } },
       compte: { select: { numero: true, libelle: true } },
@@ -94,6 +101,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'Aucune donnée à mettre à jour.' }, { status: 400 })
     }
 
+    // Vérification de l'existence et du droit d'accès
+    const checkWhere: any = { id }
+    if (session.role !== 'SUPER_ADMIN') {
+      const eId = await getEntiteId(session)
+      if (eId > 0) checkWhere.entiteId = eId
+    }
+    const existing = await prisma.ecritureComptable.findFirst({ where: checkWhere })
+    if (!existing) return NextResponse.json({ error: 'Écriture introuvable ou non autorisée.' }, { status: 404 })
+
     const ecriture = await prisma.ecritureComptable.update({
       where: { id },
       data: updateData,
@@ -124,6 +140,15 @@ export async function DELETE(
   }
 
   try {
+    // Vérification de l'existence et du droit d'accès
+    const checkWhere: any = { id }
+    if (session.role !== 'SUPER_ADMIN') {
+      const eId = await getEntiteId(session)
+      if (eId > 0) checkWhere.entiteId = eId
+    }
+    const existing = await prisma.ecritureComptable.findFirst({ where: checkWhere })
+    if (!existing) return NextResponse.json({ error: 'Écriture introuvable ou non autorisée.' }, { status: 404 })
+
     await prisma.ecritureComptable.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (e) {

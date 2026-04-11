@@ -80,9 +80,9 @@ export async function GET(request: NextRequest) {
     doc.setFontSize(9)
     doc.setFont(undefined, 'bold')
     doc.text('Date', 15, y)
-    doc.text('Type', 40, y)
-    doc.text('Rubrique', 60, y)
-    doc.text('Montant', 130, y)
+    doc.text('Rubrique', 40, y)
+    doc.text('Observation', 90, y)
+    doc.text('Montant', 160, y)
 
     y += 5
     doc.line(15, y, 195, y)
@@ -96,9 +96,9 @@ export async function GET(request: NextRequest) {
         y = 20
         doc.setFont(undefined, 'bold')
         doc.text('Date', 15, y)
-        doc.text('Type', 40, y)
-        doc.text('Rubrique', 60, y)
-        doc.text('Montant', 130, y)
+        doc.text('Rubrique', 40, y)
+        doc.text('Observation', 90, y)
+        doc.text('Montant', 160, y)
         y += 5
         doc.line(15, y, 195, y)
         y += 5
@@ -107,10 +107,11 @@ export async function GET(request: NextRequest) {
 
       total += c.montant
       doc.text(new Date(c.date).toLocaleDateString('fr-FR'), 15, y)
-      doc.text(c.type, 40, y)
       const rubrique = c.rubrique.length > 20 ? c.rubrique.substring(0, 17) + '...' : c.rubrique
-      doc.text(rubrique, 60, y)
-      doc.text(`${formatMontant(c.montant)} F`, 130, y)
+      doc.text(rubrique, 40, y)
+      const obs = c.observation ? (c.observation.length > 30 ? c.observation.substring(0, 27) + '...' : c.observation) : '-'
+      doc.text(obs, 90, y)
+      doc.text(`${formatMontant(c.montant)} F`, 160, y)
 
       y += 7
     }
@@ -120,7 +121,7 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.setFont(undefined, 'bold')
     doc.text('Total:', 15, y)
-    doc.text(`${formatMontant(total)} F`, 130, y)
+    doc.text(`${formatMontant(total)} F`, 160, y)
 
     const buffer = Buffer.from(doc.output('arraybuffer'))
     return new NextResponse(buffer, {

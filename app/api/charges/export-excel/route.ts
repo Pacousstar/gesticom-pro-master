@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
 
     const data = charges.map((c) => ({
       Date: new Date(c.date).toLocaleDateString('fr-FR'),
-      Type: c.type,
       Rubrique: c.rubrique,
       Magasin: c.magasin ? `${c.magasin.code} - ${c.magasin.nom}` : '—',
       Montant: c.montant,

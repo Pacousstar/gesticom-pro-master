@@ -63,19 +63,22 @@ export async function DELETE(
     await prisma.$transaction(async (tx) => {
       const v = await tx.vente.findUnique({
         where: { id },
-        include: { lignes: true },
+        include: { lignes: true, reglements: true },
       })
       if (!v) throw new Error('Vente introuvable.')
 
-      // 1. Nettoyer compta
+      // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('VENTE', id, tx)
+      await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
+      await deleteEcrituresByReference('VENTE_STOCK', id, tx)
+      await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
 
-      // 2. Nettoyage des mouvements de stocks
+      // 2. Nettoyage des mouvements de stocks (Annulation de la sortie)
       await tx.mouvement.deleteMany({
         where: { observation: { contains: v.numero } }
       })
 
-      // 3. Retour des produits au stock (incrément)
+      // 3. Retour des produits au stock (Incrément)
       for (const l of v.lignes) {
         await tx.stock.updateMany({
           where: { produitId: l.produitId, magasinId: v.magasinId },
@@ -83,35 +86,39 @@ export async function DELETE(
         })
       }
 
-      // 4. Nettoyage Trésorerie
+      // 4. Nettoyage Trésorerie : CAISSE
       await tx.caisse.deleteMany({
-        where: { motif: { contains: v.numero } }
+        where: {
+          OR: [
+            { motif: { contains: v.numero } },
+            { motif: { contains: `VENTE ${v.numero}` } }
+          ]
+        }
       })
 
-      // Adjustment banque
-      const reglements = await tx.reglementVente.findMany({
-        where: { venteId: id }
+      // 5. Nettoyage Trésorerie : BANQUE (Opérations Bancaires)
+      // On cherche les opérations bancaires liées au numéro de vente
+      const opsBancaires = await tx.operationBancaire.findMany({
+        where: { reference: v.numero }
       })
-      
-      for (const r of reglements) {
-        if (['CHEQUE', 'VIREMENT', 'MOBILE_MONEY'].includes(r.modePaiement)) {
-          const banque = await tx.banque.findFirst({ where: { actif: true } })
-          if (banque) {
-            await tx.banque.update({
-              where: { id: banque.id },
-              data: { soldeActuel: { decrement: r.montant } }
-            })
-          }
-        }
+
+      for (const op of opsBancaires) {
+        // MAJ du solde de la banque concernée (on soustrait le montant car c'était une entrée)
+        await tx.banque.update({
+          where: { id: op.banqueId },
+          data: { soldeActuel: { decrement: op.montant } }
+        })
+        // Suppression de l'opération
+        await tx.operationBancaire.delete({ where: { id: op.id } })
       }
 
-      // 5. Supprimer règlements et vente
+      // 6. Supprimer règlements et vente
       await tx.reglementVente.deleteMany({ where: { venteId: id } })
       await tx.vente.delete({ where: { id: id } })
 
-      // 6. LOG D'AUDIT : Mouchard de suppression (Indélébile)
-      await logSuppression(session, 'VENTE', id, `Suppression définitive de la facture ${v.numero}`, { numero: v.numero, montant: v.montantTotal }, getIpAddress(_request))
-    }, { timeout: 20000 })
+      // 7. LOG D'AUDIT : Mouchard de suppression (Indélébile)
+      await logSuppression(session, 'VENTE', id, `SUPPRESSION RADICALE : Facture ${v.numero} effacée avec régul. stocks et trésorerie par Super Admin`, { numero: v.numero, montant: v.montantTotal }, getIpAddress(_request))
+    }, { timeout: 30000 })
     
     // Invalider le cache pour affichage immédiat
     revalidatePath('/dashboard/ventes')
@@ -158,44 +165,50 @@ export async function PATCH(
 
       if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
 
-      const nouveauMontantPaye = Math.min(vente.montantTotal, (vente.montantPaye || 0) + montantReglement)
-      const nouveauStatut = nouveauMontantPaye >= vente.montantTotal ? 'PAYE' : 'PARTIEL'
+      const result = await prisma.$transaction(async (tx) => {
+        const nouveauMontantPaye = Math.min(vente.montantTotal, (vente.montantPaye || 0) + montantReglement)
+        const nouveauStatut = nouveauMontantPaye >= vente.montantTotal ? 'PAYE' : 'PARTIEL'
 
-      const updatedVente = await prisma.vente.update({
-        where: { id },
-        data: {
-          montantPaye: nouveauMontantPaye,
-          statutPaiement: nouveauStatut
-        }
-      })
-
-      if (vente.clientId) {
-        await prisma.reglementVente.create({
+        const updatedVente = await tx.vente.update({
+          where: { id },
           data: {
-            venteId: id,
-            clientId: vente.clientId,
-            montant: montantReglement,
-            modePaiement,
-            utilisateurId: session.userId,
-            date: dateReglement,
-            observation: body?.observation || `Paiement sur facture ${vente.numero}`
+            montantPaye: nouveauMontantPaye,
+            statutPaiement: nouveauStatut
           }
         })
-      }
 
-      const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
-      await comptabiliserReglementVente({
-        venteId: vente.id,
-        numeroVente: vente.numero,
-        date: dateReglement,
-        montant: montantReglement,
-        modePaiement,
-        utilisateurId: session.userId,
-      })
+        if (vente.clientId) {
+          await tx.reglementVente.create({
+            data: {
+              venteId: id,
+              clientId: vente.clientId,
+              montant: montantReglement,
+              modePaiement,
+              utilisateurId: session.userId,
+              date: dateReglement,
+              observation: body?.observation || `Paiement sur facture ${vente.numero}`
+            }
+          })
+        }
+
+        const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
+        await comptabiliserReglementVente({
+          venteId: vente.id,
+          numeroVente: vente.numero,
+          date: dateReglement,
+          montant: montantReglement,
+          modePaiement,
+          utilisateurId: session.userId,
+          entiteId: vente.entiteId,
+          magasinId: vente.magasinId
+        }, tx)
+
+        return updatedVente
+      }, { timeout: 20000 })
 
       revalidatePath('/dashboard/ventes')
       revalidatePath('/api/ventes')
-      return NextResponse.json(updatedVente)
+      return NextResponse.json(result)
     }
 
     if (action === 'FULL_UPDATE') {
@@ -299,6 +312,7 @@ export async function PATCH(
             magasinId: currentMagasinId,
             modePaiement: regsData.length > 1 ? 'MULTI' : (regsData[0]?.mode || modePaiement || oldVente.modePaiement),
             observation: observation || null,
+            numeroBon: body.numeroBon || null,
             montantTotal: totalFinal,
             fraisApproche: finalFrais,
             remiseGlobale: globalRem,

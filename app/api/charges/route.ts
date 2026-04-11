@@ -29,9 +29,17 @@ export async function GET(request: NextRequest) {
     OR?: any[]
   } = {}
 
-  // Filtrer par entité de la session (sauf SUPER_ADMIN qui voit tout)
-  if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-    where.entiteId = session.entiteId
+  // Filtrer par entité (support SUPER_ADMIN)
+  const entiteId = await getEntiteId(session)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      where.entiteId = entiteId
+    }
+  } else if (entiteId > 0) {
+    where.entiteId = entiteId
   }
 
   if (dateDebut && dateFin) {
@@ -69,7 +77,7 @@ export async function GET(request: NextRequest) {
       where,
       skip,
       take: limit,
-      orderBy: { date: 'desc' },
+      orderBy: { createdAt: 'desc' },
       include: {
         magasin: { select: { id: true, code: true, nom: true } },
         entite: { select: { id: true, code: true, nom: true } },
@@ -141,49 +149,65 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const charge = await prisma.charge.create({
-      data: {
-        date,
-        magasinId,
-        entiteId: entiteId,
-        utilisateurId: session.userId,
-        type,
-        rubrique,
-        beneficiaire,
-        montant,
-        observation,
-      },
-      include: {
-        magasin: { select: { code: true, nom: true } },
-        entite: { select: { code: true, nom: true } },
-        utilisateur: { select: { nom: true, login: true } },
-      },
-    })
+    const charge = await prisma.$transaction(async (tx) => {
+      const c = await tx.charge.create({
+        data: {
+          date,
+          magasinId,
+          entiteId: entiteId,
+          utilisateurId: session.userId,
+          type,
+          rubrique,
+          beneficiaire,
+          montant,
+          observation,
+        },
+        include: {
+          magasin: { select: { code: true, nom: true } },
+          entite: { select: { code: true, nom: true } },
+          utilisateur: { select: { nom: true, login: true } },
+        },
+      })
 
-    // Comptabilisation automatique
-    try {
+      // Comptabilisation automatique
       await comptabiliserCharge({
-        chargeId: charge.id,
+        chargeId: c.id,
         date,
         montant,
         rubrique,
         libelle: observation,
         utilisateurId: session.userId,
         magasinId,
-      })
-    } catch (comptaError) {
-      console.error('Erreur comptabilisation charge:', comptaError)
-    }
+        entiteId,
+      }, tx)
 
-    // ✅ SYNCHRO CAISSE : Toute charge est considérée comme une sortie de caisse immédiate (ESPECES)
-    await enregistrerMouvementCaisse({
-      magasinId: magasinId || 1,
-      utilisateurId: session.userId,
-      montant,
-      type: 'SORTIE',
-      motif: `Charge : ${rubrique}${observation ? ' (' + observation + ')' : ''}`,
-      date
-    })
+      // ✅ SYNCHRO CAISSE : Toute charge est considérée comme une sortie de caisse immédiate (ESPECES)
+      let targetMagasinId = magasinId;
+      if (!targetMagasinId) {
+        const firstMag = await tx.magasin.findFirst({
+          where: { entiteId },
+          select: { id: true }
+        });
+        if (!firstMag) {
+          throw new Error("Impossible d'enregistrer en caisse : aucun point de vente (magasin) n'est configuré pour cette entité.");
+        }
+        targetMagasinId = firstMag.id;
+      }
+
+      await tx.caisse.create({
+        data: {
+          magasinId: targetMagasinId,
+          entiteId: entiteId || 1,
+          utilisateurId: session.userId,
+          montant: montant,
+          type: 'SORTIE',
+          motif: `Charge : ${rubrique}${observation ? ' (' + observation + ')' : ''}`,
+          date
+        }
+      })
+
+      return c
+    }, { timeout: 20000 })
 
     revalidatePath('/dashboard/charges')
     revalidatePath('/api/charges')

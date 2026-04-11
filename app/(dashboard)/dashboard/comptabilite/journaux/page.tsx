@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Book, Plus, Loader2, Pencil, Trash2, X, Search, Filter, Download, FileSpreadsheet } from 'lucide-react'
+import { Book, Plus, Loader2, Pencil, Trash2, X, Search, Filter, Download, FileSpreadsheet, Printer } from 'lucide-react'
 import ComptabiliteNav from '../ComptabiliteNav'
 import { useToast } from '@/hooks/useToast'
 import { journalSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type Journal = {
   id: number
@@ -31,6 +33,8 @@ export default function JournauxPage() {
   })
   const [filtreType, setFiltreType] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   const fetchJournaux = () => {
     setLoading(true)
@@ -133,27 +137,23 @@ export default function JournauxPage() {
               if (filtreType) params.set('type', filtreType)
               window.open(`/api/journaux/export-excel?${params.toString()}`, '_blank')
             }}
-            className="flex items-center gap-2 rounded-lg border-2 border-green-500 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100"
+            className="flex items-center gap-2 rounded-lg border-2 border-green-500 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100 no-print"
             title="Exporter en Excel"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Excel
           </button>
           <button
-            onClick={() => {
-              const params = new URLSearchParams()
-              if (filtreType) params.set('type', filtreType)
-              window.open(`/api/journaux/export-pdf?${params.toString()}`, '_blank')
-            }}
-            className="flex items-center gap-2 rounded-lg border-2 border-red-500 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100"
-            title="Exporter en PDF"
+            onClick={() => setIsPreviewOpen(true)}
+            disabled={isPrinting || journaux.length === 0}
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50 no-print"
           >
-            <Download className="h-4 w-4" />
-            PDF
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
+            Aperçu Impression
           </button>
           <button
             onClick={() => openForm()}
-            className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
+            className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700 no-print shadow-lg"
           >
             <Plus className="h-5 w-5" />
             Nouveau journal
@@ -326,6 +326,121 @@ export default function JournauxPage() {
           </div>
         </div>
       )}
+      {/* MODALE D'APERÇU IMPRESSION JOURNAUX */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Répertoire Journaux</h2>
+                 <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                   SYSCOHADA - LISTE DES JOURNAUX CONFIGURÉS {filtreType ? `TYPE: ${filtreType}` : ''}
+                 </p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
+                 {journaux.length} JOURNAUX
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4">
+                {chunkArray(journaux, ITEMS_PER_PRINT_PAGE).map((chunk: any[], index: number, allChunks: any[][]) => (
+                  <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                    <ListPrintWrapper
+                      title="RÉPERTOIRE DES JOURNAUX"
+                      subtitle="Structure comptable des journaux auxiliaires"
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      hideVisa={index < allChunks.length - 1}
+                    >
+                      <table className="w-full text-[14px] border-collapse border-2 border-black">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                            <th className="border-r-2 border-black px-2 py-3 text-left">CODE</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-left">LIBELLÉ DU JOURNAL</th>
+                            <th className="px-2 py-3 text-left">TYPE OHADA</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((j: any, idx: number) => (
+                            <tr key={idx} className="border-b border-black">
+                              <td className="border-r-2 border-black px-2 py-2 font-mono font-bold text-[14px]">{j.code}</td>
+                              <td className="border-r-2 border-black px-2 py-2 uppercase font-medium text-[13px]">{j.libelle}</td>
+                              <td className="px-2 py-2">
+                                <span className="text-[12px] font-black uppercase tracking-widest">{j.type}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
+                              <td colSpan={2} className="border-r-2 border-black px-3 py-4 text-right bg-white tracking-widest text-[11px]">NOMBRE TOTAL DE JOURNAUX</td>
+                              <td className="px-3 py-4 text-left bg-white">{journaux.length}</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rendu masqué pour l'impression système direct */}
+      <div className="hidden print:block absolute inset-0 bg-white">
+        {chunkArray(journaux, ITEMS_PER_PRINT_PAGE).map((chunk: any[], index: number, allChunks: any[][]) => (
+          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+            <ListPrintWrapper
+              title="RÉPERTOIRE DES JOURNAUX"
+              subtitle="Structure comptable des journaux auxiliaires"
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+              hideHeader={index > 0}
+              hideVisa={index < allChunks.length - 1}
+            >
+              <table className="w-full text-[14px] border-collapse border-2 border-black">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                    <th className="border-r-2 border-black px-2 py-3 text-left w-24">CODE</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-left">LIBELLÉ</th>
+                    <th className="px-2 py-3 text-left">TYPE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((j: any, idx: number) => (
+                    <tr key={idx} className="border-b border-black">
+                      <td className="border-r-2 border-black px-2 py-2 font-mono font-bold">{j.code}</td>
+                      <td className="border-r-2 border-black px-2 py-2 uppercase font-medium">{j.libelle}</td>
+                      <td className="px-2 py-2 uppercase font-black">{j.type}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ListPrintWrapper>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

@@ -6,6 +6,7 @@ import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ComptabiliteNav from '../ComptabiliteNav'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
 type PlanCompte = {
   id: number
@@ -36,6 +37,8 @@ export default function PlanComptesPage() {
   const [filtreClasse, setFiltreClasse] = useState('')
   const [filtreType, setFiltreType] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   const fetchComptes = () => {
     setLoading(true)
@@ -141,42 +144,16 @@ export default function PlanComptesPage() {
           <p className="mt-1 text-white/90">Gestion du plan de comptes selon le système comptable OHADA</p>
         </div>
         <div className="flex items-center gap-2">
-          <ListPrintWrapper
-            title="Plan de Comptes SYSCOHADA"
-            subtitle="Référentiel Comptable de l'Entreprise"
-          >
-            <table className="w-full text-[10px] border-collapse border border-gray-300">
-              <thead>
-                <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                  <th className="border border-gray-300 px-3 py-3 text-left">Numéro</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Libellé</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Classe</th>
-                  <th className="border border-gray-300 px-3 py-3 text-left">Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comptes.map((c, idx) => (
-                  <tr key={idx} className="border-b border-gray-200">
-                    <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{c.numero}</td>
-                    <td className="border border-gray-300 px-3 py-2 uppercase">{c.libelle}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-[9px]">Classe {c.classe}</td>
-                    <td className="border border-gray-300 px-3 py-2 font-medium">{c.type}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ListPrintWrapper>
-
           <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-600 bg-orange-50 px-4 py-2 text-orange-800 hover:bg-orange-100 font-bold"
+            onClick={() => setIsPreviewOpen(true)}
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50 no-print"
           >
-            <Printer className="h-5 w-5" />
-            Imprimer
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
+            Aperçu Impression
           </button>
           <button
             onClick={() => openForm()}
-            className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700 font-bold"
+            className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700 font-bold no-print shadow-lg"
           >
             <Plus className="h-5 w-5" />
             Nouveau compte
@@ -390,6 +367,125 @@ export default function PlanComptesPage() {
           </div>
         </div>
       )}
+      {/* MODALE D'APERÇU IMPRESSION PLAN DE COMPTES */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Plan de Comptes</h2>
+                 <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                   SYSCOHADA - RÉFÉRENTIEL COMPTABLE RÉVISÉ
+                 </p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
+                 {comptes.length} COMPTES PARAMÉTRÉS
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-[14px]">
+                {chunkArray(comptes, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                  <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                    <ListPrintWrapper
+                      title="PLAN DE COMPTES SYSCOHADA"
+                      subtitle="Référentiel des comptes de l'entité"
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      hideVisa={index < allChunks.length - 1}
+                    >
+                      <table className="w-full text-[14px] border-collapse border-2 border-black">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                            <th className="border-r-2 border-black px-2 py-3 text-left w-24">N° COMPTE</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-left">INTITULÉ OFFICIEL DU COMPTE</th>
+                            <th className="border-r-2 border-black px-2 py-3 text-left w-24 text-center">CLASSE</th>
+                            <th className="px-2 py-3 text-center w-28">TYPE</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((c, idx) => (
+                            <tr key={idx} className="border-b border-black">
+                              <td className="border-r-2 border-black px-2 py-2 font-mono font-bold text-[14px]">{c.numero}</td>
+                              <td className="border-r-2 border-black px-2 py-2 uppercase font-medium text-[13px]">{c.libelle}</td>
+                              <td className="border-r-2 border-black px-2 py-2 text-center text-[12px] font-bold">Cls {c.classe}</td>
+                              <td className="px-2 py-2 text-center">
+                                <span className="text-[11px] font-black uppercase tracking-widest">{c.type}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
+                              <td colSpan={2} className="border-r-2 border-black px-3 py-4 text-right bg-white tracking-widest text-[11px]">VOLUME TOTAL DU RÉFÉRENTIEL</td>
+                              <td colSpan={2} className="px-3 py-4 text-center bg-white">{comptes.length} Comptes</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rendu masqué pour l'impression système direct */}
+      <div className="hidden print:block absolute inset-0 bg-white">
+        {chunkArray(comptes, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+            <ListPrintWrapper
+              title="PLAN DE COMPTES SYSCOHADA"
+              subtitle="Référentiel des comptes de l'entité"
+              pageNumber={index + 1}
+              totalPages={allChunks.length}
+              hideHeader={index > 0}
+              hideVisa={index < allChunks.length - 1}
+            >
+              <table className="w-full text-[14px] border-collapse border-2 border-black">
+                <thead>
+                  <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                    <th className="border-r-2 border-black px-2 py-3 text-left w-24">N° COMPTE</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-left">INTITULÉ</th>
+                    <th className="border-r-2 border-black px-2 py-3 text-left w-24 text-center">CLASSE</th>
+                    <th className="px-2 py-3 text-center w-28">TYPE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chunk.map((c, idx) => (
+                    <tr key={idx} className="border-b border-black">
+                      <td className="border-r-2 border-black px-2 py-2 font-mono font-bold">{c.numero}</td>
+                      <td className="border-r-2 border-black px-2 py-2 uppercase font-medium">{c.libelle}</td>
+                      <td className="border-r-2 border-black px-2 py-2 text-center">Cls {c.classe}</td>
+                      <td className="px-2 py-2 text-center uppercase font-black text-[11px]">{c.type}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ListPrintWrapper>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

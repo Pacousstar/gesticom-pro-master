@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 
@@ -28,6 +29,12 @@ export async function GET(
     return NextResponse.json({ error: 'Charge introuvable.' }, { status: 404 })
   }
 
+  // Sécurité Multi-Entité
+  const entiteId = await getEntiteId(session)
+  if (session.role !== 'SUPER_ADMIN' && charge.entiteId !== entiteId) {
+    return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
+  }
+
   return NextResponse.json(charge)
 }
 
@@ -42,6 +49,15 @@ export async function PATCH(
     const id = Number((await params).id)
     if (!Number.isInteger(id) || id < 1) {
       return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
+    }
+
+    const entiteId = await getEntiteId(session)
+    const oldCharge = await prisma.charge.findUnique({ where: { id } })
+    if (!oldCharge) return NextResponse.json({ error: 'Charge introuvable.' }, { status: 404 })
+    
+    // Sécurité Multi-Entité
+    if (session.role !== 'SUPER_ADMIN' && oldCharge.entiteId !== entiteId) {
+      return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -110,6 +126,15 @@ export async function DELETE(
     const id = Number((await params).id)
     if (!Number.isInteger(id) || id < 1) {
       return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
+    }
+
+    const entiteId = await getEntiteId(session)
+    const charge = await prisma.charge.findUnique({ where: { id } })
+    if (!charge) return NextResponse.json({ error: 'Charge introuvable.' }, { status: 404 })
+
+    // Sécurité Multi-Entité
+    if (session.role !== 'SUPER_ADMIN' && charge.entiteId !== entiteId) {
+       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
 
     await deleteEcrituresByReference('CHARGE', id)

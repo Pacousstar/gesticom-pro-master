@@ -231,8 +231,29 @@ export default function ParametresPage() {
         body: JSON.stringify(magasinEditForm),
       })
       if (res.ok) {
+        success('Magasin modifié avec succès.')
         setMagasinEdit(null)
         fetchMagasins()
+      } else {
+        const d = await res.json()
+        showError(d.error || 'Erreur lors de la modification')
+      }
+    } finally {
+      setMagasinSaving(false)
+    }
+  }
+
+  const handleMagasinDelete = async (id: number, nom: string) => {
+    if (!confirm(`Souhaitez-vous vraiment désactiver le magasin "${nom}" ?\nIl ne pourra plus être utilisé pour de nouvelles ventes.`)) return
+    setMagasinSaving(true)
+    try {
+      const res = await fetch(`/api/magasins/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        success('Magasin désactivé.')
+        fetchMagasins()
+      } else {
+        const d = await res.json()
+        showError(d.error || 'Erreur lors de la suppression')
       }
     } finally {
       setMagasinSaving(false)
@@ -582,21 +603,66 @@ export default function ParametresPage() {
             <tbody className="divide-y divide-white/5">
               {magasins.map(m => (
                 <tr key={m.id} className="hover:bg-white/5 transition-colors group">
-                  <td className="px-6 py-4 font-mono font-black text-blue-400">{m.code}</td>
-                  <td className="px-6 py-4 font-bold text-white uppercase text-xs tracking-tight">{m.nom}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${m.actif ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                      {m.actif ? 'En Service' : 'Hors Service'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button 
-                        onClick={() => { setMagasinEdit(m.id); setMagasinEditForm({ code: m.code, nom: m.nom, localisation: m.localisation, actif: m.actif }); }} 
-                        className="text-white/40 hover:text-white font-black uppercase text-[10px] tracking-widest flex items-center justify-end gap-2 ml-auto transition-all"
-                    >
-                      <Edit2 className="h-3 w-3" /> Modifier
-                    </button>
-                  </td>
+                  {magasinEdit === m.id ? (
+                    <>
+                      <td className="px-6 py-4">
+                        <input 
+                          value={magasinEditForm.code} 
+                          onChange={(e) => setMagasinEditForm({ ...magasinEditForm, code: e.target.value.toUpperCase() })} 
+                          className="w-20 rounded-lg border border-orange-500/30 bg-gray-900 px-2 py-1 text-xs font-black text-white outline-none"
+                        />
+                      </td>
+                      <td className="px-6 py-4">
+                        <input 
+                          value={magasinEditForm.nom} 
+                          onChange={(e) => setMagasinEditForm({ ...magasinEditForm, nom: e.target.value })} 
+                          className="w-full rounded-lg border border-orange-500/30 bg-gray-900 px-2 py-1 text-xs font-bold text-white outline-none"
+                        />
+                      </td>
+                      <td className="px-6 py-4">
+                        <select 
+                          value={String(magasinEditForm.actif)} 
+                          onChange={(e) => setMagasinEditForm({ ...magasinEditForm, actif: e.target.value === 'true' })}
+                          className="rounded-lg border border-orange-500/30 bg-gray-900 px-2 py-1 text-[10px] font-black text-white outline-none"
+                        >
+                          <option value="true">ACTIF</option>
+                          <option value="false">INACTIF</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={handleMagasinEditSave} className="text-emerald-400 hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest">Enregistrer</button>
+                          <button onClick={() => setMagasinEdit(null)} className="text-white/40 hover:text-white font-black uppercase text-[10px] tracking-widest">Annuler</button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-6 py-4 font-mono font-black text-blue-400">{m.code}</td>
+                      <td className="px-6 py-4 font-bold text-white uppercase text-xs tracking-tight">{m.nom}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${m.actif ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {m.actif ? 'En Service' : 'Hors Service'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-4">
+                          <button 
+                              onClick={() => { setMagasinEdit(m.id); setMagasinEditForm({ code: m.code, nom: m.nom, localisation: m.localisation, actif: m.actif }); }} 
+                              className="text-white/40 hover:text-white font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5 transition-all"
+                          >
+                            <Edit2 className="h-3 w-3" /> Modifier
+                          </button>
+                          <button 
+                              onClick={() => handleMagasinDelete(m.id, m.nom)} 
+                              className="text-red-500/40 hover:text-red-500 font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5 transition-all"
+                          >
+                            <Trash2 className="h-3 w-3" /> Supprimer
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

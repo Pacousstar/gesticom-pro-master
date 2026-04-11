@@ -50,6 +50,14 @@ export async function POST(request: NextRequest) {
       permissions: session.permissions,
     })
 
+    // Persister le choix en base de données pour SUPER_ADMIN pour que ça survive aux reconnexions
+    if (session.role === 'SUPER_ADMIN') {
+      await prisma.utilisateur.update({
+        where: { id: session.userId },
+        data: { entiteId: entiteId },
+      })
+    }
+
     const c = await cookies()
     const isHttps = request.nextUrl.protocol === 'https:'
     c.set(getCookieName(), token, {

@@ -9,7 +9,6 @@ export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  const limit = Math.min(5000, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 1000))
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const where: { date?: { gte: Date; lte: Date }; statut?: string; entiteId?: number } = {}
@@ -26,53 +25,61 @@ export async function GET(request: NextRequest) {
 
   const ventes = await prisma.vente.findMany({
     where,
-    take: limit,
     orderBy: { date: 'desc' },
     include: {
       magasin: { select: { code: true, nom: true } },
-      lignes: { include: { produit: { select: { code: true, designation: true } } } },
+      client: { select: { code: true, nom: true } },
     },
   })
 
-  const rows: Array<Record<string, string | number>> = []
+  const rows: any[] = []
+  let totalMontant = 0
+  let totalPaye = 0
+  let totalReste = 0
+
   for (const v of ventes) {
     const dateStr = v.date.toISOString().slice(0, 10)
-    const magasin = v.magasin ? `${v.magasin.code} - ${v.magasin.nom}` : ''
-    for (const l of v.lignes) {
-      rows.push({
-        Date: dateStr,
-        Numéro: v.numero,
-        Magasin: magasin,
-        'Montant total': v.montantTotal,
-        'Montant payé': v.montantPaye ?? 0,
-        'Statut paiement': v.statutPaiement ?? 'PAYE',
-        Mode: v.modePaiement,
-        'Code produit': l.produit?.code ?? '',
-        Désignation: l.designation,
-        Quantité: l.quantite,
-        'Prix unit.': l.prixUnitaire,
-        Montant: l.quantite * l.prixUnitaire,
-      })
-    }
-    if (v.lignes.length === 0) {
-      rows.push({
-        Date: dateStr,
-        Numéro: v.numero,
-        Magasin: magasin,
-        'Montant total': v.montantTotal,
-        'Montant payé': v.montantPaye ?? 0,
-        'Statut paiement': v.statutPaiement ?? 'PAYE',
-        Mode: v.modePaiement,
-        'Code produit': '',
-        Désignation: '',
-        Quantité: 0,
-        'Prix unit.': 0,
-        Montant: 0,
-      })
-    }
+    const clientNom = v.client?.nom || v.clientLibre || '—'
+    const clientCode = v.client?.code || '—'
+    const reste = v.montantTotal - (v.montantPaye || 0)
+
+    totalMontant += v.montantTotal
+    totalPaye += v.montantPaye || 0
+    totalReste += reste
+
+    rows.push({
+      'N°': v.numero,
+      'Bon N°': v.numeroBon || '—',
+      Date: dateStr,
+      'Code Client': clientCode,
+      Client: clientNom,
+      Magasin: v.magasin?.code || '—',
+      Montant: v.montantTotal,
+      Paiement: v.modePaiement,
+      'Statut paiement': v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit',
+      'Reste à payer': reste,
+      Statut: v.statut === 'VALIDEE' ? 'Validée' : v.statut,
+    })
   }
 
-  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Date: '', Numéro: '', Magasin: '', 'Montant total': '', 'Montant payé': '', 'Statut paiement': '', Mode: '', 'Code produit': '', Désignation: '', Quantité: '', 'Prix unit.': '', Montant: '' }])
+  // Ligne de totaux
+  if (rows.length > 0) {
+    rows.push({
+      'N°': 'TOTAL',
+      'Bon N°': '',
+      Date: '',
+      'Code Client': '',
+      Client: '',
+      Magasin: '',
+      Montant: totalMontant,
+      Paiement: '',
+      'Statut paiement': '',
+      'Reste à payer': totalReste,
+      Statut: '',
+    })
+  }
+
+  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'N°': '', 'Bon N°': '', Date: '', 'Code Client': '', Client: '', Magasin: '', Montant: '', Paiement: '', 'Statut paiement': '', 'Reste à payer': '', Statut: '' }])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Ventes')
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })

@@ -3,23 +3,33 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logAction } from '@/lib/audit'
 import { comptabiliserOperationBancaire } from '@/lib/comptabilisation'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
+    const entiteId = await getEntiteId(session)
     const banqueId = request.nextUrl.searchParams.get('banqueId')
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
     const type = request.nextUrl.searchParams.get('type')?.trim()
     const limit = Math.min(500, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 200))
 
-    const where: {
-      banqueId?: number
-      date?: { gte: Date; lte: Date }
-      type?: string
-    } = {}
+    const where: any = {}
+
+    // Isolation Multi-Entité
+    if (session.role === 'SUPER_ADMIN') {
+        const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+        if (entiteIdFromParams) {
+            where.banque = { entiteId: Number(entiteIdFromParams) }
+        }
+    } else {
+        if (entiteId && entiteId > 0) {
+            where.banque = { entiteId }
+        }
+    }
 
     if (banqueId) {
       const bId = Number(banqueId)
@@ -39,17 +49,29 @@ export async function GET(request: NextRequest) {
       where.type = type
     }
 
-    const operations = await prisma.operationBancaire.findMany({
-      where,
-      take: limit,
-      orderBy: { date: 'desc' },
-      include: {
-        banque: { select: { id: true, numero: true, nomBanque: true, libelle: true } },
-        utilisateur: { select: { nom: true, login: true } },
+    const [operations, total] = await Promise.all([
+      prisma.operationBancaire.findMany({
+        where,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          banque: { select: { id: true, numero: true, nomBanque: true, libelle: true, entiteId: true } },
+          utilisateur: { select: { nom: true, login: true } },
+        },
+      }),
+      prisma.operationBancaire.count({ where })
+    ])
+    
+    return NextResponse.json({
+      data: operations,
+      pagination: {
+        page: 1, 
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     })
 
-    return NextResponse.json(operations)
   } catch (error) {
     console.error('GET /api/banques/operations:', error)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
@@ -144,6 +166,7 @@ export async function POST(request: NextRequest) {
         libelle: libelle.trim(),
         compteId: banque.compteId,
         utilisateurId: session.userId,
+        entiteId: banque.entiteId,
       })
     } catch (comptaError) {
       console.error('Erreur comptabilisation opération bancaire:', comptaError)
