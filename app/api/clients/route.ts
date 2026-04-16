@@ -62,102 +62,73 @@ export async function GET(request: NextRequest) {
   let dettePeriodeByClient: Record<number, number> = {}
 
   if (clientIds.length > 0) {
-    // 1. Dette TOTALE (jusqu'à dateFin si fournie, sinon tout)
-    const whereVenteTotale: any = {
-      clientId: { in: clientIds },
-      statut: { in: ['VALIDE', 'VALIDEE'] },
-    }
-    if (dateFin) whereVenteTotale.date = { lte: new Date(dateFin + 'T23:59:59') }
-
-    const sumsTotales = await prisma.vente.groupBy({
+    // 1. Chiffre d'Affaires Global (Ventes VALIDÉES)
+    const CA_Global = await prisma.vente.groupBy({
       by: ['clientId'],
-      where: whereVenteTotale,
-      _sum: { montantTotal: true, montantPaye: true },
+      where: {
+        clientId: { in: clientIds },
+        statut: 'VALIDEE'
+      },
+      _sum: { montantTotal: true },
     })
     
-    // Règlements LIBRES totaux
-    const whereReglementTotal: any = { clientId: { in: clientIds }, venteId: null }
-    if (dateFin) whereReglementTotal.date = { lte: new Date(dateFin + 'T23:59:59') }
-    const reglementsLibresTotaux = await prisma.reglementVente.groupBy({
+    // 2. Encaissements Globaux (Règlements VALIDES, liés ou libres)
+    const Encaissements_Globaux = await prisma.reglementVente.groupBy({
       by: ['clientId'],
-      where: whereReglementTotal,
+      where: {
+        clientId: { in: clientIds },
+        statut: 'VALIDE'
+      },
       _sum: { montant: true }
     })
 
-    for (const r of sumsTotales) {
-       if (r.clientId != null) {
-          detteTotaleByClient[r.clientId] = (r._sum?.montantTotal || 0) - (r._sum?.montantPaye || 0)
-       }
-    }
-    for (const rl of reglementsLibresTotaux) {
-       if (rl.clientId != null) {
-          detteTotaleByClient[rl.clientId] = (detteTotaleByClient[rl.clientId] || 0) - (rl._sum?.montant || 0)
-       }
+    const caMap = Object.fromEntries(CA_Global.map(r => [r.clientId, r._sum?.montantTotal || 0]))
+    const payeMap = Object.fromEntries(Encaissements_Globaux.map(r => [r.clientId, r._sum?.montant || 0]))
+
+    // Mapper les résultats
+    for (const cId of clientIds) {
+      const ca = caMap[cId] || 0
+      const paye = payeMap[cId] || 0
+      detteTotaleByClient[cId] = ca - paye
     }
 
-    // 2. Dette sur la PÉRIODE (uniquement entre dateDebut et dateFin)
+    // Dette sur la PÉRIODE (uniquement si demandé)
     if (dateDebut && dateFin) {
-      const wherePeriode: any = {
-        clientId: { in: clientIds },
-        entiteId: where.entiteId, // Appliquer l'entité si filtrée
-        statut: { in: ['VALIDE', 'VALIDEE'] },
-        date: { gte: new Date(dateDebut + 'T00:00:00'), lte: new Date(dateFin + 'T23:59:59') }
-      }
-      if (where.entiteId) wherePeriode.entiteId = where.entiteId
+      const gte = new Date(dateDebut + 'T00:00:00')
+      const lte = new Date(dateFin + 'T23:59:59')
 
-      const sumsPeriode = await prisma.vente.groupBy({
+      const CA_Periode = await prisma.vente.groupBy({
         by: ['clientId'],
-        where: wherePeriode,
-        _sum: { montantTotal: true, montantPaye: true },
+        where: { clientId: { in: clientIds }, statut: 'VALIDEE', date: { gte, lte } },
+        _sum: { montantTotal: true },
       })
       
-      const whereRegPeriode: any = { 
-        clientId: { in: clientIds }, 
-        venteId: null,
-        date: { gte: new Date(dateDebut + 'T00:00:00'), lte: new Date(dateFin + 'T23:59:59') }
-      }
-      if (where.entiteId) whereRegPeriode.entiteId = where.entiteId
-
-      const reglementsLibresPeriode = await prisma.reglementVente.groupBy({
+      const Enc_Periode = await prisma.reglementVente.groupBy({
         by: ['clientId'],
-        where: whereRegPeriode,
+        where: { clientId: { in: clientIds }, statut: 'VALIDE', date: { gte, lte } },
         _sum: { montant: true }
       })
 
-      for (const r of sumsPeriode) {
-        if (r.clientId != null) {
-          dettePeriodeByClient[r.clientId] = (r._sum?.montantTotal || 0) - (r._sum?.montantPaye || 0)
-        }
-      }
-      for (const rl of reglementsLibresPeriode) {
-        if (rl.clientId != null) {
-          dettePeriodeByClient[rl.clientId] = (dettePeriodeByClient[rl.clientId] || 0) - (rl._sum?.montant || 0)
-        }
+      const caPMap = Object.fromEntries(CA_Periode.map(r => [r.clientId, r._sum?.montantTotal || 0]))
+      const payePMap = Object.fromEntries(Enc_Periode.map(r => [r.clientId, r._sum?.montant || 0]))
+
+      for (const cId of clientIds) {
+        dettePeriodeByClient[cId] = (caPMap[cId] || 0) - (payePMap[cId] || 0)
       }
     }
   }
 
-  const result = await Promise.all(paginated.map(async (c) => {
-    const base = { ...c } as any
-    const totalVentes = detteTotaleByClient[c.id] ?? 0
-    // Dette Totale = (Impayés Factures) + (Dette Initiale) - (Avoir Initial)
-    base.dette = totalVentes + (c.soldeInitial || 0) - (c.avoirInitial || 0)
+  const result = paginated.map((c) => {
+    const totalNet = detteTotaleByClient[c.id] ?? 0
+    // FORMULE UNIFIÉE : Solde = (Ventes - Paiements) + SoldeInitial - AvoirInitial
+    const dette = totalNet + (c.soldeInitial || 0) - (c.avoirInitial || 0)
     
-    // Dette sur période (Si dates fournies)
-    if (dateDebut && dateFin) {
-      base.dettePeriode = (dettePeriodeByClient[c.id] ?? 0)
+    return {
+      ...c,
+      dette,
+      dettePeriode: dateDebut && dateFin ? (dettePeriodeByClient[c.id] ?? 0) : undefined
     }
-
-    // Récupérer le numéro de la dernière facture
-    const derniereVente = await prisma.vente.findFirst({
-      where: { clientId: c.id, statut: { in: ['VALIDE', 'VALIDEE'] } },
-      orderBy: { date: 'desc' },
-      select: { numero: true }
-    })
-    base.derniereFacture = derniereVente?.numero || null
-    
-    return base
-  }))
+  })
 
   const res = NextResponse.json({
     data: result,

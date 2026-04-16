@@ -12,21 +12,34 @@ export async function GET(request: Request) {
         const annee = parseInt(searchParams.get('annee') || '', 10) || new Date().getFullYear()
 
         const finAnnee = new Date(annee, 11, 31, 23, 59, 59, 999)
-        // 1. Déterminer l'entité
+        // 1. Déterminer l'entité et le magasin
         const entiteIdFromParams = searchParams.get('entiteId')
+        const magasinIdParam = searchParams.get('magasinId')
         let entiteId: number | null = null
         
         if (session.role === 'SUPER_ADMIN') {
-            // Pour le Super Admin, on filtre uniquement si demandé explicitement
-            entiteId = entiteIdFromParams ? parseInt(entiteIdFromParams) : null
+            entiteId = entiteIdFromParams ? parseInt(entiteIdFromParams) : (entiteIdFromParams === 'all' ? null : 1) // Défaut à 1 pour Super Admin si non précisé
         } else {
-            // Pour les autres, on force l'entité de leur profil
             entiteId = await getEntiteId(session)
         }
 
         const whereEcritures: any = {}
         if (entiteId && entiteId > 0) {
             whereEcritures.entiteId = entiteId
+        }
+
+        // Ajout du filtrage par magasin (via les références de pièces ou metadata si dispo)
+        // Note: Dans ce schéma, le magasin est souvent déduit du journal ou de la pièce.
+        // Pour une version robuste, on filtre les écritures dont la pièce correspond à un mouvement de ce magasin.
+        if (magasinIdParam && magasinIdParam !== 'all') {
+            const magId = parseInt(magasinIdParam)
+            // On cherche les écritures liées à des ventes/achats de ce magasin
+            const [ventesMag, achatsMag] = await Promise.all([
+                prisma.vente.findMany({ where: { magasinId: magId }, select: { numero: true } }),
+                prisma.achat.findMany({ where: { magasinId: magId }, select: { numero: true } })
+            ])
+            const pieces = [...ventesMag.map(v => v.numero), ...achatsMag.map(a => a.numero)]
+            whereEcritures.piece = { in: pieces }
         }
         
         console.log(`[BILAN] Calcul pour l'année ${annee}, Rôle: ${session.role}, Filtre Entité:`, entiteId || 'TOUTES')
@@ -45,7 +58,7 @@ export async function GET(request: Request) {
         })
 
         const totalEcritures = comptes.reduce((sum, c) => sum + (c.ecritures?.length || 0), 0)
-        console.log(`[BILAN] Nombre total d'écritures trouvées dans les comptes: ${totalEcritures}`)
+        console.log(`[BILAN] Diagnostic : Année=${annee}, Entité=${entiteId || 'Toutes'}, Magasin=${magasinIdParam || 'Tous'}, Écritures=${totalEcritures}`)
 
         // 3. Calculer les soldes
         const accountsWithBalances = comptes.map(compte => {

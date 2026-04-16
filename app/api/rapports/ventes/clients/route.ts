@@ -53,15 +53,17 @@ export async function GET(request: NextRequest) {
     const detailedStats = await Promise.all(stats.map(async (item) => {
       let nom = item.clientLibre || 'Client Divers'
       let telephone = ''
+      let pointsFidelite = 0
       
       if (item.clientId) {
         const client = await prisma.client.findUnique({
           where: { id: item.clientId },
-          select: { nom: true, telephone: true }
+          select: { nom: true, telephone: true, pointsFidelite: true }
         })
         if (client) {
           nom = client.nom
           telephone = client.telephone || ''
+          pointsFidelite = client.pointsFidelite || 0
         }
       }
 
@@ -69,6 +71,7 @@ export async function GET(request: NextRequest) {
         clientId: item.clientId,
         nom,
         telephone,
+        pointsFidelite,
         nombreVentes: item._count.id,
         caTotal: item._sum.montantTotal || 0,
         totalPaye: item._sum.montantPaye || 0,

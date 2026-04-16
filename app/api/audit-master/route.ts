@@ -34,7 +34,6 @@ export async function GET() {
       }
     });
     await updateStockAndPAMP(produit.id, 10, 10000, 0, magasin.id, entite.id, utilisateur.id, numA);
-    // @ts-ignore
     await comptabiliserAchat({ achatId: 0, numeroAchat: numA, date: new Date(), montantTotal: ttcA, modePaiement: 'ESPECES', fournisseurId: fourn.id, entiteId: entite.id, utilisateurId: utilisateur.id, magasinId: magasin.id, reglements: [{ mode: 'ESPECES', montant: ttcA }], lignes: [{ produitId: produit.id, designation: produit.designation, quantite: 10, prixUnitaire: 1000, tva: 18 }] });
     logs.push('2. Cycle A (TVA) ok.');
 
@@ -47,7 +46,6 @@ export async function GET() {
       }
     });
     await updateStockAndPAMP(produit.id, 10, 8000, 0, magasin.id, entite.id, utilisateur.id, numB);
-    // @ts-ignore
     await comptabiliserAchat({ achatId: 0, numeroAchat: numB, date: new Date(), montantTotal: ttcB, modePaiement: 'ESPECES', fournisseurId: fourn.id, entiteId: entite.id, utilisateurId: utilisateur.id, magasinId: magasin.id, reglements: [{ mode: 'ESPECES', montant: ttcB }], lignes: [{ produitId: produit.id, designation: produit.designation, quantite: 10, prixUnitaire: 1000, remise: 2000 }] });
     logs.push('3. Cycle B (Remise) ok.');
 
@@ -61,7 +59,6 @@ export async function GET() {
       }
     });
     await updateStockForSale(produit.id, 5, magasin.id, entite.id, utilisateur.id, numVA);
-    // @ts-ignore
     await comptabiliserVente({ venteId: 0, numeroVente: numVA, date: new Date(), montantTotal: ttcVA, modePaiement: 'ESPECES', clientId: client.id, entiteId: entite.id, utilisateurId: utilisateur.id, magasinId: magasin.id, reglements: [{ mode: 'ESPECES', montant: ttcVA }], fraisApproche: 2000, lignes: [{ produitId: produit.id, designation: produit.designation, quantite: 5, prixUnitaire: 5000, coutUnitaire: pCurrent?.pamp || 0, tva: 18, remise: 1000 }] });
     logs.push('4. Cycle C (Vente Mixte + Frais) ok.');
 

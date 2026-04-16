@@ -35,30 +35,68 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const stats = await prisma.venteLigne.groupBy({
-      by: ['produitId', 'designation'],
-      where,
-      _sum: {
-        quantite: true,
-        montant: true,
+    // Récupérer toutes les lignes de vente validées avec leur coût unitaire historique
+    const lignes = await prisma.venteLigne.findMany({
+      where: {
+        vente: {
+          statut: 'VALIDEE',
+          ...(dateDebut && dateFin ? {
+            date: {
+              gte: new Date(dateDebut + 'T00:00:00'),
+              lte: new Date(dateFin + 'T23:59:59'),
+            }
+          } : {}),
+          ...(clientId ? { clientId: Number(clientId) } : {}),
+          ...(session.role !== 'SUPER_ADMIN' && session.entiteId ? { entiteId: session.entiteId } : {})
+        }
       },
-      _count: {
-        id: true
-      },
-      orderBy: {
-        _sum: {
-          montant: 'desc'
+      include: {
+        produit: {
+          select: {
+            code: true,
+            designation: true,
+            categorie: true
+          }
         }
       }
     })
 
-    return NextResponse.json(stats.map(s => ({
-      produitId: s.produitId,
-      designation: s.designation,
-      quantiteTotale: s._sum.quantite || 0,
-      caTotal: s._sum.montant || 0,
-      nombreTransactions: s._count.id
-    })))
+    // Aggréger par produit
+    const stats: Record<number, any> = {}
+
+    lignes.forEach((l) => {
+      const pId = l.produitId
+      if (!stats[pId]) {
+        stats[pId] = {
+          produitId: pId,
+          code: l.produit?.code || '—',
+          designation: l.designation,
+          categorie: l.produit?.categorie || 'S/C',
+          quantiteTotale: 0,
+          caTotal: 0,
+          coutTotal: 0,
+          nombreTransactions: 0
+        }
+      }
+
+      const q = l.quantite
+      const pu = l.prixUnitaire
+      const remiseLigne = l.remise || 0
+      const cu = l.coutUnitaire || 0 
+      
+      stats[pId].quantiteTotale += q
+      stats[pId].caTotal += (q * pu) - remiseLigne
+      stats[pId].coutTotal += q * cu
+      stats[pId].nombreTransactions += 1
+    })
+
+    const result = Object.values(stats).map((item: any) => ({
+      ...item,
+      margeBrute: item.caTotal - item.coutTotal,
+      tauxMarge: item.caTotal > 0 ? ((item.caTotal - item.coutTotal) / item.caTotal) * 100 : 0
+    })).sort((a, b) => b.caTotal - a.caTotal)
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Erreur Rapport CA Produits:', error)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })

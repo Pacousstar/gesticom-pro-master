@@ -139,6 +139,9 @@ export async function POST(request: NextRequest) {
 
     // Utiliser l'entité de la session
     const entiteId = await getEntiteId(session)
+    const modePaiement = String(body?.modePaiement || 'ESPECES').toUpperCase()
+    const banqueId = body?.banqueId != null ? Number(body.banqueId) : null
+    const pieceJustificative = body?.pieceJustificative != null ? String(body.pieceJustificative).trim() || null : null
 
     if (magasinId != null) {
       const magasin = await prisma.magasin.findUnique({ where: { id: magasinId } })
@@ -150,6 +153,22 @@ export async function POST(request: NextRequest) {
     }
 
     const charge = await prisma.$transaction(async (tx) => {
+      // --- VERROU SÉMANTIQUE (Idempotence) ---
+      const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000)
+      const isDuplicate = await tx.charge.findFirst({
+        where: {
+          rubrique,
+          montant,
+          utilisateurId: session.userId,
+          createdAt: { gte: fifteenSecondsAgo }
+        },
+        select: { id: true }
+      })
+
+      if (isDuplicate) {
+        throw new Error('DOUBLE_TRANSACTION: Cette charge semble être un doublon.')
+      }
+
       const c = await tx.charge.create({
         data: {
           date,
@@ -160,6 +179,9 @@ export async function POST(request: NextRequest) {
           rubrique,
           beneficiaire,
           montant,
+          modePaiement,
+          banqueId,
+          pieceJustificative,
           observation,
         },
         include: {
@@ -181,30 +203,39 @@ export async function POST(request: NextRequest) {
         entiteId,
       }, tx)
 
-      // ✅ SYNCHRO CAISSE : Toute charge est considérée comme une sortie de caisse immédiate (ESPECES)
-      let targetMagasinId = magasinId;
-      if (!targetMagasinId) {
-        const firstMag = await tx.magasin.findFirst({
-          where: { entiteId },
-          select: { id: true }
-        });
-        if (!firstMag) {
-          throw new Error("Impossible d'enregistrer en caisse : aucun point de vente (magasin) n'est configuré pour cette entité.");
-        }
-        targetMagasinId = firstMag.id;
-      }
+      // ✅ SYNCHRO TRÉSORERIE (Caisse ou Banque)
+      const modePaiementRaw = modePaiement || 'ESPECES'
+      const { estModeEspeces } = await import('@/lib/caisse')
 
-      await tx.caisse.create({
-        data: {
-          magasinId: targetMagasinId,
-          entiteId: entiteId || 1,
-          utilisateurId: session.userId,
-          montant: montant,
-          type: 'SORTIE',
-          motif: `Charge : ${rubrique}${observation ? ' (' + observation + ')' : ''}`,
-          date
+      if (estModeEspeces(modePaiementRaw)) {
+        await tx.caisse.create({
+          data: {
+            magasinId: magasinId || 1,
+            entiteId: entiteId || 1,
+            utilisateurId: session.userId,
+            montant: montant,
+            type: 'SORTIE',
+            motif: `Charge : ${rubrique}${observation ? ' (' + observation + ')' : ''}`,
+            date
+          }
+        })
+      } else {
+        // ✅ SYNCHRO BANQUE : Charge par Chèque/Virement/MM
+        const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
+        if (estModeBanque(modePaiementRaw)) {
+          await enregistrerOperationBancaire({
+            banqueId: banqueId,
+            entiteId,
+            date,
+            type: 'CHARGE',
+            libelle: `Charge : ${rubrique}`,
+            montant: montant,
+            utilisateurId: session.userId,
+            reference: `CHG-${Date.now()}`,
+            observation: observation
+          }, tx)
         }
-      })
+      }
 
       return c
     }, { timeout: 20000 })
@@ -213,8 +244,14 @@ export async function POST(request: NextRequest) {
     revalidatePath('/api/charges')
 
     return NextResponse.json(charge)
-  } catch (e) {
+  } catch (e: any) {
     console.error('POST /api/charges:', e)
+    if (e.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Cette charge a déjà été enregistrée (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
     return NextResponse.json(
       { error: 'Erreur serveur.' },
       { status: 500 }

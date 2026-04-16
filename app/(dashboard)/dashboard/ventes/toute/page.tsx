@@ -57,6 +57,7 @@ export default function ToutesLesVentesPage() {
   const [editingVenteId, setEditingVenteId] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
   
   const ITEMS_PER_PAGE_REPORT = 18
 
@@ -176,15 +177,18 @@ export default function ToutesLesVentesPage() {
                 disabled={isPrintingData}
               >
                 {isPrintingData && printType === 'GLOBAL' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-                JOURNAL GLOBAL
+                IMPRIMER JOURNAL
               </button>
               <button 
-                onClick={() => handleOpenPreview('DETAIL')}
-                className="flex items-center gap-2 rounded-xl bg-gray-900 border-2 border-gray-700 px-6 py-3 text-sm font-black text-white hover:bg-black transition-all uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50"
-                disabled={isPrintingData}
+                onClick={() => {
+                  let url = `/api/ventes/export?dateDebut=${startDate}&dateFin=${endDate}`
+                  if (search) url += `&search=${encodeURIComponent(search)}`
+                  window.open(url, '_blank')
+                }}
+                className="flex items-center gap-2 rounded-xl bg-white border-2 border-slate-200 px-6 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 transition-all uppercase tracking-widest shadow-xl active:scale-95"
               >
-                {isPrintingData && printType === 'DETAIL' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-                JOURNAL DÉTAILLÉ
+                <Download className="h-4 w-4 text-emerald-600" />
+                EXPORTER EXCEL
               </button>
             </div>
           </div>
@@ -207,6 +211,18 @@ export default function ToutesLesVentesPage() {
                <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
                  {allVentesForPrint.length} OPÉRATIONS
                </span>
+               <div className="h-10 w-px bg-gray-200" />
+               <div className="flex items-center gap-2">
+                 <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
+                 <select 
+                   value={printLayout}
+                   onChange={(e) => setPrintLayout(e.target.value as any)}
+                   className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
+                 >
+                   <option value="portrait">Portrait</option>
+                   <option value="landscape">Paysage</option>
+                 </select>
+               </div>
             </div>
             <div className="flex gap-4">
               <button
@@ -226,7 +242,7 @@ export default function ToutesLesVentesPage() {
           </div>
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
+            <div className={`mx-auto ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} bg-white shadow-2xl min-h-screen`}>
                {chunkArray(allVentesForPrint, ITEMS_PER_PAGE_REPORT).map((chunk, index, allChunks) => (
                 <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
                    <ListPrintWrapper
@@ -236,6 +252,7 @@ export default function ToutesLesVentesPage() {
                     totalPages={allChunks.length}
                     hideHeader={index > 0} // Header seulement sur la page 1
                     hideVisa={index < allChunks.length - 1} // Visa seulement sur la dernière page
+                    layout={printLayout}
                   >
                     {printType === 'GLOBAL' ? (
                       <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner">
@@ -347,6 +364,7 @@ export default function ToutesLesVentesPage() {
                 totalPages={allChunks.length}
                 hideHeader={index > 0}
                 hideVisa={index < allChunks.length - 1}
+                layout={printLayout}
               >
                   {printType === 'GLOBAL' ? (
                       <table className="w-full text-[14px] border-collapse border-2 border-black">

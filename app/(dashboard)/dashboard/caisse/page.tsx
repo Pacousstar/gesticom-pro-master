@@ -61,6 +61,7 @@ export default function CaissePage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [allOperationsForPrint, setAllOperationsForPrint] = useState<OperationCaisse[]>([])
+  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
 
   useEffect(() => {
     setCurrentPage(1)
@@ -244,10 +245,10 @@ export default function CaissePage() {
               }
             }}
             disabled={isPrinting}
-            className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-xl transition-all active:scale-95 disabled:opacity-50"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Aperçu Impression
+            IMPRIMER
           </button>
           <button
             type="button"
@@ -370,18 +371,18 @@ export default function CaissePage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
-          <p className="text-sm font-medium text-white/90">Total entrées (Période)</p>
+          <p className="text-sm font-medium text-white/90">Total entrées (Période) {(dateDebut || dateFin || filtreMagasin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}</p>
           <p className="mt-1 text-2xl font-bold text-white">{totalEntrees.toLocaleString('fr-FR')} FCFA</p>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-red-500 to-rose-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
-          <p className="text-sm font-medium text-white/90">Total sorties (Période)</p>
+          <p className="text-sm font-medium text-white/90">Total sorties (Période) {(dateDebut || dateFin || filtreMagasin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}</p>
           <p className="mt-1 text-2xl font-bold text-white">{totalSorties.toLocaleString('fr-FR')} FCFA</p>
         </div>
         <div className={`rounded-xl bg-gradient-to-br p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105 ${soldeMouvements >= 0
           ? 'from-blue-500 to-cyan-600'
           : 'from-orange-500 to-red-600'
           }`}>
-          <p className="text-sm font-medium text-white/90">Solde (E − S Période)</p>
+          <p className="text-sm font-medium text-white/90">Solde (E − S Période) {(dateDebut || dateFin || filtreMagasin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}</p>
           <p className="mt-1 text-2xl font-bold text-white">
             {soldeMouvements.toLocaleString('fr-FR')} FCFA
           </p>
@@ -649,6 +650,18 @@ export default function CaissePage() {
                <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
                  {allOperationsForPrint.length} OPÉRATIONS
                </span>
+               <div className="h-10 w-px bg-gray-200" />
+               <div className="flex items-center gap-2">
+                 <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
+                 <select 
+                   value={printLayout}
+                   onChange={(e) => setPrintLayout(e.target.value as any)}
+                   className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
+                 >
+                   <option value="portrait">Portrait</option>
+                   <option value="landscape">Paysage</option>
+                 </select>
+               </div>
             </div>
             <div className="flex gap-4">
               <button
@@ -683,6 +696,7 @@ export default function CaissePage() {
                         totalPages={allChunks.length}
                         hideHeader={index > 0}
                         hideVisa={index < allChunks.length - 1}
+                        layout={printLayout}
                       >
                          <table className="w-full text-[14px] border-collapse border-2 border-black">
                           <thead>
@@ -751,6 +765,7 @@ export default function CaissePage() {
               totalPages={allChunks.length}
               hideHeader={index > 0}
               hideVisa={index < allChunks.length - 1}
+              layout={printLayout}
             >
               <table className="w-full text-[14px] border-collapse border-2 border-black">
                 <thead>

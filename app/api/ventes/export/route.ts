@@ -11,33 +11,48 @@ export async function GET(request: NextRequest) {
 
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
-  const where: { date?: { gte: Date; lte: Date }; statut?: string; entiteId?: number } = {}
+  const search = request.nextUrl.searchParams.get('search')?.trim().toLowerCase()
+
+  const where: any = { statut: 'VALIDEE' }
   if (dateDebut && dateFin) {
     where.date = {
       gte: new Date(dateDebut + 'T00:00:00'),
       lte: new Date(dateFin + 'T23:59:59'),
     }
   }
-  where.statut = 'VALIDEE'
+
+  const entiteId = await getEntiteId(session)
   if (session.role !== 'SUPER_ADMIN') {
-    where.entiteId = await getEntiteId(session)
+    where.entiteId = entiteId
   }
 
   const ventes = await prisma.vente.findMany({
     where,
-    orderBy: { date: 'desc' },
     include: {
-      magasin: { select: { code: true, nom: true } },
       client: { select: { code: true, nom: true } },
+      magasin: { select: { code: true } },
+      lignes: { include: { produit: { select: { designation: true } } } },
     },
+    orderBy: { date: 'desc' },
   })
+
+  // Filtrage post-fetch si recherche
+  const filteredVentes = search 
+    ? ventes.filter(v => {
+        const clientNom = v.client?.nom || v.clientLibre || v.client?.code || ''
+        const prods = v.lignes.map(l => l.produit?.designation || '').join(' ')
+        return v.numero.toLowerCase().includes(search) || 
+               clientNom.toLowerCase().includes(search) ||
+               prods.toLowerCase().includes(search)
+      })
+    : ventes
 
   const rows: any[] = []
   let totalMontant = 0
   let totalPaye = 0
   let totalReste = 0
 
-  for (const v of ventes) {
+  for (const v of filteredVentes) {
     const dateStr = v.date.toISOString().slice(0, 10)
     const clientNom = v.client?.nom || v.clientLibre || '—'
     const clientCode = v.client?.code || '—'

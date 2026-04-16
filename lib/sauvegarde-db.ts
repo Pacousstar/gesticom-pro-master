@@ -5,6 +5,7 @@
 
 import path from 'path'
 import fs from 'fs'
+import { prisma } from './db'
 
 export const BACKUP_PREFIX = 'gesticom-backup-'
 export const BACKUP_EXT = '.db'
@@ -187,8 +188,9 @@ export function listBackups(): Array<{ name: string; size: number; date: string 
 
 /**
  * Effectue une sauvegarde physique immédiate du fichier .db actuel.
+ * Utilise VACUUM INTO pour garantir l'intégrité même si la base est en cours d'utilisation.
  */
-export function createBackup(): string {
+export async function createBackup(): Promise<string> {
   const dbPath = getDatabaseFilePath()
   if (!dbPath) throw new Error('Chemin de la base de données non trouvé.')
   
@@ -198,8 +200,18 @@ export function createBackup(): string {
   const targetName = backupFileName()
   const targetPath = path.join(/*turbopackIgnore: true*/ dir, targetName)
   
-  fs.copyFileSync(dbPath, targetPath)
-  console.log(`[sauvegarde-db] Sauvegarde créée : ${targetPath}`)
+  try {
+    // Utilisation de VACUUM INTO (supporté par SQLite 3.27+)
+    // Plus sûr que copyFileSync car gère les transactions en cours.
+    // On convertit les backslashes pour SQL et on double les quotes.
+    const sqlPath = targetPath.replace(/\\/g, '/').replace(/'/g, "''")
+    await prisma.$executeRawUnsafe(`VACUUM INTO '${sqlPath}'`)
+    console.log(`[sauvegarde-db] Sauvegarde atomique créée : ${targetPath}`)
+  } catch (error) {
+    console.warn(`[sauvegarde-db] Échec VACUUM INTO, repli sur copyFileSync :`, error)
+    fs.copyFileSync(dbPath, targetPath)
+    console.log(`[sauvegarde-db] Sauvegarde par copie créée (fallback) : ${targetPath}`)
+  }
   
   return targetName
 }

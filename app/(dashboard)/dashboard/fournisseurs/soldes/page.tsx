@@ -112,6 +112,12 @@ export default function SoldesFournisseursPage() {
       </div>
 
       {/* Cartes de Totaux */}
+      {/* T-6 AUDIT : Badge ⚠️ quand search est actif */}
+      {search && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 no-print">
+          ⚠️ Filtre actif : les totaux ci-dessous ne concernent que les fournisseurs correspondant à « {search} » — ils ne représentent pas la situation globale.
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 no-print">
         <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-4 shadow-sm">
           <div className="flex items-center gap-3">
@@ -119,7 +125,7 @@ export default function SoldesFournisseursPage() {
               <ShoppingBag className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">Achats (Période)</p>
+              <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">Achats (Période){search && ' ⚠️'}</p>
               <p className="text-xl font-bold text-gray-900">{totals.achats.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -131,7 +137,7 @@ export default function SoldesFournisseursPage() {
               <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-emerald-600 uppercase tracking-wider">Payé (Période)</p>
+              <p className="text-xs font-medium text-emerald-600 uppercase tracking-wider">Payé (Période){search && ' ⚠️'}</p>
               <p className="text-xl font-bold text-gray-900">{totals.paiements.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -143,7 +149,7 @@ export default function SoldesFournisseursPage() {
               <FileText className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Variation Dette</p>
+              <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Variation Dette{search && ' ⚠️'}</p>
               <p className="text-xl font-bold text-gray-900">{totals.variationPeriode.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -156,7 +162,7 @@ export default function SoldesFournisseursPage() {
             </div>
             <div>
               <p className={`text-xs font-medium uppercase tracking-wider ${totals.soldeGlobal > 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                Dette Totale Net
+                Dette Totale Net{search && ' ⚠️'}
               </p>
               <p className="text-xl font-bold text-gray-900">{totals.soldeGlobal.toLocaleString('fr-FR')} F</p>
             </div>

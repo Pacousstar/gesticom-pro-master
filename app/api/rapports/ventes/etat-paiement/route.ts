@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
                 montantTotal: total,
                 montantPaye: paye,
                 resteAPayer: total - paye,
-                nbVentes: v._count.id,
+                nombreVentes: v._count.id,
             }
         })
 
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
                 existing.montantTotal += curr.montantTotal
                 existing.montantPaye += curr.montantPaye
                 existing.resteAPayer += curr.resteAPayer
-                existing.nbVentes += curr.nbVentes
+                existing.nombreVentes += curr.nombreVentes
             } else {
                 acc.set(curr.client, { ...curr })
             }

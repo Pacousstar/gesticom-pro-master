@@ -29,6 +29,7 @@ export default function ListeVentesPage() {
   const [page, setPage] = useState(1)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
+  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
   const { error: showError } = useToast()
 
   useEffect(() => {
@@ -338,7 +339,7 @@ export default function ListeVentesPage() {
           </div>
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-              <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
+              <div className={`mx-auto shadow-2xl bg-white ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} min-h-screen p-4 text-slate-900 not-italic tracking-normal`}>
                   {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: VenteListe[], index: number, allChunks: VenteListe[][]) => (
                       <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                           <ListPrintWrapper

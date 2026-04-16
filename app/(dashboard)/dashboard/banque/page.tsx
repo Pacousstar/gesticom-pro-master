@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building2, Plus, Loader2, ArrowDownCircle, ArrowUpCircle, Filter, X, Edit2, Trash2, Search, FileSpreadsheet, Download, Printer } from 'lucide-react'
+import { Building2, Plus, Loader2, ArrowDownCircle, ArrowUpCircle, Filter, X, Edit2, Trash2, Search, FileSpreadsheet, Download, Printer, ShieldCheck, ArrowRightLeft } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -60,6 +60,18 @@ export default function BanquePage() {
   const [formOperationOpen, setFormOperationOpen] = useState(false)
   const [editingBanque, setEditingBanque] = useState<Banque | null>(null)
   const [selectedBanque, setSelectedBanque] = useState<number | ''>('')
+  const [virementOpen, setVirementOpen] = useState(false)
+  const [magasins, setMagasins] = useState<any[]>([])
+  const [virementData, setVirementData] = useState({
+    sourceId: '',
+    sourceIdType: 'BANQUE',
+    destId: '',
+    destIdType: 'CAISSE',
+    montant: '',
+    frais: '',
+    motif: 'Consolidation Mobile Money',
+    date: new Date().toISOString().split('T')[0]
+  })
   const [formBanqueData, setFormBanqueData] = useState({
     numero: '',
     nomBanque: '',
@@ -95,6 +107,7 @@ export default function BanquePage() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
   const [allOperationsForPrint, setAllOperationsForPrint] = useState<OperationBancaire[]>([])
+  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
 
   useEffect(() => {
     setCurrentPage(1)
@@ -110,7 +123,14 @@ export default function BanquePage() {
   useEffect(() => {
     fetchBanques()
     fetchComptes()
+    fetchMagasins()
   }, [])
+  
+  const fetchMagasins = () => {
+    fetch('/api/magasins')
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setMagasins)
+  }
 
   useEffect(() => {
     fetchOperations()
@@ -397,7 +417,7 @@ export default function BanquePage() {
         ].map((s) => (
           <div key={s.key} className={`rounded-xl bg-gradient-to-br ${s.color} p-4 shadow-md transition-all hover:scale-105`}>
             <div className="flex justify-between items-center text-white/90">
-              <span className="text-[10px] font-bold uppercase tracking-widest">{s.label}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">{s.label} {(dateDebut || dateFin) && <span className="ml-1" title="Filtre de période actif">⚠️</span>}</span>
               <span className="text-xl">{s.icon}</span>
             </div>
             <p className="mt-2 text-2xl font-black text-white">
@@ -424,6 +444,25 @@ export default function BanquePage() {
           >
             <Filter className="h-4 w-4" />
             Filtres
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.href = '/dashboard/banque/rapprochement'}
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-blue-600 bg-blue-50 px-4 py-2 text-sm font-black text-blue-800 hover:bg-blue-100 shadow-sm transition-all active:scale-95"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Rapprochement
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setVirementData(prev => ({ ...prev, sourceId: String(selectedBanque) || '' }))
+              setVirementOpen(true)
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-600 bg-orange-50 px-4 py-2 text-sm font-bold text-orange-800 hover:bg-orange-100 shadow-sm"
+          >
+            <ArrowRightLeft className="h-4 w-4" />
+            Virement / Consolidation
           </button>
           <button
             type="button"
@@ -570,10 +609,10 @@ export default function BanquePage() {
                }
             }}
             disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 h-[42px] disabled:opacity-50 transition-all"
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 h-[42px] disabled:opacity-50 transition-all uppercase no-print"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Aperçu Impression
+            Imprimer
           </button>
         </div>
       </div>
@@ -586,7 +625,7 @@ export default function BanquePage() {
         </div>
         <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">
-            Total dépôts {selectedBanque ? '(ce compte)' : '(tous comptes)'}
+            Total dépôts {selectedBanque ? '(ce compte)' : '(tous comptes)'} {(selectedBanque || dateDebut || dateFin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}
           </p>
           <p className="mt-1 text-2xl font-bold text-white">
             {totalDepots.toLocaleString('fr-FR')} FCFA
@@ -595,7 +634,7 @@ export default function BanquePage() {
         </div>
         <div className="rounded-xl bg-gradient-to-br from-red-500 to-rose-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">
-            Total retraits {selectedBanque ? '(ce compte)' : '(tous comptes)'}
+            Total retraits {selectedBanque ? '(ce compte)' : '(tous comptes)'} {(selectedBanque || dateDebut || dateFin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}
           </p>
           <p className="mt-1 text-2xl font-bold text-white">
             {totalRetraits.toLocaleString('fr-FR')} FCFA
@@ -1209,6 +1248,18 @@ export default function BanquePage() {
                <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-600 uppercase tracking-widest">
                  {allOperationsForPrint.length} OPÉRATIONS
                </span>
+               <div className="h-6 w-px bg-gray-200" />
+               <div className="flex items-center gap-2">
+                 <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
+                 <select 
+                   value={printLayout}
+                   onChange={(e) => setPrintLayout(e.target.value as any)}
+                   className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
+                 >
+                   <option value="portrait">Portrait</option>
+                   <option value="landscape">Paysage</option>
+                 </select>
+               </div>
             </div>
             <div className="flex gap-3">
               <button
@@ -1246,6 +1297,7 @@ export default function BanquePage() {
                         subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les opérations"}
                         pageNumber={index + 1}
                         totalPages={allChunks.length}
+                        layout={printLayout}
                       >
                          <table className="w-full text-[14px] border-collapse border-2 border-black">
                           <thead>
@@ -1312,6 +1364,7 @@ export default function BanquePage() {
                         totalPages={allChunks.length}
                         hideHeader={index > 0}
                         hideVisa={index < allChunks.length - 1}
+                        layout={printLayout}
                       >
                          <table className="w-full text-[14px] border-collapse border-2 border-black">
                           <thead>
@@ -1353,6 +1406,149 @@ export default function BanquePage() {
           })()}
       </div>
 
+      {/* Modal Virement Interne */}
+      {virementOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between border-b pb-4">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <ArrowRightLeft className="h-6 w-6 text-orange-600" />
+                Virement / Consolidation
+              </h3>
+              <button onClick={() => setVirementOpen(false)} className="rounded-lg p-2 hover:bg-gray-100">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              setSaving(true)
+              try {
+                const res = await fetch('/api/banques/virement', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(virementData),
+                })
+                if (res.ok) {
+                  showSuccess("Virement effectué avec succès")
+                  setVirementOpen(false)
+                  fetchBanques()
+                  fetchOperations()
+                } else {
+                  const d = await res.json()
+                  showError(d.error || "Erreur lors du virement")
+                }
+              } catch (e) {
+                showError("Erreur réseau")
+              } finally {
+                setSaving(false)
+              }
+            }} className="space-y-4 text-gray-900">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700">Source</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm"
+                    value={virementData.sourceIdType}
+                    onChange={(e) => setVirementData({ ...virementData, sourceIdType: e.target.value })}
+                  >
+                    <option value="BANQUE">Banque / MM</option>
+                    <option value="CAISSE">Caisse Magasin</option>
+                  </select>
+                  <select
+                    required
+                    className="mt-2 w-full rounded-lg border border-orange-200 p-2 text-sm focus:border-orange-500"
+                    value={virementData.sourceId}
+                    onChange={(e) => setVirementData({ ...virementData, sourceId: e.target.value })}
+                  >
+                    <option value="">— Choisir source —</option>
+                    {virementData.sourceIdType === 'BANQUE' ? (
+                      banques.map(b => <option key={b.id} value={b.id}>{b.nomBanque} ({b.soldeActuel.toLocaleString()} F)</option>)
+                    ) : (
+                      magasins.map(m => <option key={m.id} value={m.id}>{m.nom} (Caisse)</option>)
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700">Destination</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm"
+                    value={virementData.destIdType}
+                    onChange={(e) => setVirementData({ ...virementData, destIdType: e.target.value })}
+                  >
+                    <option value="CAISSE">Caisse Magasin</option>
+                    <option value="BANQUE">Banque / MM</option>
+                  </select>
+                  <select
+                    required
+                    className="mt-2 w-full rounded-lg border border-blue-200 p-2 text-sm focus:border-blue-500"
+                    value={virementData.destId}
+                    onChange={(e) => setVirementData({ ...virementData, destId: e.target.value })}
+                  >
+                    <option value="">— Choisir destination —</option>
+                    {virementData.destIdType === 'BANQUE' ? (
+                      banques.map(b => <option key={b.id} value={b.id}>{b.nomBanque} ({b.soldeActuel.toLocaleString()} F)</option>)
+                    ) : (
+                      magasins.map(m => <option key={m.id} value={m.id}>{m.nom} (Caisse)</option>)
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700">Montant net</label>
+                  <input
+                    type="number"
+                    required
+                    className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm"
+                    value={virementData.montant}
+                    onChange={(e) => setVirementData({ ...virementData, montant: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700">Frais de retrait (+)</label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-red-600"
+                    placeholder="0"
+                    value={virementData.frais}
+                    onChange={(e) => setVirementData({ ...virementData, frais: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Motif</label>
+                <input
+                  type="text"
+                  className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm"
+                  value={virementData.motif}
+                  onChange={(e) => setVirementData({ ...virementData, motif: e.target.value })}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => setVirementOpen(false)}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 rounded-lg bg-orange-600 px-6 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Valider le Virement
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

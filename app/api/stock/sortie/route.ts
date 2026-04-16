@@ -78,26 +78,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await prisma.mouvement.create({
-      data: {
-        date: dateMouvement,
-        type: 'SORTIE',
-        produitId,
-        magasinId,
-        entiteId: entiteId,
-        utilisateurId: session.userId,
-        quantite,
-        observation: observation || 'Sortie stock',
-      },
-    })
+    const result = await prisma.$transaction(async (tx) => {
+      // --- VERROU SÉMANTIQUE (Idempotence temporelle) ---
+      // Bloque si une sortie identique a été faite il y a < 15 secondes par le même utilisateur
+      const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000)
+      const isDuplicate = await tx.mouvement.findFirst({
+        where: {
+          type: 'SORTIE',
+          produitId,
+          magasinId,
+          quantite,
+          utilisateurId: session.userId,
+          createdAt: { gte: fifteenSecondsAgo }
+        },
+        select: { id: true }
+      })
 
-    await prisma.stock.update({
-      where: { id: st.id },
-      data: { quantite: { decrement: quantite } },
-    })
+      if (isDuplicate) {
+        throw new Error('DOUBLE_TRANSACTION: Cette sortie de stock semble être un doublon (même produit et quantité en moins de 15s).')
+      }
 
-    // Comptabilisation de la sortie de stock
-    try {
+      // a. Créer Mouvement
+      const mvt = await tx.mouvement.create({
+        data: {
+          date: dateMouvement,
+          type: 'SORTIE',
+          produitId,
+          magasinId,
+          entiteId: entiteId,
+          utilisateurId: session.userId,
+          quantite,
+          observation: observation || 'Sortie stock',
+        },
+      })
+
+      // b. Décrémenter Stock
+      await tx.stock.update({
+        where: { id: st.id },
+        data: { quantite: { decrement: quantite } },
+      })
+
+      // c. Comptabilisation
       const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
       await comptabiliserMouvementStock({
         produitId,
@@ -107,15 +128,14 @@ export async function POST(request: NextRequest) {
         date: dateMouvement,
         motif: observation || 'Sortie stock manuelle',
         utilisateurId: session.userId,
-        entiteId: entiteId
-      })
-    } catch (comptaError) {
-      console.error('Erreur comptabilisation sortie stock:', comptaError)
-    }
+        entiteId: entiteId,
+        mouvementId: mvt.id
+      }, tx)
 
-    const updated = await prisma.stock.findUnique({
-      where: { id: st.id },
-      include: { produit: { select: { code: true, designation: true } }, magasin: { select: { code: true } } },
+      return await tx.stock.findUnique({
+        where: { id: st.id },
+        include: { produit: { select: { code: true, designation: true } }, magasin: { select: { code: true } } },
+      })
     })
 
     // ✅ LOG AUDIT : Tracer la sortie de stock pour éviter les "fuites" d'employés
@@ -124,19 +144,24 @@ export async function POST(request: NextRequest) {
       session,
       'STOCK',
       st.id,
-      `Sortie manuelle de stock : ${quantite} unité(s) pour ${updated?.produit.designation} depuis ${updated?.magasin.code}. Motif: ${observation || 'Sortie stock'}`,
+      `Sortie manuelle de stock : ${quantite} unité(s) pour ${result?.produit.designation} depuis ${result?.magasin.code}. Motif: ${observation || 'Sortie stock'}`,
       { quantiteAvant: st.quantite },
       { quantiteApres: st.quantite - quantite, quantiteSortie: quantite },
       ipAddress
     )
 
-    // Invalider le cache pour affichage immédiat
     revalidatePath('/dashboard/stock')
     revalidatePath('/api/stock')
 
-    return NextResponse.json(updated)
-  } catch (e) {
+    return NextResponse.json(result)
+  } catch (e: any) {
     console.error('POST /api/stock/sortie:', e)
+    if (e.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Cette sortie de stock a déjà été enregistrée (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

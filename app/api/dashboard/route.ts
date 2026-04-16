@@ -43,20 +43,40 @@ export async function GET() {
 
     // Utiliser l'entité de la session
     const entiteId = await getEntiteId(session)
-    const entiteFilter = entiteId ? { entiteId } : {}
+    const entiteCondition = entiteId ? { entiteId } : {}
+
+    // Début des dates pour SQL
+    const isoAuj = debAuj.toISOString()
+    const isoFinAuj = finAuj.toISOString()
+    const isoHier = debHier.toISOString()
+    const isoFinHier = finHier.toISOString()
+    const isoMois = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
     const queries = Promise.all([
-      // 0 - Transactions du jour
-      prisma.vente.count({ where: { date: { gte: debAuj, lte: finAuj }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter } }).catch(catchZero('vente.count')),
+      // 0 - Métriques de Ventes (KPIs combinés)
+      prisma.$queryRaw<any[]>`
+        SELECT 
+          COUNT(CASE WHEN date BETWEEN ${isoAuj} AND ${isoFinAuj} THEN 1 END) as nb_auj,
+          SUM(CASE WHEN date BETWEEN ${isoAuj} AND ${isoFinAuj} THEN "montantTotal" ELSE 0 END) as ca_auj,
+          COUNT(CASE WHEN date BETWEEN ${isoHier} AND ${isoFinHier} THEN 1 END) as nb_hier,
+          SUM(CASE WHEN date BETWEEN ${isoHier} AND ${isoFinHier} THEN "montantTotal" ELSE 0 END) as ca_hier,
+          SUM(CASE WHEN date >= ${isoMois} THEN "montantTotal" ELSE 0 END) as ca_mois,
+          SUM("montantTotal") as ca_total,
+          COUNT(id) as nb_total
+        FROM "Vente"
+        WHERE statut IN ('VALIDE', 'VALIDEE')
+        ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.sql` `}
+      `.catch(err => {
+        console.error('[dashboard] sales.raw', err)
+        return [{ nb_auj: 0, ca_auj: 0, nb_hier: 0, ca_hier: 0, ca_mois: 0, ca_total: 0, nb_total: 0 }]
+      }),
       // 1 - Mouvements du jour
-      prisma.mouvement.count({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteFilter } }).catch(catchZero('mouvement.count')),
+      prisma.mouvement.count({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteCondition } }).catch(catchZero('mouvement.count')),
       // 2 - Clients actifs
-      prisma.client.count({ where: { actif: true, ...entiteFilter } }).catch(catchZero('Client')),
-      // 3 - Produits en stock
-      prisma.stock.count({ where: { quantite: { gt: 0 }, magasin: entiteFilter } }).catch(catchZero('stock.count')),
-      // 4 - Total produits catalogue
-      prisma.produit.count({ where: { actif: true, ...entiteFilter } }).catch(catchZero('produit.count')),
-      // 5 - Stocks faibles
+      prisma.client.count({ where: { actif: true, ...entiteCondition } }).catch(catchZero('Client')),
+      // 3 - Total produits catalogue
+      prisma.produit.count({ where: { actif: true, ...entiteCondition } }).catch(catchZero('produit.count')),
+      // 4 - Stocks faibles
       prisma.$queryRaw<Array<{
         id: number
         quantite: number
@@ -65,114 +85,89 @@ export async function GET() {
         produit_categorie: string
         magasin_code: string
       }>>`
-        SELECT 
-          s.id,
-          s.quantite,
-          p.designation as produit_designation,
-          p."seuilMin" as produit_seuilMin,
-          p.categorie as produit_categorie,
-          m.code as magasin_code
+        SELECT s.id, s.quantite, p.designation as produit_designation, p."seuilMin" as produit_seuilMin, p.categorie as produit_categorie, m.code as magasin_code
         FROM "Stock" s
         INNER JOIN "Produit" p ON s."produitId" = p.id
         INNER JOIN "Magasin" m ON s."magasinId" = m.id
         WHERE p.actif = 1 AND s.quantite < p."seuilMin"
         ${entiteId ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.sql` `}
-        ORDER BY s.quantite ASC
-        LIMIT 5
-      `.then((rows: any[]) => rows.map((r: any) => ({
-        id: r.id,
-        quantite: r.quantite,
-        produit: {
-          designation: r.produit_designation,
-          seuilMin: r.produit_seuilMin,
-          categorie: r.produit_categorie,
-        },
-        magasin: {
-          code: r.magasin_code,
-        },
-      }))).catch(catchEmpty('stock.findMany')),
-      // 6 - Ventes récentes avec montants
+        ORDER BY s.quantite ASC LIMIT 5
+      `.catch(catchEmpty('stock.low')),
+      // 5 - Ventes récentes
       prisma.vente.findMany({
-        where: entiteFilter,
-        take: 5,
-        orderBy: { date: 'desc' },
-        select: {
-          id: true,
-          numero: true,
-          date: true,
-          montantTotal: true,
-          clientLibre: true,
-          client: { select: { nom: true } },
-        },
-      }).catch(catchEmpty('vente.findMany')),
-      // 7 - Répartition par catégorie
-      prisma.produit.groupBy({
-        by: ['categorie'],
-        where: { actif: true, ...entiteFilter },
-        _count: { id: true },
-      }).catch(catchEmpty('produit.groupBy')),
-      // 8 - CA total (toutes périodes pour le calcul du panier moyen globale ou filtré)
-      prisma.vente.aggregate({
-        where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter },
-        _sum: { montantTotal: true },
-        _count: { id: true }
-      }).catch(() => ({ _sum: { montantTotal: 0 }, _count: { id: 0 } })),
-      // 9 - Top 5 Produits les plus vendus (CA)
+        where: entiteCondition, take: 5, orderBy: { date: 'desc' },
+        select: { id: true, numero: true, date: true, montantTotal: true, clientLibre: true, client: { select: { nom: true } } },
+      }).catch(catchEmpty('vente.recent')),
+      // 6 - Répartition par catégorie
+      prisma.produit.groupBy({ by: ['categorie'], where: { actif: true, ...entiteCondition }, _count: { id: true } }).catch(catchEmpty('produit.groupBy')),
+      // 7 - Top 5 Produits (CA)
       prisma.venteLigne.groupBy({
         by: ['produitId', 'designation'],
-        where: { vente: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter } },
+        where: { vente: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition } },
         _sum: { montant: true, quantite: true },
         orderBy: { _sum: { montant: 'desc' } },
         take: 5
       }).catch(catchEmpty('venteLigne.groupBy')),
-      // 10 - Valeur totale du stock au prix de vente
-      prisma.stock.findMany({
-        where: { quantite: { gt: 0 }, magasin: entiteFilter },
-        select: {
-          quantite: true,
-          produit: { select: { prixVente: true, prixAchat: true, pamp: true } }
-        }
-      }).catch(catchEmpty('stock.findMany.valeur')),
-      // 11 - Statut Rupture (Nombre de produits à 0 stock)
-      prisma.produit.count({
-        where: {
-          actif: true,
-          stocks: { some: { quantite: { lte: 0 }, magasin: entiteFilter } }
-        }
-      }).catch(catchZero('produit.count.rupture')),
-      // 12 - CA du jour (pour KPI direct)
+      // 8 - Valeur du Stock (Agrégation SQL Native)
+      prisma.$queryRaw<any[]>`
+        SELECT 
+          SUM(s.quantite * COALESCE(p.pamp, p."prixAchat", 0)) as total_achat,
+          SUM(s.quantite * COALESCE(p."prixVente", 0)) as total_vente,
+          SUM(CASE WHEN s.quantite <= 0 THEN 1 ELSE 0 END) as nb_ruptures,
+          SUM(CASE WHEN s.quantite > 0 THEN 1 ELSE 0 END) as nb_en_stock
+        FROM "Stock" s
+        INNER JOIN "Produit" p ON s."produitId" = p.id
+        INNER JOIN "Magasin" m ON s."magasinId" = m.id
+        WHERE p.actif = 1
+        ${entiteId ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.sql` `}
+      `.catch(err => {
+        console.error('[dashboard] stock.raw', err)
+        return [{ total_achat: 0, total_vente: 0, nb_ruptures: 0, nb_en_stock: 0 }]
+      }),
+      // 9 - Dépenses Totales
+      prisma.depense.aggregate({ where: entiteCondition, _count: { id: true }, _sum: { montant: true } }).catch(() => ({ _count: { id: 0 }, _sum: { montant: 0 } })),
+      // 10 - Trésorerie Encaissée (Classe 5)
+      // 12 - Créances Clients (Ventes non soldées)
       prisma.vente.aggregate({
-        where: { date: { gte: debAuj, lte: finAuj }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter },
-        _sum: { montantTotal: true }
-      }).then((r: any) => toNum(r._sum.montantTotal)).catch(catchZero('vente.ca.auj')),
-      // 13 - Transactions hier (pour comparaison)
-      prisma.vente.count({ where: { date: { gte: debHier, lte: finHier }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter } }).catch(catchZero('vente.count.hier')),
-      // 14 - CA du mois en cours
-      prisma.vente.aggregate({
-        where: { date: { gte: new Date(now.getFullYear(), now.getMonth(), 1), lte: now }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter },
-        _sum: { montantTotal: true }
-      }).then((r: any) => toNum(r._sum.montantTotal)).catch(catchZero('vente.ca.mois')),
-      // 15 - Dépenses Totales (Nombre et Montant)
-      prisma.depense.aggregate({
-        where: entiteFilter,
-        _count: { id: true },
-        _sum: { montant: true }
-      }).catch(() => ({ _count: { id: 0 }, _sum: { montant: 0 } })),
+        where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
+        _sum: { montantTotal: true, montantPaye: true }
+      }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0 } })),
+      // 13 - Détail Trésorerie (Caisse vs Banque)
+      prisma.ecritureComptable.groupBy({
+        by: ['compteId'],
+        where: { compte: { numero: { startsWith: '5' } }, ...entiteCondition as any },
+        _sum: { debit: true, credit: true }
+      }).catch(() => []) as Promise<any[]>,
+      // 14 - Alertes Système
+      prisma.systemAlerte.findMany({
+        where: { lu: false, entiteId: entiteId || undefined },
+        orderBy: { date: 'desc' },
+        take: 10
+      }).catch(catchEmpty('systemAlerte.findMany')),
+      // 15 - TENDANCES MENSUELLES
+      prisma.$queryRaw<any[]>`
+        SELECT 
+          SUBSTR(date, 1, 7) as mois,
+          SUM("montantTotal") as montant
+        FROM "Vente"
+        WHERE statut IN ('VALIDE', 'VALIDEE')
+        AND date >= date('now', '-24 month', 'start of month')
+        ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.sql` `}
+        GROUP BY mois
+        ORDER BY mois ASC
+      `.catch(catchEmpty('tendances.raw')),
     ])
 
     const timeoutFallback: any[] = [
-      0, 0, 0, 0, 0,
-      [] as any[], // lowStock
-      [] as any[], // recentSales
-      [] as any[], // categories
-      { _sum: { montantTotal: 0 }, _count: { id: 0 } }, // caTotalAgg
-      [] as any[], // topProduitsRaw
-      [] as any[], // stocksValeurRaw
-      0, // nbRuptures
-      0, // caJour
-      0, // transactionsHier
-      0, // caMois
-      { _count: { id: 0 }, _sum: { montant: 0 } }, // depensesAgg
+      [{ nb_auj: 0, ca_auj: 0, nb_hier: 0, ca_hier: 0, ca_mois: 0, ca_total: 0, nb_total: 0 }],
+      0, 0, 0,
+       [], [], [], [],
+      [{ total_achat: 0, total_vente: 0, nb_ruptures: 0, nb_en_stock: 0 }],
+      { _count: { id: 0 }, _sum: { montant: 0 } },
+      { _sum: { debit: 0, credit: 0 } },
+      { _sum: { montantTotal: 0, montantPaye: 0, fraisApproche: 0 } },
+      { _sum: { montantTotal: 0, montantPaye: 0 } },
+      [],
     ]
 
     const result = await Promise.race([
@@ -181,76 +176,106 @@ export async function GET() {
     ]) as any[]
 
     const [
-      transactionsJour,
+      salesRaw,
       mouvementsJour,
       clientsActifs,
-      stocksAvecQte,
       totalProduitsCatalogue,
-      lowStock,
-      recentSales,
-      categories,
-      caTotalAgg,
+      lowStockRaw,
+      recentSalesRaw,
+      categoriesRaw,
       topProduitsRaw,
-      stocksValeurRaw,
-      nbRuptures,
-      caJour,
-      transactionsHier,
-      caMois,
+      stockRaw,
       depensesAgg,
+      soldeCompte, // Sum global (Option 10) - On garde pour rétro-compatibilité
+      dettesAgg,
+      creancesAgg,
+      detailTresorerieRaw, // GroupBy (Option 13)
+      systemAlertesRaw,
+      tendancesRaw,
     ] = result
 
     const timedOut = result === timeoutFallback
     if (timedOut) {
-      console.warn('[dashboard] Timeout après', DASHBOARD_TIMEOUT_MS, 'ms. Base verrouillée ou trop lente. Fermez le portable (Lancer.bat) si ouvert.')
+      console.warn('[dashboard] Timeout après', DASHBOARD_TIMEOUT_MS, 'ms. Base verrouillée.')
     }
 
-    const totalRef = categories.reduce((s: number, c: any) => s + (c._count?.id ?? 0), 0)
-    const repartition = totalRef > 0
-      ? categories.map((c: any) => ({ name: c.categorie || 'DIVERS', percent: Math.round(((c._count?.id ?? 0) / totalRef) * 100) })).sort((a: any, b: any) => b.percent - a.percent)
-      : []
-
-    // Calculs ERP supplémentaires
-    const caTotalGlobal = toNum(caTotalAgg._sum?.montantTotal)
-    const nbVentesGlobal = toNum(caTotalAgg._count?.id)
+    // Extraction des données Sales
+    const s = salesRaw[0] || {}
+    const transactionsJour = toNum(s.nb_auj)
+    const transactionsHier = toNum(s.nb_hier)
+    const caJour = toNum(s.ca_auj)
+    const caMois = toNum(s.ca_mois)
+    const caTotalGlobal = toNum(s.ca_total)
+    const nbVentesGlobal = toNum(s.nb_total)
     const panierMoyen = nbVentesGlobal > 0 ? Math.round(caTotalGlobal / nbVentesGlobal) : 0
 
-    const valeurStockTotal = stocksValeurRaw.reduce((sum: number, s: any) => {
-      const prixRevient = s.produit?.pamp && s.produit?.pamp > 0 ? s.produit.pamp : (s.produit?.prixAchat ?? 0)
-      return sum + (s.quantite * prixRevient)
-    }, 0)
-    const valeurStockVente = stocksValeurRaw.reduce((sum: number, s: any) => sum + (s.quantite * (s.produit?.prixVente ?? 0)), 0)
+    // Extraction Stock
+    const st = stockRaw[0] || {}
+    const valeurStockTotal = toNum(st.total_achat)
+    const valeurStockVente = toNum(st.total_vente)
+    const nbRuptures = toNum(st.nb_ruptures)
+    const stocksAvecQte = toNum(st.nb_en_stock)
+    const tauxRupture = totalProduitsCatalogue > 0 ? Math.round((nbRuptures / totalProduitsCatalogue) * 100) : 0
 
+    // Extraction Trésorerie/Dettes/Créances
+    let tresorerieCaisse = 0
+    let tresorerieBanque = 0
+    
+    // Essayer de récupérer le détail via les comptes (OHADA: 57=Caisse, 52/51=Banque)
+    if (Array.isArray(detailTresorerieRaw)) {
+      for (const d of detailTresorerieRaw) {
+         const solde = (d._sum?.debit || 0) - (d._sum?.credit || 0)
+         // On récupère le numéro de compte via Prisma (ou on utilise un mapping pré-récupéré)
+         // Pour faire simple ici, on va utiliser le solde total et essayer de différencier si on avait les numéros
+         // Mais soldeCompte agrégé est plus sûr pour le total
+      }
+    }
+
+    const tresorerieReelle = toNum(soldeCompte._sum?.debit) - toNum(soldeCompte._sum?.credit)
+    
+    // On va aussi récupérer les soldes physiques des tables Caisse et Banque qui sont plus fiables pour la gestion
+    const [soldesPhysiques] = await Promise.all([
+      prisma.$transaction([
+        prisma.banque.aggregate({ where: entiteCondition, _sum: { soldeActuel: true } }),
+        prisma.magasin.aggregate({ where: entiteCondition, _sum: { soldeCaisse: true } })
+      ])
+    ])
+
+    tresorerieBanque = toNum(soldesPhysiques[0]._sum?.soldeActuel)
+    tresorerieCaisse = toNum(soldesPhysiques[1]._sum?.soldeCaisse)
+
+    const totalDettes = (toNum(dettesAgg._sum?.montantTotal) + toNum(dettesAgg._sum?.fraisApproche)) - toNum(dettesAgg._sum?.montantPaye)
+    const totalCreances = toNum(creancesAgg._sum?.montantTotal) - toNum(creancesAgg._sum?.montantPaye)
+
+    // Formattage Catégories
+    const totalCat = categoriesRaw.reduce((acc: number, c: any) => acc + (c._count?.id ?? 0), 0)
+    const repartition = totalCat > 0
+      ? categoriesRaw.map((c: any) => ({ name: c.categorie || 'DIVERS', percent: Math.round(((c._count?.id ?? 0) / totalCat) * 100) })).sort((a: any, b: any) => b.percent - a.percent)
+      : []
+
+    // Formattage Top Produits
     const topProduits = topProduitsRaw.map((t: any) => ({
       name: t.designation || 'Inconnu',
       ca: toNum(t._sum?.montant),
       qte: toNum(t._sum?.quantite)
     }))
 
-    const tauxRupture = totalProduitsCatalogue > 0 ? Math.round((nbRuptures / totalProduitsCatalogue) * 100) : 0
+    // Formattage des tendances (12 mois courants vs 12 mois précédents)
+    const trends: Record<string, number> = {}
+    tendancesRaw.forEach((t: any) => { trends[t.mois] = toNum(t.montant) })
 
-    // 1. Trésorerie Encaissée (Classe 5)
-    const soldeCompte = await prisma.ecritureComptable.aggregate({
-      where: {
-        compte: { numero: { startsWith: '5' } },
-        ...entiteFilter
-      },
-      _sum: { debit: true, credit: true }
+    const monthlyTrends = Array.from({ length: 12 }, (_, i) => {
+      const month = i + 1
+      const year = now.getFullYear()
+      const prevYear = year - 1
+      const key = `${year}-${month.toString().padStart(2, '0')}`
+      const prevKey = `${prevYear}-${month.toString().padStart(2, '0')}`
+      return {
+        month: new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(new Date(year, i)),
+        current: trends[key] || 0,
+        previous: trends[prevKey] || 0
+      }
     })
-    const tresorerieReelle = toNum(soldeCompte._sum?.debit) - toNum(soldeCompte._sum?.credit)
-
-    // 2. Dettes Fournisseurs (Achats non soldés)
-    const dettesAgg = await prisma.achat.aggregate({
-      where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter },
-      _sum: { montantTotal: true, montantPaye: true, fraisApproche: true }
-    })
-    const totalDettes = (toNum(dettesAgg._sum?.montantTotal) + toNum(dettesAgg._sum?.fraisApproche)) - toNum(dettesAgg._sum?.montantPaye)
-
-    // 3. Créances Clients (Ventes non soldées)
-    const creancesAgg = await prisma.vente.aggregate({
-      where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter },
-      _sum: { montantTotal: true, montantPaye: true }
-    })
-    const totalCreances = toNum(creancesAgg._sum?.montantTotal) - toNum(creancesAgg._sum?.montantPaye)
 
     return NextResponse.json({
       transactionsJour,
@@ -265,25 +290,53 @@ export async function GET() {
       valeurStockTotal,
       valeurStockVente,
       tresorerieReelle,
+      tresorerieCaisse,
+      tresorerieBanque,
       totalDettes,
       totalCreances,
       tauxRupture,
       topProduits,
-      lowStock: Array.isArray(lowStock) ? lowStock.map((s: any) => ({
-        name: s.produit?.designation || '',
+      lowStock: (lowStockRaw as any[]).map((s: any) => ({
+        name: s.produit_designation || '',
         stock: s.quantite || 0,
-        min: s.produit?.seuilMin || 0,
-        category: s.produit?.categorie || '',
-      })) : [],
-      recentSales: Array.isArray(recentSales) ? recentSales.map((v: any) => ({
-        id: v.numero,
-        client: v.client?.nom || v.clientLibre || '—',
-        montant: toNum(v.montantTotal),
-        time: v.date,
-      })) : [],
+        min: s.produit_seuilMin || 0,
+        category: s.produit_categorie || '',
+      })),
+      systemAlertes: systemAlertesRaw || [],
+      creditAlerts: (await (async () => {
+        // Détection automatique des alertes de crédit (90% du plafond)
+        const clientsWithPlafond = await prisma.client.findMany({
+          where: { ...entiteCondition, plafondCredit: { gt: 0 } },
+          select: { id: true, nom: true, plafondCredit: true, soldeInitial: true }
+        })
+        
+        const alerts: any[] = []
+        for (const c of clientsWithPlafond) {
+          // Calcul de la dette actuelle
+          const [ca, paye] = await Promise.all([
+            prisma.vente.aggregate({ where: { clientId: c.id, statut: 'VALIDEE' }, _sum: { montantTotal: true } }),
+            prisma.reglementVente.aggregate({ where: { clientId: c.id, statut: 'VALIDE' }, _sum: { montant: true } })
+          ])
+          
+          const dette = (ca._sum.montantTotal || 0) - (paye._sum.montant || 0)
+          const ratio = dette / (c.plafondCredit || 1)
+          
+          if (ratio >= 0.9) {
+            alerts.push({
+              id: `credit-${c.id}`,
+              type: ratio >= 1 ? 'CRITICAL' : 'WARNING',
+              categorie: 'CREDIT',
+              message: `Le client ${c.nom} a atteint ${Math.round(ratio * 100)}% de son plafond (${dette.toLocaleString()} / ${c.plafondCredit?.toLocaleString()} F)`,
+              date: new Date().toISOString()
+            })
+          }
+        }
+        return alerts
+      })()),
       repartition,
       totalDepensesCount: toNum(depensesAgg?._count?.id),
       totalDepensesAmount: toNum(depensesAgg?._sum?.montant),
+      monthlyTrends,
       _timeout: timedOut,
     }, {
       headers: {
@@ -312,7 +365,6 @@ export async function GET() {
       _timeout: false,
     })
   } finally {
-    // @ts-ignore
     if (typeof startTime !== 'undefined') {
       console.log(`[API] GET /api/dashboard - Fin (${Date.now() - startTime}ms)`);
     }

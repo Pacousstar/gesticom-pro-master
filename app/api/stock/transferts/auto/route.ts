@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
 
       if (enRupture.length > 0 && enSurplus.length > 0) {
         // Trier les surplus : Dépôt principal en premier, puis par quantité décroissante
-        // @ts-ignore - Le champ estDepotPrincipal vient d'être ajouté
         enSurplus.sort((a, b) => {
           if (a.magasin.estDepotPrincipal && !b.magasin.estDepotPrincipal) return -1
           if (!a.magasin.estDepotPrincipal && b.magasin.estDepotPrincipal) return 1

@@ -4,7 +4,7 @@
  */
 
 export type SyncAction = 'CREATE' | 'UPDATE' | 'DELETE'
-export type SyncEntity = 'VENTE' | 'ACHAT' | 'PRODUIT' | 'CLIENT' | 'FOURNISSEUR' | 'STOCK' | 'DEPENSE' | 'CHARGE' | 'CAISSE' | 'BANQUE' | 'OPERATION_BANQUE'
+export type SyncEntity = 'VENTE' | 'ACHAT' | 'PRODUIT' | 'CLIENT' | 'FOURNISSEUR' | 'STOCK' | 'DEPENSE' | 'CHARGE' | 'CAISSE' | 'BANQUE' | 'OPERATION_BANQUE' | 'TRANSFERT' | 'STOCK_ENTREE' | 'STOCK_SORTIE'
 
 export interface PendingSync {
   id: string // UUID généré localement
@@ -104,9 +104,9 @@ export async function syncAll(): Promise<{ success: number; failed: number; erro
         body: pending.method !== 'DELETE' ? JSON.stringify(pending.data) : undefined,
       })
 
-      if (response.ok) {
+      if (response.ok || response.status === 409) {
         success++
-        // Succès : on ne l'ajoute plus à remaining -> il est retiré de la queue
+        // Succès ou Déjà existant (idempotence) : on ne l'ajoute plus à remaining
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }))
         pending.lastError = errorData.error || 'Erreur serveur'
@@ -142,9 +142,9 @@ export async function syncAll(): Promise<{ success: number; failed: number; erro
  */
 export function isOnline(): boolean {
   if (typeof window === 'undefined') return true
-  // Dans une application installée localement, le "vrai" onLine est la disponibilité du serveur local.
-  // navigator.onLine ne concerne que l'internet mondial, ce qui est non pertinent ici.
-  return true 
+  // navigator.onLine n'est pas fiable pour un serveur local. 
+  // On renvoie true par défaut, la boucle syncAll gérera les échecs réels de fetch.
+  return typeof navigator !== 'undefined' ? navigator.onLine : true
 }
 
 /**

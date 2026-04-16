@@ -200,36 +200,70 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ce magasin n\'appartient pas à votre entité.' }, { status: 403 })
     }
 
-    const p = await prisma.produit.create({
-      data: { 
-        code, 
-        designation, 
-        categorie, 
-        prixAchat, 
-        prixVente, 
-        prixMinimum,
-        pamp: prixAchat, 
-        fournisseurId, 
-        seuilMin, 
-        actif: true,
-        entiteId: entiteId
-      },
-    })
+    const result = await prisma.$transaction(async (tx) => {
+      const p = await tx.produit.create({
+        data: { 
+          code, 
+          designation, 
+          categorie, 
+          prixAchat, 
+          prixVente, 
+          prixMinimum,
+          pamp: prixAchat, 
+          fournisseurId, 
+          seuilMin, 
+          actif: true,
+          entiteId: entiteId
+        },
+      })
 
-    await prisma.stock.create({
-      data: { produitId: p.id, magasinId: magasinIdRaw, quantite: quantiteInitiale, quantiteInitiale },
-    })
+      const st = await tx.stock.create({
+        data: { produitId: p.id, magasinId: magasinIdRaw, quantite: quantiteInitiale, quantiteInitiale, entiteId },
+      })
+
+      if (quantiteInitiale > 0) {
+        // Enregistrer le mouvement initial
+        const mvt = await tx.mouvement.create({
+          data: {
+            type: 'ENTREE',
+            produitId: p.id,
+            magasinId: magasinIdRaw,
+            entiteId,
+            utilisateurId: session.userId,
+            quantite: quantiteInitiale,
+            dateOperation: new Date(),
+            observation: `Stock initial - Création produit ${p.code}`,
+          }
+        })
+
+        // Comptabiliser en Journal OD
+        const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
+        await comptabiliserMouvementStock({
+          produitId: p.id,
+          magasinId: magasinIdRaw,
+          type: 'ENTREE',
+          quantite: quantiteInitiale,
+          date: new Date(),
+          motif: `Stock initial à la création`,
+          utilisateurId: session.userId,
+          entiteId,
+          mouvementId: mvt.id
+        }, tx)
+      }
+
+      return p
+    }, { timeout: 10000 })
 
     const ipAddress = getIpAddress(request)
     await logCreation(
         session,
         'PRODUIT',
-        p.id,
-        `Produit ${p.code} - ${p.designation}`,
+        result.id,
+        `Produit ${result.code} - ${result.designation}`,
         {
-          code: p.code,
-          designation: p.designation,
-          categorie: p.categorie,
+          code: result.code,
+          designation: result.designation,
+          categorie: result.categorie,
           magasinId: magasinIdRaw,
           quantiteInitiale,
         },
@@ -242,7 +276,7 @@ export async function POST(request: NextRequest) {
       revalidatePath('/api/produits/stats')
       revalidatePath('/api/produits/categories')
 
-      return NextResponse.json(p)
+      return NextResponse.json(result)
     } catch (e) {
       console.error('POST /api/produits:', e)
       return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

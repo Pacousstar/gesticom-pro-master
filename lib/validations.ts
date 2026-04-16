@@ -125,9 +125,11 @@ export const depenseSchema = z.object({
   libelle: z.string().min(1, 'Le libellé est requis.').max(MAX_STRING, 'Le libellé ne peut pas dépasser 500 caractères.').trim(),
   montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
   montantPaye: z.coerce.number().min(0, 'Le montant payé doit être positif.').optional(),
-  modePaiement: z.enum(['ESPECES', 'MOBILE_MONEY', 'CREDIT', 'VIREMENT'], {
+  modePaiement: z.enum(['ESPECES', 'MOBILE_MONEY', 'CREDIT', 'VIREMENT', 'CHEQUE'], {
     message: 'Mode de paiement invalide.',
   }),
+  banqueId: z.coerce.number().int().positive().nullable().optional(),
+  pieceJustificative: z.string().max(MAX_STRING).trim().nullable().optional(),
   beneficiaire: z.string().max(MAX_STRING, 'Le bénéficiaire ne peut pas dépasser 500 caractères.').trim().nullable().optional(),
 })
 
@@ -162,6 +164,12 @@ export const chargeSchema = z.object({
   }),
   rubrique: z.string().min(1, 'La rubrique est requise.').max(100, 'La rubrique ne peut pas dépasser 100 caractères.').trim(),
   montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  modePaiement: z.enum(['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE'], {
+    message: 'Mode de paiement invalide.',
+  }).default('ESPECES'),
+  banqueId: z.coerce.number().int().positive().nullable().optional(),
+  pieceJustificative: z.string().max(MAX_STRING).trim().nullable().optional(),
+  beneficiaire: z.string().max(MAX_STRING).trim().nullable().optional(),
   observation: z.string().max(MAX_TEXT, 'L\'observation ne peut pas dépasser 2000 caractères.').trim().nullable().optional(),
 })
 

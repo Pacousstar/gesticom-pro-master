@@ -70,43 +70,31 @@ export async function GET(request: NextRequest) {
   let detteByFournisseur: Record<number, number> = {}
   
   if (fournisseurIds.length > 0) {
-    const whereAchat: any = {
-      fournisseurId: { in: fournisseurIds },
-      statut: { in: ['VALIDE', 'VALIDEE'] },
-    }
-    if (where.entiteId) whereAchat.entiteId = where.entiteId
-
-    const sums = await prisma.achat.groupBy({
+    // 1. Dettes Globales (Achats VALIDE)
+    const Dettes_Globales = await prisma.achat.groupBy({
       by: ['fournisseurId'],
-      where: whereAchat,
-      _sum: { montantTotal: true, montantPaye: true },
+      where: { fournisseurId: { in: fournisseurIds }, statut: 'VALIDE' },
+      _sum: { montantTotal: true },
     })
-    for (const r of sums) {
-      if (r.fournisseurId != null) {
-        const totalA = r._sum?.montantTotal || 0
-        const payeA = r._sum?.montantPaye || 0
-        detteByFournisseur[r.fournisseurId] = totalA - payeA
-      }
-    }
-    // Inclure aussi les règlements LIBRES (non liés à un achat spécifique)
-    const whereReg: any = { fournisseurId: { in: fournisseurIds }, achatId: null }
-    if (where.entiteId) whereReg.entiteId = where.entiteId
-
-    const reglementsLibres = await prisma.reglementAchat.groupBy({
+    
+    // 2. Paiements Globaux (Règlements VALIDE)
+    const Paiements_Globaux = await prisma.reglementAchat.groupBy({
       by: ['fournisseurId'],
-      where: whereReg,
+      where: { fournisseurId: { in: fournisseurIds }, statut: 'VALIDE' },
       _sum: { montant: true }
     })
-    for (const rl of reglementsLibres) {
-      if (rl.fournisseurId != null) {
-        detteByFournisseur[rl.fournisseurId] = (detteByFournisseur[rl.fournisseurId] || 0) - (rl._sum?.montant || 0)
-      }
+
+    const detteMap = Object.fromEntries(Dettes_Globales.map(r => [r.fournisseurId, r._sum?.montantTotal || 0]))
+    const payeMap = Object.fromEntries(Paiements_Globaux.map(r => [r.fournisseurId, r._sum?.montant || 0]))
+
+    for (const fId of fournisseurIds) {
+      detteByFournisseur[fId] = (detteMap[fId] || 0) - (payeMap[fId] || 0)
     }
   }
 
   const result = paginated.map((f: any) => ({
     ...f,
-    // Dette Totale = (Impayés sur achats) + Dette Initiale - Avoir Initial
+    // Dette Totale = (Achats - Paiements) + SoldeInitial - AvoirInitial
     dette: (detteByFournisseur[f.id] ?? 0) + (f.soldeInitial || 0) - (f.avoirInitial || 0)
   }))
 

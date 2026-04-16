@@ -9,8 +9,12 @@ import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 interface ProduitData {
     produitId: number
     designation: string
+    categorie: string
     quantiteTotale: number
     caTotal: number
+    coutTotal: number
+    margeBrute: number
+    tauxMarge: number
     nombreTransactions: number
 }
 
@@ -25,6 +29,7 @@ export default function ParProduitPage() {
     const [endDate, setEndDate] = useState('')
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [isPrinting, setIsPrinting] = useState(false)
+    const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
 
     useEffect(() => {
         const now = new Date()
@@ -56,7 +61,8 @@ export default function ParProduitPage() {
     }
 
     const totalQty = data.reduce((acc, c) => acc + c.quantiteTotale, 0)
-    const totalCA = data.reduce((acc, c) => acc + c.caTotal, 0)
+    const totalCA = data.reduce((acc, c) => acc + (c.caTotal || 0), 0)
+    const totalMarge = data.reduce((acc, c) => acc + (c.margeBrute || 0), 0)
 
     return (
         <>
@@ -72,10 +78,10 @@ export default function ParProduitPage() {
                                 <div className="p-3 bg-orange-50 rounded-2xl shadow-sm">
                                     <Package className="h-8 w-8 text-orange-600" />
                                 </div>
-                                Rentabilité Produits
+                                Rentabilité Produits {(startDate || endDate) && <span className="ml-1" title="Période filtrée">⚠️</span>}
                             </h1>
                             <p className="text-slate-500 text-sm mt-3 max-w-xl font-bold uppercase tracking-widest opacity-80">
-                                Analyse des rotations de stock et de la performance par article
+                                Analyse des rotations de stock et de la performance par article (Marge Réelle incluse)
                             </p>
                         </div>
 
@@ -86,7 +92,7 @@ export default function ParProduitPage() {
                                 className="bg-slate-800 text-white px-6 py-2 rounded-xl text-xs font-black hover:bg-slate-900 flex items-center gap-2 h-[42px] transition-all hover:scale-105 active:scale-95 shadow-lg no-print uppercase tracking-widest"
                             >
                                 <Printer className="h-4 w-4" />
-                                Aperçu Impression
+                                Imprimer
                             </button>
                             <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end bg-gray-50/50 p-6 rounded-2xl border border-gray-100 shadow-inner">
                                 <div className="space-y-1.5">
@@ -133,6 +139,7 @@ export default function ParProduitPage() {
                                         <th className="px-8 py-6">Catégorie</th>
                                         <th className="px-8 py-6 text-right">Qté Vendue</th>
                                         <th className="px-8 py-6 text-right">Valeur Ventes</th>
+                                        <th className="px-8 py-6 text-right text-orange-600">Marge Brute</th>
                                         <th className="px-8 py-6 text-right">Masse CA</th>
                                     </tr>
                                 </thead>
@@ -154,6 +161,14 @@ export default function ParProduitPage() {
                                             </td>
                                             <td className="px-8 py-7 text-right text-blue-600 font-black tracking-tighter text-xl tabular-nums">
                                                 {formatCurrency(row.caTotal)}
+                                            </td>
+                                            <td className="px-8 py-7 text-right">
+                                                <div className="font-black tabular-nums text-emerald-600 italic">
+                                                    {formatCurrency(row.margeBrute)}
+                                                </div>
+                                                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                                    {row.tauxMarge.toFixed(1)}% de marge
+                                                </div>
                                             </td>
                                             <td className="px-8 py-7 text-right">
                                                 <span className="bg-orange-50 text-orange-600 px-3 py-1 rounded-xl text-[10px] font-black border border-orange-100 tracking-tight">
@@ -186,6 +201,7 @@ export default function ParProduitPage() {
                             totalPages={allChunks.length}
                             hideHeader={index > 0}
                             hideVisa={index < allChunks.length - 1}
+                            layout={printLayout}
                         >
                             <table className="w-full text-[14px] border-collapse border-2 border-black">
                                 <thead>
@@ -240,6 +256,18 @@ export default function ParProduitPage() {
                          <span className="text-xs font-black text-emerald-600 italic uppercase">Période : {startDate}</span>
                          <span className="text-xs font-black text-emerald-600 italic uppercase">jusqu'au : {endDate}</span>
                        </div>
+                       <div className="h-10 w-px bg-gray-200" />
+                       <div className="flex items-center gap-2">
+                         <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
+                         <select 
+                           value={printLayout}
+                           onChange={(e) => setPrintLayout(e.target.value as any)}
+                           className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
+                         >
+                           <option value="portrait">Portrait</option>
+                           <option value="landscape">Paysage</option>
+                         </select>
+                       </div>
                     </div>
                     <div className="flex gap-4">
                       <button
@@ -259,7 +287,7 @@ export default function ParProduitPage() {
                 </div>
 
                 <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-                    <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
+                    <div className={`mx-auto ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal`}>
                         {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
                             <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                                 <ListPrintWrapper
@@ -269,6 +297,7 @@ export default function ParProduitPage() {
                                     totalPages={allChunks.length}
                                     hideHeader={index > 0}
                                     hideVisa={index < allChunks.length - 1}
+                                    layout={printLayout}
                                 >
                                     <table className="w-full text-[14px] border-collapse border-2 border-black">
                                         <thead>

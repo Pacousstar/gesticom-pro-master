@@ -176,7 +176,6 @@ export async function POST(request: NextRequest) {
         modePaiement,
         observation,
         statut: 'VALIDEE',
-        // @ts-ignore
         estHistorique: true,
         lignes: {
           create: lignesValides.map((l) => ({

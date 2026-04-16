@@ -453,53 +453,57 @@ export default function ProduitsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Produits</h1>
-          <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Catalogue et gestion des articles</p>
-          <p className="mt-1 text-sm font-medium text-white/60">
-            Total : <span className="text-amber-300 font-bold">{stats?.total ?? '—'}</span>
-            {' · '}En stock : <span className="text-emerald-300 font-bold">{stats?.enStock ?? '—'}</span>
-          </p>
+      {/* Header Orange Premium (Modèle Image) */}
+      <div className="relative -mx-6 -mt-6 mb-8 overflow-hidden bg-orange-600 px-8 py-10 shadow-2xl">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <h1 className="text-5xl font-black text-white uppercase italic tracking-tighter leading-none">Produits</h1>
+            <p className="mt-2 text-white/90 font-bold uppercase text-[11px] tracking-[0.2em]">Catalogue et gestion des articles</p>
+            <div className="mt-4 flex items-center gap-2 text-sm font-black text-white/80 uppercase tracking-widest">
+              Total : <span className="text-amber-300">{stats?.total ?? '—'}</span>
+              <span className="mx-2 opacity-50">|</span>
+              En stock : <span className="text-amber-300">{stats?.enStock ?? '—'}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleImportExcel}
+              className="flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-black text-white hover:bg-emerald-600 transition-all shadow-lg hover:scale-105 active:scale-95 no-print"
+            >
+              <Upload className="h-5 w-5" />
+              IMPORTER EXCEL
+            </button>
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 rounded-xl border-2 border-white/30 bg-white/10 px-6 py-3 text-sm font-black text-white hover:bg-white/20 transition-all no-print"
+            >
+              <Download className="h-5 w-5" />
+              Exporter Excel
+            </button>
+            <button
+              onClick={handleDirectPrint}
+              disabled={isPrinting}
+              className="flex items-center gap-2 rounded-xl border-2 border-orange-400 bg-orange-500/50 px-6 py-3 text-sm font-black text-white hover:bg-orange-500 transition-all shadow-xl no-print"
+            >
+              {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
+              APERÇU & IMPRESSION
+            </button>
+            <button
+              onClick={() => {
+                setFormData({ code: '', codeBarres: '', designation: '', categorie: 'DIVERS', unite: 'unite', magasinId: '', prixAchat: '', prixVente: '', prixMinimum: '', fournisseurId: '', seuilMin: '5', quantiteInitiale: '0' })
+                setForm(true)
+                fetchNextCode('DIVERS')
+              }}
+              className="flex items-center gap-2 rounded-xl bg-orange-400 px-6 py-3 text-sm font-black text-black hover:bg-orange-300 transition-all shadow-xl no-print"
+            >
+              <Plus className="h-5 w-5" />
+              + Nouveau <span className="text-[10px] opacity-70 ml-1">(Ctrl+N)</span>
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ImportExcelButton
-            endpoint="/api/produits/import"
-            onSuccess={() => {
-              fetchList()
-              window.dispatchEvent(new CustomEvent('produit-created'))
-            }}
-          />
-          <button
-            onClick={handleExportExcel}
-            className="flex items-center gap-2 rounded-lg border-2 border-green-500 bg-green-50 px-4 py-2 text-sm font-medium text-green-800 hover:bg-green-100"
-            title="Exporter tous les produits vers un fichier Excel"
-          >
-            <Download className="h-4 w-4" />
-            Exporter Excel
-          </button>
-          <button
-            onClick={handleDirectPrint}
-            disabled={isPrinting}
-            className="flex items-center gap-2 rounded-xl border-2 border-orange-600 bg-orange-50 px-6 py-3 text-sm font-black text-orange-900 hover:bg-orange-100 disabled:opacity-50 transition-all shadow-xl active:scale-95 no-print"
-          >
-            {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-            IMPRIMER
-          </button>
-          <button
-            onClick={() => {
-              setFormData({ code: '', codeBarres: '', designation: '', categorie: 'DIVERS', unite: 'unite', magasinId: '', prixAchat: '', prixVente: '', prixMinimum: '', fournisseurId: '', seuilMin: '5', quantiteInitiale: '0' })
-              setForm(true)
-              fetchNextCode('DIVERS')
-            }}
-            className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-            title="Nouveau produit (Ctrl+N)"
-          >
-            <Plus className="h-4 w-4" />
-            Nouveau
-            <span className="hidden sm:inline text-xs opacity-75 ml-1">(Ctrl+N)</span>
-          </button>
-        </div>
+        {/* Effet décoratif subtil */}
+        <div className="absolute right-0 top-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-white/5" />
       </div>
 
       {isPrinting && (
@@ -595,40 +599,42 @@ export default function ProduitsPage() {
         ))}
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 no-print items-end bg-white/10 p-3 rounded-xl border border-white/20">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+      <div className="flex flex-col lg:flex-row gap-4 no-print items-end bg-orange-700/80 p-6 rounded-[2rem] shadow-xl border-t-4 border-orange-400">
+        <div className="flex-1 relative w-full">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 bg-gray-100 p-2 rounded-full shadow-inner">
+            <Search className="h-5 w-5 text-gray-500" />
+          </div>
           <input
             type="search"
             placeholder="Rechercher par code, désignation, catégorie..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-gray-900"
+            className="w-full rounded-2xl border-0 bg-white py-4 pl-16 pr-6 focus:outline-none focus:ring-4 focus:ring-orange-300 text-gray-900 font-bold shadow-2xl"
           />
         </div>
-        <div className="flex gap-2 items-end">
+        <div className="flex gap-4 items-end bg-white/10 p-4 rounded-3xl border border-white/20">
           <div>
-            <label className="block text-[10px] font-black text-white uppercase mb-1">Depuis le</label>
+            <label className="block text-[11px] font-black text-white uppercase mb-2 tracking-widest ml-1">Depuis le</label>
             <input
               type="date"
               value={dateDebut}
               onChange={e => setDateDebut(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 text-gray-900"
+              className="rounded-xl border-0 bg-white px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-400 text-gray-900"
             />
           </div>
           <div>
-            <label className="block text-[10px] font-black text-white uppercase mb-1">Jusqu'au</label>
+            <label className="block text-[11px] font-black text-white uppercase mb-2 tracking-widest ml-1">Jusqu'au</label>
             <input
               type="date"
               value={dateFin}
               onChange={e => setDateFin(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 text-gray-900"
+              className="rounded-xl border-0 bg-white px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-400 text-gray-900"
             />
           </div>
           {(dateDebut || dateFin) && (
             <button
               onClick={() => { setDateDebut(''); setDateFin(''); }}
-              className="bg-white/20 hover:bg-white/30 text-white rounded-lg p-2 text-xs font-bold transition-all"
+              className="bg-red-500 hover:bg-red-600 text-white rounded-xl px-4 py-2.5 text-xs font-black transition-all shadow-lg"
             >
               RÉINITIALISER
             </button>
@@ -827,100 +833,75 @@ export default function ProduitsPage() {
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">N°</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Désignation</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Catégorie</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Prix achat</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Prix vente</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-red-800 bg-red-50 italic">Prix Min.</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Stock Actuel</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Seuil</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Date création</th>
-                  <th className="px-4 py-3"></th>
+                <tr className="bg-gray-100 uppercase">
+                  <th className="px-4 py-4 text-left text-[11px] font-black text-gray-600">N°</th>
+                  <th className="px-4 py-4 text-left text-[11px] font-black text-gray-600">CODE</th>
+                  <th className="px-4 py-4 text-left text-[11px] font-black text-gray-600">DÉSIGNATION</th>
+                  <th className="px-4 py-4 text-left text-[11px] font-black text-gray-600">CATÉGORIE</th>
+                  <th className="px-4 py-4 text-right text-[11px] font-black text-gray-600">P. ACHAT</th>
+                  <th className="px-4 py-4 text-right text-[11px] font-black text-gray-600">P. VENTE</th>
+                  <th className="px-4 py-4 text-right text-[11px] font-black text-red-700 bg-red-50/50 italic">P. MIN.</th>
+                  <th className="px-4 py-4 text-right text-[11px] font-black text-gray-600">STOCK ACTUEL</th>
+                  <th className="px-4 py-4 text-right text-[11px] font-black text-gray-600">SEUIL</th>
+                  <th className="px-4 py-4 text-left text-[11px] font-black text-gray-600">DATE CRÉATION</th>
+                  <th className="px-4 py-4"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {list.map((p, idx) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-500">{(pagination ? (pagination.page - 1) * pagination.limit : 0) + idx + 1}</td>
-                    <td className="px-4 py-3 font-mono text-sm text-gray-900">{p.code}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{p.designation}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{p.categorie}</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-600">
-                      {p.prixAchat != null ? `${Number(p.prixAchat).toLocaleString('fr-FR')} F` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-600">
-                      <input
-                        type="number"
-                        defaultValue={p.prixVente || 0}
-                        onBlur={async (e) => {
-                          const val = Number(e.target.value)
-                          if (val === p.prixVente) return
-                          await fetch(`/api/produits/${p.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ prixVente: val })
-                          })
-                          showSuccess(`${p.code}: Prix de vente mis à jour.`)
-                        }}
-                        className="w-20 rounded border border-transparent hover:border-gray-300 px-1 text-right focus:border-orange-500 outline-none transition-all"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-black text-red-700 bg-red-50 italic">
-                      <input
-                        type="number"
-                        defaultValue={p.prixMinimum || 0}
-                        onBlur={async (e) => {
-                          const val = Number(e.target.value)
-                          if (val === p.prixMinimum) return
-                          await fetch(`/api/produits/${p.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ prixMinimum: val })
-                          })
-                          showSuccess(`${p.code}: Prix minimum mis à jour.`)
-                        }}
-                        className="w-20 rounded border border-transparent hover:border-red-300 px-1 text-right focus:border-red-500 outline-none bg-transparent transition-all"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <span className={`font-bold ${(p.stockConsolide ?? 0) <= p.seuilMin ? 'text-red-600' : 'text-emerald-600'}`}>
-                          {(p.stockConsolide ?? 0).toLocaleString()}
-                        </span>
-                        {(p.stockConsolide ?? 0) <= p.seuilMin && (
-                          <AlertTriangle className="h-4 w-4 text-red-500" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-600 font-medium">{p.seuilMin}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {formatDate(p.createdAt, { includeTime: true })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEditProduit(p)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-orange-600"
-                          title="Modifier produit (Nom, Prix, Fournisseur)"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleting(p)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
-                          title="Supprimer ce produit"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {list.map((p, idx) => {
+                  const outOfStock = (p.stockConsolide ?? 0) <= p.seuilMin
+                  return (
+                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-4 text-xs font-bold text-gray-400">{(pagination ? (pagination.page - 1) * pagination.limit : 0) + idx + 1}</td>
+                      <td className="px-4 py-4 font-mono text-xs font-bold text-gray-900">{p.code}</td>
+                      <td className="px-4 py-4 text-sm font-black text-gray-900 uppercase">{p.designation}</td>
+                      <td className="px-4 py-4 text-[11px] font-bold text-gray-500 uppercase italic">{p.categorie}</td>
+                      <td className="px-4 py-4 text-right text-sm font-bold text-gray-600">
+                        {p.prixAchat != null ? `${Number(p.prixAchat).toLocaleString('fr-FR')} F` : '—'}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm font-black text-gray-900">
+                        {p.prixVente != null ? Number(p.prixVente).toLocaleString('fr-FR') : '—'}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm font-black text-red-600 bg-red-50/30 italic">
+                        {p.prixMinimum != null ? Number(p.prixMinimum).toLocaleString('fr-FR') : '0'}
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className={`text-base font-black ${outOfStock ? 'text-red-600 underline' : 'text-emerald-600'}`}>
+                            {(p.stockConsolide ?? 0).toLocaleString()}
+                          </span>
+                          {outOfStock && (
+                            <AlertTriangle className="h-4 w-4 text-red-500" />
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm font-bold text-gray-600">{p.seuilMin}</td>
+                      <td className="px-4 py-4 text-[11px] font-bold text-gray-500">
+                        {formatDate(p.createdAt, { includeTime: true })}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => openEditProduit(p)}
+                            className="rounded-lg p-2 text-gray-400 hover:bg-orange-50 hover:text-orange-600 transition-all"
+                            title="Modifier"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleting(p)}
+                            className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-all"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

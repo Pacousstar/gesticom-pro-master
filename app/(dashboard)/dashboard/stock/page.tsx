@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, AlertTriangle, Plus, Pencil, Trash2, X, Search, Minus, ClipboardList, FileSpreadsheet, Download, Printer, ArrowRightLeft, CheckCircle2 } from 'lucide-react'
+import { Loader2, AlertTriangle, Plus, Pencil, Trash2, X, Search, Minus, ClipboardList, FileSpreadsheet, Download, Printer, ArrowRightLeft, CheckCircle2, Smartphone } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
@@ -9,6 +9,7 @@ import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import Pagination from '@/components/ui/Pagination'
 import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+
 type Magasin = { id: number; code: string; nom: string }
 type Produit = { id: number; code: string; designation: string; prixAchat?: number | null }
 type StockRow = {
@@ -115,6 +116,12 @@ export default function StockPage() {
   const [loadingRecommendations, setLoadingRecommendations] = useState(false)
   const [validatingTransfers, setValidatingTransfers] = useState(false)
   const [selectedRecommendations, setSelectedRecommendations] = useState<Set<number>>(new Set())
+  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+
+  const itemsPerPage = 20
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const totalPagesFiltered = pagination?.totalPages ?? Math.ceil(list.length / itemsPerPage)
 
   const refetchProduits = () => {
     fetch('/api/produits?complet=1')
@@ -164,14 +171,14 @@ export default function StockPage() {
     try {
       const toValidate = recommendations.filter((_, i) => selectedRecommendations.has(i))
       
-      // Groupe par couple (Origine, Destination) pour faire moins d'appels ou un seul transfert groupé
-      // Pour GestiCom, on va faire un appel par transfert unique (Origine -> Dest)
-      
       const transfersMap = new Map<string, any>()
       toValidate.forEach(r => {
         const key = `${r.magasinOrigineId}-${r.magasinDestId}`
         if (!transfersMap.has(key)) {
+          // Générer un numéro unique par couple de magasins pour l'idempotence
+          const stableId = `TRF-AUTO-${Date.now()}-${r.magasinOrigineId}-${r.magasinDestId}`.toUpperCase()
           transfersMap.set(key, {
+            numero: stableId,
             magasinOrigineId: r.magasinOrigineId,
             magasinDestId: r.magasinDestId,
             observation: 'Transfert automatique via Assistant',
@@ -234,7 +241,6 @@ export default function StockPage() {
     if (showEntree) refetchProduits()
   }, [showEntree])
 
-  // Écouter les événements de création de produit depuis d'autres pages
   useEffect(() => {
     const handleProduitCreated = () => {
       refetchProduits()
@@ -252,11 +258,11 @@ export default function StockPage() {
         limit: '20',
       })
       if (magasinId) params.set('magasinId', magasinId)
+      if (searchTerm.trim()) params.set('search', searchTerm.trim())
 
       const res = await fetch('/api/stock?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        // Mode complet : retourne directement un tableau
         if (Array.isArray(response)) {
           setList(response)
           setPagination(null)
@@ -282,11 +288,7 @@ export default function StockPage() {
   useEffect(() => {
     setCurrentPage(1)
     fetchList(1)
-  }, [magasinId])
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [searchTerm])
+  }, [magasinId, searchTerm])
 
   useEffect(() => {
     fetchList()
@@ -306,10 +308,8 @@ export default function StockPage() {
         const response = await res.json()
         const data = Array.isArray(response) ? response : (response.data || [])
         setAllStocksForPrint(data)
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 500)
+        setIsPreviewOpen(true)
+        setIsPrinting(false)
       }
     } catch (e) {
       console.error(e)
@@ -327,25 +327,11 @@ export default function StockPage() {
   }
 
   const searchLower = searchTerm.trim().toLowerCase()
-  const filteredList = searchLower
-    ? list.filter(
-      (s) =>
-        s.magasin.code.toLowerCase().includes(searchLower) ||
-        s.magasin.nom.toLowerCase().includes(searchLower) ||
-        s.produit.code.toLowerCase().includes(searchLower) ||
-        s.produit.designation.toLowerCase().includes(searchLower)
-    )
-    : list
-
-  // Pagination côté client pour la liste filtrée
-  const itemsPerPage = 20
-  const totalPagesFiltered = Math.ceil(filteredList.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const paginatedList = filteredList.slice(startIndex, endIndex)
+  const filteredList = list
+  const paginatedList = list
 
   const alertes = filteredList.filter((s) => s.quantite < s.produit.seuilMin)
-  const totalLignes = filteredList.length
+  const totalLignes = pagination?.total ?? filteredList.length
   const produitsAvecStock = new Set(filteredList.filter((s) => s.quantite > 0).map((s) => s.produit.id)).size
 
   const handleEntree = async (e: React.FormEvent) => {
@@ -357,12 +343,9 @@ export default function StockPage() {
       date: entreeForm.date || undefined,
       magasinId: Number(entreeForm.magasinId),
       produitId: Number(entreeForm.produitId),
-      quantite: Math.max(0, Number(entreeForm.quantite) || 0), // Libération décimales
+      quantite: Math.max(0, Number(entreeForm.quantite) || 0),
       observation: entreeForm.observation.trim() || undefined,
     }
-
-    // Dans GestiCom Offline, on enregistre toujours directement vers le serveur local.
-    // La file d'attente (SyncQueue) est gérée dans le catch en cas de défaillance du serveur.
 
     try {
       const res = await fetch('/api/stock/entree', {
@@ -374,7 +357,6 @@ export default function StockPage() {
       if (res.ok) {
         setShowEntree(false)
         refetch()
-        setTimeout(() => refetch(), 500)
       } else {
         if (data.error?.includes("n'existe pas dans ce magasin") || data.error?.includes("Creez d'abord le produit")) {
           setCreateProduitData({
@@ -404,11 +386,9 @@ export default function StockPage() {
       date: sortieForm.date || undefined,
       magasinId: Number(sortieForm.magasinId),
       produitId: Number(sortieForm.produitId),
-      quantite: Math.max(0, Number(sortieForm.quantite) || 0), // Libération décimales
+      quantite: Math.max(0, Number(sortieForm.quantite) || 0),
       observation: sortieForm.observation.trim() || undefined,
     }
-
-    // Dans GestiCom Offline, on enregistre toujours directement vers le serveur local.
 
     try {
       const res = await fetch('/api/stock/sortie', {
@@ -420,7 +400,6 @@ export default function StockPage() {
       if (res.ok) {
         setShowSortie(false)
         refetch()
-        setTimeout(() => refetch(), 500)
         showSuccess('Sortie de stock enregistrée avec succès.')
       } else {
         if (data.error?.includes("n'existe pas dans ce magasin") || data.error?.includes("Creez d'abord le produit")) {
@@ -432,7 +411,6 @@ export default function StockPage() {
           })
           setShowCreateProduit(true)
         } else if (data.error?.includes('Stock insuffisant')) {
-          // Extraire les informations du message d'erreur
           const match = data.error.match(/Stock insuffisant\. Disponible : (\d+), demandé : (\d+)\./)
           if (match) {
             const quantiteDisponible = Number(match[1])
@@ -510,7 +488,6 @@ export default function StockPage() {
         setShowCreateProduit(false)
         refetchProduits()
         refetch()
-        // Notifier les autres pages pour rafraîchir leurs listes de produits
         window.dispatchEvent(new CustomEvent('produit-created'))
         if (createProduitData?.afterCreate) {
           createProduitData.afterCreate()
@@ -571,7 +548,7 @@ export default function StockPage() {
           const val = inventaireReelles[key]
           const quantiteReelle =
             val !== '' && val !== undefined
-              ? Math.max(0, Number(val) || 0) // Libération décimales
+              ? Math.max(0, Number(val) || 0)
               : s.quantite
           return { stockId: s.id!, quantiteReelle }
         })
@@ -589,7 +566,6 @@ export default function StockPage() {
         setShowInventaire(false)
         setInventaireReelles({})
         refetch()
-        setTimeout(() => refetch(), 500)
         showSuccess(data.regularise !== undefined ? `${data.regularise} ligne(s) régularisée(s).` : 'Inventaire enregistré avec succès.')
       } else {
         const errorMsg = formatApiError(data.error || 'Erreur lors de l\'enregistrement.')
@@ -618,7 +594,6 @@ export default function StockPage() {
     setErr('')
     setSaving(true)
 
-    // Si le stock n'existe pas encore (id null), on doit le créer via une entrée de stock
     if (editRow.id == null) {
       const quantite = Math.max(0, Number(editForm.quantite) || 0)
       try {
@@ -637,7 +612,6 @@ export default function StockPage() {
           setShowEdit(false)
           setEditRow(null)
           refetch()
-          setTimeout(() => refetch(), 500)
           showSuccess('Stock initialisé avec succès.')
         } else {
           const d = await res.json()
@@ -655,7 +629,6 @@ export default function StockPage() {
       return
     }
 
-    // Stock existant, on peut le modifier
     try {
       const res = await fetch(`/api/stock/${editRow.id}`, {
         method: 'PATCH',
@@ -669,7 +642,6 @@ export default function StockPage() {
         setShowEdit(false)
         setEditRow(null)
         refetch()
-        setTimeout(() => refetch(), 500)
         showSuccess('Stock modifié avec succès.')
       } else {
         const d = await res.json()
@@ -708,7 +680,6 @@ export default function StockPage() {
 
   return (
     <div className="pb-12">
-      {/* VUE ÉCRAN (Masquée à l'impression) */}
       <div className="print:hidden space-y-6">
         <div>
         <h1 className="text-3xl font-bold text-white">Stock</h1>
@@ -746,6 +717,13 @@ export default function StockPage() {
             ))}
           </select>
         </label>
+        <button
+          onClick={() => window.location.href = '/dashboard/stock/inventaire-rapide'}
+          className="flex items-center gap-2 rounded-lg border-2 border-indigo-600 bg-indigo-50 px-3 py-2 text-sm font-black text-indigo-800 hover:bg-indigo-100 shadow-sm transition-all active:scale-95"
+        >
+          <Smartphone className="h-4 w-4" />
+          Mobile
+        </button>
         <button
           onClick={() => setShowEntree(true)}
           className="flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
@@ -813,10 +791,13 @@ export default function StockPage() {
             </div>
           </div>
         )}
-        {alertes.length > 0 && (
+        {(alertes.length > 0 || alertesRupture.length > 0) && (
           <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             <AlertTriangle className="h-5 w-5" />
-            {alertes.length} alerte(s) stock faible
+            {Math.max(alertes.length, alertesRupture.length)} alerte(s) rupture détectée(s)
+            {alertesRupture.length > alertes.length && (
+              <span className="text-[10px] text-red-500 italic">(global)</span>
+            )}
           </div>
         )}
         {magasinId && (
@@ -913,8 +894,9 @@ export default function StockPage() {
               />
             </div>
             <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
-              <button type="submit" disabled={saving} className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-60">
-                {saving ? '...' : "Enregistrer l'entree"}
+              <button type="submit" disabled={saving || !entreeForm.magasinId || !entreeForm.produitId} className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-60">
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {saving ? 'Enregistrement...' : "Enregistrer l'entree"}
               </button>
               <button type="button" onClick={() => { setShowEntree(false); setErr(''); }} className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300">
                 Annuler
@@ -991,8 +973,9 @@ export default function StockPage() {
               />
             </div>
             <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
-              <button type="submit" disabled={saving} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700 disabled:opacity-60">
-                {saving ? '...' : 'Enregistrer la sortie'}
+              <button type="submit" disabled={saving || !sortieForm.magasinId || !sortieForm.produitId} className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700 disabled:opacity-60">
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {saving ? 'Enregistrement...' : 'Enregistrer la sortie'}
               </button>
               <button type="button" onClick={() => { setShowSortie(false); setErr(''); }} className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300">
                 Annuler
@@ -1018,6 +1001,14 @@ export default function StockPage() {
               <X className="h-5 w-5" />
             </button>
           </div>
+          {searchTerm.trim() && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
+              <span>
+                ⚠️ Filtre texte actif : <strong>"{searchTerm}"</strong>. Seuls les articles correspondant à cette recherche sont affichés et seront régularisés. Effacez la recherche pour un inventaire complet.
+              </span>
+            </div>
+          )}
           <form onSubmit={handleInventaire} className="space-y-4">
             <div className="overflow-x-auto rounded-lg border-2 border-gray-300 bg-white shadow-sm max-h-[60vh] overflow-y-auto">
               <table className="min-w-full text-sm">
@@ -1034,7 +1025,7 @@ export default function StockPage() {
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {filteredList.filter((s) => s.id != null).length === 0 ? (
                     <tr className="bg-white">
-                      <td colSpan={5} className="px-4 py-6 text-center text-gray-600">
+                      <td colSpan={6} className="px-4 py-6 text-center text-gray-600">
                         Aucune ligne de stock à inventorier. Créez des produits avec leur magasin pour voir les stocks.
                       </td>
                     </tr>
@@ -1240,13 +1231,11 @@ export default function StockPage() {
             </table>
           </div>
         )}
-        {filteredList.length > itemsPerPage && (
-          <div className="mt-4 px-4 pb-4">
+        {pagination && pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
             <Pagination
               currentPage={currentPage}
-              totalPages={totalPagesFiltered}
-              totalItems={filteredList.length}
-              itemsPerPage={itemsPerPage}
+              totalPages={pagination.totalPages}
               onPageChange={handlePageChange}
             />
           </div>
@@ -1390,7 +1379,10 @@ export default function StockPage() {
       {stockInsuffisantModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStockInsuffisantModal(null)}>
           <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between border-b pb-4">
+            <div className="mb-4 flex items-center gap-3 text-red-600">
+              <div className="rounded-full bg-red-100 p-2">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Stock insuffisant</h3>
                 <p className="mt-1 text-sm text-gray-600">
@@ -1424,7 +1416,6 @@ export default function StockPage() {
                 }
                 setAjoutStockSaving(true)
                 try {
-                  // Ajouter le stock
                   const res = await fetch('/api/stock/entree', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1441,7 +1432,6 @@ export default function StockPage() {
                     showSuccess(`Stock ajouté avec succès (${quantite} unités).`)
                     setStockInsuffisantModal(null)
                     setAjoutStockQuantite('')
-                    // Réessayer l'opération
                     if (stockInsuffisantModal.onSuccess) {
                       stockInsuffisantModal.onSuccess()
                     } else {
@@ -1609,6 +1599,7 @@ export default function StockPage() {
           </div>
         </div>
       )}
+
       {/* Modal Assistant de Transfert */}
       {showTransferAssistant && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => !validatingTransfers && setShowTransferAssistant(false)}>
@@ -1680,47 +1671,47 @@ export default function StockPage() {
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white">
                         {recommendations.map((r, i) => (
-                          <tr key={i} className={`hover:bg-purple-50/30 transition-colors ${selectedRecommendations.has(i) ? 'bg-purple-50/20' : ''}`}>
-                            <td className="px-4 py-4">
-                              <input 
-                                type="checkbox" 
-                                checked={selectedRecommendations.has(i)}
-                                onChange={(e) => {
-                                  const next = new Set(selectedRecommendations)
-                                  if (e.target.checked) next.add(i)
-                                  else next.delete(i)
-                                  setSelectedRecommendations(next)
-                                }}
-                                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                              />
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="font-bold text-gray-900 leading-tight">{r.designation}</div>
-                              <div className="text-[10px] font-mono text-gray-500">{r.codeProduit}</div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-col">
-                                <span className="font-medium text-gray-800">{r.magasinOrigineNom}</span>
-                                {r.estSourcePrincipale && (
-                                  <span className="inline-flex w-fit items-center rounded px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 mt-1 uppercase">
-                                    Dépôt Principal
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 text-center">
-                              <ArrowRightLeft className="h-4 w-4 text-purple-400 mx-auto" />
-                            </td>
-                            <td className="px-4 py-4">
-                              <span className="font-medium text-gray-800">{r.magasinDestNom}</span>
-                            </td>
-                            <td className="px-4 py-4 text-right">
-                              <span className="text-lg font-black text-purple-700 bg-purple-50 px-2 py-1 rounded-lg">
-                                {r.quantite}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                           <tr key={i} className={`hover:bg-purple-50/30 transition-colors ${selectedRecommendations.has(i) ? 'bg-purple-50/20' : ''}`}>
+                             <td className="px-4 py-4">
+                               <input 
+                                 type="checkbox" 
+                                 checked={selectedRecommendations.has(i)}
+                                 onChange={(e) => {
+                                   const next = new Set(selectedRecommendations)
+                                   if (e.target.checked) next.add(i)
+                                   else next.delete(i)
+                                   setSelectedRecommendations(next)
+                                 }}
+                                 className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                               />
+                             </td>
+                             <td className="px-4 py-4">
+                               <div className="font-bold text-gray-900 leading-tight">{r.designation}</div>
+                               <div className="text-[10px] font-mono text-gray-500">{r.codeProduit}</div>
+                             </td>
+                             <td className="px-4 py-4">
+                               <div className="flex flex-col">
+                                 <span className="font-medium text-gray-800">{r.magasinOrigineNom}</span>
+                                 {r.estSourcePrincipale && (
+                                   <span className="inline-flex w-fit items-center rounded px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 mt-1 uppercase">
+                                     Dépôt Principal
+                                   </span>
+                                 )}
+                               </div>
+                             </td>
+                             <td className="px-4 py-4 text-center">
+                               <ArrowRightLeft className="h-4 w-4 text-purple-400 mx-auto" />
+                             </td>
+                             <td className="px-4 py-4">
+                               <span className="font-medium text-gray-800">{r.magasinDestNom}</span>
+                             </td>
+                             <td className="px-4 py-4 text-right">
+                               <span className="text-lg font-black text-purple-700 bg-purple-50 px-2 py-1 rounded-lg">
+                                 {r.quantite}
+                               </span>
+                             </td>
+                           </tr>
+                         ))}
                       </tbody>
                     </table>
                   </div>
@@ -1763,8 +1754,6 @@ export default function StockPage() {
         </div>
       )}
 
-      </div>
-
       {/* Rendu Système (Impression Native) */}
       <div className="hidden print:block absolute inset-0 bg-white">
           {(() => {
@@ -1779,6 +1768,7 @@ export default function StockPage() {
                       pageNumber={index + 1}
                       totalPages={allChunks.length}
                       enterprise={entreprise}
+                      layout={printLayout}
                     >
                        <table className="w-full text-[14px] border-collapse border-2 border-black font-sans">
                         <thead>
@@ -1835,6 +1825,133 @@ export default function StockPage() {
                   </div>
                 ));
           })()}
+      </div>
+
+      {/* MODALE D'APERÇU IMPRESSION INVENTAIRE STOCK */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans text-slate-900">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+              <div className="flex items-center gap-6">
+                 <div>
+                   <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu État des Stocks</h2>
+                   <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                     Inventaire Physique et Valorisation du Dépôt
+                   </p>
+                 </div>
+                 <div className="h-10 w-px bg-gray-200" />
+                 <div className="flex items-center gap-4">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-gray-400 uppercase">Magasin :</span>
+                      <span className="text-xs font-black text-orange-600 uppercase">
+                        {magasinId ? magasins.find(m => String(m.id) === magasinId)?.nom : 'Tous les sites'}
+                      </span>
+                    </div>
+                    <div className="h-10 w-px bg-gray-200" />
+                    <div className="flex items-center gap-2">
+                       <label className="text-[10px] font-black text-gray-400 uppercase text-xs">Orientation :</label>
+                       <select 
+                         value={printLayout}
+                         onChange={(e) => setPrintLayout(e.target.value as any)}
+                         className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
+                       >
+                         <option value="portrait">Portrait</option>
+                         <option value="landscape">Paysage</option>
+                       </select>
+                    </div>
+                 </div>
+              </div>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+                >
+                  Fermer
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+                >
+                  <Printer className="h-4 w-4" />
+                  Lancer l'impression
+                </button>
+              </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+              <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900">
+                {(() => {
+                    const dataToPrint = allStocksForPrint.length > 0 ? allStocksForPrint : list;
+                    const chunks = chunkArray(dataToPrint, ITEMS_PER_PRINT_PAGE);
+                    
+                    return chunks.map((chunk, index, allChunks) => (
+                      <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                        <ListPrintWrapper
+                          title="ÉTAT PHYSIQUE DES STOCKS"
+                          subtitle={magasinId ? `Dépôt : ${magasins.find(m => String(m.id) === magasinId)?.nom || magasinId}` : "Inventaire Multisites Global"}
+                          pageNumber={index + 1}
+                          totalPages={allChunks.length}
+                          enterprise={entreprise}
+                          layout={printLayout}
+                        >
+                           <table className="w-full text-[14px] border-collapse border-2 border-black font-sans">
+                            <thead>
+                              <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black text-[11px]">
+                                <th className="border border-black px-1 py-3 text-center w-8 italic">N°</th>
+                                <th className="border border-black px-2 py-3 text-left">Désignation de l'Article</th>
+                                <th className="border border-black px-2 py-3 text-left">Référence</th>
+                                <th className="border border-black px-2 py-3 text-left">Magasin</th>
+                                <th className="border border-black px-2 py-3 text-right">Quantité</th>
+                                <th className="border border-black px-2 py-3 text-right">Seuil</th>
+                                <th className="border border-black px-2 py-3 text-center uppercase text-[9px]">Statut</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {chunk.map((s, idx) => {
+                                const isAlerte = s.quantite < s.produit.seuilMin;
+                                return (
+                                  <tr key={idx} className="border border-black text-[14px]">
+                                    <td className="border border-black px-1 py-2 text-center font-bold">
+                                      {index * ITEMS_PER_PRINT_PAGE + idx + 1}
+                                    </td>
+                                    <td className="border border-black px-2 py-2">
+                                      <div className="font-black uppercase text-[12px]">{s.produit.designation}</div>
+                                      <div className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{s.produit.categorie}</div>
+                                    </td>
+                                    <td className="border border-black px-2 py-2 font-mono text-[11px] font-bold">{s.produit.code}</td>
+                                    <td className="border border-black px-2 py-2 uppercase font-bold text-gray-600 text-[10px]">{s.magasin.nom}</td>
+                                    <td className="border border-black px-2 py-2 text-right font-black text-[15px]">{s.quantite.toLocaleString()}</td>
+                                    <td className="border border-black px-2 py-2 text-right italic text-gray-400 text-[12px]">{s.produit.seuilMin}</td>
+                                    <td className="border border-black px-2 py-2 text-center">
+                                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${isAlerte ? 'bg-red-50 text-red-600 border border-red-100 shadow-sm' : 'bg-green-50 text-green-600 border border-green-100 shadow-sm'}`}>
+                                        {isAlerte ? 'Alerte' : 'Ok'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            {index === allChunks.length - 1 && (
+                              <tfoot>
+                                <tr className="bg-gray-50 font-black text-[14px] border-t-2 border-black uppercase italic">
+                                  <td colSpan={4} className="border border-black px-3 py-4 text-right tracking-widest bg-white">VOLUME GLOBAL CONSOLIDÉ :</td>
+                                  <td className="border border-black px-3 py-4 text-right tabular-nums bg-slate-100 text-slate-900 underline underline-offset-4 decoration-double">
+                                    {dataToPrint.reduce((acc, s) => acc + s.quantite, 0).toLocaleString()}
+                                  </td>
+                                  <td colSpan={2} className="border border-black px-3 py-4 text-center text-[10px] bg-white font-bold text-gray-300 italic">
+                                    Rapport certifié GestiCom Pro
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </ListPrintWrapper>
+                      </div>
+                    ));
+                })()}
+              </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   )

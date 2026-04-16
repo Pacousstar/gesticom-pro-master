@@ -3,6 +3,9 @@
 
 import { useEffect, useState } from 'react'
 
+// Cache global pour éviter les requêtes simultanées depuis plusieurs instances de pages
+let enterpriseCachePromise: Promise<any> | null = null;
+
 interface ListPrintWrapperProps {
   title: string
   subtitle?: string
@@ -10,7 +13,7 @@ interface ListPrintWrapperProps {
   pageNumber?: number
   totalPages?: number
   children: React.ReactNode
-  enterprise?: any // Optional data to avoid redundant API calls
+  enterprise?: any // Données optionnelles pour éviter les appels API redondants
   hideHeader?: boolean
   hideVisa?: boolean
   layout?: 'portrait' | 'landscape'
@@ -35,17 +38,21 @@ export default function ListPrintWrapper({
       setEnterprise(providedEnterprise)
       return
     }
-    // Only fetch if not provided and not already fetched
-    if (!enterprise) {
-      fetch('/api/parametres')
+
+    // Utilisation du cache de promesse pour ne faire qu'UN SEUL fetch globalement
+    if (!enterpriseCachePromise) {
+      enterpriseCachePromise = fetch('/api/parametres')
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => setEnterprise(d))
-        .catch(() => {})
+        .catch(() => null);
     }
-  }, [providedEnterprise, enterprise])
+
+    enterpriseCachePromise.then(data => {
+      if (data) setEnterprise(data);
+    });
+  }, [providedEnterprise])
 
   return (
-    <div className="print:flex flex-col font-sans text-black bg-white p-4 min-h-screen relative">
+    <div className="print:flex flex-col font-sans text-black bg-white p-4 min-h-screen relative list-print-container">
       {/* HEADER PROFESSIONNEL */}
       {!hideHeader && (
         <div className="flex justify-between items-start mb-8 border-b-4 border-gray-900 pb-6">
@@ -100,7 +107,7 @@ export default function ListPrintWrapper({
               </p>
               {dateRange && (
                 <p className="inline-block bg-gray-100 px-3 py-1 rounded text-[11px] font-black uppercase text-gray-800 border border-gray-200">
-                  Période : Du {new Date(dateRange.start).toLocaleDateString('fr-FR')} Au {new Date(dateRange.end).toLocaleDateString('fr-FR')}
+                   Du {new Date(dateRange.start).toLocaleDateString('fr-FR')} Au {new Date(dateRange.end).toLocaleDateString('fr-FR')}
                 </p>
               )}
               {pageNumber && totalPages && (
@@ -118,7 +125,7 @@ export default function ListPrintWrapper({
         {children}
       </div>
 
-      {/* FOOTER & VISA - Apparaît sur chaque page, mais les visas sont souvent sur la dernière */}
+      {/* FOOTER & VISA */}
       {!hideVisa && (
         <div className="mt-12 flex justify-between items-end pt-8 border-t-2 border-black print-footer">
           <div className="text-[15px] italic text-gray-500 uppercase font-black max-w-[50%] leading-tight">
@@ -130,10 +137,10 @@ export default function ListPrintWrapper({
           
           <div className="flex gap-12">
             <div className="text-center w-56">
-              <p className="text-[15px] font-black uppercase border-b-2 border-gray-900 pb-1 mb-20 whitespace-nowrap">Le Responsable Stock / Visa</p>
+              <p className="text-[15px] font-black uppercase border-b-2 border-gray-900 pb-1 mb-20 whitespace-nowrap">Le Responsable / Visa</p>
             </div>
             <div className="text-center w-64">
-              <p className="text-[15px] font-black uppercase border-b-2 border-black pb-1 mb-20 whitespace-nowrap">La Direction Générale / Cachet</p>
+              <p className="text-[15px] font-black uppercase border-b-2 border-black pb-1 mb-20 whitespace-nowrap">La Direction / Cachet</p>
               <div className="mt-16 text-[13px] font-bold text-gray-400 italic">
                 (Signature et Cachet)
               </div>
@@ -142,7 +149,6 @@ export default function ListPrintWrapper({
         </div>
       )}
 
-      {/* Styles spécifiques d'impression pour forcer la pagination et le rendu des couleurs */}
       <style jsx global>{`
         @media print {
           @page {
@@ -157,9 +163,10 @@ export default function ListPrintWrapper({
             background: white !important;
             color: black !important;
             width: 100% !important;
-            height: 100% !important;
+            height: auto !important; /* CRITIQUE : Évite les pages blanches / troncatures */
             margin: 0 !important;
             padding: 0 !important;
+            overflow: visible !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -168,9 +175,10 @@ export default function ListPrintWrapper({
             padding: 0 !important; 
             width: 100% !important;
             display: block !important;
+            overflow: visible !important;
           }
-          /* Forcer le conteneur d'impression à prendre toute la largeur */
-          div[class*="min-h-screen"] {
+          .list-print-container {
+            min-height: auto !important; /* CRITIQUE */
             padding: 0 !important;
             margin: 0 !important;
           }
@@ -185,42 +193,28 @@ export default function ListPrintWrapper({
             background-color: #f3f4f6 !important;
             border: 2px solid #000 !important;
             padding: 10px 4px !important;
-            font-size: 15px !important; /* Standard demandé */
+            font-size: 14px !important;
             font-weight: 900 !important;
             text-transform: uppercase;
           }
           .print-content td {
             border: 1px solid #000 !important;
             padding: 8px 4px !important;
-            font-size: 14px !important; /* Standard demandé */
+            font-size: 14px !important;
             font-weight: 500 !important;
           }
-          .print-content tfoot td {
-            font-size: 15px !important; /* Standard demandé */
-            font-weight: 900 !important;
-            background-color: #f9fafb !important;
-            border-top: 2px solid #000 !important;
-          }
           .print-content tr {
-            page-break-inside: avoid;
+            page-break-inside: avoid !important;
           }
           .print-content thead {
             display: table-header-group;
           }
-          .print-content tfoot {
-            display: table-footer-group;
-          }
           .print-footer {
             page-break-inside: avoid !important;
-            margin-top: auto;
+            margin-top: 2rem;
           }
           .page-break {
             page-break-after: always;
-          }
-          /* Éviter les dégradés et images inutiles */
-          * {
-            box-shadow: none !important;
-            text-shadow: none !important;
           }
         }
       `}</style>

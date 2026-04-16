@@ -30,7 +30,7 @@ export async function POST() {
 
   try {
     const { createBackup } = await import('@/lib/sauvegarde-db')
-    const name = createBackup()
+    const name = await createBackup()
     return NextResponse.json({ success: true, name })
   } catch (e) {
     console.error('POST /api/sauvegarde:', e)

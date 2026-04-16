@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, Plus, Loader2, Trash2, Edit2, Filter, X, Search, FileSpreadsheet, Download, Printer } from 'lucide-react'
+import { TrendingUp, Plus, Loader2, Trash2, Edit2, Filter, X, Search, FileSpreadsheet, Download, Printer, CreditCard } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { useToast } from '@/hooks/useToast'
 import { chargeSchema } from '@/lib/validations'
@@ -18,6 +18,8 @@ type Charge = {
   rubrique: string
   beneficiaire: string | null
   montant: number
+  modePaiement: string
+  pieceJustificative: string | null
   observation: string | null
   magasin: { id: number; code: string; nom: string } | null
   entite: { id: number; code: string; nom: string }
@@ -69,6 +71,7 @@ type Magasin = { id: number; code: string; nom: string }
 
 export default function ChargesPage() {
   const [magasins, setMagasins] = useState<Magasin[]>([])
+  const [banques, setBanques] = useState<any[]>([])
   const [charges, setCharges] = useState<Charge[]>([])
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
@@ -81,6 +84,9 @@ export default function ChargesPage() {
     rubriqueLibre: '',
     beneficiaire: '',
     montant: '',
+    modePaiement: 'ESPECES',
+    banqueId: '',
+    pieceJustificative: '',
     observation: '',
   })
   const [err, setErr] = useState('')
@@ -99,6 +105,7 @@ export default function ChargesPage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [allChargesForPrint, setAllChargesForPrint] = useState<Charge[]>([])
+  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
   const itemsPerPage = 20
 
   useEffect(() => {
@@ -113,6 +120,9 @@ export default function ChargesPage() {
     fetch('/api/magasins')
       .then((r) => (r.ok ? r.json() : []))
       .then(setMagasins)
+    fetch('/api/banques')
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((d) => setBanques(d.data || []))
   }, [])
 
   const fetchCharges = (page = currentPage) => {
@@ -172,6 +182,9 @@ export default function ChargesPage() {
       rubriqueLibre: '',
       beneficiaire: '',
       montant: '',
+      modePaiement: 'ESPECES',
+      banqueId: '',
+      pieceJustificative: '',
       observation: '',
     })
     setEditing(null)
@@ -188,6 +201,9 @@ export default function ChargesPage() {
       rubriqueLibre: '',
       beneficiaire: '',
       montant: '',
+      modePaiement: 'ESPECES',
+      banqueId: '',
+      pieceJustificative: '',
       observation: '',
     })
     setEditing(null)
@@ -206,6 +222,9 @@ export default function ChargesPage() {
       rubriqueLibre: isRubriqueLibre ? (c.rubrique || '') : '',
       beneficiaire: c.beneficiaire || '',
       montant: String(c.montant),
+      modePaiement: c.modePaiement || 'ESPECES',
+      banqueId: (c as any).banqueId ? String((c as any).banqueId) : '',
+      pieceJustificative: (c as any).pieceJustificative || '',
       observation: c.observation || '',
     })
     setErr('')
@@ -224,6 +243,9 @@ export default function ChargesPage() {
       rubrique: rubriqueFinale,
       beneficiaire: formData.beneficiaire.trim() || null,
       montant: Number(formData.montant),
+      modePaiement: formData.modePaiement,
+      banqueId: ['ESPECES', 'CREDIT'].includes(formData.modePaiement) ? null : (formData.banqueId ? Number(formData.banqueId) : null),
+      pieceJustificative: formData.pieceJustificative.trim() || null,
       observation: formData.observation.trim() || null,
     }
 
@@ -471,11 +493,11 @@ export default function ChargesPage() {
               }
             }}
             disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border-2 border-slate-700 bg-slate-800 px-6 py-2.5 text-sm font-black text-white hover:bg-slate-900 shadow-xl transition-all active:scale-95 disabled:opacity-50 uppercase tracking-widest no-print"
             title="Aperçu avant impression"
           >
-            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Imprimer
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin mx-auto text-orange-500" /> : <Printer className="h-4 w-4" />}
+            IMPRIMER
           </button>
         </div>
       </div>
@@ -497,6 +519,7 @@ export default function ChargesPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Rubrique</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 bg-orange-50 font-bold">Bénéficiaire</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Mode</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Montant</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Observation</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Utilisateur</th>
@@ -525,6 +548,9 @@ export default function ChargesPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{c.rubrique}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm font-bold text-gray-900 bg-orange-50 italic">{c.beneficiaire || '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                        {c.modePaiement === 'ESPECES' ? 'Espèces' : c.modePaiement === 'CHEQUE' ? 'Chèque' : c.modePaiement === 'VIREMENT' ? 'Virement' : c.modePaiement === 'MOBILE_MONEY' ? 'Mobile Money' : c.modePaiement}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">
                         {c.montant.toLocaleString('fr-FR')} FCFA
                       </td>
@@ -587,6 +613,18 @@ export default function ChargesPage() {
                <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-600 uppercase tracking-widest">
                  {allChargesForPrint.length} Éléments
                </span>
+               <div className="h-6 w-px bg-gray-200" />
+               <div className="flex items-center gap-2">
+                 <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
+                 <select 
+                   value={printLayout}
+                   onChange={(e) => setPrintLayout(e.target.value as any)}
+                   className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
+                 >
+                   <option value="portrait">Portrait</option>
+                   <option value="landscape">Paysage</option>
+                 </select>
+               </div>
             </div>
             <div className="flex gap-3">
               <button
@@ -617,6 +655,7 @@ export default function ChargesPage() {
                     totalPages={allChunks.length}
                     hideHeader={index > 0}
                     hideVisa={index < allChunks.length - 1}
+                    layout={printLayout}
                   >
                     <table className="w-full text-[14px] border-collapse border-2 border-black">
                       <thead>
@@ -671,6 +710,7 @@ export default function ChargesPage() {
                 totalPages={allChunks.length}
                 hideHeader={index > 0}
                 hideVisa={index < allChunks.length - 1}
+                layout={printLayout}
               >
                 <table className="w-full text-[14px] border-collapse border-2 border-black">
                   <thead>
@@ -804,6 +844,47 @@ export default function ChargesPage() {
                   className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 />
               </div>
+               <div>
+                <label className="block text-sm font-medium text-gray-700">Mode de paiement</label>
+                <select
+                  value={formData.modePaiement}
+                  onChange={(e) => setFormData((f) => ({ ...f, modePaiement: e.target.value }))}
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="ESPECES">Espèces</option>
+                  <option value="CHEQUE">Chèque</option>
+                  <option value="VIREMENT">Virement</option>
+                  <option value="MOBILE_MONEY">Mobile Money</option>
+                </select>
+              </div>
+              {formData.modePaiement !== 'ESPECES' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Compte Bancaire</label>
+                  <select
+                    required
+                    value={formData.banqueId}
+                    onChange={(e) => setFormData((f) => ({ ...f, banqueId: e.target.value }))}
+                    className="mt-1 block w-full rounded-lg border-2 border-orange-200 px-3 py-2 text-sm focus:border-orange-500 outline-none"
+                  >
+                    <option value="">— Sélectionner une banque —</option>
+                    {banques.map((b) => (
+                      <option key={b.id} value={String(b.id)}>{b.nomBanque} - {b.libelle} (Solde: {b.soldeActuel.toLocaleString()} F)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {formData.modePaiement !== 'ESPECES' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Référence / Pièce</label>
+                  <input
+                    type="text"
+                    value={formData.pieceJustificative}
+                    onChange={(e) => setFormData((f) => ({ ...f, pieceJustificative: e.target.value }))}
+                    placeholder="Ex: N° Chèque, Réf Virement..."
+                    className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Observation</label>
                 <input

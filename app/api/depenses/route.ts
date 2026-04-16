@@ -160,6 +160,22 @@ export async function POST(request: NextRequest) {
     }
 
     const depense = await prisma.$transaction(async (tx) => {
+      // --- VERROU SÉMANTIQUE (Idempotence) ---
+      const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000)
+      const isDuplicate = await tx.depense.findFirst({
+        where: {
+          libelle,
+          montant,
+          utilisateurId: session.userId,
+          createdAt: { gte: fifteenSecondsAgo }
+        },
+        select: { id: true }
+      })
+
+      if (isDuplicate) {
+        throw new Error('DOUBLE_TRANSACTION: Cette dépense semble être un doublon.')
+      }
+
       const d = await tx.depense.create({
         data: {
           date,
@@ -172,6 +188,7 @@ export async function POST(request: NextRequest) {
           montantPaye,
           statutPaiement,
           modePaiement,
+          banqueId: body?.banqueId != null ? Number(body.banqueId) : null,
           beneficiaire,
           pieceJustificative,
           observation,
@@ -225,6 +242,22 @@ export async function POST(request: NextRequest) {
               date
             }
           })
+        } else {
+          // ✅ SYNCHRO BANQUE : Dépense par Chèque/Virement/MM
+          const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
+          if (montantPaye > 0 && estModeBanque(modePaiement)) {
+            await enregistrerOperationBancaire({
+              banqueId: body.banqueId ? Number(body.banqueId) : null,
+              entiteId,
+              date,
+              type: 'DEPENSE',
+              libelle: `Dépense : ${libelle}`,
+              montant: montantPaye,
+              utilisateurId: session.userId,
+              reference: pieceJustificative || `EXP-${Date.now()}`,
+              observation: observation
+            }, tx)
+          }
         }
       }
       return d
@@ -234,8 +267,14 @@ export async function POST(request: NextRequest) {
     revalidatePath('/api/depenses')
 
     return NextResponse.json(depense)
-  } catch (e) {
+  } catch (e: any) {
     console.error('POST /api/depenses:', e)
+    if (e.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Cette dépense a déjà été enregistrée (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
     const msg = e instanceof Error ? e.message : String(e)
     const hint = msg.includes('table') || msg.includes('Table')
       ? 'La table Dépenses n\'existe peut-être pas. Exécutez: npx prisma db push'

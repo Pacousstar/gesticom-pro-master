@@ -54,68 +54,82 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Magasin ou produit introuvable.' }, { status: 400 })
     }
 
-    // --- RECALCUL DU PAMP SI PRIX SAISI ---
-    if (prixAchatSaisi !== null) {
-      const stockGlobalAvant = produit.stocks.reduce((acc, s) => acc + s.quantite, 0)
-      const pampActuel = produit.pamp || produit.prixAchat || 0
-      
-      let nouveauPamp = pampActuel
-      if (stockGlobalAvant <= 0) {
-        nouveauPamp = prixAchatSaisi
-      } else {
-        const valeurExistante = stockGlobalAvant * pampActuel
-        const valeurNouvelle = quantite * prixAchatSaisi
-        nouveauPamp = (valeurExistante + valeurNouvelle) / (stockGlobalAvant + quantite)
-      }
-      
-      if (!isNaN(nouveauPamp) && isFinite(nouveauPamp)) {
-        await prisma.produit.update({
-          where: { id: produitId },
-          data: { pamp: Math.round(nouveauPamp) }
-        })
-      }
-    }
+    let stockAvantRecalcul: { id: number, quantite: number } | null = null
 
-    // Vérifier que le magasin appartient à l'entité sélectionnée (sauf SUPER_ADMIN)
-    if (session.role !== 'SUPER_ADMIN' && magasin.entiteId !== entiteId) {
-      return NextResponse.json({ error: 'Ce magasin n\'appartient pas à votre entité.' }, { status: 403 })
-    }
-
-    let st = await prisma.stock.findUnique({
-      where: { produitId_magasinId: { produitId, magasinId } },
-    })
-    // Si le produit n'a pas encore de ligne de stock dans ce magasin, la créer (quantité 0)
-    if (!st) {
-      st = await prisma.stock.create({
-        data: {
+    const updatedStock = await prisma.$transaction(async (tx) => {
+      // --- VERROU SÉMANTIQUE (Idempotence temporelle) ---
+      // Bloque si une entrée identique a été faite il y a < 15 secondes par le même utilisateur
+      const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000)
+      const isDuplicate = await tx.mouvement.findFirst({
+        where: {
+          type: 'ENTREE',
           produitId,
           magasinId,
-          quantite: 0,
-          quantiteInitiale: 0,
+          quantite,
+          utilisateurId: session.userId,
+          createdAt: { gte: fifteenSecondsAgo }
+        },
+        select: { id: true }
+      })
+
+      if (isDuplicate) {
+        throw new Error('DOUBLE_TRANSACTION: Cette entrée de stock semble être un doublon (même produit et quantité en moins de 15s).')
+      }
+
+      // Récupérer le point de stock
+      let st = await tx.stock.findUnique({
+        where: { produitId_magasinId: { produitId, magasinId } }
+      })
+      if (!st) {
+        st = await tx.stock.create({
+          data: { produitId, magasinId, entiteId, quantite: 0, quantiteInitiale: 0 }
+        })
+      }
+      stockAvantRecalcul = { id: st.id, quantite: st.quantite }
+
+      // a. Recalcul PAMP
+      if (prixAchatSaisi !== null) {
+        const stockGlobalAvant = produit.stocks.reduce((acc, s) => acc + s.quantite, 0)
+        const pampActuel = produit.pamp || produit.prixAchat || 0
+        
+        let nouveauPamp = pampActuel
+        if (stockGlobalAvant <= 0) {
+          nouveauPamp = prixAchatSaisi
+        } else {
+          const valeurExistante = stockGlobalAvant * pampActuel
+          const valeurNouvelle = quantite * prixAchatSaisi
+          nouveauPamp = (valeurExistante + valeurNouvelle) / (stockGlobalAvant + quantite)
+        }
+        
+        if (!isNaN(nouveauPamp) && isFinite(nouveauPamp)) {
+          await tx.produit.update({
+            where: { id: produitId },
+            data: { pamp: Math.round(nouveauPamp) }
+          })
+        }
+      }
+
+      // b. Création Mouvement
+      const mvt = await tx.mouvement.create({
+        data: {
+          date: dateMouvement,
+          type: 'ENTREE',
+          produitId,
+          magasinId,
+          entiteId: entiteId,
+          utilisateurId: session.userId,
+          quantite,
+          observation: observation || 'Entrée stock',
         },
       })
-    }
 
-    await prisma.mouvement.create({
-      data: {
-        date: dateMouvement,
-        type: 'ENTREE',
-        produitId,
-        magasinId,
-        entiteId: entiteId,
-        utilisateurId: session.userId,
-        quantite,
-        observation: observation || 'Entrée stock',
-      },
-    })
+      // c. Mise à jour Stock
+      await tx.stock.update({
+        where: { id: st.id },
+        data: { quantite: { increment: quantite } },
+      })
 
-    await prisma.stock.update({
-      where: { id: st.id },
-      data: { quantite: { increment: quantite } },
-    })
-
-    // Comptabilisation de l'entrée de stock
-    try {
+      // d. Comptabilisation
       const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
       await comptabiliserMouvementStock({
         produitId,
@@ -125,36 +139,44 @@ export async function POST(request: NextRequest) {
         date: dateMouvement,
         motif: observation || 'Entrée stock manuelle',
         utilisateurId: session.userId,
-        entiteId: entiteId
-      })
-    } catch (comptaError) {
-      console.error('Erreur comptabilisation entrée stock:', comptaError)
-    }
+        entiteId: entiteId,
+        mouvementId: mvt.id
+      }, tx)
 
-    const updated = await prisma.stock.findUnique({
-      where: { id: st.id },
-      include: { produit: { select: { code: true, designation: true } }, magasin: { select: { code: true } } },
+      return await tx.stock.findUnique({
+        where: { id: stockAvantRecalcul!.id },
+        include: { produit: { select: { code: true, designation: true } }, magasin: { select: { code: true } } },
+      })
     })
 
     // Logger l'entrée de stock
-    const ipAddress = getIpAddress(request)
-    await logModification(
-      session,
-      'STOCK',
-      st.id,
-      `Entrée de stock : ${quantite} unité(s) pour ${updated?.produit.designation} dans ${updated?.magasin.code}`,
-      { quantiteAvant: st.quantite },
-      { quantiteApres: st.quantite + quantite, quantiteAjoutee: quantite },
-      ipAddress
-    )
+    if (updatedStock && stockAvantRecalcul) {
+      const { id, quantite: qAvant } = stockAvantRecalcul as { id: number, quantite: number };
+      const ipAddress = getIpAddress(request)
+      await logModification(
+        session,
+        'STOCK',
+        id,
+        `Entrée de stock : ${quantite} unité(s) pour ${updatedStock.produit.designation} dans ${updatedStock.magasin.code}`,
+        { quantiteAvant: qAvant },
+        { quantiteApres: qAvant + quantite, quantiteAjoutee: quantite },
+        ipAddress
+      )
+    }
 
     // Invalider le cache pour affichage immédiat
     revalidatePath('/dashboard/stock')
     revalidatePath('/api/stock')
 
-    return NextResponse.json(updated)
-  } catch (e) {
+    return NextResponse.json(updatedStock)
+  } catch (e: any) {
     console.error('POST /api/stock/entree:', e)
+    if (e.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Cette entrée de stock a déjà été enregistrée (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

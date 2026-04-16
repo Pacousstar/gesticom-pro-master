@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
                 montantTotal: total,
                 montantPaye: paye,
                 resteAPayer: total - paye,
-                nbAchats: a._count.id,
+                nombreAchats: a._count.id,
             }
         })
 
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
                 existing.montantTotal += curr.montantTotal
                 existing.montantPaye += curr.montantPaye
                 existing.resteAPayer += curr.resteAPayer
-                existing.nbAchats += curr.nbAchats
+                existing.nombreAchats += curr.nombreAchats
             } else {
                 acc.set(curr.fournisseur, { ...curr })
             }

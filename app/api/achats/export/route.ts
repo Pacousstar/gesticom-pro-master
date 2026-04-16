@@ -11,15 +11,19 @@ export async function GET(request: NextRequest) {
 
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
-  const where: { date?: { gte: Date; lte: Date }; entiteId?: number } = {}
+  const search = request.nextUrl.searchParams.get('search')?.trim().toLowerCase()
+
+  const where: any = {}
   if (dateDebut && dateFin) {
     where.date = {
       gte: new Date(dateDebut + 'T00:00:00'),
       lte: new Date(dateFin + 'T23:59:59'),
     }
   }
+
+  const entiteId = await getEntiteId(session)
   if (session.role !== 'SUPER_ADMIN') {
-    where.entiteId = await getEntiteId(session)
+    where.entiteId = entiteId
   }
 
   const achats = await prisma.achat.findMany({
@@ -28,15 +32,32 @@ export async function GET(request: NextRequest) {
     include: {
       magasin: { select: { code: true, nom: true } },
       fournisseur: { select: { nom: true } },
+      lignes: {
+        include: {
+          produit: { select: { designation: true } }
+        }
+      }
     },
   })
+
+  // Filtrage post-fetch si recherche
+  const filteredAchats = search 
+    ? achats.filter(a => {
+        const fournisseurNom = a.fournisseur?.nom || a.fournisseurLibre || ''
+        const prods = a.lignes.map(l => l.produit?.designation || '').join(' ')
+        return a.numero.toLowerCase().includes(search) || 
+               fournisseurNom.toLowerCase().includes(search) ||
+               prods.toLowerCase().includes(search) ||
+               (a.numeroCamion || '').toLowerCase().includes(search)
+      })
+    : achats
 
   const rows: any[] = []
   let totalMontant = 0
   let totalPaye = 0
   let totalReste = 0
 
-  for (const a of achats) {
+  for (const a of filteredAchats) {
     const dateStr = a.date.toISOString().slice(0, 10)
     const fournisseur = a.fournisseur?.nom ?? a.fournisseurLibre ?? '—'
     const reste = a.montantTotal - (a.montantPaye || 0)

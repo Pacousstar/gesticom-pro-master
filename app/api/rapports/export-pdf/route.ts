@@ -57,7 +57,6 @@ export async function GET(request: NextRequest) {
           }),
       prisma.mouvement.findMany({
         where: { ...whereBase, ...(deb && fin ? { date: { gte: deb, lte: fin } } : {}) },
-        take: 500,
         orderBy: { date: 'desc' },
         include: {
           produit: { select: { code: true, designation: true } },

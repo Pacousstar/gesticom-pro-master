@@ -156,6 +156,21 @@ export default function PaiementsFournisseursPage() {
           <button type="submit" className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-purple-700 flex items-center gap-2 h-[34px]">
             <Filter className="h-4 w-4" /> Filtrer
           </button>
+          {/* T-10 AUDIT : Bouton reset pour revenir aux 30 derniers jours */}
+          <button
+            type="button"
+            onClick={() => {
+              const now = new Date()
+              const d30 = new Date(); d30.setDate(now.getDate() - 30)
+              const s = d30.toISOString().split('T')[0]
+              const e = now.toISOString().split('T')[0]
+              setStartDate(s); setEndDate(e)
+              fetchData(s, e)
+            }}
+            className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-200 h-[34px]"
+          >
+            Derniers 30j
+          </button>
         </form>
 
         <div className="relative w-full md:max-w-xs">
@@ -173,8 +188,10 @@ export default function PaiementsFournisseursPage() {
       {/* Résumé par mode de paiement */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 no-print">
         <div className="rounded-lg bg-purple-100 px-4 py-3 border border-purple-200 md:col-span-2 shadow-sm">
-          <p className="text-sm text-purple-800 font-bold uppercase">Total Décaissé (Période)</p>
+          <p className="text-sm text-purple-800 font-bold uppercase">Total Décaissé {search ? '(Résultats filtrés)' : '(Période)'}</p>
           <p className="text-2xl font-black text-purple-900">{total.toLocaleString('fr-FR')} F</p>
+          {/* T-7 AUDIT : Note contextuelle si filtre texte actif */}
+          {search && <p className="text-[10px] text-purple-600 italic mt-1">⚠️ Ce montant correspond uniquement aux lignes affichées (filtre : "{search}")</p>}
         </div>
         {Object.entries(totalsByMode).map(([mode, sum]) => (
           <div key={mode} className="rounded-lg bg-white px-4 py-3 border border-gray-200 shadow-sm flex flex-col justify-between">

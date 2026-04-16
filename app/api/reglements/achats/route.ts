@@ -42,6 +42,23 @@ export async function POST(request: NextRequest) {
     const entiteId = session.entiteId || 1
 
     const res = await prisma.$transaction(async (tx: any) => {
+      // --- VERROU SÉMANTIQUE (Idempotence) ---
+      const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000)
+      const isDuplicate = await tx.reglementAchat.findFirst({
+        where: {
+          achatId,
+          fournisseurId,
+          montant,
+          utilisateurId: session.userId,
+          createdAt: { gte: fifteenSecondsAgo }
+        },
+        select: { id: true }
+      })
+
+      if (isDuplicate) {
+        throw new Error('DOUBLE_TRANSACTION: Ce règlement achat semble être un doublon.')
+      }
+
       const a = achatId ? await tx.achat.findUnique({ where: { id: achatId } }) : null
       const targetFournisseurId = achatId ? a?.fournisseurId : fournisseurId
       if (!targetFournisseurId) throw new Error('Fournisseur introuvable')
@@ -81,12 +98,29 @@ export async function POST(request: NextRequest) {
             date: dateReglement
           }
         })
+      } else {
+        // ✅ SYNCHRO BANQUE : Sortie de fonds
+        const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
+        if (estModeBanque(modePaiement)) {
+          await enregistrerOperationBancaire({
+            banqueId: body.banqueId ? Number(body.banqueId) : null,
+            entiteId,
+            date: dateReglement,
+            type: 'REGLEMENT_FOURNISSEUR',
+            libelle: `Règlement Achat ${a?.numero || ''} - ${observation}`,
+            montant,
+            utilisateurId: session.userId,
+            reference: a?.numero || `PAY-${Date.now()}`,
+            observation: `Paiement via ${modePaiement}`
+          }, tx)
+        }
       }
 
       // ✅ COMPTABILISATION
       await comptabiliserReglementAchat({
+        reglementId: reglement.id,
         achatId: achatId || 0,
-        numeroAchat: a?.numero || String(achatId || 'LIBRE'),
+        numeroAchat: a?.numero || `AC-FOURN-${targetFournisseurId}`,
         date: dateReglement,
         montant,
         modePaiement,
@@ -102,8 +136,14 @@ export async function POST(request: NextRequest) {
     revalidatePath('/dashboard/fournisseurs')
     
     return NextResponse.json(res)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur Règlement Achat:', error)
+    if (error.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Ce règlement achat a déjà été enregistré (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

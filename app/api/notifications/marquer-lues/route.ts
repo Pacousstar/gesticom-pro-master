@@ -1,12 +1,30 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { prisma } from '@/lib/db'
 
-// Les notifications sont générées dynamiquement (pas de table dédiée).
-// Cet endpoint retourne simplement un succès — la logique "lu" est gérée
-// côté client via localStorage pour éviter une migration de base.
-export async function PATCH() {
-    const session = await getSession()
-    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-    return NextResponse.json({ success: true, message: 'Notifications marquées comme lues.' })
+  try {
+    const { id } = await request.json()
+    
+    if (id) {
+      await prisma.systemAlerte.update({
+        where: { id },
+        data: { lu: true }
+      })
+    } else {
+      // Marquer tout comme lu pour l'entité
+      await prisma.systemAlerte.updateMany({
+        where: { entiteId: session.entiteId || 1, lu: false },
+        data: { lu: true }
+      })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Erreur Marquage Notifications:', error)
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { logAction, getIpAddress, getUserAgent } from '@/lib/audit'
 import { comptabiliserVente, comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
@@ -111,7 +112,6 @@ export async function POST(request: NextRequest) {
     let listReglements: { mode: string; montant: number }[] = []
 
     if (reglementsPayload.length > 0) {
-      // Si on reçoit une liste de règlements, on les additionne
       for (const r of reglementsPayload) {
         const amt = Math.max(0, Number(r.montant) || 0)
         if (amt > 0) {
@@ -120,14 +120,12 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      // Fallback sur l'ancien système (paiement unique)
       const montantPayeRaw = body?.montantPaye != null ? Math.max(0, Number(body.montantPaye) || 0) : null
       if (montantPayeRaw !== null) {
          montantPaye = montantPayeRaw
          listReglements.push({ mode: modePaiementPrincipal, montant: montantPaye })
       } else {
-         // Si rien n'est spécifié, on considère tout payé sauf si CREDIT
-         montantPaye = modePaiementPrincipal === 'CREDIT' ? 0 : 999999999 // Sera limité au total après
+         montantPaye = modePaiementPrincipal === 'CREDIT' ? 0 : 999999999
       }
     }
 
@@ -174,7 +172,6 @@ export async function POST(request: NextRequest) {
       const produit = await prisma.produit.findUnique({ where: { id: produitId } })
       if (!produit) continue
 
-      // Validation du prix minimum (PVM)
       const prixMin = produit.prixMinimum || 0
       if (prixMin > 0 && prixUnitaire < prixMin) {
         const ip = getIpAddress(request)
@@ -202,7 +199,6 @@ export async function POST(request: NextRequest) {
 
     const montantTotal = Math.max(0, Math.round(montantTotalAVantRemise - remiseGlobale + fraisApproche))
     
-    // --- SECURITE : Gestion des Trop-perçus ---
     let surplusAvoir = 0
     if (montantPaye > montantTotal + 1) {
        if (clientId) {
@@ -222,6 +218,11 @@ export async function POST(request: NextRequest) {
     
     const statutPaiement = montantPaye >= montantTotal ? 'PAYE' : montantPaye > 0 ? 'PARTIEL' : 'CREDIT'
     const pointsGagnes = Math.floor(montantTotal)
+
+    let needCreditAlerte = false
+    let alerteType = 'INFO'
+    let alerteMsg = ''
+    let clientExtId: number | null = null
 
     if (statutPaiement === 'CREDIT' || statutPaiement === 'PARTIEL') {
       if (clientId == null) return NextResponse.json({ error: 'Vente à crédit : un client doit être sélectionné.' }, { status: 400 })
@@ -243,12 +244,37 @@ export async function POST(request: NextRequest) {
       if (detteReelle + (montantTotal - montantPaye) > client.plafondCredit) {
          return NextResponse.json({ error: 'Plafond crédit dépassé.' }, { status: 400 })
       }
+
+      const totalApresVente = detteReelle + (montantTotal - montantPaye)
+      needCreditAlerte = totalApresVente >= 0.9 * client.plafondCredit
+      alerteType = totalApresVente >= client.plafondCredit ? 'CRITICAL' : 'WARNING'
+      alerteMsg = `Attention : Le client ${client.nom} a atteint ${Math.round((totalApresVente / client.plafondCredit) * 100)}% de son plafond de crédit (${client.plafondCredit.toLocaleString()} F).`
+      clientExtId = client.id
     }
 
-    const num = `V${Date.now()}`
+    const num = body?.numero || `V${Date.now()}`
     
     const vente = await prisma.$transaction(async (tx) => {
-      // --- FINAL STOCK AUTO-CHECK INSIDE TRANSACTION (Concurrency Safety) ---
+      // Bloquer les doublons par numéro (Idempotence)
+      const existing = await tx.vente.findUnique({
+        where: { numero: num },
+        select: { id: true }
+      })
+      if (existing) {
+        throw new Error('DOUBLE_TRANSACTION: Cette vente a déjà été enregistrée.')
+      }
+      if (needCreditAlerte && clientExtId) {
+        await tx.systemAlerte.create({
+          data: {
+            type: alerteType,
+            categorie: 'CREDIT',
+            message: alerteMsg,
+            referenceId: clientExtId,
+            entiteId
+          }
+        })
+      }
+
       for (const l of lignesValides) {
         const st = await tx.stock.findUnique({ 
           where: { produitId_magasinId: { produitId: l.produitId, magasinId } } 
@@ -258,7 +284,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 1. Créer la vente
       const v = await tx.vente.create({
         data: {
           numero: num,
@@ -272,7 +297,6 @@ export async function POST(request: NextRequest) {
           fraisApproche,
           remiseGlobale,
           montantPaye,
-          // @ts-ignore
           pointsGagnes,
           statutPaiement,
           modePaiement: listReglements.length > 1 ? 'MULTI' : (listReglements[0]?.mode || modePaiementPrincipal),
@@ -285,7 +309,6 @@ export async function POST(request: NextRequest) {
               designation: l.designation,
               quantite: l.quantite,
               prixUnitaire: l.prixUnitaire,
-              // @ts-ignore
               coutUnitaire: l.coutUnitaire,
               tva: l.tva,
               remise: l.remise,
@@ -296,7 +319,6 @@ export async function POST(request: NextRequest) {
         include: { lignes: true, magasin: { select: { code: true, nom: true } } },
       })
 
-      // 2. Mettre à jour les stocks et créer les mouvements
       for (const l of lignesValides) {
         await tx.stock.update({
           where: { produitId_magasinId: { produitId: l.produitId, magasinId } },
@@ -316,25 +338,21 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // 3. Fidélité (UNQUEMENT SI CLIENT IDENTIFIÉ)
       if (clientId && pointsGagnes > 0) {
-        // Double vérification que le client n'est pas "de passage"
         const clientObj = await tx.client.findUnique({ where: { id: clientId } })
         if (clientObj && clientObj.code !== 'PASSAGE' && clientObj.code !== 'ANONYME') {
           await tx.client.update({
             where: { id: clientId },
-            // @ts-ignore
             data: { pointsFidelite: { increment: pointsGagnes } }
           })
         }
       }
 
-      // 4. Règlement(s) automatique(s) - MULTI-PAIEMENT
       for (const reg of listReglements) {
-        const montantReg = Math.min(reg.montant, montantTotal) // Sécurité
+        const montantReg = Math.min(reg.montant, montantTotal)
         if (montantReg <= 0) continue
 
-        await tx.reglementVente.create({
+        const rv = await tx.reglementVente.create({
           data: {
             venteId: v.id,
             clientId,
@@ -347,10 +365,36 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        // 5. Mouvement de caisse : Désormais géré automatiquement par comptabiliserVente
+        // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque)
+        if (estModeEspeces(reg.mode)) {
+          await tx.caisse.create({
+            data: {
+              date: dateVente,
+              magasinId,
+              type: 'ENTREE',
+              motif: `Vente ${num}`,
+              montant: montantReg,
+              utilisateurId: session.userId,
+              entiteId
+            }
+          })
+        } else {
+          const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
+          if (estModeBanque(reg.mode)) {
+            await enregistrerOperationBancaire({
+              banqueId: body?.banqueId ? Number(body.banqueId) : null,
+              entiteId,
+              date: dateVente,
+              type: 'VENTE',
+              libelle: `Vente ${num}`,
+              montant: montantReg,
+              utilisateurId: session.userId,
+              reference: num
+            }, tx)
+          }
+        }
       }
 
-      // 6. Création de l'AVOIR si surplus (Règlement libre hors venteId)
       if (surplusAvoir > 0) {
         const modeAvoir = listReglements.length > 0 ? listReglements[0].mode : modePaiementPrincipal
         await tx.reglementVente.create({
@@ -365,7 +409,6 @@ export async function POST(request: NextRequest) {
           }
         })
         
-        // Comptabilisation de l'avoir
         await comptabiliserReglementVente({
           venteId: null, 
           numeroVente: `${num} (AVOIR)`,
@@ -378,7 +421,6 @@ export async function POST(request: NextRequest) {
         }, tx)
       }
 
-      // 7. Comptabilisation
       await comptabiliserVente({
         venteId: v.id,
         numeroVente: num,
@@ -391,7 +433,7 @@ export async function POST(request: NextRequest) {
         magasinId,
         reglements: listReglements, 
         fraisApproche,
-        lignes: lignesValides, // Ajout des lignes pour la TVA et le stock
+        lignes: lignesValides,
       }, tx)
 
       return v
@@ -401,8 +443,23 @@ export async function POST(request: NextRequest) {
     revalidatePath('/api/ventes')
 
     return NextResponse.json(vente)
-  } catch (e) {
-    console.error(e)
+  } catch (e: any) {
+    console.error('[API VENTES ERROR]', e)
+    
+    if (e.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Cette vente a déjà été enregistrée (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
+
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      return NextResponse.json({ 
+        error: 'Cette vente a déjà été enregistrée.', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
+
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

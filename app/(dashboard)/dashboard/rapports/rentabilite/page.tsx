@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import { TrendingUp, ArrowUpRight, ArrowDownRight, Filter, FileBarChart2, Loader2, Package, Search } from 'lucide-react'
 import { formatDate } from '@/lib/format-date'
 import Pagination from '@/components/ui/Pagination'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { Printer } from 'lucide-react'
 
 export default function RentabilitePage() {
   const [data, setData] = useState<any[]>([])
@@ -16,6 +19,8 @@ export default function RentabilitePage() {
   const [dateFin, setDateFin] = useState(() => new Date().toISOString().split('T')[0])
   const [recherche, setRecherche] = useState('')
   const [page, setPage] = useState(1)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   useEffect(() => {
     fetchRentabilite()
@@ -54,8 +59,8 @@ export default function RentabilitePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Rentabilité par Produit</h1>
-          <p className="mt-1 text-white/90">Analyse des marges nettes sur les ventes</p>
+          <h1 className="text-3xl font-bold text-white uppercase italic tracking-tighter">Rentabilité par Produit</h1>
+          <p className="mt-1 text-white/90 font-bold uppercase text-[10px] tracking-widest opacity-80">Analyse des marges nettes sur les ventes {(dateDebut || dateFin || recherche) && <span className="ml-1" title="Filtre actif">⚠️</span>}</p>
         </div>
         <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-xl bg-orange-100 p-3 text-orange-900 border border-orange-200">
@@ -72,6 +77,12 @@ export default function RentabilitePage() {
                     <p className="text-lg font-bold">{tauxMoy.toFixed(1)}%</p>
                 </div>
             </div>
+            <button
+                onClick={() => setIsPreviewOpen(true)}
+                className="flex items-center gap-2 rounded-xl bg-slate-800 px-6 py-3 text-sm font-black text-white hover:bg-slate-900 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+            >
+                <Printer className="h-4 w-4" /> Impression
+            </button>
         </div>
       </div>
 
@@ -194,6 +205,91 @@ export default function RentabilitePage() {
           </div>
         )}
       </div>
+
+      {/* MODALE D'APERÇU IMPRESSION RENTABILITÉ GLOBALE (ZenPrint) */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans text-slate-900">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+              <div className="flex items-center gap-6">
+                 <div>
+                   <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Rapport de Rentabilité</h2>
+                   <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                     Analyse des Marges et Performances Produits
+                   </p>
+                 </div>
+                 <div className="h-10 w-px bg-gray-200" />
+                 <div className="flex items-center gap-2 text-xs font-black text-orange-600 uppercase">
+                    Du {dateDebut} au {dateFin}
+                 </div>
+              </div>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+                >
+                  Fermer
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+                >
+                  <Printer className="h-4 w-4" />
+                  Imprimer
+                </button>
+              </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+              <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900">
+                  {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                      <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                          <ListPrintWrapper
+                              title="RAPPORT DE RENTABILITÉ GLOBALE"
+                              subtitle={`Analyse des marges par produit - ${filteredData.length} références`}
+                              pageNumber={index + 1}
+                              totalPages={allChunks.length}
+                              hideHeader={index > 0}
+                              hideVisa={index < allChunks.length - 1}
+                          >
+                              <table className="w-full text-[12px] border-collapse border-2 border-black">
+                                  <thead>
+                                      <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                                          <th className="border-r-2 border-black px-2 py-2 text-left">Produit / Désignation</th>
+                                          <th className="border-r-2 border-black px-2 py-2 text-right">Qté</th>
+                                          <th className="border-r-2 border-black px-2 py-2 text-right">C.A HT</th>
+                                          <th className="border-r-2 border-black px-2 py-2 text-right">Marge Brute</th>
+                                          <th className="px-2 py-2 text-right">Taux (%)</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody>
+                                      {chunk.map((row, idx) => (
+                                          <tr key={idx} className="border-b border-black">
+                                              <td className="border-r-2 border-black px-2 py-1 font-bold uppercase">{row.designation}</td>
+                                              <td className="border-r-2 border-black px-2 py-1 text-right tabular-nums">{row.quantiteVendue}</td>
+                                              <td className="border-r-2 border-black px-2 py-1 text-right font-black tabular-nums">{row.chiffreAffairesHT.toLocaleString()} F</td>
+                                              <td className="border-r-2 border-black px-2 py-1 text-right font-black tabular-nums text-emerald-700">{row.margeBrute.toLocaleString()} F</td>
+                                              <td className="px-2 py-1 text-right font-black italic">{row.tauxMarge.toFixed(1)}%</td>
+                                          </tr>
+                                      ))}
+                                  </tbody>
+                                  {index === allChunks.length - 1 && (
+                                      <tfoot>
+                                          <tr className="bg-gray-50 font-black text-[14px] border-t-2 border-black uppercase italic">
+                                              <td className="border-r-2 border-black px-2 py-3 text-right">PERFORMANCE GLOBALE SUR PÉRIODE</td>
+                                              <td colSpan={2} className="border-r-2 border-black px-2 py-3 text-center bg-white tabular-nums">{stats.ca.toLocaleString()} FCFA</td>
+                                              <td className="border-r-2 border-black px-2 py-3 text-right bg-white text-emerald-900 font-black tabular-nums">{stats.marge.toLocaleString()} F</td>
+                                              <td className="px-2 py-3 bg-white text-right">{tauxMoy.toFixed(1)}%</td>
+                                          </tr>
+                                      </tfoot>
+                                  )}
+                              </table>
+                          </ListPrintWrapper>
+                      </div>
+                  ))}
+              </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

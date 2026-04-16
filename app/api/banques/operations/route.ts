@@ -106,53 +106,53 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
 
-    // Calculer le solde actuel
-    const operations = await prisma.operationBancaire.findMany({
-      where: { banqueId: Number(banqueId) },
-      orderBy: { date: 'asc' },
-    })
-    let soldeActuel = banque.soldeInitial
-    for (const op of operations) {
-      if (op.type === 'DEPOT' || op.type === 'VIREMENT_ENTRANT' || op.type === 'INTERETS') {
-        soldeActuel += op.montant
+    // Utiliser une transaction pour sécuriser la mise à jour du solde
+    const operation = await prisma.$transaction(async (tx) => {
+      // Re-vérifier le solde actuel de la banque (verrouillage implicite via transaction)
+      const b = await tx.banque.findUnique({ 
+        where: { id: Number(banqueId) },
+        select: { soldeActuel: true, entiteId: true, compteId: true }
+      })
+      if (!b) throw new Error('Banque introuvable.')
+
+      const soldeAvant = b.soldeActuel
+      let soldeApres = soldeAvant
+
+      const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(type)
+      if (isEntree) {
+        soldeApres += montantNum
       } else {
-        soldeActuel -= op.montant
+        soldeApres -= montantNum
       }
-    }
 
-    const soldeAvant = soldeActuel
-    let soldeApres = soldeAvant
-    if (type === 'DEPOT' || type === 'VIREMENT_ENTRANT' || type === 'INTERETS') {
-      soldeApres += montantNum
-    } else {
-      soldeApres -= montantNum
-    }
+      // 1. Créer l'opération
+      const op = await tx.operationBancaire.create({
+        data: {
+          banqueId: Number(banqueId),
+          date: new Date(date + 'T00:00:00'),
+          type,
+          libelle: libelle.trim(),
+          montant: montantNum,
+          soldeAvant,
+          soldeApres,
+          reference: reference?.trim() || null,
+          beneficiaire: beneficiaire?.trim() || null,
+          utilisateurId: session.userId,
+          observation: observation?.trim() || null,
+        },
+        include: {
+          banque: { select: { id: true, numero: true, nomBanque: true, libelle: true } },
+          utilisateur: { select: { nom: true, login: true } },
+        },
+      })
 
-    // Créer l'opération
-    const operation = await prisma.operationBancaire.create({
-      data: {
-        banqueId: Number(banqueId),
-        date: new Date(date + 'T00:00:00'),
-        type,
-        libelle: libelle.trim(),
-        montant: montantNum,
-        soldeAvant,
-        soldeApres,
-        reference: reference?.trim() || null,
-        beneficiaire: beneficiaire?.trim() || null,
-        utilisateurId: session.userId,
-        observation: observation?.trim() || null,
-      },
-      include: {
-        banque: { select: { id: true, numero: true, nomBanque: true, libelle: true } },
-        utilisateur: { select: { nom: true, login: true } },
-      },
-    })
+      // 2. Mettre à jour le solde de la banque
+      await tx.banque.update({
+        where: { id: Number(banqueId) },
+        data: { soldeActuel: soldeApres },
+      })
 
-    // Mettre à jour le solde actuel de la banque
-    await prisma.banque.update({
-      where: { id: Number(banqueId) },
-      data: { soldeActuel: soldeApres },
+      return op
     })
 
     // Comptabiliser l'opération

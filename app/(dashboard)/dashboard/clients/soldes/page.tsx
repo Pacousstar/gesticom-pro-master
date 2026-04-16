@@ -131,7 +131,8 @@ export default function SoldesClientsPage() {
                     {chunk.map((c, idx) => (
                       <tr key={idx} className="border-b border-black">
                         <td className="border border-black px-2 py-2 text-center font-bold">
-                          {(index === 0 ? 0 : 15 + (index - 1) * 23) + idx + 1}
+                          {/* T-2 AUDIT : Numérotation continue inter-pages corrigée */}
+                          {index === 0 ? idx + 1 : 15 + (index - 1) * 23 + idx + 1}
                         </td>
                         <td className="border border-black px-3 py-2">
                           <div className="font-black uppercase text-[13px]">{c.nom}</div>
@@ -222,6 +223,12 @@ export default function SoldesClientsPage() {
       )}
 
       {/* Cartes de Totaux */}
+      {/* T-5 AUDIT : Badge ⚠️ Filtré quand search est actif */}
+      {search && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 no-print">
+          ⚠️ Filtre actif : les totaux ci-dessous ne concernent que les clients correspondant à « {search} » — ils ne représentent pas le portefeuille global.
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 no-print">
         <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm">
           <div className="flex items-center gap-3">
@@ -229,7 +236,7 @@ export default function SoldesClientsPage() {
               <FileText className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">Total Factures</p>
+              <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">Total Factures{search && ' ⚠️'}</p>
               <p className="text-xl font-bold text-gray-900">{totals.factures.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -241,7 +248,7 @@ export default function SoldesClientsPage() {
               <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Total Paiements</p>
+              <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Total Paiements{search && ' ⚠️'}</p>
               <p className="text-xl font-bold text-gray-900">{totals.paiements.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -253,7 +260,7 @@ export default function SoldesClientsPage() {
               <Landmark className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Variation Période</p>
+              <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Variation Période{search && ' ⚠️'}</p>
               <p className="text-xl font-bold text-gray-900">{totals.variationPeriode.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -266,7 +273,7 @@ export default function SoldesClientsPage() {
             </div>
             <div>
               <p className={`text-xs font-medium uppercase tracking-wider ${totals.soldeClient > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                Solde Net Global
+                Solde Net Global{search && ' ⚠️'}
               </p>
               <p className="text-xl font-bold text-gray-900">{totals.soldeClient.toLocaleString('fr-FR')} F</p>
             </div>
@@ -327,7 +334,7 @@ export default function SoldesClientsPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">N° Facture</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Dernière Facture</th>
                   <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Code / Nom</th>
                   <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Localisation</th>
                   <th className="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-500">Total Factures (Période)</th>

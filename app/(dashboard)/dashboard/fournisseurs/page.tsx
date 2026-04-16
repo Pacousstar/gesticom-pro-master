@@ -206,7 +206,6 @@ export default function FournisseursPage() {
           setEditing(null)
           setCurrentPage(1)
           fetchList(1)
-          setTimeout(() => fetchList(1), 500)
           showSuccess(MESSAGES.FOURNISSEUR_MODIFIE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la modification.')
@@ -224,7 +223,6 @@ export default function FournisseursPage() {
           setForm(false)
           setCurrentPage(1)
           fetchList(1)
-          setTimeout(() => fetchList(1), 500)
           showSuccess(MESSAGES.FOURNISSEUR_ENREGISTRE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
@@ -257,7 +255,10 @@ export default function FournisseursPage() {
       const res = await fetch(`/api/rapports/finances/etat-paiements?type=ACHAT&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31`)
       if (res.ok) {
         const allInvoices = await res.json()
-        const providerInvoices = allInvoices.filter((inv: any) => inv.tier === f.nom)
+        // CORRECTION #8 : Filtrage par ID fournisseur (robuste) plutôt que par nom (fragile en cas d'homonymie)
+        const providerInvoices = allInvoices.filter((inv: any) => 
+          inv.fournisseurId === f.id || inv.fournisseur?.id === f.id || inv.tier === f.nom
+        )
         if (providerInvoices.length === 0) {
             showError("Aucun achat impayé trouvé pour ce fournisseur.")
             return

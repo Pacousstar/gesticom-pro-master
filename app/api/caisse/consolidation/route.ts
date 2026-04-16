@@ -78,15 +78,13 @@ export async function GET(request: NextRequest) {
     select: { montantTotal: true, montantPaye: true }
   })
 
-  // 6. Crédits Fournisseurs (Achats)
-  const creditsFournisseurs = await prisma.achat.findMany({
+  // 7. Opérations Bancaires manuelles (Période)
+  const opsBancaires = await prisma.operationBancaire.findMany({
     where: {
       ...whereDate,
-      ...whereMagasin,
-      ...whereEntite,
-      statutPaiement: { in: ['CREDIT', 'PARTIEL'] },
+      banque: whereEntite
     },
-    select: { montantTotal: true, montantPaye: true }
+    select: { montant: true, type: true }
   })
 
   const stats = { ESPECES: 0, MOBILE_MONEY: 0, VIREMENT: 0, CHEQUE: 0 }
@@ -127,6 +125,17 @@ export async function GET(request: NextRequest) {
       else ouvertures.ESPECES -= c.montant
     })
 
+    // Opérations Bancaires passées (Considérées par défaut comme VIREMENT sauf si MoMo précisé)
+    const pastOpsBanque = await prisma.operationBancaire.findMany({
+      where: { date: { lt: startOfPeriod }, banque: whereEntite },
+      select: { montant: true, type: true }
+    })
+    pastOpsBanque.forEach(o => {
+      const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
+      if (isEntree) ouvertures.VIREMENT += o.montant
+      else ouvertures.VIREMENT -= o.montant
+    })
+
     // Dépenses passées (Exclu Espèces)
     const pastDepenses = await prisma.depense.findMany({
       where: { ...wherePast, modePaiement: { notIn: ['ESPECES', 'CASH'] }, ...whereMagasin, ...whereEntite },
@@ -156,10 +165,28 @@ export async function GET(request: NextRequest) {
     else stats.ESPECES -= c.montant
   })
 
+  // Agrégation OP BANQUE (Période)
+  opsBancaires.forEach(o => {
+    const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
+    if (isEntree) stats.VIREMENT += o.montant
+    else stats.VIREMENT -= o.montant
+  })
+
   // Agrégation Depenses (Période)
   depenses.forEach(d => {
     const mode = mapMode(d.modePaiement) as keyof typeof stats
     if (stats[mode] !== undefined) stats[mode] -= d.montant
+  })
+
+  // Récupération des crédits fournisseurs (qui avait été effacé par erreur)
+  const creditsFournisseurs = await prisma.achat.findMany({
+    where: {
+      ...whereDate,
+      ...whereMagasin,
+      ...whereEntite,
+      statutPaiement: { in: ['CREDIT', 'PARTIEL'] },
+    },
+    select: { montantTotal: true, montantPaye: true }
   })
 
   // Calcul des totaux Crédits

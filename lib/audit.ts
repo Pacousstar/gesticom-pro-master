@@ -17,6 +17,7 @@ export type ActionType =
   | 'IMPORT'
   | 'VALIDATION'
   | 'ANNULATION'
+  | 'RESTAURATION'
 
 export type EntityType =
   | 'UTILISATEUR'

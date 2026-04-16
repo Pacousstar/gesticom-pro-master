@@ -26,6 +26,7 @@ export default function ParClientPage() {
     const [endDate, setEndDate] = useState('')
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [isPrinting, setIsPrinting] = useState(false)
+    const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
     const { error: showError } = useToast()
     const [selectedHistory, setSelectedHistory] = useState<{ id: number | null; nom: string } | null>(null)
     const [historyData, setHistoryData] = useState<any[]>([])
@@ -106,7 +107,7 @@ export default function ParClientPage() {
                                 className="bg-slate-800 text-white px-6 py-2 rounded-xl text-xs font-black hover:bg-slate-900 flex items-center gap-2 h-[42px] transition-all hover:scale-105 active:scale-95 shadow-lg no-print uppercase tracking-widest"
                             >
                                 <Printer className="h-4 w-4" />
-                                Aperçu Impression
+                                Imprimer
                             </button>
                             <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end bg-gray-50/50 p-6 rounded-2xl border border-gray-100 shadow-inner">
                                 <div className="space-y-1.5">
@@ -282,6 +283,7 @@ export default function ParClientPage() {
                             totalPages={allChunks.length}
                             hideHeader={index > 0}
                             hideVisa={index < allChunks.length - 1}
+                            layout={printLayout}
                         >
                             <table className="w-full text-[14px] border-collapse border-2 border-black">
                                 <thead>
@@ -336,6 +338,18 @@ export default function ParClientPage() {
                        <div className="flex flex-col">
                          <span className="text-xs font-black text-orange-600 italic">Extraction du {startDate}</span>
                          <span className="text-xs font-black text-orange-600 italic">au {endDate}</span>
+                       </div>
+                       <div className="h-10 w-px bg-gray-200" />
+                       <div className="flex items-center gap-2">
+                         <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
+                         <select 
+                           value={printLayout}
+                           onChange={(e) => setPrintLayout(e.target.value as any)}
+                           className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
+                         >
+                           <option value="portrait">Portrait</option>
+                           <option value="landscape">Paysage</option>
+                         </select>
                        </div>
                     </div>
                     <div className="flex gap-4">

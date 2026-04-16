@@ -380,12 +380,13 @@ export default function VentesPage() {
   }
 
   // Ouvrir le détail d'une vente si ?open=id dans l'URL (ex. depuis la recherche)
+  // CORRECTION #10 : Ajout de [openIdParam] comme dépendance pour éviter la boucle infinie
   useEffect(() => {
     const id = openIdParam ? Number(openIdParam) : NaN
     if (Number.isInteger(id) && id > 0) {
       handleVoirDetail(id)
     }
-  })
+  }, [openIdParam])
   const addLigne = () => {
     const pId = Number(ajoutProduit.produitId)
     const p = produits.find((x) => x.id === pId)
@@ -452,6 +453,8 @@ export default function VentesPage() {
     setFormData((f) => ({ ...f, lignes: f.lignes.filter((_, j) => j !== i) }))
   }
 
+  // CORRECTION #1 : Arrondi global après la somme (et non par ligne) pour éviter le décalage
+  // entre le total affiché et le montant réellement enregistré en base de données.
   const { totalHT, totalTVA, totalRemise, totalAvantRemiseGlobale } = formData.lignes.reduce(
     (acc, val) => {
       const q = val.quantite
@@ -461,18 +464,20 @@ export default function VentesPage() {
       const ht = q * pu
       const htNet = ht - r
       const tvaMontant = htNet * (t / 100)
-      const montantLigne = Math.round(htNet + tvaMontant) // Arrondi par ligne comme au backend
-
+      // On accumule les valeurs brutes sans arrondir par ligne
       acc.totalHT += ht
       acc.totalTVA += tvaMontant
       acc.totalRemise += r
-      acc.totalAvantRemiseGlobale += montantLigne
+      acc.totalAvantRemiseGlobale += htNet + tvaMontant
       return acc
     },
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalAvantRemiseGlobale: 0 }
   )
-  const total = Math.max(0, totalAvantRemiseGlobale - (Number(formData.remiseGlobale) || 0))
-  const pointsGagnes = Math.floor(total)
+  // Arrondi global une seule fois (cohérent avec le backend)
+  const total = Math.max(0, Math.round(totalAvantRemiseGlobale - (Number(formData.remiseGlobale) || 0)))
+  // CORRECTION #3 : Points fidélité calculés sur le HT Net (sans TVA) pour ne pas sur-valoriser
+  const totalHTNetApresRemiseGlobale = Math.max(0, (totalHT - totalRemise) - (Number(formData.remiseGlobale) || 0))
+  const pointsGagnes = Math.floor(totalHTNetApresRemiseGlobale)
 
   const popupTotal = popupLignes.reduce((s, l) => s + ( (l.quantite * l.prixUnitaire) - (l.remise || 0) ) * (1 + (l.tvaPerc || 0) / 100), 0)
 
@@ -482,7 +487,10 @@ export default function VentesPage() {
     setErr('')
     setSubmitting(true)
 
+    const numAuto = `V-${Math.floor(Date.now() / 1000)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase()
+    
     const requestData = {
+      numero: numAuto, // Idempotence : généré côté client
       date: formData.date || undefined,
       magasinId,
       clientId: formData.clientId ? Number(formData.clientId) : null,
@@ -500,9 +508,6 @@ export default function VentesPage() {
         remise: Number(l.remise) || 0,
       })),
     }
-
-    // Dans GestiCom Offline, on tente toujours l'enregistrement direct vers le serveur local.
-    // La file d'attente (SyncQueue) n'est utilisée que si le serveur local est injoignable (géré dans le catch).
 
     try {
       const res = await fetch('/api/ventes', {
@@ -533,18 +538,15 @@ export default function VentesPage() {
         setCurrentPage(1)
         showSuccess(MESSAGES.VENTE_ENREGISTREE)
         fetchVentes(undefined, undefined, 1)
-        setTimeout(() => fetchVentes(undefined, undefined, 1), 500)
       } else {
         if (data.error?.includes('Client introuvable')) {
           setCreateClientAfter(() => () => doEnregistrerVente(lignes))
           setShowCreateClient(true)
         } else if (data.error?.includes('Stock insuffisant')) {
-          // Extraire les informations du message d'erreur
           const match = data.error.match(/Stock insuffisant pour (.+?) \(dispo: (\d+)\)/)
           if (match) {
             const designation = match[1]
             const quantiteDisponible = Number(match[2])
-            // Trouver la ligne concernée
             const ligneProbleme = lignes.find((l) => l.designation === designation)
             if (ligneProbleme) {
               setStockInsuffisantModal({
@@ -568,10 +570,45 @@ export default function VentesPage() {
           showError(errorMsg)
         }
       }
-    } catch (e) {
-      const errorMsg = formatApiError(e)
-      setErr(errorMsg)
-      showError(errorMsg)
+    } catch (e: any) {
+      // --- LOGIQUE HORS-LIGNE (SYNCHRONISATION PWA) ---
+      // Si on détecte une erreur réseau (serveur injoignable)
+      const isNetworkError = !window.navigator.onLine || e instanceof TypeError || String(e).includes('fetch')
+      
+      if (isNetworkError) {
+        addToSyncQueue({
+          action: 'CREATE',
+          entity: 'VENTE',
+          data: requestData,
+          endpoint: '/api/ventes',
+          method: 'POST'
+        })
+        
+        // On acte le succès visuel pour le vendeur
+        setForm(false)
+        setAddLignesPopupOpen(false)
+        showSuccess("Vente enregistrée localement (HORS-LIGNE). Elle sera synchronisée dès le retour du réseau.")
+        
+        // Reset du formulaire
+        setFormData({
+          date: new Date().toLocaleDateString('en-CA'),
+          magasinId: '',
+          clientId: '',
+          clientLibre: '',
+          modePaiement: 'ESPECES',
+          montantPaye: '',
+          reglements: [{ mode: 'ESPECES', montant: '' }],
+          remiseGlobale: '',
+          observation: '',
+          numeroBon: '',
+          lignes: [],
+          pointsGagnes: 0,
+        })
+      } else {
+        const errorMsg = formatApiError(e)
+        setErr(errorMsg)
+        showError(errorMsg)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -661,8 +698,9 @@ export default function VentesPage() {
     if (!p || !q) return
 
     // Blocage Prix Minimum (PVM)
+    // CORRECTION #2 : Utilisation de < au lieu de <= pour autoriser la vente exactement au prix minimum
     const pMin = (p as any).prixMinimum || 0
-    if (pMin > 0 && pu <= pMin) {
+    if (pMin > 0 && pu < pMin) {
       showError(`⚠️ augmenter le prix de vente svp ! (Prix de revient minimum: ${pMin.toLocaleString('fr-FR')} F)`)
       return
     }

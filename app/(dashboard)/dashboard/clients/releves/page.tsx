@@ -56,6 +56,7 @@ export default function ClientRelevesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
+  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
   const itemsPerPage = 20
   const ITEMS_PER_PAGE_REPORT = 18
 
@@ -138,7 +139,7 @@ export default function ClientRelevesPage() {
             className="flex items-center gap-2 rounded-lg border-2 border-blue-500 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-50 no-print shadow-xl transition-all"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Aperçu Relevé
+            IMPRIMER
           </button>
         </div>
       </div>
@@ -216,6 +217,8 @@ export default function ClientRelevesPage() {
               <p className="text-3xl font-black text-white tracking-tighter italic">
                 {(selectedClient?.dette || 0).toLocaleString()} F
               </p>
+              {/* T-8 AUDIT : Note d'obsolescence — le solde vient de la liste chargée à l'ouverture */}
+              <p className="text-[9px] text-gray-500 italic mt-2">Solde au moment du chargement de la page</p>
             </div>
           </div>
 
@@ -330,6 +333,18 @@ export default function ClientRelevesPage() {
                <span className="rounded-full bg-blue-100 px-4 py-2 text-xs font-black text-blue-600 uppercase">
                  {data.length} Transactions
                </span>
+               <div className="h-10 w-px bg-gray-200" />
+               <div className="flex items-center gap-2">
+                 <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
+                 <select 
+                   value={printLayout}
+                   onChange={(e) => setPrintLayout(e.target.value as any)}
+                   className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-blue-500"
+                 >
+                   <option value="portrait">Portrait</option>
+                   <option value="landscape">Paysage</option>
+                 </select>
+               </div>
             </div>
             <div className="flex gap-4">
               <button
@@ -364,6 +379,7 @@ export default function ClientRelevesPage() {
                         totalPages={allChunks.length}
                         hideHeader={index > 0} // Header seulement sur la page 1
                         hideVisa={index < allChunks.length - 1} // Visa seulement sur la dernière page
+                        layout={printLayout}
                       >
                          <table className="w-full text-[14px] border-collapse border-2 border-black">
                           <thead>
@@ -437,6 +453,7 @@ export default function ClientRelevesPage() {
                       totalPages={allChunks.length}
                       hideHeader={index > 0}
                       hideVisa={index < allChunks.length - 1}
+                      layout={printLayout}
                     >
                        <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner">
                         <thead>

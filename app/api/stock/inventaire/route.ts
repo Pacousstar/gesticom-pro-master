@@ -111,20 +111,41 @@ export async function POST(request: NextRequest) {
     // Exécuter toutes les opérations dans une transaction
     let regularise = 0
     if (mouvements.length > 0) {
+      // --- VERROU SÉMANTIQUE (Idempotence temporelle) ---
+      // Bloque si un inventaire a été validé il y a < 15 secondes par le même utilisateur pour ce magasin
+      const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000)
+      const isDuplicate = await prisma.mouvement.findFirst({
+        where: {
+          observation: { contains: 'Inventaire' },
+          utilisateurId: session.userId,
+          entiteId: entiteId,
+          createdAt: { gte: fifteenSecondsAgo }
+        },
+        select: { id: true }
+      })
+
+      if (isDuplicate) {
+         return NextResponse.json({ 
+           error: 'Cet inventaire semble déjà avoir été validé (Doublon bloqué).', 
+           code: 'IDEMPOTENCY_CONFLICT' 
+         }, { status: 409 })
+      }
+
       await prisma.$transaction(async (tx) => {
         // Créer tous les mouvements en batch et les comptabiliser
         const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
-        for (const mvt of mouvements) {
-          await tx.mouvement.create({ data: mvt })
+        for (const mvtData of mouvements) {
+          const mvt = await tx.mouvement.create({ data: mvtData })
           await comptabiliserMouvementStock({
             produitId: mvt.produitId,
             magasinId: mvt.magasinId,
-            type: mvt.type,
+            type: mvt.type as 'ENTREE' | 'SORTIE',
             quantite: mvt.quantite,
             date: mvt.date,
-            motif: mvt.observation,
+            motif: mvt.observation || 'Régularisation inventaire',
             utilisateurId: mvt.utilisateurId,
-            entiteId: mvt.entiteId
+            entiteId: mvt.entiteId,
+            mouvementId: mvt.id
           }, tx)
         }
 

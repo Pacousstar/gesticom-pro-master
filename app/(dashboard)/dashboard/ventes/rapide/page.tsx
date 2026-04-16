@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, AlertTriangle, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
+import { addToSyncQueue } from '@/lib/offline-sync'
 
 type Produit = { 
   id: number; 
@@ -169,29 +170,34 @@ export default function VenteRapidePage() {
   }
 
   const handleValidate = async () => {
-    if (!magasinId || cart.length === 0) return
     setSubmitting(true)
+
+    const numAuto = `VR-${Math.floor(Date.now() / 1000)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase()
+    
+    const requestData = {
+      numero: numAuto,
+      magasinId: Number(magasinId),
+      clientId: clientId ? Number(clientId) : null,
+      modePaiement,
+      montantPaye: modePaiement === 'CREDIT' ? (montantPaye !== '' ? Number(montantPaye) : 0) : Number(montantPaye) || total,
+      remiseGlobale: remiseVal,
+      numeroBon: numeroBon || null,
+      lignes: cart.map(l => ({
+        produitId: l.produitId,
+        quantite: l.quantite,
+        prixUnitaire: l.prixUnitaire
+      }))
+    }
+
     try {
       const res = await fetch('/api/ventes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          magasinId: Number(magasinId),
-          clientId: clientId ? Number(clientId) : null,
-          modePaiement,
-          montantPaye: modePaiement === 'CREDIT' ? (montantPaye !== '' ? Number(montantPaye) : 0) : Number(montantPaye) || total,
-          remiseGlobale: remiseVal,
-          numeroBon: numeroBon || null,
-          lignes: cart.map(l => ({
-            produitId: l.produitId,
-            quantite: l.quantite,
-            prixUnitaire: l.prixUnitaire
-          }))
-        })
+        body: JSON.stringify(requestData)
       })
 
-      if (res.ok) {
-        showSuccess('Vente validée avec succès !')
+      if (res.ok || res.status === 409) {
+        showSuccess(res.status === 409 ? 'Vente déjà enregistrée (Doublon ignoré).' : 'Vente validée avec succès !')
         setCart([])
         setShowPayment(false)
         setSearch('')
@@ -202,8 +208,29 @@ export default function VenteRapidePage() {
         const d = await res.json()
         showError(formatApiError(d.error))
       }
-    } catch (e) {
-      showError('Erreur lors de la validation')
+    } catch (e: any) {
+      // --- LOGIQUE HORS-LIGNE ---
+      const isNetworkError = e instanceof TypeError || String(e).includes('fetch') || !navigator.onLine
+      
+      if (isNetworkError) {
+        addToSyncQueue({
+          action: 'CREATE',
+          entity: 'VENTE',
+          data: requestData,
+          endpoint: '/api/ventes',
+          method: 'POST'
+        })
+        
+        showSuccess('Vente enregistrée localement (HORS-LIGNE) !')
+        setCart([])
+        setShowPayment(false)
+        setSearch('')
+        setRemise('0')
+        setMontantPaye('')
+        setNumeroBon('')
+      } else {
+        showError('Erreur lors de la validation : ' + formatApiError(e))
+      }
     } finally {
       setSubmitting(false)
     }

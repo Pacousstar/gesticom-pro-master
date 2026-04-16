@@ -3,8 +3,9 @@ import { getSession } from '@/lib/auth'
 import { ROLES_ADMIN } from '@/lib/require-role'
 import { parametresPatchSchema } from '@/lib/validations'
 import { prisma } from '@/lib/db'
+import { logModification, getIpAddress } from '@/lib/audit'
 
-async function canAccessParametres(session: { userId: number; role: string } | null) {
+async function canAccessParametres(session: any) {
   if (!session) return false
   if (ROLES_ADMIN.includes(session.role as 'SUPER_ADMIN' | 'ADMIN')) return true
   const user = await prisma.utilisateur.findUnique({
@@ -132,6 +133,17 @@ export async function PATCH(request: NextRequest) {
 
       if (Object.keys(update).length > 0) {
         p = await prisma.parametre.update({ where: { id: p.id }, data: update })
+        
+        // Log Audit
+        await logModification(
+          session,
+          'PARAMETRE',
+          p.id,
+          `Configuration du système mise à jour (${Object.keys(update).join(', ')})`,
+          {}, // Valeurs anciennes optionnelles
+          update,
+          getIpAddress(request)
+        )
       }
     }
     return NextResponse.json(p)

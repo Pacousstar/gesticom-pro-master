@@ -47,6 +47,23 @@ export async function POST(request: NextRequest) {
 
     // Transaction Prisma
     const res = await prisma.$transaction(async (tx: any) => {
+      // --- VERROU SÉMANTIQUE (Idempotence) ---
+      const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000)
+      const isDuplicate = await tx.reglementVente.findFirst({
+        where: {
+          venteId,
+          clientId,
+          montant,
+          utilisateurId: session.userId,
+          createdAt: { gte: fifteenSecondsAgo }
+        },
+        select: { id: true }
+      })
+
+      if (isDuplicate) {
+        throw new Error('DOUBLE_TRANSACTION: Ce règlement semble être un doublon (même montant en moins de 15s).')
+      }
+
       const v = venteId ? await tx.vente.findUnique({ where: { id: venteId } }) : null
       const targetClientId = venteId ? v?.clientId : clientId
       if (!targetClientId) throw new Error('Client introuvable')
@@ -92,10 +109,27 @@ export async function POST(request: NextRequest) {
             date: dateReglement
           }
         })
+      } else {
+        // ✅ SYNCHRO BANQUE : Mobile Money, Virement, Chèque
+        const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
+        if (estModeBanque(modePaiement)) {
+          await enregistrerOperationBancaire({
+            banqueId: body.banqueId ? Number(body.banqueId) : null,
+            entiteId,
+            date: dateReglement,
+            type: 'REGLEMENT_CLIENT',
+            libelle: `Règlement Vente ${v?.numero || ''} - ${observation}`,
+            montant,
+            utilisateurId: session.userId,
+            reference: v?.numero || `REG-${Date.now()}`,
+            observation: `Paiement via ${modePaiement}`
+          }, tx)
+        }
       }
 
       // ✅ COMPTABILISATION
       await comptabiliserReglementVente({
+        reglementId: reglement.id,
         venteId: venteId || 0,
         numeroVente: v?.numero || `AC-CLI-${targetClientId}`,
         date: dateReglement,
@@ -113,8 +147,14 @@ export async function POST(request: NextRequest) {
     revalidatePath('/dashboard/clients')
     
     return NextResponse.json(res)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur Règlement Vente:', error)
+    if (error.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Ce règlement a déjà été enregistré (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

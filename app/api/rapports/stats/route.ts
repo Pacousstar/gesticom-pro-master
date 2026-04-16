@@ -149,7 +149,6 @@ export async function GET(request: NextRequest) {
         quantite: true,
       },
       orderBy: { date: 'asc' },
-      take: 5000,
     })
 
     // Grouper les données par jour ou mois

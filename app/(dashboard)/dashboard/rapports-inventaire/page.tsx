@@ -19,6 +19,7 @@ export default function RapportInventaireGlobalPage() {
     const { error: showError } = useToast()
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [isPrinting, setIsPrinting] = useState(false)
+    const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
     const [entreprise, setEntreprise] = useState<any>(null)
 
     const fetchData = async () => {
@@ -63,7 +64,7 @@ export default function RapportInventaireGlobalPage() {
                         className="flex items-center gap-2 rounded-xl border-2 border-slate-800 bg-slate-100 px-5 py-2.5 text-sm font-black text-slate-900 hover:bg-slate-200 shadow-xl transition-all active:scale-95 no-print uppercase tracking-widest"
                     >
                         <Printer className="h-4 w-4" /> 
-                        Aperçu Impression
+                        IMPRIMER
                     </button>
                     <div className="bg-white/10 p-2 rounded-xl backdrop-blur-sm border border-white/20">
                         <div className="flex items-center gap-2">
@@ -174,6 +175,7 @@ export default function RapportInventaireGlobalPage() {
                     subtitle={`Rapport de synthèse consolidé - Journée du ${date}`}
                     pageNumber={1}
                     totalPages={1}
+                    layout={printLayout}
                 >
                     <div className="space-y-8">
                         {/* SYNTHESE VENTES IMPRESSION */}
@@ -271,9 +273,16 @@ export default function RapportInventaireGlobalPage() {
                          </p>
                        </div>
                        <div className="h-10 w-px bg-gray-200" />
-                       <div className="flex flex-col">
-                         <span className="text-xs font-black text-orange-600 italic">Inventaire du {date}</span>
-                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest italic">Rapport Camicase Pro</span>
+                       <div className="flex items-center gap-2">
+                         <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
+                         <select 
+                           value={printLayout}
+                           onChange={(e) => setPrintLayout(e.target.value as any)}
+                           className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
+                         >
+                           <option value="portrait">Portrait</option>
+                           <option value="landscape">Paysage</option>
+                         </select>
                        </div>
                     </div>
                     <div className="flex gap-4">
@@ -300,6 +309,7 @@ export default function RapportInventaireGlobalPage() {
                             subtitle={`Audit journalier consolidé - État au ${date}`}
                             pageNumber={1}
                             totalPages={1}
+                            layout={printLayout}
                         >
                             <div className="space-y-12">
                                 {/* SYNTHESE VENTES IMPRESSION */}

@@ -14,12 +14,15 @@ import {
     Calendar,
     MapPin,
     Building,
-    Phone
+    Phone,
+    FileSpreadsheet,
+    Package
 } from 'lucide-react'
 import Link from 'next/link'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ComptabiliteNav from '../ComptabiliteNav'
 import Pagination from '@/components/ui/Pagination'
+import * as XLSX from 'xlsx-prototype-pollution-fixed'
 
 type BilanItem = {
     numero: string
@@ -63,14 +66,72 @@ function formatFcfa(n: number) {
 
 export default function BilanPage() {
     const [annee, setAnnee] = useState(new Date().getFullYear())
+    const [magasinId, setMagasinId] = useState('all')
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+    const [isExporting, setIsExporting] = useState(false)
     
-    // Construire l'URL avec l'année (l'entité est gérée par la session côté serveur)
-    const url = `/api/comptabilite/bilan?annee=${annee}`
+    // Récupération des magasins pour le filtre
+    const { data: magasins } = useSWR<any[]>('/api/magasins')
+
+    // Construire l'URL avec l'année et le magasin
+    const url = `/api/comptabilite/bilan?annee=${annee}${magasinId !== 'all' ? `&magasinId=${magasinId}` : ''}`
     const { data, error, isLoading, mutate } = useSWR<BilanData>(url)
 
     const [currentPage, setCurrentPage] = useState(1)
-    const itemsPerPage = 100 // Affichage plus large pour le bilan comme demandé
+    const itemsPerPage = 100
+
+    const exportToExcel = () => {
+        if (!data) return
+        setIsExporting(true)
+        try {
+            const workbook = XLSX.utils.book_new()
+            
+            // Préparation des données Actif
+            const actifData = [
+                ['BILAN COMPTABLE - ACTIF', '', ''],
+                ['EXERCICE', annee, ''],
+                ['DATE DE GÉNÉRATION', new Date().toLocaleDateString('fr-FR'), ''],
+                ['', '', ''],
+                ['NUMÉRO', 'LIBELLÉ', 'MONTANT'],
+                ...data.bilan.actif.immobilise.map(i => [i.numero, i.libelle, i.montant]),
+                ['S/T Immobilisé', '', data.bilan.actif.immobilise.reduce((s, i) => s + i.montant, 0)],
+                ...data.bilan.actif.stocks.map(i => [i.numero, i.libelle, i.montant]),
+                ['S/T Stocks', '', data.bilan.actif.stocks.reduce((s, i) => s + i.montant, 0)],
+                ...data.bilan.actif.creances.map(i => [i.numero, i.libelle, i.montant]),
+                ['S/T Créances', '', data.bilan.actif.creances.reduce((s, i) => s + i.montant, 0)],
+                ...data.bilan.actif.tresorerie.map(i => [i.numero, i.libelle, i.montant]),
+                ['S/T Trésorerie', '', data.bilan.actif.tresorerie.reduce((s, i) => s + i.montant, 0)],
+                ['', '', ''],
+                ['TOTAL GÉNÉRAL ACTIF', '', data.bilan.actif.total]
+            ]
+            
+            const wsActif = XLSX.utils.aoa_to_sheet(actifData)
+            XLSX.utils.book_append_sheet(workbook, wsActif, 'ACTIF')
+
+            // Préparation des données Passif
+            const passifData = [
+                ['BILAN COMPTABLE - PASSIF', '', ''],
+                ['EXERCICE', annee, ''],
+                ['', '', ''],
+                ['NUMÉRO', 'LIBELLÉ', 'MONTANT'],
+                ...data.bilan.passif.capitaux.map(i => [i.numero, i.libelle, i.montant]),
+                ['S/T Capitaux', '', data.bilan.passif.capitaux.reduce((s, i) => s + i.montant, 0)],
+                ...data.bilan.passif.dettes.map(i => [i.numero, i.libelle, i.montant]),
+                ['S/T Dettes', '', data.bilan.passif.dettes.reduce((s, i) => s + i.montant, 0)],
+                ...data.bilan.passif.tresorerie.map(i => [i.numero, i.libelle, i.montant]),
+                ['S/T Trésorerie', '', data.bilan.passif.tresorerie.reduce((s, i) => s + i.montant, 0)],
+                ['', '', ''],
+                ['TOTAL GÉNÉRAL PASSIF', '', data.bilan.passif.total]
+            ]
+            
+            const wsPassif = XLSX.utils.aoa_to_sheet(passifData)
+            XLSX.utils.book_append_sheet(workbook, wsPassif, 'PASSIF')
+
+            XLSX.writeFile(workbook, `Bilan_${annee}_${magasinId === 'all' ? 'Consolide' : magasinId}.xlsx`)
+        } finally {
+            setIsExporting(false)
+        }
+    }
 
     const handlePrint = () => {
         window.print()
@@ -80,26 +141,63 @@ export default function BilanPage() {
 
     return (
         <div className="space-y-6 pb-20">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
-                <div>
-                    <h1 className="text-3xl font-black text-white tracking-tight">Bilan Comptable</h1>
-                    <p className="text-white/80 font-medium">États financiers annuels (SYSCOHADA) — Exercice {annee}</p>
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 no-print bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-md">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-orange-600 rounded-2xl shadow-lg shadow-orange-600/20">
+                        <Building className="h-8 w-8 text-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-black text-white tracking-tight uppercase italic">Bilan Comptable</h1>
+                        <p className="text-white/60 font-bold uppercase tracking-widest text-[10px]">États financiers annuels (SYSCOHADA) — Exercice {annee}</p>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <select
-                        value={annee}
-                        onChange={(e) => setAnnee(parseInt(e.target.value))}
-                        className="rounded-xl border-none bg-white/10 backdrop-blur-md text-white font-bold px-4 py-2.5 outline-none focus:ring-2 focus:ring-white/20"
+
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Filtre Année */}
+                    <div className="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl border border-white/10">
+                        <Calendar className="h-4 w-4 text-orange-400" />
+                        <select
+                            value={annee}
+                            onChange={(e) => setAnnee(parseInt(e.target.value))}
+                            className="bg-transparent border-none text-white font-bold outline-none cursor-pointer"
+                        >
+                            {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y} className="text-gray-900">{y}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Filtre Magasin / Consolidation */}
+                    <div className="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl border border-white/10">
+                        <MapPin className="h-4 w-4 text-emerald-400" />
+                        <select
+                            value={magasinId}
+                            onChange={(e) => setMagasinId(e.target.value)}
+                            className="bg-transparent border-none text-white font-bold outline-none cursor-pointer max-w-[150px]"
+                        >
+                            <option value="all" className="text-gray-900">Vue Consolidée</option>
+                            {magasins?.map(m => (
+                                <option key={m.id} value={m.id} className="text-gray-900">{m.nom}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="h-8 w-px bg-white/10 mx-2" />
+
+                    <button
+                        onClick={exportToExcel}
+                        disabled={isExporting || isLoading}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700 shadow-xl transition-all uppercase tracking-widest disabled:opacity-50"
                     >
-                        {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y} className="text-gray-900">{y}</option>)}
-                    </select>
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Excel
+                    </button>
 
                     <button
                         onClick={() => setIsPreviewOpen(true)}
-                        className="flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-gray-900 shadow-lg hover:bg-gray-100 transition-all border-2 border-orange-500"
+                        disabled={isLoading}
+                        className="flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-xs font-black text-gray-900 shadow-xl hover:bg-gray-100 transition-all border-2 border-orange-500 uppercase tracking-widest disabled:opacity-50"
                     >
                         <Printer className="h-4 w-4" />
-                        Aperçu Impression
+                        Impression
                     </button>
                 </div>
             </div>

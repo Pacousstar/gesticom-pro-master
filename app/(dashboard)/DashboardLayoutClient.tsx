@@ -165,14 +165,15 @@ export default function DashboardLayoutClient({
 
   // Fetch sidebar counters for reassurance in UI
   const fetchSidebarCounters = async () => {
+    if (!isServerConnected) return
     try {
       const res = await fetch('/api/maintenance/sidebar-counters')
       if (res.ok) {
         const data = await res.json()
         setSidebarCounters(data || {})
       }
-    } catch (e) {
-      console.error('Erreur fetch sidebar counters:', e)
+    } catch (e: any) {
+      if (e.name !== 'TypeError') console.error('Erreur fetch sidebar counters:', e)
     }
   }
 
@@ -184,6 +185,7 @@ export default function DashboardLayoutClient({
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
   const fetchDailyPerformance = async () => {
+    if (!isServerConnected) return
     try {
       const res = await fetch('/api/dashboard/bilan-journalier')
       if (res.ok) {
@@ -193,8 +195,8 @@ export default function DashboardLayoutClient({
           count: data.count || 0
         })
       }
-    } catch (e) {
-      console.error('Erreur fetch performance:', e)
+    } catch (e: any) {
+      if (e.name !== 'TypeError') console.error('Erreur fetch performance:', e)
     }
   }
 
@@ -424,6 +426,7 @@ export default function DashboardLayoutClient({
   }
 
   async function loadNotifications() {
+    if (!isServerConnected) return
     setLoadingNotifications(true)
     try {
       const res = await fetch('/api/notifications')
@@ -433,8 +436,8 @@ export default function DashboardLayoutClient({
         setNonLues(data.nonLues || 0)
         setToutesLues(false) // Réinitialiser à chaque rechargement
       }
-    } catch (e) {
-      console.error('Erreur chargement notifications:', e)
+    } catch (e: any) {
+      if (e.name !== 'TypeError') console.error('Erreur chargement notifications:', e)
     } finally {
       setLoadingNotifications(false)
     }

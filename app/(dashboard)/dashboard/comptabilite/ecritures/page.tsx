@@ -341,33 +341,6 @@ export default function EcrituresPage() {
             <Filter className="h-4 w-4" />
             Filtres
           </button>
-          <button
-            type="button"
-            disabled={backfilling}
-            onClick={async () => {
-              setBackfilling(true)
-              try {
-                const res = await fetch('/api/comptabilite/backfill-ecritures', { method: 'POST' })
-                const data = await res.json().catch(() => ({}))
-                if (res.ok && data.ok) {
-                  showSuccess(data.message || 'Écritures générées.')
-                  fetchEcritures()
-                  fetchDiagnostic()
-                } else {
-                  showError(data.error || data.message || 'Erreur lors de la génération.')
-                }
-              } catch (e) {
-                showError('Erreur réseau.')
-              } finally {
-                setBackfilling(false)
-              }
-            }}
-            className="flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100 disabled:opacity-50"
-            title="Génère les écritures pour les ventes, achats et dépenses qui n'en ont pas encore (ex. après import)."
-          >
-            {backfilling ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-            Générer écritures manquantes
-          </button>
         </div>
 
         {showFilters && (

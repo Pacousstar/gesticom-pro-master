@@ -43,10 +43,13 @@ type Comparaison = {
 
 type RapportClient = {
   clientId: number | null
-  client: string
-  code: string | null
-  chiffreAffaires: number
-  frequenceAchat: number
+  nom: string
+  telephone: string
+  pointsFidelite: number
+  nombreVentes: number
+  caTotal: number
+  totalPaye: number
+  soldeDu: number
 }
 
 type RapportPaiement = {
@@ -668,6 +671,33 @@ export default function RapportsPage() {
 
         {activeTab === 'ventes' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+            {/* NOUVEAUTÉ : CARTE TOP 10 STARS (Fidélité) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div className="lg:col-span-4 bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden border-2 border-indigo-500/30">
+                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                  <Star className="h-64 w-64 text-indigo-400" />
+                </div>
+                <div className="relative z-10">
+                  <h3 className="text-xl font-black text-white uppercase tracking-tighter italic flex items-center gap-3">
+                    <Star className="h-6 w-6 text-amber-400 fill-amber-400" />
+                    Top 10 Clients Stars (Fidélité & Volume)
+                  </h3>
+                  <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {caClients.slice(0, 10).map((c, idx) => (
+                      <div key={idx} className="bg-white/5 backdrop-blur-md border border-white/10 p-5 rounded-3xl hover:bg-white/10 transition-all group">
+                         <div className="flex justify-between items-start mb-2">
+                            <span className="text-[10px] font-black bg-amber-400 text-amber-900 h-6 w-6 rounded-full flex items-center justify-center italic">#{idx + 1}</span>
+                            <span className="text-[10px] font-black text-indigo-300 uppercase italic">{c.pointsFidelite} pts</span>
+                         </div>
+                         <p className="text-sm font-black text-white uppercase tracking-tighter truncate italic">{c.nom}</p>
+                         <p className="text-xl font-black text-amber-400 tabular-nums tracking-tighter mt-1">{(c.caTotal || 0).toLocaleString()} <span className="text-[10px] opacity-40">F</span></p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div className="grid lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1 border border-gray-100 bg-white p-8 rounded-[2.5rem] shadow-xl">

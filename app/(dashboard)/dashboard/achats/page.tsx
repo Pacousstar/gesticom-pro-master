@@ -108,7 +108,8 @@ export default function AchatsPage() {
   const [userRole, setUserRole] = useState<string>('')
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
-  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES' })
+  // CORRECTION #13 : Ajout du champ date au règlement achat (comme dans Ventes) pour permettre la rétro-datation
+  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', date: new Date().toISOString().split('T')[0] })
   const [submitting, setSubmitting] = useState(false)
   const [savingReglement, setSavingReglement] = useState(false)
   const [formFournisseurSearch, setFormFournisseurSearch] = useState('')
@@ -150,7 +151,7 @@ export default function AchatsPage() {
     return () => window.removeEventListener('produit-created', handleProduitCreated)
   }, [])
 
-  const fetchAchats = (overrideDeb?: string, overrideFin?: string, page?: number) => {
+  const fetchAchats = (overrideDeb?: string, overrideFin?: string, page?: number, overrideSearch?: string) => {
     setLoading(true)
     const params = new URLSearchParams({
       page: String(page ?? currentPage),
@@ -158,8 +159,11 @@ export default function AchatsPage() {
     })
     const deb = overrideDeb ?? dateDebut
     const fin = overrideFin ?? dateFin
+    // CORRECTION #11 : Passage du searchQuery dans les paramètres API
+    const q = overrideSearch !== undefined ? overrideSearch : searchQuery
     if (deb) params.set('dateDebut', deb)
     if (fin) params.set('dateFin', fin)
+    if (q) params.set('q', q)
     fetch('/api/achats?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [], pagination: null, totals: null }))
       .then((response) => {
@@ -311,6 +315,8 @@ export default function AchatsPage() {
     }
   }
 
+  // CORRECTION #4 : Inclusion des frais d'approche dans le total affiché (cohérent avec le montant facturé réel)
+  // CORRECTION Achats #1 : Arrondi global après la somme (comme dans Ventes)
   const { totalHT, totalTVA, totalRemise, totalHTNet, totalAchatTTC } = formData.lignes.reduce(
     (acc, val) => {
       const q = val.quantite
@@ -320,18 +326,19 @@ export default function AchatsPage() {
       const ht = q * pu
       const htNet = ht - r
       const tvaMontant = htNet * (t / 100)
-      const montantLigne = Math.round(htNet + tvaMontant) // Arrondi par ligne comme au backend
-      
+      // Accumulation brute, arrondi global une seule fois à la fin
       acc.totalHT += ht
       acc.totalTVA += tvaMontant
       acc.totalRemise += r
       acc.totalHTNet += htNet
-      acc.totalAchatTTC += montantLigne
+      acc.totalAchatTTC += htNet + tvaMontant
       return acc
     },
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalHTNet: 0, totalAchatTTC: 0 }
   )
-  const total = totalAchatTTC
+  // Total = TTC arrondi + Frais d'approche (correction #4)
+  const fraisApproche = Number(formData.fraisApproche) || 0
+  const total = Math.round(totalAchatTTC) + fraisApproche
 
   // Récupérer le templateId par défaut pour ACHAT
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
@@ -434,16 +441,21 @@ export default function AchatsPage() {
         quantite: l.quantite,
         prixUnitaire: l.prixUnitaire,
         tva: l.tvaPerc,
-        remise: l.remise,
+      remise: l.remise,
       })),
     }
 
-    // Dans GestiCom Offline, l'enregistrement se fait toujours directement vers le serveur local.
+    // --- IDEMPOTENCE : Génération du numéro côté client pour éviter les doublons au renvoi ---
+    const numeroStable = editingAchatId ? undefined : `A-${Math.floor(Date.now() / 1000)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase()
+    const requestDataFinal = { 
+      ...requestData, 
+      numero: numeroStable 
+    }
 
     if (editingAchatId) {
-      await doModifierAchat(requestData)
+      await doModifierAchat(requestDataFinal)
     } else {
-      await doEnregistrerAchat(requestData)
+      await doEnregistrerAchat(requestDataFinal)
     }
   }
 
@@ -551,13 +563,15 @@ export default function AchatsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           montant,
-          modePaiement: reglementData.modePaiement
+          modePaiement: reglementData.modePaiement,
+          // CORRECTION #13 : Envoi de la date du règlement
+          date: reglementData.date || new Date().toISOString().split('T')[0]
         }),
       })
       if (res.ok) {
         showSuccess('Règlement enregistré avec succès.')
         setShowReglement(null)
-        setReglementData({ montant: '', modePaiement: 'ESPECES' })
+        setReglementData({ montant: '', modePaiement: 'ESPECES', date: new Date().toISOString().split('T')[0] })
         fetchAchats()
         if (detailAchat?.id === showReglement.id) {
           handleVoirDetail(showReglement.id)
@@ -666,7 +680,7 @@ export default function AchatsPage() {
         </button>
         <button
           type="button"
-          onClick={() => { setDateDebut(''); setDateFin(''); setCurrentPage(1); fetchAchats('', '', 1); }}
+          onClick={() => { setDateDebut(''); setDateFin(''); setSearchQuery(''); setCurrentPage(1); fetchAchats('', '', 1, ''); }}
           className="rounded-lg border-2 border-orange-400 bg-orange-100 px-3 py-1.5 text-sm font-medium text-orange-900 hover:bg-orange-200"
         >
           Réinitialiser

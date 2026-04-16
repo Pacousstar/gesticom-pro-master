@@ -68,11 +68,19 @@ export async function POST(request: NextRequest) {
 
     const entiteId = await getEntiteId(session)
 
-    // Générer un numéro de transfert unique
+    // Générer un numéro de transfert unique (ou utiliser celui du client pour l'idempotence)
     const count = await prisma.transfert.count({ where: { entiteId } })
-    const numero = `TRF-${new Date().getFullYear()}${(count + 1).toString().padStart(5, '0')}`
+    const numero = body.numero || `TRF-${new Date().getFullYear()}${(count + 1).toString().padStart(5, '0')}`
 
     const result = await prisma.$transaction(async (tx) => {
+      // Bloquer les doublons par numéro (Idempotence)
+      const existing = await tx.transfert.findUnique({
+        where: { numero },
+        select: { id: true }
+      })
+      if (existing) {
+        throw new Error('DOUBLE_TRANSACTION: Ce transfert a déjà été enregistré.')
+      }
       // 1. Créer le transfert
       const transfert = await tx.transfert.create({
         data: {
@@ -159,6 +167,29 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      // 3. Comptabilisation du transfert (OD : 311 Débit / 311 Crédit)
+      let montantTotalTransfert = 0
+      for (const ligne of transfert.lignes) {
+        const prod = await tx.produit.findUnique({ where: { id: ligne.produitId } })
+        montantTotalTransfert += (prod?.pamp || prod?.prixAchat || 0) * ligne.quantite
+      }
+
+      if (montantTotalTransfert > 0) {
+        const { comptabiliserTransfert } = await import('@/lib/comptabilisation')
+        const magasinOrigine = await tx.magasin.findUnique({ where: { id: transfert.magasinOrigineId } })
+        const magasinDest = await tx.magasin.findUnique({ where: { id: transfert.magasinDestId } })
+
+        await comptabiliserTransfert({
+          transfertId: transfert.id,
+          numero: transfert.numero,
+          date: new Date(),
+          magasinOrigineNom: magasinOrigine?.nom || `Magasin ${transfert.magasinOrigineId}`,
+          magasinDestNom: magasinDest?.nom || `Magasin ${transfert.magasinDestId}`,
+          montantTotal: Math.round(montantTotalTransfert),
+          utilisateurId: session.userId,
+        }, tx)
+      }
+
       return transfert
     }, { timeout: 20000 })
 
@@ -177,8 +208,14 @@ export async function POST(request: NextRequest) {
     )
 
     return NextResponse.json(result)
-  } catch (e) {
+  } catch (e: any) {
     console.error('POST /api/stock/transferts:', e)
+    if (e.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Ce transfert a déjà été enregistré (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Erreur lors du transfert' }, { status: 500 })
   }
 }

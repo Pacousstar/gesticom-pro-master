@@ -116,8 +116,15 @@ export async function DELETE(
       await tx.reglementVente.deleteMany({ where: { venteId: id } })
       await tx.vente.delete({ where: { id: id } })
 
-      // 7. LOG D'AUDIT : Mouchard de suppression (Indélébile)
-      await logSuppression(session, 'VENTE', id, `SUPPRESSION RADICALE : Facture ${v.numero} effacée avec régul. stocks et trésorerie par Super Admin`, { numero: v.numero, montant: v.montantTotal }, getIpAddress(_request))
+      // 7. LOG D'AUDIT : Mouchard de suppression (Capture intégrale pour restauration)
+      await logSuppression(
+        session, 
+        'VENTE', 
+        id, 
+        `SUPPRESSION RADICALE : Facture ${v.numero} effacée avec régul. stocks et trésorerie par Super Admin`, 
+        v, // Snapshot complet
+        getIpAddress(_request)
+      )
     }, { timeout: 30000 })
     
     // Invalider le cache pour affichage immédiat

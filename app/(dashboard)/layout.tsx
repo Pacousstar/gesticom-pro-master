@@ -27,10 +27,10 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  try {
-    const session = await getSession()
-    if (!session) redirect('/login')
+  const session = await getSession()
+  if (!session) redirect('/login')
 
+  try {
     const userRow = await prisma.utilisateur.findUnique({
       where: { id: session.userId },
       select: { permissionsPersonnalisees: true },
@@ -46,6 +46,7 @@ export default async function DashboardLayout({
     )
   } catch (e) {
     console.error('DashboardLayout error:', e)
-    redirect('/login?error=session')
+    // On ne redirige plus ici pour éviter les boucles d'erreur complexes si le catch est déclenché par une erreur de base de données
+    return <div className="p-10 text-center text-rose-600 font-black">Erreur de chargement du dashboard. Veuillez nous contacter.</div>
   }
 }

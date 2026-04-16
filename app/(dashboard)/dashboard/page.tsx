@@ -18,6 +18,12 @@ import {
   TrendingUp,
   Banknote,
   FileText,
+  ShieldCheck,
+  CreditCard,
+  Wallet,
+  ArrowUpRight,
+  ArrowDownRight,
+  LineChart as ChartIcon
 } from 'lucide-react'
 import KpiCard from '@/components/dashboard/KpiCard'
 import RecentActivity from '@/components/dashboard/RecentActivity'
@@ -42,9 +48,16 @@ type DashboardData = {
   repartition: Array<{ name: string; percent: number }>
   lowStock: Array<{ name: string; stock: number; min: number; category: string }>
   recentSales: Array<{ id: string; client: string; montant: number; time: string }>
+  systemAlertes: Array<{ id: number; date: string; type: string; categorie: string; message: string; lu: boolean }>
+  creditAlerts?: Array<{ id: string; date: string; type: string; categorie: string; message: string }>
   totalDepensesCount: number
   totalDepensesAmount: number
   tresorerieReelle: number
+  tresorerieCaisse: number
+  tresorerieBanque: number
+  totalDettes: number
+  totalCreances: number
+  monthlyTrends: Array<{ month: string; current: number; previous: number }>
   _timeout?: boolean
 }
 
@@ -128,7 +141,64 @@ export default function DashboardPage() {
         <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 flex flex-col gap-1">
           <p className="font-bold flex items-center gap-2 underline"><AlertTriangle className="h-4 w-4" /> Problème de chargement</p>
           <p className="text-sm">{err}</p>
-          <p className="text-[10px] mt-1 opacity-70 italic">Conseil : Si vous voyez ce message en mode développement, c'est souvent dû à la compilation lente. Patientez ou actualisez.</p>
+        </div>
+      )}
+
+       {/* ALERTES SYSTÈME CRITIQUES (Intelligence GestiCom) */}
+       {(data?.creditAlerts || []).length > 0 && (
+        <div className="grid grid-cols-1 gap-4 mb-4">
+           {data?.creditAlerts?.map((alerte) => (
+             <div key={alerte.id} className="flex items-center justify-between p-5 rounded-3xl border-2 border-indigo-500/50 bg-indigo-500/10 backdrop-blur-3xl text-indigo-100 shadow-2xl animate-pulse">
+                <div className="flex items-center gap-5">
+                  <div className="p-3 rounded-2xl bg-indigo-500 shadow-lg shadow-indigo-500/50">
+                    <ShieldCheck className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] bg-indigo-500 text-white px-3 py-0.5 rounded-full italic">Alerte Crédit - 90%</span>
+                      <span className="text-[9px] font-bold opacity-60 uppercase">{new Date(alerte.date).toLocaleDateString('fr-FR')}</span>
+                    </div>
+                    <p className="text-base font-black italic tracking-tight uppercase">{alerte.message}</p>
+                  </div>
+                </div>
+                <Link 
+                  href="/dashboard/clients"
+                  className="bg-white/10 hover:bg-indigo-600 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/20 whitespace-nowrap"
+                >
+                  Gérer Client
+                </Link>
+             </div>
+           ))}
+        </div>
+      )}
+
+      {(data?.systemAlertes || []).filter(a => !a.lu).length > 0 && (
+        <div className="grid grid-cols-1 gap-4">
+           {data?.systemAlertes.filter(a => !a.lu).slice(0, 3).map((alerte) => (
+             <div key={alerte.id} className={`flex items-center justify-between p-4 rounded-2xl border-2 backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-700 ${alerte.type === 'CRITICAL' ? 'bg-red-500/10 border-red-500/50 text-red-500' : 'bg-amber-500/10 border-amber-500/50 text-amber-600'}`}>
+                <div className="flex items-center gap-4">
+                  <div className={`p-2 rounded-xl ${alerte.type === 'CRITICAL' ? 'bg-red-500' : 'bg-amber-500'}`}>
+                    <AlertTriangle className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-0.5 rounded italic">{alerte.categorie}</span>
+                      <span className="text-[9px] font-bold opacity-60 uppercase">{new Date(alerte.date).toLocaleDateString('fr-FR')}</span>
+                    </div>
+                    <p className="text-sm font-black italic tracking-tight">{alerte.message}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={async () => {
+                    await fetch(`/api/notifications/marquer-lues`, { method: 'POST', body: JSON.stringify({ id: alerte.id }) })
+                    mutate()
+                  }}
+                  className="bg-white/20 hover:bg-white/40 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  Acquitter
+                </button>
+             </div>
+           ))}
         </div>
       )}
 
@@ -440,6 +510,127 @@ export default function DashboardPage() {
         {/* Suggestions / IA */}
         <div className="flex flex-col h-full">
           <SuggestionsAchat />
+        </div>
+      </div>
+
+      {/* SECTION FINANCIÈRE & TENDANCES (AJOUTÉE EN BAS) */}
+      <div className="grid gap-6 lg:grid-cols-3 mt-8">
+        {/* Graphique de Tendance (2/3) */}
+        <div className="lg:col-span-2 flex flex-col rounded-3xl bg-white p-8 shadow-xl border border-gray-100">
+          <div className="mb-8 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-blue-50">
+                <ChartIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-gray-900 tracking-tight uppercase italic">Tendance des Ventes</h2>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Comparatif Année N (Bleu) vs N-1 (Gris)</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Le Graphique Ultra-Léger (Pure CSS/SVG) */}
+          <div className="flex-1 flex items-end justify-between gap-2 h-64 mt-4">
+            {(data?.monthlyTrends || Array(12).fill({ month: '-', current: 0, previous: 0 })).map((m: any, i: number) => {
+              const max = Math.max(...(data?.monthlyTrends?.map((t: any) => Math.max(t.current, t.previous)) || [1]))
+              const hCurrent = Math.max(2, Math.round((m.current / max) * 100))
+              const hPrevious = Math.max(2, Math.round((m.previous / max) * 100))
+              
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center group relative h-full justify-end">
+                  <div className="flex items-end gap-1 h-full w-full justify-center">
+                    {/* Année Précédente */}
+                    <div 
+                      className="w-full max-w-[8px] bg-gray-100 rounded-t-sm transition-all duration-1000 group-hover:bg-gray-200"
+                      style={{ height: `${hPrevious}%` }}
+                    />
+                    {/* Année Courante */}
+                    <div 
+                      className="w-full max-w-[8px] bg-blue-500 rounded-t-sm transition-all duration-700 group-hover:bg-blue-600 shadow-sm"
+                      style={{ height: `${hCurrent}%` }}
+                    />
+                  </div>
+                  <span className="mt-3 text-[9px] font-black text-gray-400 uppercase tracking-tighter">{m.month}</span>
+                  
+                  {/* Tooltip ultra-léger */}
+                  <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[9px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl whitespace-nowrap border border-white/10">
+                    <p className="font-bold border-b border-white/10 pb-1 mb-1">{m.month}</p>
+                    <p className="text-blue-300">N : {m.current.toLocaleString()} F</p>
+                    <p className="text-gray-400">N-1 : {m.previous.toLocaleString()} F</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Compteurs Financiers (1/3) */}
+        <div className="flex flex-col gap-6">
+          {/* Trésorerie détaillée */}
+          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl p-6 shadow-xl shadow-emerald-200 text-white border border-white/10">
+            <div className="flex justify-between items-start mb-6">
+              <div className="p-2.5 bg-white/20 rounded-2xl backdrop-blur-md">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Trésorerie Globale</span>
+                <TrendingUp className="h-4 w-4 opacity-50 mt-1" />
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+               <div>
+                  <h3 className="text-3xl font-black tabular-nums tracking-tighter">
+                    {(data?.tresorerieReelle || 0).toLocaleString('fr-FR')} F
+                  </h3>
+                  <p className="text-[9px] mt-1 opacity-60 italic uppercase font-bold tracking-widest">Liquidités totales disponibles</p>
+               </div>
+               
+               <div className="h-px bg-white/10 w-full" />
+               
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                     <p className="text-[9px] font-black uppercase tracking-widest opacity-70">En Caisse</p>
+                     <p className="text-sm font-bold tabular-nums">{(data?.tresorerieCaisse || 0).toLocaleString('fr-FR')} F</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                     <p className="text-[9px] font-black uppercase tracking-widest opacity-70">Banque & MM</p>
+                     <p className="text-sm font-bold tabular-nums">{(data?.tresorerieBanque || 0).toLocaleString('fr-FR')} F</p>
+                  </div>
+               </div>
+            </div>
+            
+            <div className="mt-6">
+               <Link href="/dashboard/banque" className="block w-full text-center py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10">
+                  Détails & Virements
+               </Link>
+            </div>
+          </div>
+
+          {/* Dettes / Créances */}
+          <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100">
+             <div className="space-y-6">
+                <div>
+                   <div className="flex items-center gap-2 mb-2">
+                      <ArrowDownRight className="h-4 w-4 text-rose-500" />
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dettes Fournisseurs</span>
+                   </div>
+                   <p className="text-xl font-black text-rose-600 tabular-nums">
+                      {(data?.totalDettes || 0).toLocaleString('fr-FR')} F
+                   </p>
+                </div>
+                <div className="h-px bg-gray-50 w-full" />
+                <div>
+                   <div className="flex items-center gap-2 mb-2">
+                      <ArrowUpRight className="h-4 w-4 text-emerald-500" />
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Créances Clients</span>
+                   </div>
+                   <p className="text-xl font-black text-emerald-600 tabular-nums">
+                      {(data?.totalCreances || 0).toLocaleString('fr-FR')} F
+                   </p>
+                </div>
+             </div>
+          </div>
         </div>
       </div>
     </div>

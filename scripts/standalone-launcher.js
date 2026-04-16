@@ -80,6 +80,18 @@ async function migrateDatabase() {
                 stdio: 'inherit' 
             });
             console.log('[GestiCom] Base de données et index de performance à jour.');
+
+            // --- AUTO-STABILISATION ET MAINTENANCE ---
+            console.log('[GestiCom] Exécution de la maintenance automatique...');
+            const maintenanceCmd = `"${process.execPath}" "${path.join(projectRoot, 'scripts', 'maintenance-runner.js')}"`;
+            try {
+                execSync(maintenanceCmd, {
+                    env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
+                    stdio: 'inherit'
+                });
+            } catch (maintError) {
+                console.warn('[GestiCom] Note : Erreur mineure lors de la maintenance automatique.');
+            }
         } catch (error) {
             console.warn('[GestiCom] Note : La base était probablement déjà synchronisée ou une migration est nécessaire.');
         }

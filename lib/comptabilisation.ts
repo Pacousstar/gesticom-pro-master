@@ -81,10 +81,29 @@ async function createEcriture(data: {
 }, tx?: any) {
   if ((data.debit || 0) <= 0 && (data.credit || 0) <= 0) {
     console.warn(`[Comptabilisation] Barrière de validation => Ignore l'écriture (${data.libelle}): Débit=${data.debit}, Crédit=${data.credit}`);
-    return null; // ou return undefined;
+    return null;
   }
 
   const p = tx || prisma
+  
+  // IDEMPOTENCE : Vérifier si une écriture identique existe déjà
+  if (data.referenceId && data.referenceType) {
+    const exist = await p.ecritureComptable.findFirst({
+      where: {
+        referenceType: data.referenceType,
+        referenceId: data.referenceId,
+        compteId: data.compteId,
+        debit: Math.round(data.debit || 0),
+        credit: Math.round(data.credit || 0),
+        entiteId: data.entiteId || 1
+      }
+    })
+    if (exist) {
+      // console.log(`[Comptabilisation] Écriture déjà existante (ignorée) : ${data.referenceType}#${data.referenceId}`);
+      return exist
+    }
+  }
+
   const numero = `ECR-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
   
   return await p.ecritureComptable.create({
@@ -122,6 +141,19 @@ export async function comptabiliserVente(data: {
     // console.log(`[Comptabilisation] Ignore vente nulle : ${data.numeroVente}`);
     return null;
   }
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  // Supprime toutes les écritures liées à cette vente ou ses règlements pour éviter les doublons lors des mises à jour
+  await p.ecritureComptable.deleteMany({
+    where: {
+      OR: [
+        { referenceType: 'VENTE', referenceId: data.venteId },
+        { referenceType: 'VENTE_STOCK', referenceId: data.venteId },
+        { referenceType: 'VENTE_FRAIS', referenceId: data.venteId },
+        { referenceType: 'VENTE_REGLEMENT', referenceId: data.venteId }
+      ]
+    }
+  })
   
   const journalVentes = await getOrCreateJournal('VE', 'Journal des Ventes', 'VENTES', tx)
   const compteVentes = await getOrCreateCompte('701', 'Ventes de marchandises', '7', 'PRODUITS', tx)
@@ -149,8 +181,8 @@ export async function comptabiliserVente(data: {
     montantTVA = montantTTC - montantHT
   }
   
-  montantHT = Math.round(montantHT)
-  montantTVA = Math.round(montantTVA)
+  // montantHT = Math.round(montantHT)
+  // montantTVA = Math.round(montantTVA)
 
   // 1. Écriture de CRÉDIT (Ventes HT)
   await createEcriture({
@@ -313,6 +345,7 @@ export async function comptabiliserVente(data: {
  * Comptabilise un règlement sur une vente (Crédit vers Règlement)
  */
 export async function comptabiliserReglementVente(data: {
+  reglementId?: number | null
   venteId: number | null
   numeroVente: string
   date: Date
@@ -323,6 +356,14 @@ export async function comptabiliserReglementVente(data: {
   magasinId?: number | null
 }, tx?: any) {
   const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  if (data.reglementId) {
+    await p.ecritureComptable.deleteMany({
+      where: { referenceType: 'VENTE_REGLEMENT', referenceId: data.reglementId }
+    })
+  }
+
   const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
   const compteClient = await getOrCreateCompte(
     COMPTES_DEFAUT.CLIENTS,
@@ -343,10 +384,23 @@ export async function comptabiliserReglementVente(data: {
     compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
   } else {
     // Mobile Money, Chèque, Virement vont en 521 (Banque/MM)
-    compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    const banque = await p.banque.findFirst({
+      where: { entiteId, actif: true },
+      orderBy: { id: 'asc' }
+    })
+    
+    if (banque && banque.compteId) {
+      const dbCompte = await p.planCompte.findUnique({ where: { id: banque.compteId } })
+      compteTresorerie = dbCompte || await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    } else {
+      compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    }
   }
   
   // Écriture : Débit Caisse/Banque (entrée d'argent), Crédit Clients (réduit la créance)
+  // FIX: Utiliser le reglementId pour l'idempotence et la référence exacte
+  const referenceId = data.reglementId || data.venteId || 0
+
   await createEcriture({
     date: data.date,
     journalId: journal.id,
@@ -356,9 +410,9 @@ export async function comptabiliserReglementVente(data: {
     compteId: compteTresorerie.id,
     debit: data.montant,
     credit: 0,
-    reference: `REG-VEN-${data.venteId}`,
+    reference: `REG-VEN-${referenceId}`,
     referenceType: 'VENTE_REGLEMENT',
-    referenceId: data.venteId,
+    referenceId: referenceId,
     utilisateurId: data.utilisateurId,
   }, tx)
   
@@ -371,48 +425,14 @@ export async function comptabiliserReglementVente(data: {
     compteId: compteClient.id,
     debit: 0,
     credit: data.montant,
-    reference: `REG-VEN-${data.venteId}`,
+    reference: `REG-VEN-${referenceId}`,
     referenceType: 'VENTE_REGLEMENT',
-    referenceId: data.venteId,
+    referenceId: referenceId,
     utilisateurId: data.utilisateurId,
   }, tx)
 
-  // --- SYNCHRONISATION PHYSIQUE CAISSE/BANQUE ---
-  if ((m === 'ESPECES' || m === 'CASH') && data.magasinId) {
-    await p.caisse.create({
-      data: {
-        date: data.date,
-        magasinId: data.magasinId,
-        type: 'ENTREE',
-        motif: `REGLEMENT VENTE ${data.numeroVente}`,
-        montant: data.montant,
-        utilisateurId: data.utilisateurId,
-        entiteId: entiteId
-      }
-    })
-  } else if (!isCash) {
-    // Pour les autres modes (Banque/MM), on synchronise OperationBancaire
-    // On cherche une banque correspondante ou la première disponible
-    const banque = await p.banque.findFirst({
-      where: { entiteId, actif: true },
-      orderBy: { id: 'asc' }
-    })
-    
-    if (banque) {
-      await p.operationBancaire.create({
-        data: {
-          banqueId: banque.id,
-          date: data.date,
-          type: 'ENTREE',
-          montant: data.montant,
-          libelle: `REGLEMENT VENTE ${data.numeroVente} (${m})`,
-          soldeApres: 0, // Sera recalculé par le système ou ignoré ici si non strict
-          reference: data.numeroVente,
-          utilisateurId: data.utilisateurId,
-        }
-      })
-    }
-  }
+  // NOTE: Les mouvements physiques de Caisse/Banque sont désormais gérés uniquement par les APIs métier
+  // pour éviter les doublons constatés.
 }
 
 /**
@@ -433,6 +453,18 @@ export async function comptabiliserAchat(data: {
   lignes?: { produitId: number; designation: string; quantite: number; prixUnitaire: number; tva?: number; remise?: number }[]
 }, tx?: any) {
   const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: {
+      OR: [
+        { referenceType: 'ACHAT', referenceId: data.achatId },
+        { referenceType: 'ACHAT_STOCK', referenceId: data.achatId },
+        { referenceType: 'ACHAT_REGLEMENT', referenceId: data.achatId }
+      ]
+    }
+  })
+
   const journalAchats = await getOrCreateJournal('AC', 'Journal des Achats', 'ACHATS', tx)
   const compteAchats = await getOrCreateCompte(COMPTES_DEFAUT.ACHATS_MARCHANDISES, 'Achats de marchandises', '6', 'CHARGES', tx)
   const compteFournisseur = await getOrCreateCompte(COMPTES_DEFAUT.FOURNISSEURS, 'Fournisseurs', '4', 'PASSIF', tx)
@@ -458,8 +490,8 @@ export async function comptabiliserAchat(data: {
     montantTVA = montantTTC - montantHT
   }
   
-  montantHT = Math.round(montantHT)
-  montantTVA = Math.round(montantTVA)
+  // montantHT = Math.round(montantHT)
+  // montantTVA = Math.round(montantTVA)
 
   // 1. Écriture de DÉBIT (Achats HT)
   await createEcriture({
@@ -568,6 +600,7 @@ export async function comptabiliserAchat(data: {
  * Comptabilise un règlement sur un achat (Crédit vers Règlement)
  */
 export async function comptabiliserReglementAchat(data: {
+  reglementId?: number | null
   achatId: number | null
   numeroAchat: string
   date: Date
@@ -578,6 +611,14 @@ export async function comptabiliserReglementAchat(data: {
   magasinId?: number | null
 }, tx?: any) {
   const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  if (data.reglementId) {
+    await p.ecritureComptable.deleteMany({
+      where: { referenceType: 'ACHAT_REGLEMENT', referenceId: data.reglementId }
+    })
+  }
+
   const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
   const compteFournisseur = await getOrCreateCompte(
     COMPTES_DEFAUT.FOURNISSEURS,
@@ -601,6 +642,8 @@ export async function comptabiliserReglementAchat(data: {
   }
   
   // Écriture : Débit Fournisseurs (réduit la dette), Crédit Caisse/Banque (sortie d'argent)
+  const referenceId = data.reglementId || data.achatId || 0
+
   await createEcriture({
     date: data.date,
     journalId: journal.id,
@@ -610,9 +653,9 @@ export async function comptabiliserReglementAchat(data: {
     compteId: compteFournisseur.id,
     debit: data.montant,
     credit: 0,
-    reference: `REG-ACH-${data.achatId}`,
+    reference: `REG-ACH-${referenceId}`,
     referenceType: 'ACHAT_REGLEMENT',
-    referenceId: data.achatId,
+    referenceId: referenceId,
     utilisateurId: data.utilisateurId,
   }, tx)
   
@@ -625,47 +668,13 @@ export async function comptabiliserReglementAchat(data: {
     compteId: compteTresorerie.id,
     debit: 0,
     credit: data.montant,
-    reference: `REG-ACH-${data.achatId}`,
+    reference: `REG-ACH-${referenceId}`,
     referenceType: 'ACHAT_REGLEMENT',
-    referenceId: data.achatId,
+    referenceId: referenceId,
     utilisateurId: data.utilisateurId,
   }, tx)
 
-  // --- SYNCHRONISATION PHYSIQUE CAISSE/BANQUE ---
-  if ((m === 'ESPECES' || m === 'CASH') && data.magasinId) {
-    await p.caisse.create({
-      data: {
-        date: data.date,
-        magasinId: data.magasinId,
-        type: 'SORTIE',
-        motif: `REGLEMENT ACHAT ${data.numeroAchat}`,
-        montant: data.montant,
-        utilisateurId: data.utilisateurId,
-        entiteId: entiteId
-      }
-    })
-  } else if (!isCash) {
-    // Sortie de banque pour paiement fournisseur
-    const banque = await p.banque.findFirst({
-      where: { entiteId, actif: true },
-      orderBy: { id: 'asc' }
-    })
-    
-    if (banque) {
-      await p.operationBancaire.create({
-        data: {
-          banqueId: banque.id,
-          date: data.date,
-          type: 'SORTIE',
-          montant: data.montant,
-          libelle: `Paiement Achat ${data.numeroAchat} (${m})`,
-          soldeApres: 0,
-          reference: data.numeroAchat,
-          utilisateurId: data.utilisateurId,
-        }
-      })
-    }
-  }
+  // NOTE: Les mouvements physiques de Caisse/Banque sont uniquement gérés par les APIs métier.
 }
 
 /**
@@ -680,8 +689,22 @@ export async function comptabiliserMouvementStock(data: {
   motif: string
   utilisateurId: number
   entiteId?: number
+  mouvementId?: number | null
 }, tx?: any) {
   const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  if (data.mouvementId) {
+    await p.ecritureComptable.deleteMany({
+      where: {
+        OR: [
+          { referenceType: 'STOCK_AJUSTEMENT', referenceId: data.mouvementId },
+          { referenceType: 'STOCK_MVT', referenceId: data.mouvementId }
+        ]
+      }
+    })
+  }
+
   const journalOD = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const compteStock = await getOrCreateCompte(COMPTES_DEFAUT.STOCK_MARCHANDISES, 'Stock de marchandises', '3', 'ACTIF', tx)
   const compteVariation = await getOrCreateCompte(COMPTES_DEFAUT.VARIATION_STOCKS, 'Variation de stocks', '6', 'CHARGES', tx)
@@ -704,9 +727,9 @@ export async function comptabiliserMouvementStock(data: {
       compteId: compteStock.id,
       debit: valeur,
       credit: 0,
-      reference: `STK-IN-${data.produitId}`,
+      reference: `STK-IN-${data.mouvementId || data.produitId}`,
       referenceType: 'STOCK_AJUSTEMENT',
-      referenceId: data.produitId,
+      referenceId: data.mouvementId || data.produitId,
       utilisateurId: data.utilisateurId,
     }, tx)
     await createEcriture({
@@ -718,9 +741,9 @@ export async function comptabiliserMouvementStock(data: {
       compteId: compteVariation.id,
       debit: 0,
       credit: valeur,
-      reference: `STK-IN-${data.produitId}`,
+      reference: `STK-IN-${data.mouvementId || data.produitId}`,
       referenceType: 'STOCK_AJUSTEMENT',
-      referenceId: data.produitId,
+      referenceId: data.mouvementId || data.produitId,
       utilisateurId: data.utilisateurId,
     }, tx)
   } else {
@@ -734,9 +757,9 @@ export async function comptabiliserMouvementStock(data: {
       compteId: compteVariation.id,
       debit: valeur,
       credit: 0,
-      reference: `STK-OUT-${data.produitId}`,
+      reference: `STK-OUT-${data.mouvementId || data.produitId}`,
       referenceType: 'STOCK_AJUSTEMENT',
-      referenceId: data.produitId,
+      referenceId: data.mouvementId || data.produitId,
       utilisateurId: data.utilisateurId,
     }, tx)
     await createEcriture({
@@ -748,9 +771,9 @@ export async function comptabiliserMouvementStock(data: {
       compteId: compteStock.id,
       debit: 0,
       credit: valeur,
-      reference: `STK-OUT-${data.produitId}`,
+      reference: `STK-OUT-${data.mouvementId || data.produitId}`,
       referenceType: 'STOCK_AJUSTEMENT',
-      referenceId: data.produitId,
+      referenceId: data.mouvementId || data.produitId,
       utilisateurId: data.utilisateurId,
     }, tx)
   }
@@ -771,6 +794,12 @@ export async function comptabiliserDepense(data: {
   magasinId?: number | null
 }, tx?: any) {
   const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'DEPENSE', referenceId: data.depenseId }
+  })
+
   const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const entiteId = data.entiteId
   
@@ -823,7 +852,18 @@ export async function comptabiliserDepense(data: {
   if (m === 'ESPECES' || m === 'CASH') {
     compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
   } else {
-    compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    // Tentative de récupération du compte spécifique à la banque
+    const banque = await p.banque.findFirst({
+      where: { entiteId, actif: true },
+      orderBy: { id: 'asc' }
+    })
+    
+    if (banque && banque.compteId) {
+      const dbCompte = await p.planCompte.findUnique({ where: { id: banque.compteId } })
+      compteReglement = dbCompte || await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    } else {
+      compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    }
   }
   
   // Écriture 1 : Débit Charge, Crédit Caisse
@@ -874,6 +914,13 @@ export async function comptabiliserCharge(data: {
   magasinId?: number | null
   modePaiement?: string
 }, tx?: any) {
+  const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'CHARGE', referenceId: data.chargeId }
+  })
+
   const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const entiteId = data.entiteId
   
@@ -924,13 +971,24 @@ export async function comptabiliserCharge(data: {
   // Déterminer le compte de règlement dynamiquement (Défaut Caisse si non précisé)
   const m = data.modePaiement?.toUpperCase() || ''
   const isCash = m === 'ESPECES' || m === 'CASH' || m === ''
-  const compteReglement = await getOrCreateCompte(
-    isCash ? COMPTES_DEFAUT.CAISSE : COMPTES_DEFAUT.BANQUE,
-    isCash ? 'Caisse' : 'Banque/MM',
-    '5',
-    'ACTIF',
-    tx
-  )
+  let compteReglement: { id: number }
+  
+  if (isCash) {
+    compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+  } else {
+    // Tentative de récupération du compte spécifique à la banque
+    const banque = await p.banque.findFirst({
+      where: { entiteId, actif: true },
+      orderBy: { id: 'asc' }
+    })
+    
+    if (banque && banque.compteId) {
+      const dbCompte = await p.planCompte.findUnique({ where: { id: banque.compteId } })
+      compteReglement = dbCompte || await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    } else {
+      compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    }
+  }
   
   const libelle = data.libelle || `Charge: ${data.rubrique}`
   
@@ -979,6 +1037,13 @@ export async function comptabiliserCaisse(data: {
   utilisateurId: number
   entiteId: number
 }, tx?: any) {
+  const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'CAISSE', referenceId: data.caisseId }
+  })
+
   const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
   const entiteId = data.entiteId
   
@@ -1083,6 +1148,13 @@ export async function comptabiliserOperationBancaire(data: {
   entiteId: number
 }, tx?: any) {
   const entiteId = data.entiteId
+  const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'BANQUE', referenceId: data.operationId }
+  })
+
   // Journal Banque
   const journal = await getOrCreateJournal('BA', 'Journal de Banque', 'BANQUE', tx)
   
@@ -1257,6 +1329,13 @@ export async function comptabiliserTransfert(data: {
   utilisateurId: number
 }, tx?: any) {
   if (data.montantTotal <= 0) return
+  const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'TRANSFERT', referenceId: data.transfertId }
+  })
+
   const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const compteStock = await getOrCreateCompte(
     COMPTES_DEFAUT.STOCK_MARCHANDISES,

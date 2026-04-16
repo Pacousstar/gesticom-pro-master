@@ -213,9 +213,17 @@ export async function POST(request: NextRequest) {
     
     const statutPaiement = montantPaye >= montantTotal ? 'PAYE' : montantPaye > 0 ? 'PARTIEL' : 'CREDIT'
 
-    const num = `A${Date.now()}`
+    const num = body?.numero || `A${Date.now()}`
     
     const achat = await prisma.$transaction(async (tx) => {
+      // Bloquer les doublons par numéro (Idempotence)
+      const existing = await tx.achat.findUnique({
+        where: { numero: num },
+        select: { id: true }
+      })
+      if (existing) {
+        throw new Error('DOUBLE_TRANSACTION: Cet achat a déjà été enregistré.')
+      }
       // 1. Créer l'achat et ses lignes
       const a = await tx.achat.create({
         data: {
@@ -395,8 +403,14 @@ export async function POST(request: NextRequest) {
     revalidatePath('/api/achats')
 
     return NextResponse.json(achat)
-  } catch (e) {
+  } catch (e: any) {
     console.error('POST /api/achats:', e)
+    if (e.message?.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({ 
+        error: 'Cet achat a déjà été enregistré (Doublon bloqué).', 
+        code: 'IDEMPOTENCY_CONFLICT' 
+      }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

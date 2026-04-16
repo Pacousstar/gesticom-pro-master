@@ -74,6 +74,7 @@ model Magasin {
   entiteId          Int
   actif             Boolean        @default(true)
   estDepotPrincipal Boolean        @default(false)
+  soldeCaisse       Float          @default(0)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   achats            Achat[]
@@ -265,6 +266,7 @@ model ReglementVente {
   montant       Float
   modePaiement  String
   statut        String      @default("VALIDE")
+  rapproche     Boolean     @default(false)
   venteId       Int?
   clientId      Int?
   utilisateurId Int
@@ -280,6 +282,7 @@ model ReglementVente {
   @@index([venteId])
   @@index([entiteId])
   @@index([modePaiement])
+  @@index([rapproche])
 }
 
 model ReglementAchat {
@@ -288,6 +291,7 @@ model ReglementAchat {
   montant       Float
   modePaiement  String
   statut        String       @default("VALIDE")
+  rapproche     Boolean      @default(false)
   achatId       Int?
   fournisseurId Int?
   utilisateurId Int
@@ -303,6 +307,7 @@ model ReglementAchat {
   @@index([achatId])
   @@index([entiteId])
   @@index([modePaiement])
+  @@index([rapproche])
 }
 
 model Caisse {
@@ -313,6 +318,7 @@ model Caisse {
   motif         String
   montant       Float
   utilisateurId Int
+  dateOperation DateTime    @default(now())
   createdAt     DateTime    @default(now())
   entiteId      Int         @default(1)
   utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
@@ -374,6 +380,7 @@ model Vente {
   statut         String           @default("VALIDEE")
   observation    String?
   numeroBon      String?
+  dateOperation  DateTime         @default(now())
   estHistorique  Boolean          @default(false)
   createdAt      DateTime         @default(now())
   reglements     ReglementVente[]
@@ -427,6 +434,7 @@ model Achat {
   modePaiement     String           @default("ESPECES")
   numeroCamion     String?
   observation      String?
+  dateOperation    DateTime         @default(now())
   createdAt        DateTime         @default(now())
   utilisateur      Utilisateur      @relation(fields: [utilisateurId], references: [id])
   entite           Entite           @relation(fields: [entiteId], references: [id])
@@ -471,6 +479,10 @@ model Charge {
   beneficiaire  String?
   montant       Float
   observation   String?
+  modePaiement  String      @default("ESPECES")
+  pieceJustificative String?
+  banqueId      Int?
+  banque        Banque?     @relation(fields: [banqueId], references: [id])
   createdAt     DateTime    @default(now())
   utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
   entite        Entite      @relation(fields: [entiteId], references: [id])
@@ -498,6 +510,8 @@ model Depense {
   beneficiaire       String?
   pieceJustificative String?
   observation        String?
+  banqueId           Int?
+  banque             Banque?     @relation(fields: [banqueId], references: [id])
   createdAt          DateTime    @default(now())
   utilisateur        Utilisateur @relation(fields: [utilisateurId], references: [id])
   entite             Entite      @relation(fields: [entiteId], references: [id])
@@ -525,6 +539,8 @@ model Banque {
   entite       Entite              @relation(fields: [entiteId], references: [id])
   compte       PlanCompte?         @relation(fields: [compteId], references: [id])
   operations   OperationBancaire[]
+  charges      Charge[]
+  depenses     Depense[]
 
   @@index([entiteId])
   @@index([compteId])
@@ -749,4 +765,20 @@ model CommandeFournisseurLigne {
   produit      Produit             @relation(fields: [produitId], references: [id], onDelete: Cascade)
 
   @@index([commandeId])
+}
+model SystemAlerte {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @default(now())
+  type        String   @default("INFO") // INFO, WARNING, CRITICAL
+  categorie   String   @default("AUTRE") // CREDIT, STOCK, COMPTA
+  message     String
+  referenceId Int?     // Optionnel (ex: clientId, produitId)
+  lu          Boolean  @default(false)
+  entiteId    Int?     @default(1)
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+  @@index([type])
+  @@index([categorie])
+  @@index([lu])
 }
