@@ -62,9 +62,10 @@ Source: ".env"; DestDir: "{app}"; Flags: ignoreversion
 ; Base de données initiale : On ne l'écrase JAMAIS si elle existe déjà (uninsneveruninstall)
 Source: "prisma\gesticom.db"; DestDir: "C:\gesticom"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall
 
-; Scripts VITAUX uniquement (On ignore les 15 autres scripts de dev)
+; Scripts VITAUX uniquement (On ignore les scripts de dev obsolètes)
 Source: "scripts\standalone-launcher.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
-Source: "scripts\repair-client-db.ts"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "scripts\final-sync.ts"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "scripts\grande-parade.ts"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "LANCER-SILENCIEUX.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
