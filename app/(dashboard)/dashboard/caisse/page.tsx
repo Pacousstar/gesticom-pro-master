@@ -370,17 +370,17 @@ export default function CaissePage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
+        <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-teal-500 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">Total entrées (Période) {(dateDebut || dateFin || filtreMagasin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}</p>
           <p className="mt-1 text-2xl font-bold text-white">{totalEntrees.toLocaleString('fr-FR')} FCFA</p>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-red-500 to-rose-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
+        <div className="rounded-xl bg-gradient-to-br from-red-600 to-rose-500 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">Total sorties (Période) {(dateDebut || dateFin || filtreMagasin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}</p>
           <p className="mt-1 text-2xl font-bold text-white">{totalSorties.toLocaleString('fr-FR')} FCFA</p>
         </div>
         <div className={`rounded-xl bg-gradient-to-br p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105 ${soldeMouvements >= 0
-          ? 'from-blue-500 to-cyan-600'
-          : 'from-orange-500 to-red-600'
+          ? 'from-teal-600 to-cyan-500'
+          : 'from-orange-600 to-red-600'
           }`}>
           <p className="text-sm font-medium text-white/90">Solde (E − S Période) {(dateDebut || dateFin || filtreMagasin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}</p>
           <p className="mt-1 text-2xl font-bold text-white">

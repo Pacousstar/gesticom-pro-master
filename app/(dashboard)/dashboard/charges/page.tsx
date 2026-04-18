@@ -401,15 +401,15 @@ export default function ChargesPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl bg-gradient-to-br from-red-500 to-orange-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
+        <div className="rounded-xl bg-gradient-to-br from-red-700 to-rose-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">Total charges</p>
           <p className="mt-1 text-2xl font-bold text-white">{total.toLocaleString('fr-FR')} FCFA</p>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
+        <div className="rounded-xl bg-gradient-to-br from-indigo-700 to-blue-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">Charges fixes</p>
           <p className="mt-1 text-2xl font-bold text-white">{totalFixe.toLocaleString('fr-FR')} FCFA</p>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
+        <div className="rounded-xl bg-gradient-to-br from-purple-700 to-fuchsia-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">Charges variables</p>
           <p className="mt-1 text-2xl font-bold text-white">{totalVariable.toLocaleString('fr-FR')} FCFA</p>
         </div>

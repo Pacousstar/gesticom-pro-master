@@ -229,21 +229,21 @@ export default function DashboardPage() {
             value: data?.caJour ?? 0,
             icon: ArrowUp,
             isFcfa: true,
-            color: 'from-orange-500 to-orange-600',
+            color: 'from-orange-500 to-amber-500',
           },
           {
             title: "Chiffre d'Affaire (Mois)",
             value: data?.caMois ?? 0,
             icon: TrendingUp,
             isFcfa: true,
-            color: 'from-emerald-500 to-teal-600',
+            color: 'from-emerald-600 to-teal-500',
           },
           {
             title: 'Panier Moyen',
             value: data?.panierMoyen ?? 0,
             icon: ShoppingCart,
             isFcfa: true,
-            color: 'from-blue-500 to-blue-600',
+            color: 'from-blue-600 to-sky-500',
           },
           {
             title: 'Valeur Stock (Achat PAMP)',
@@ -251,14 +251,14 @@ export default function DashboardPage() {
             subValue: `CA Est: ${(data?.valeurStockVente ?? 0).toLocaleString('fr-FR')} F`,
             icon: Banknote,
             isFcfa: true,
-            color: 'from-emerald-600 to-teal-700',
+            color: 'from-indigo-600 to-violet-500',
           },
           {
             title: 'Taux de Rupture',
             value: data?.tauxRupture ?? 0,
             icon: AlertTriangle,
             isPercent: true,
-            color: 'from-red-500 to-rose-600',
+            color: 'from-rose-600 to-red-500',
           },
         ].map((s, i) => (
           <KpiCard
@@ -280,7 +280,7 @@ export default function DashboardPage() {
             title: 'Transactions Jour',
             value: txJour,
             icon: ClipboardList,
-            color: 'from-yellow-400 to-yellow-500',
+            color: 'from-yellow-400 to-orange-400',
             trend: txTrend.trend,
             trendValue: txTrend.value,
           },
@@ -288,25 +288,25 @@ export default function DashboardPage() {
             title: 'Produits (Catalogue)',
             value: data?.totalProduitsCatalogue ?? 0,
             icon: Package,
-            color: 'from-indigo-500 to-purple-600',
+            color: 'from-purple-600 to-fuchsia-500',
           },
           {
             title: 'Produits en Stock',
             value: data?.produitsEnStock ?? 0,
             icon: ShoppingBag,
-            color: 'from-emerald-500 to-teal-600',
+            color: 'from-teal-500 to-emerald-400',
           },
           {
             title: 'Mouvements Jour',
             value: data?.mouvementsJour ?? 0,
             icon: RefreshCw,
-            color: 'from-pink-500 to-rose-600',
+            color: 'from-pink-600 to-rose-500',
           },
           {
             title: 'Clients Actifs',
             value: data?.clientsActifs ?? 0,
             icon: Users,
-            color: 'from-cyan-500 to-emerald-600',
+            color: 'from-cyan-600 to-blue-500',
           },
         ].map((s, i) => (
           <KpiCard
@@ -523,40 +523,57 @@ export default function DashboardPage() {
                 <ChartIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <h2 className="text-xl font-black text-gray-900 tracking-tight uppercase italic">Tendance des Ventes</h2>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Comparatif Année N (Bleu) vs N-1 (Gris)</p>
+                <h2 className="text-xl font-black text-gray-900 tracking-tight uppercase italic underline decoration-blue-500/30">Tendance des Ventes</h2>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-0.5">Performance glissante sur 12 mois</p>
               </div>
             </div>
           </div>
           
-          {/* Le Graphique Ultra-Léger (Pure CSS/SVG) */}
-          <div className="flex-1 flex items-end justify-between gap-2 h-64 mt-4">
+          <div className="flex-1 flex items-end justify-between gap-1 sm:gap-4 h-64 mt-6 px-2">
+            {(!data?.monthlyTrends || data.monthlyTrends.every((m: any) => m.current === 0 && m.previous === 0)) && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/50 rounded-2xl z-0 border border-dashed border-gray-200">
+                <ChartIcon className="h-8 w-8 text-gray-300 mb-2" />
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Données de tendance en attente...</p>
+              </div>
+            )}
+            
             {(data?.monthlyTrends || Array(12).fill({ month: '-', current: 0, previous: 0 })).map((m: any, i: number) => {
-              const max = Math.max(...(data?.monthlyTrends?.map((t: any) => Math.max(t.current, t.previous)) || [1]))
-              const hCurrent = Math.max(2, Math.round((m.current / max) * 100))
-              const hPrevious = Math.max(2, Math.round((m.previous / max) * 100))
+              const trends = data?.monthlyTrends || []
+              const allValues = trends.map((t: any) => Math.max(t.current, t.previous))
+              const max = Math.max(1, ...allValues)
+              
+              const hCurrent = Math.max(3, Math.round((m.current / max) * 100))
+              const hPrevious = Math.max(3, Math.round((m.previous / max) * 100))
               
               return (
-                <div key={i} className="flex-1 flex flex-col items-center group relative h-full justify-end">
+                <div key={i} className="flex-1 flex flex-col items-center group relative h-full justify-end z-10">
                   <div className="flex items-end gap-1 h-full w-full justify-center">
-                    {/* Année Précédente */}
+                    {/* Année Précédente (Gris - Plus visible) */}
                     <div 
-                      className="w-full max-w-[8px] bg-gray-100 rounded-t-sm transition-all duration-1000 group-hover:bg-gray-200"
+                      className="w-full max-w-[10px] bg-slate-300 rounded-t-sm transition-all duration-1000 group-hover:bg-slate-400"
                       style={{ height: `${hPrevious}%` }}
                     />
-                    {/* Année Courante */}
+                    {/* Année Courante (Gradient Indigo/Blue - Premium) */}
                     <div 
-                      className="w-full max-w-[8px] bg-blue-500 rounded-t-sm transition-all duration-700 group-hover:bg-blue-600 shadow-sm"
+                      className="w-full max-w-[10px] bg-gradient-to-t from-blue-600 to-indigo-500 rounded-t-sm transition-all duration-700 group-hover:scale-y-105 group-hover:from-blue-500 group-hover:to-indigo-400 shadow-[0_0_10px_rgba(59,130,246,0.2)]"
                       style={{ height: `${hCurrent}%` }}
                     />
                   </div>
-                  <span className="mt-3 text-[9px] font-black text-gray-400 uppercase tracking-tighter">{m.month}</span>
+                  <span className="mt-4 text-[9px] font-black text-gray-500 uppercase tracking-tighter group-hover:text-blue-600 transition-colors">{m.month}</span>
                   
                   {/* Tooltip ultra-léger */}
-                  <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[9px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl whitespace-nowrap border border-white/10">
-                    <p className="font-bold border-b border-white/10 pb-1 mb-1">{m.month}</p>
-                    <p className="text-blue-300">N : {m.current.toLocaleString()} F</p>
-                    <p className="text-gray-400">N-1 : {m.previous.toLocaleString()} F</p>
+                  <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-gray-900/95 backdrop-blur-md text-white text-[10px] p-2.5 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20 shadow-2xl whitespace-nowrap border border-white/10 scale-90 group-hover:scale-100">
+                    <p className="font-black border-b border-white/10 pb-1.5 mb-1.5 uppercase tracking-widest text-center">{m.month}</p>
+                    <div className="space-y-1">
+                      <p className="flex justify-between gap-4 font-bold">
+                        <span className="text-gray-400 uppercase">Actuel</span>
+                        <span className="text-blue-400">{m.current.toLocaleString()} F</span>
+                      </p>
+                      <p className="flex justify-between gap-4 font-bold">
+                        <span className="text-gray-400 uppercase font-medium">Précédent</span>
+                        <span className="text-gray-300">{m.previous.toLocaleString()} F</span>
+                      </p>
+                    </div>
                   </div>
                 </div>
               )

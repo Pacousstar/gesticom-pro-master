@@ -672,7 +672,7 @@ export default function DashboardLayoutClient({
                       <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-tighter">Serveur Local OK</span>
                     </div>
                     <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">
-                      v4.2 PRO
+                      v2.0.1 PRO
                     </div>
                   </div>
                 </div>

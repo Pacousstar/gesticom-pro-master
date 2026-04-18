@@ -8,48 +8,49 @@ datasource db {
 }
 
 model Entite {
-  id            Int                  @id @default(autoincrement())
-  code          String               @unique
-  nom           String
-  type          String
-  localisation  String
-  active        Boolean              @default(true)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  achats        Achat[]
-  archiveSoldes ArchiveSoldeClient[]
-  archiveVentes ArchiveVente[]
-  banques       Banque[]
-  charges       Charge[]
-  depenses      Depense[]
-  magasins      Magasin[]
-  mouvements    Mouvement[]
-  produits      Produit[]
-  stocks        Stock[]
-  transferts    Transfert[]
-  utilisateurs  Utilisateur[]
-  ventes        Vente[]
+  id                    Int                   @id @default(autoincrement())
+  code                  String                @unique
+  nom                   String
+  type                  String
+  localisation          String
+  active                Boolean               @default(true)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  achats                Achat[]
+  archiveSoldes         ArchiveSoldeClient[]
+  archiveVentes         ArchiveVente[]
+  banques               Banque[]
+  charges               Charge[]
   commandesFournisseurs CommandeFournisseur[]
+  depenses              Depense[]
+  magasins              Magasin[]
+  mouvements            Mouvement[]
+  produits              Produit[]
+  stocks                Stock[]
+  transferts            Transfert[]
+  utilisateurs          Utilisateur[]
+  ventes                Vente[]
 }
 
 model Utilisateur {
-  id                        Int                  @id @default(autoincrement())
-  login                     String               @unique
+  id                        Int                   @id @default(autoincrement())
+  login                     String                @unique
   nom                       String
-  email                     String?              @unique
+  email                     String?               @unique
   motDePasse                String
   role                      String
   permissionsPersonnalisees String?
   entiteId                  Int
-  actif                     Boolean              @default(true)
-  createdAt                 DateTime             @default(now())
-  updatedAt                 DateTime             @updatedAt
+  actif                     Boolean               @default(true)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
   achats                    Achat[]
   archiveSoldes             ArchiveSoldeClient[]
   archiveVentes             ArchiveVente[]
   auditLogs                 AuditLog[]
   operationsCaisse          Caisse[]
   charges                   Charge[]
+  commandesFournisseurs     CommandeFournisseur[]
   DashboardPreference       DashboardPreference?
   depenses                  Depense[]
   ecrituresComptables       EcritureComptable[]
@@ -58,67 +59,66 @@ model Utilisateur {
   reglementsAchat           ReglementAchat[]
   reglementsVente           ReglementVente[]
   transferts                Transfert[]
-  entite                    Entite               @relation(fields: [entiteId], references: [id])
+  entite                    Entite                @relation(fields: [entiteId], references: [id])
   ventes                    Vente[]
-  commandesFournisseurs     CommandeFournisseur[]
 
   @@index([entiteId])
   @@index([actif])
 }
 
 model Magasin {
-  id                Int            @id @default(autoincrement())
-  code              String         @unique
-  nom               String
-  localisation      String
-  entiteId          Int
-  actif             Boolean        @default(true)
-  estDepotPrincipal Boolean        @default(false)
-  soldeCaisse       Float          @default(0)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  achats            Achat[]
-  archiveVentes     ArchiveVente[]
-  operationsCaisse  Caisse[]
-  charges           Charge[]
-  depenses          Depense[]
-  entite            Entite         @relation(fields: [entiteId], references: [id])
-  mouvements        Mouvement[]
-  stocks            Stock[]
-  transfertsOrigine Transfert[]    @relation("TransfertOrigine")
-  transfertsDest    Transfert[]    @relation("TransfertDest")
-  ventes            Vente[]
+  id                    Int                   @id @default(autoincrement())
+  code                  String                @unique
+  nom                   String
+  localisation          String
+  entiteId              Int
+  actif                 Boolean               @default(true)
+  estDepotPrincipal     Boolean               @default(false)
+  soldeCaisse           Float                 @default(0)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  achats                Achat[]
+  archiveVentes         ArchiveVente[]
+  operationsCaisse      Caisse[]
+  charges               Charge[]
   commandesFournisseurs CommandeFournisseur[]
+  depenses              Depense[]
+  entite                Entite                @relation(fields: [entiteId], references: [id])
+  mouvements            Mouvement[]
+  stocks                Stock[]
+  transfertsOrigine     Transfert[]           @relation("TransfertOrigine")
+  transfertsDest        Transfert[]           @relation("TransfertDest")
+  ventes                Vente[]
 
   @@index([entiteId])
   @@index([actif])
 }
 
 model Produit {
-  id              Int              @id @default(autoincrement())
-  code            String           @unique
+  id              Int                        @id @default(autoincrement())
+  code            String                     @unique
   codeBarres      String?
   designation     String
   categorie       String
-  unite           String           @default("unite")
+  unite           String                     @default("unite")
   prixAchat       Float?
   prixVente       Float?
-  pamp            Float?           @default(0)
-  prixMinimum     Float?           @default(0)
-  seuilMin        Int              @default(5)
-  actif           Boolean          @default(true)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  pamp            Float?                     @default(0)
+  seuilMin        Int                        @default(5)
+  actif           Boolean                    @default(true)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
   fournisseurId   Int?
-  entiteId        Int              @default(1)
+  entiteId        Int                        @default(1)
+  prixMinimum     Float?                     @default(0)
   achatsLignes    AchatLigne[]
+  commandeLignes  CommandeFournisseurLigne[]
   mouvements      Mouvement[]
-  entite          Entite           @relation(fields: [entiteId], references: [id])
-  fournisseur     Fournisseur?     @relation(fields: [fournisseurId], references: [id])
+  entite          Entite                     @relation(fields: [entiteId], references: [id])
+  fournisseur     Fournisseur?               @relation(fields: [fournisseurId], references: [id])
   stocks          Stock[]
   transfertLignes TransfertLigne[]
   ventesLignes    VenteLigne[]
-  commandeLignes  CommandeFournisseurLigne[]
 
   @@index([designation])
   @@index([categorie])
@@ -137,9 +137,9 @@ model Stock {
   entiteId         Int      @default(1)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  magasin          Magasin  @relation(fields: [magasinId], references: [id])
-  produit          Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
   entite           Entite   @relation(fields: [entiteId], references: [id])
+  produit          Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  magasin          Magasin  @relation(fields: [magasinId], references: [id])
 
   @@unique([produitId, magasinId])
   @@index([produitId])
@@ -161,11 +161,11 @@ model Mouvement {
   referenceTransfertId Int?
   dateOperation        DateTime    @default(now())
   createdAt            DateTime    @default(now())
-  transfert            Transfert?  @relation(fields: [referenceTransfertId], references: [id])
-  utilisateur          Utilisateur @relation(fields: [utilisateurId], references: [id])
-  entite               Entite      @relation(fields: [entiteId], references: [id])
-  magasin              Magasin     @relation(fields: [magasinId], references: [id])
   produit              Produit     @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  magasin              Magasin     @relation(fields: [magasinId], references: [id])
+  entite               Entite      @relation(fields: [entiteId], references: [id])
+  utilisateur          Utilisateur @relation(fields: [utilisateurId], references: [id])
+  transfert            Transfert?  @relation(fields: [referenceTransfertId], references: [id])
 
   @@index([date])
   @@index([type])
@@ -205,8 +205,8 @@ model TransfertLigne {
   designation String
   quantite    Float
   createdAt   DateTime  @default(now())
-  transfert   Transfert @relation(fields: [transfertId], references: [id], onDelete: Cascade)
   produit     Produit   @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  transfert   Transfert @relation(fields: [transfertId], references: [id], onDelete: Cascade)
 
   @@index([transfertId])
 }
@@ -240,24 +240,24 @@ model Client {
 }
 
 model Fournisseur {
-  id           Int              @id @default(autoincrement())
-  code         String?          @unique
-  nom          String
-  telephone    String?
-  email        String?
-  localisation String?
-  ncc          String?
-  soldeInitial Float            @default(0)
-  avoirInitial Float            @default(0)
-  actif        Boolean          @default(true)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  numeroCamion String?
-  entiteId     Int?             @default(1)
-  achats       Achat[]
-  produits     Produit[]
-  reglements   ReglementAchat[]
+  id                    Int                   @id @default(autoincrement())
+  code                  String?               @unique
+  nom                   String
+  telephone             String?
+  email                 String?
+  localisation          String?
+  ncc                   String?
+  soldeInitial          Float                 @default(0)
+  avoirInitial          Float                 @default(0)
+  actif                 Boolean               @default(true)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  numeroCamion          String?
+  entiteId              Int?                  @default(1)
+  achats                Achat[]
   commandesFournisseurs CommandeFournisseur[]
+  produits              Produit[]
+  reglements            ReglementAchat[]
 }
 
 model ReglementVente {
@@ -273,9 +273,9 @@ model ReglementVente {
   observation   String?
   createdAt     DateTime    @default(now())
   entiteId      Int?        @default(1)
-  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
-  client        Client?     @relation(fields: [clientId], references: [id], onDelete: Cascade)
   vente         Vente?      @relation(fields: [venteId], references: [id], onDelete: Cascade)
+  client        Client?     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
 
   @@index([date])
   @@index([clientId])
@@ -298,9 +298,9 @@ model ReglementAchat {
   observation   String?
   createdAt     DateTime     @default(now())
   entiteId      Int?         @default(1)
-  utilisateur   Utilisateur  @relation(fields: [utilisateurId], references: [id])
-  fournisseur   Fournisseur? @relation(fields: [fournisseurId], references: [id], onDelete: Cascade)
   achat         Achat?       @relation(fields: [achatId], references: [id], onDelete: Cascade)
+  fournisseur   Fournisseur? @relation(fields: [fournisseurId], references: [id], onDelete: Cascade)
+  utilisateur   Utilisateur  @relation(fields: [utilisateurId], references: [id])
 
   @@index([date])
   @@index([fournisseurId])
@@ -321,8 +321,8 @@ model Caisse {
   dateOperation DateTime    @default(now())
   createdAt     DateTime    @default(now())
   entiteId      Int         @default(1)
-  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
   magasin       Magasin     @relation(fields: [magasinId], references: [id])
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
 
   @@index([date])
   @@index([entiteId])
@@ -384,10 +384,10 @@ model Vente {
   estHistorique  Boolean          @default(false)
   createdAt      DateTime         @default(now())
   reglements     ReglementVente[]
-  utilisateur    Utilisateur      @relation(fields: [utilisateurId], references: [id])
-  entite         Entite           @relation(fields: [entiteId], references: [id])
-  magasin        Magasin          @relation(fields: [magasinId], references: [id])
   client         Client?          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  magasin        Magasin          @relation(fields: [magasinId], references: [id])
+  entite         Entite           @relation(fields: [entiteId], references: [id])
+  utilisateur    Utilisateur      @relation(fields: [utilisateurId], references: [id])
   lignes         VenteLigne[]
 
   @@index([date])
@@ -410,8 +410,8 @@ model VenteLigne {
   tva          Float   @default(0)
   remise       Float   @default(0)
   montant      Float
-  vente        Vente   @relation(fields: [venteId], references: [id], onDelete: Cascade)
   produit      Produit @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  vente        Vente   @relation(fields: [venteId], references: [id], onDelete: Cascade)
 
   @@index([venteId])
   @@index([produitId])
@@ -436,10 +436,10 @@ model Achat {
   observation      String?
   dateOperation    DateTime         @default(now())
   createdAt        DateTime         @default(now())
-  utilisateur      Utilisateur      @relation(fields: [utilisateurId], references: [id])
-  entite           Entite           @relation(fields: [entiteId], references: [id])
-  magasin          Magasin          @relation(fields: [magasinId], references: [id])
   fournisseur      Fournisseur?     @relation(fields: [fournisseurId], references: [id], onDelete: Cascade)
+  magasin          Magasin          @relation(fields: [magasinId], references: [id])
+  entite           Entite           @relation(fields: [entiteId], references: [id])
+  utilisateur      Utilisateur      @relation(fields: [utilisateurId], references: [id])
   lignes           AchatLigne[]
   reglements       ReglementAchat[]
 
@@ -460,33 +460,33 @@ model AchatLigne {
   tva          Float   @default(0)
   remise       Float   @default(0)
   montant      Float
-  achat        Achat   @relation(fields: [achatId], references: [id], onDelete: Cascade)
   produit      Produit @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  achat        Achat   @relation(fields: [achatId], references: [id], onDelete: Cascade)
 
   @@index([achatId])
   @@index([produitId])
 }
 
 model Charge {
-  id            Int         @id @default(autoincrement())
-  date          DateTime    @default(now())
-  magasinId     Int?
-  entiteId      Int
-  utilisateurId Int
-  statut        String?     @default("VALIDE")
-  type          String
-  rubrique      String
-  beneficiaire  String?
-  montant       Float
-  observation   String?
-  modePaiement  String      @default("ESPECES")
+  id                 Int         @id @default(autoincrement())
+  date               DateTime    @default(now())
+  magasinId          Int?
+  entiteId           Int
+  utilisateurId      Int
+  statut             String?     @default("VALIDE")
+  type               String
+  rubrique           String
+  beneficiaire       String?
+  montant            Float
+  observation        String?
+  modePaiement       String      @default("ESPECES")
   pieceJustificative String?
-  banqueId      Int?
-  banque        Banque?     @relation(fields: [banqueId], references: [id])
-  createdAt     DateTime    @default(now())
-  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
-  entite        Entite      @relation(fields: [entiteId], references: [id])
-  magasin       Magasin?    @relation(fields: [magasinId], references: [id])
+  banqueId           Int?
+  createdAt          DateTime    @default(now())
+  magasin            Magasin?    @relation(fields: [magasinId], references: [id])
+  entite             Entite      @relation(fields: [entiteId], references: [id])
+  utilisateur        Utilisateur @relation(fields: [utilisateurId], references: [id])
+  banque             Banque?     @relation(fields: [banqueId], references: [id])
 
   @@index([date])
   @@index([type])
@@ -511,11 +511,11 @@ model Depense {
   pieceJustificative String?
   observation        String?
   banqueId           Int?
-  banque             Banque?     @relation(fields: [banqueId], references: [id])
   createdAt          DateTime    @default(now())
-  utilisateur        Utilisateur @relation(fields: [utilisateurId], references: [id])
-  entite             Entite      @relation(fields: [entiteId], references: [id])
   magasin            Magasin?    @relation(fields: [magasinId], references: [id])
+  entite             Entite      @relation(fields: [entiteId], references: [id])
+  utilisateur        Utilisateur @relation(fields: [utilisateurId], references: [id])
+  banque             Banque?     @relation(fields: [banqueId], references: [id])
 
   @@index([date])
   @@index([categorie])
@@ -538,9 +538,9 @@ model Banque {
   updatedAt    DateTime            @updatedAt
   entite       Entite              @relation(fields: [entiteId], references: [id])
   compte       PlanCompte?         @relation(fields: [compteId], references: [id])
-  operations   OperationBancaire[]
   charges      Charge[]
   depenses     Depense[]
+  operations   OperationBancaire[]
 
   @@index([entiteId])
   @@index([compteId])
@@ -738,10 +738,10 @@ model CommandeFournisseur {
   statut           String                     @default("BROUILLON")
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
-  fournisseur      Fournisseur?               @relation(fields: [fournisseurId], references: [id])
-  magasin          Magasin                    @relation(fields: [magasinId], references: [id])
-  entite           Entite                     @relation(fields: [entiteId], references: [id])
   utilisateur      Utilisateur                @relation(fields: [utilisateurId], references: [id])
+  entite           Entite                     @relation(fields: [entiteId], references: [id])
+  magasin          Magasin                    @relation(fields: [magasinId], references: [id])
+  fournisseur      Fournisseur?               @relation(fields: [fournisseurId], references: [id])
   lignes           CommandeFournisseurLigne[]
 
   @@index([date])
@@ -761,18 +761,19 @@ model CommandeFournisseurLigne {
   tva          Float               @default(0)
   remise       Float               @default(0)
   montant      Float
-  commande     CommandeFournisseur @relation(fields: [commandeId], references: [id], onDelete: Cascade)
   produit      Produit             @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  commande     CommandeFournisseur @relation(fields: [commandeId], references: [id], onDelete: Cascade)
 
   @@index([commandeId])
 }
+
 model SystemAlerte {
   id          Int      @id @default(autoincrement())
   date        DateTime @default(now())
-  type        String   @default("INFO") // INFO, WARNING, CRITICAL
-  categorie   String   @default("AUTRE") // CREDIT, STOCK, COMPTA
+  type        String   @default("INFO")
+  categorie   String   @default("AUTRE")
   message     String
-  referenceId Int?     // Optionnel (ex: clientId, produitId)
+  referenceId Int?
   lu          Boolean  @default(false)
   entiteId    Int?     @default(1)
   createdAt   DateTime @default(now())

@@ -411,9 +411,9 @@ export default function BanquePage() {
       {/* Bandeau des flux digitaux (MoMo, Virement, Cheque) */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
-          { label: 'Mobile Money', key: 'MOBILE_MONEY', color: 'from-orange-500 to-yellow-600', icon: '📱' },
-          { label: 'Virements Bancaires', key: 'VIREMENT', color: 'from-blue-600 to-indigo-700', icon: '🏦' },
-          { label: 'Chèques à Encaisser', key: 'CHEQUE', color: 'from-purple-600 to-pink-700', icon: '📜' },
+          { label: 'Mobile Money', key: 'MOBILE_MONEY', color: 'from-orange-600 to-amber-500', icon: '📱' },
+          { label: 'Virements Bancaires', key: 'VIREMENT', color: 'from-blue-700 to-indigo-600', icon: '🏦' },
+          { label: 'Chèques à Encaisser', key: 'CHEQUE', color: 'from-purple-700 to-fuchsia-600', icon: '📜' },
         ].map((s) => (
           <div key={s.key} className={`rounded-xl bg-gradient-to-br ${s.color} p-4 shadow-md transition-all hover:scale-105`}>
             <div className="flex justify-between items-center text-white/90">
@@ -619,11 +619,11 @@ export default function BanquePage() {
 
       {/* Encarts statistiques globaux */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
+        <div className="rounded-xl bg-gradient-to-br from-blue-600 to-sky-500 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">Total comptes</p>
           <p className="mt-1 text-2xl font-bold text-white">{banques.length}</p>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
+        <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-teal-500 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">
             Total dépôts {selectedBanque ? '(ce compte)' : '(tous comptes)'} {(selectedBanque || dateDebut || dateFin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}
           </p>
@@ -632,7 +632,7 @@ export default function BanquePage() {
           </p>
           <p className="mt-1 text-xs text-white/80">Dépôts + virements entrants + intérêts</p>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-red-500 to-rose-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
+        <div className="rounded-xl bg-gradient-to-br from-rose-600 to-red-500 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">
             Total retraits {selectedBanque ? '(ce compte)' : '(tous comptes)'} {(selectedBanque || dateDebut || dateFin || filtreType || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}
           </p>
@@ -643,8 +643,8 @@ export default function BanquePage() {
         </div>
         <div className={`rounded-xl bg-gradient-to-br p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105 ${
           soldeTotalBanques >= 0 
-            ? 'from-indigo-500 to-purple-600' 
-            : 'from-orange-500 to-red-600'
+            ? 'from-indigo-700 to-violet-600' 
+            : 'from-orange-600 to-red-600'
         }`}>
           <p className="text-sm font-medium text-white/90">
             {selectedBanque ? 'Solde du compte' : 'Solde total'}

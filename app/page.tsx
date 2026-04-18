@@ -100,7 +100,7 @@ export default function Home() {
         <div className="mt-10 pt-6 border-t border-gray-200 space-y-2">
           <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
             <Shield className="h-4 w-4 text-orange-500" />
-            <span>Version 1.0.0 - Offline Ready - Sécurisé</span>
+            <span>Version 2.0.1 - Offline Ready - Sécurisé</span>
           </div>
           <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
             <span>GestiCom — Solution de Gestion Professionnelle</span>

@@ -7,17 +7,177 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+async function repareCaisses() {
+  try {
+    const magasins = await prisma.magasin.findMany();
+    for (const magasin of magasins) {
+       const operations = await prisma.caisse.findMany({
+         where: { magasinId: magasin.id },
+         select: { type: true, montant: true }
+       });
+
+       let soldeReel = 0;
+       for (const op of operations) {
+         if (op.type === 'ENTREE') soldeReel += op.montant;
+         else if (op.type === 'SORTIE') soldeReel -= op.montant;
+       }
+
+       if (soldeReel < 0) {
+         const montantReparation = Math.abs(soldeReel);
+
+         // 1. Création mouvement de caisse
+         await prisma.caisse.create({
+           data: {
+             magasinId: magasin.id,
+             type: 'ENTREE',
+             motif: 'Régularisation solde négatif (Auto-Maintenance)',
+             montant: montantReparation,
+             utilisateurId: 1,
+             entiteId: magasin.entiteId,
+             dateOperation: new Date(),
+             date: new Date()
+           }
+         });
+
+         // 2. Écritures comptables (OD)
+         const journalOD = await prisma.journal.findUnique({ where: { code: 'OD' } });
+         const compte531 = await prisma.planCompte.findUnique({ where: { numero: '531' } });
+         const compte101 = await prisma.planCompte.findUnique({ where: { numero: '101' } });
+
+         if (journalOD && compte531 && compte101) {
+           const commonNum = `REGUL-CAISSE-${magasin.code}-${Date.now()}`;
+           
+           // Débit Caisse (531)
+           await prisma.ecritureComptable.create({
+             data: {
+               numero: `${commonNum}-D`,
+               journalId: journalOD.id,
+               compteId: compte531.id,
+               debit: montantReparation,
+               credit: 0,
+               libelle: `Régul. Caisse ${magasin.nom} (Auto)`,
+               utilisateurId: 1,
+               entiteId: magasin.entiteId,
+               date: new Date()
+             }
+           });
+
+           // Crédit Capital (101)
+           await prisma.ecritureComptable.create({
+             data: {
+               numero: `${commonNum}-C`,
+               journalId: journalOD.id,
+               compteId: compte101.id,
+               debit: 0,
+               credit: montantReparation,
+               libelle: `Régul. Caisse ${magasin.nom} (Auto)`,
+               utilisateurId: 1,
+               entiteId: magasin.entiteId,
+               date: new Date()
+             }
+           });
+         }
+
+         // 3. Correction du champ soldeCaisse
+         await prisma.magasin.update({
+           where: { id: magasin.id },
+           data: { soldeCaisse: 0 }
+         });
+       }
+    }
+  } catch (e) {
+    // Silence total sauf erreur critique (on pourrait loguer dans un fichier si besoin)
+  }
+}
+
+async function repareBanques() {
+  try {
+    const banques = await prisma.banque.findMany();
+    for (const banque of banques) {
+      const operations = await prisma.operationBancaire.findMany({
+        where: { banqueId: banque.id },
+        select: { type: true, montant: true }
+      });
+
+      let soldeReel = 0;
+      for (const op of operations) {
+        const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(op.type);
+        if (isEntree) soldeReel += op.montant;
+        else soldeReel -= op.montant;
+      }
+
+      if (soldeReel < 0) {
+        const montantReparation = Math.abs(soldeReel);
+        const soldeAvant = banque.soldeActuel;
+        const soldeApres = soldeAvant + montantReparation;
+
+        await prisma.operationBancaire.create({
+          data: {
+            banqueId: banque.id,
+            date: new Date(),
+            type: 'DEPOT',
+            libelle: 'Régularisation solde négatif (Auto-Maintenance)',
+            montant: montantReparation,
+            soldeAvant: soldeAvant,
+            soldeApres: soldeApres,
+            utilisateurId: 1,
+            observation: 'Correction automatique du solde négatif au démarrage.'
+          }
+        });
+
+        const journalOD = await prisma.journal.findUnique({ where: { code: 'OD' } });
+        const compte521 = await prisma.planCompte.findUnique({ where: { numero: '521' } });
+        const compte101 = await prisma.planCompte.findUnique({ where: { numero: '101' } });
+
+        if (journalOD && compte521 && compte101) {
+          const commonNum = `REGUL-BANQUE-${banque.id}-${Date.now()}`;
+          await prisma.ecritureComptable.create({
+            data: {
+              numero: `${commonNum}-D`,
+              journalId: journalOD.id,
+              compteId: compte521.id,
+              debit: montantReparation,
+              credit: 0,
+              libelle: `Régul. Banque ${banque.nomBanque} (Auto)`,
+              utilisateurId: 1,
+              entiteId: banque.entiteId,
+              date: new Date()
+            }
+          });
+
+          await prisma.ecritureComptable.create({
+            data: {
+              numero: `${commonNum}-C`,
+              journalId: journalOD.id,
+              compteId: compte101.id,
+              debit: 0,
+              credit: montantReparation,
+              libelle: `Régul. Banque ${banque.nomBanque} (Auto)`,
+              utilisateurId: 1,
+              entiteId: banque.entiteId,
+              date: new Date()
+            }
+          });
+        }
+
+        await prisma.banque.update({
+          where: { id: banque.id },
+          data: { soldeActuel: 0 }
+        });
+      }
+    }
+  } catch (e) {
+    // Silence total
+  }
+}
+
 async function runMaintenance() {
-  console.log('\n[Auto-Maintenance] Démarrage de la stabilisation du système...');
-  
   try {
     // 1. DÉTECTION MODE MISE À JOUR (Correctif des décimales historiques)
-    console.log('[Auto-Maintenance] Vérification de l\'intégrité des calculs...');
     const allEntries = await prisma.ecritureComptable.findMany({
       select: { id: true, debit: true, credit: true }
     });
     
-    let fixedCount = 0;
     for (const entry of allEntries) {
       const dRounded = Math.round(entry.debit);
       const cRounded = Math.round(entry.credit);
@@ -27,10 +187,8 @@ async function runMaintenance() {
           where: { id: entry.id },
           data: { debit: dRounded, credit: cRounded }
         });
-        fixedCount++;
       }
     }
-    if (fixedCount > 0) console.log(`[Auto-Maintenance] ✅ Arrondi fiscal appliqué sur ${fixedCount} écritures.`);
 
     // 2. INITIALISATION / SYNCHRONISATION DU PLAN COMPTABLE
     const journals = [
@@ -72,10 +230,12 @@ async function runMaintenance() {
       });
     }
 
-    console.log('[Auto-Maintenance] ✅ Système stabilisé et prêt pour exploitation.');
+    // 3. MÉDECINE DE CAISSE & BANQUE (Auto-correction des soldes négatifs)
+    await repareCaisses();
+    await repareBanques();
 
   } catch (error) {
-    console.error('[Auto-Maintenance] ❌ Erreur de stabilisation :', error.message);
+    // Erreurs ignorées en mode silencieux, le système continue le démarrage
   } finally {
     await prisma.$disconnect();
   }

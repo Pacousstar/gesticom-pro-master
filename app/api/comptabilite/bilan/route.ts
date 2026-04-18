@@ -18,7 +18,15 @@ export async function GET(request: Request) {
         let entiteId: number | null = null
         
         if (session.role === 'SUPER_ADMIN') {
-            entiteId = entiteIdFromParams ? parseInt(entiteIdFromParams) : (entiteIdFromParams === 'all' ? null : 1) // Défaut à 1 pour Super Admin si non précisé
+            // Fix: S'assurer que entiteId est bien un nombre ou null pour "tous"
+            if (entiteIdFromParams && entiteIdFromParams !== 'all') {
+                entiteId = parseInt(entiteIdFromParams)
+            } else if (entiteIdFromParams === 'all') {
+                entiteId = null
+            } else {
+                // Par défaut, utiliser l'entité de la session ou la première disponible
+                entiteId = session.entiteId || 1
+            }
         } else {
             entiteId = await getEntiteId(session)
         }
@@ -28,22 +36,31 @@ export async function GET(request: Request) {
             whereEcritures.entiteId = entiteId
         }
 
-        // Ajout du filtrage par magasin (via les références de pièces ou metadata si dispo)
-        // Note: Dans ce schéma, le magasin est souvent déduit du journal ou de la pièce.
-        // Pour une version robuste, on filtre les écritures dont la pièce correspond à un mouvement de ce magasin.
+        console.log(`[BILAN-API] Diagnostic : User=${session.login}, Role=${session.role}, Entite=${entiteId}, Magasin=${magasinIdParam}`)
+
+        // Ajout du filtrage par magasin
         if (magasinIdParam && magasinIdParam !== 'all') {
             const magId = parseInt(magasinIdParam)
-            // On cherche les écritures liées à des ventes/achats de ce magasin
             const [ventesMag, achatsMag] = await Promise.all([
                 prisma.vente.findMany({ where: { magasinId: magId }, select: { numero: true } }),
                 prisma.achat.findMany({ where: { magasinId: magId }, select: { numero: true } })
             ])
             const pieces = [...ventesMag.map(v => v.numero), ...achatsMag.map(a => a.numero)]
-            whereEcritures.piece = { in: pieces }
+            
+            // On filtre par pièce OU les écritures génériques qui n'ont pas de pièce mais qui appartiennent à l'entité
+            // Note: Pour un vrai bilan par magasin, il faudrait une colonne magasinId dans EcritureComptable.
+            // En attendant, on assouplit pour ne pas retourner "vide".
+            if (pieces.length > 0) {
+                whereEcritures.OR = [
+                    { piece: { in: pieces } },
+                    { piece: null } // On inclut les écritures d'OD/Capital pour garder l'équilibre
+                ]
+            } else {
+                // Si aucune pièce, on montre au moins les écritures sans pièce
+                whereEcritures.piece = null
+            }
         }
         
-        console.log(`[BILAN] Calcul pour l'année ${annee}, Rôle: ${session.role}, Filtre Entité:`, entiteId || 'TOUTES')
-
         // 2. Récupérer tous les comptes actifs avec les écritures
         const comptes = await prisma.planCompte.findMany({
             where: { actif: true },
@@ -57,8 +74,8 @@ export async function GET(request: Request) {
             }
         })
 
-        const totalEcritures = comptes.reduce((sum, c) => sum + (c.ecritures?.length || 0), 0)
-        console.log(`[BILAN] Diagnostic : Année=${annee}, Entité=${entiteId || 'Toutes'}, Magasin=${magasinIdParam || 'Tous'}, Écritures=${totalEcritures}`)
+        const totalEntriesCharged = comptes.reduce((sum, c) => sum + (c.ecritures?.length || 0), 0)
+        console.log(`[BILAN-API] Écritures chargées : ${totalEntriesCharged} sur ${comptes.length} comptes actifs`)
 
         // 3. Calculer les soldes
         const accountsWithBalances = comptes.map(compte => {
@@ -66,15 +83,13 @@ export async function GET(request: Request) {
             const totalCredit = compte.ecritures.reduce((sum, e) => sum + e.credit, 0)
             const solde = totalDebit - totalCredit
             return {
-                numero: compte.numero,
+                numero: compte.numero.trim(),
                 libelle: compte.libelle,
                 totalDebit,
                 totalCredit,
                 solde
             }
         }).filter(c => c.solde !== 0 || c.totalDebit !== 0 || c.totalCredit !== 0)
-
-        console.log(`[BILAN] Nombre de comptes avec solde non nul: ${accountsWithBalances.length}`)
 
         // 4. Structurer le Bilan (SYSCOHADA Simplifié)
         const bilan = {
@@ -97,42 +112,48 @@ export async function GET(request: Request) {
         let totalCharges = 0
 
         accountsWithBalances.forEach(c => {
-            const p = { numero: c.numero, libelle: c.libelle, montant: Math.abs(c.solde) }
+            const montant = Math.abs(c.solde)
+            const p = { numero: c.numero, libelle: c.libelle, montant }
 
+            const prefix = c.numero.charAt(0)
+            
             // CLASSIFICATION BILAN (Classes 1 à 5)
-            if (c.numero.startsWith('2')) {
+            if (prefix === '2') {
                 bilan.actif.immobilise.push(p)
-                bilan.actif.total += p.montant
-            } else if (c.numero.startsWith('3')) {
+                bilan.actif.total += montant
+            } else if (prefix === '3') {
                 bilan.actif.stocks.push(p)
-                bilan.actif.total += p.montant
-            } else if (c.numero.startsWith('4')) {
-                // Créances si débit (solde > 0), Dettes si crédit (solde < 0)
+                bilan.actif.total += montant
+            } else if (prefix === '4') {
                 if (c.solde >= 0) {
                     bilan.actif.creances.push(p)
-                    bilan.actif.total += p.montant
+                    bilan.actif.total += montant
                 } else {
                     bilan.passif.dettes.push(p)
-                    bilan.passif.total += p.montant
+                    bilan.passif.total += montant
                 }
-            } else if (c.numero.startsWith('5')) {
+            } else if (prefix === '5') {
                 if (c.solde >= 0) {
                     bilan.actif.tresorerie.push(p)
-                    bilan.actif.total += p.montant
+                    bilan.actif.total += montant
                 } else {
                     bilan.passif.tresorerie.push(p)
-                    bilan.passif.total += p.montant
+                    bilan.passif.total += montant
                 }
-            } else if (c.numero.startsWith('1')) {
+            } else if (prefix === '1') {
                 bilan.passif.capitaux.push(p)
-                bilan.passif.total += p.montant
+                // Attention: Dans le Passif, un solde débiteur en classe 1 (ex: report à nouveau débiteur) 
+                // doit normalement venir en déduction des capitaux propres.
+                // Ici pour simplifier le Bilan visuel, on ajoute le montant au Passif
+                // Mais pour le Résultat Net (13), on fera un ajustement spécifique.
+                bilan.passif.total += (c.solde <= 0 ? montant : -montant)
             } 
             // CLASSIFICATION RÉSULTAT (Classes 6, 7 et 8)
-            else if (c.numero.startsWith('7')) {
+            else if (prefix === '7') {
                 totalProduits += (c.totalCredit - c.totalDebit)
-            } else if (c.numero.startsWith('6')) {
+            } else if (prefix === '6') {
                 totalCharges += (c.totalDebit - c.totalCredit)
-            } else if (c.numero.startsWith('8')) {
+            } else if (prefix === '8') {
                 const soldeNaturel = c.totalCredit - c.totalDebit
                 if (soldeNaturel > 0) totalProduits += soldeNaturel
                 else totalCharges += Math.abs(soldeNaturel)
@@ -141,19 +162,20 @@ export async function GET(request: Request) {
 
         // Calcul du Résultat (Produits - Charges)
         const resultatNet = totalProduits - totalCharges
-        console.log(`[BILAN] Résultat Net: ${resultatNet} (Produits: ${totalProduits}, Charges: ${totalCharges})`)
         
         if (resultatNet !== 0) {
+            const isBenefice = resultatNet > 0
             bilan.passif.capitaux.push({
                 numero: '13',
-                libelle: resultatNet > 0 ? 'RÉSULTAT NET : BÉNÉFICE' : 'RÉSULTAT NET : PERTE',
+                libelle: isBenefice ? 'RÉSULTAT NET : BÉNÉFICE' : 'RÉSULTAT NET : PERTE',
                 montant: Math.abs(resultatNet),
                 isResultat: true
             })
-            // En comptabilité (A=P), le bénéfice s'ajoute au passif, la perte s'y soustrait.
-            // On ajoute resultatNet directement pour préserver l'équilibre mathématique total.
+            // Le résultat s'ajoute au Passif (positif si bénéfice, négatif si perte)
             bilan.passif.total += resultatNet 
         }
+
+        console.log(`[BILAN-API] Total Actif: ${bilan.actif.total}, Total Passif: ${bilan.passif.total}, Résultat: ${resultatNet}`)
 
         const [params, entite] = await Promise.all([
             prisma.parametre.findFirst(),

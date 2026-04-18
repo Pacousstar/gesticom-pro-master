@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X,
   Search, Scan, Camera, Edit2, Pencil, Trash, CreditCard, Wallet, UserPlus,
-  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent
+  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent, ShieldCheck
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -620,9 +620,9 @@ export default function AchatsPage() {
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 no-print">
 
         {[
-          { label: "Total Facturé", val: (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F', sub: "Volume achat période", icon: ShoppingBag, color: "bg-indigo-600" },
-          { label: "Total Décaissé", val: (totals?.montantPaye || 0).toLocaleString('fr-FR') + ' F', sub: "Paiements effectués", icon: Wallet, color: "bg-emerald-600" },
-          { label: "Reste à Payer", val: (totals?.resteAPayer || 0).toLocaleString('fr-FR') + ' F', sub: "Engagements fournisseurs", icon: AlertTriangle, color: "bg-rose-600" },
+          { label: "Total Facturé", val: (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F', sub: "Engagements fournisseurs", icon: ShoppingCart, color: "bg-gradient-to-br from-indigo-700 to-blue-800" },
+          { label: "Total Décaissé", val: (totals?.montantPaye || 0).toLocaleString('fr-FR') + ' F', sub: "Paiements effectués", icon: Wallet, color: "bg-gradient-to-br from-violet-600 to-purple-700" },
+          { label: "Reste à Payer", val: (totals?.resteAPayer || 0).toLocaleString('fr-FR') + ' F', sub: "Dettes fournisseurs en cours", icon: ShieldCheck, color: "bg-gradient-to-br from-rose-600 to-pink-700" },
         ].map((c, i) => (
           <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group shadow-indigo-900/10`}>
              <div className="relative z-10 text-white flex flex-col justify-between h-full">

@@ -53,21 +53,37 @@ export async function GET() {
     const isoMois = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
     const queries = Promise.all([
-      // 0 - Métriques de Ventes (KPIs combinés)
-      prisma.$queryRaw<any[]>`
-        SELECT 
-          COUNT(CASE WHEN date BETWEEN ${isoAuj} AND ${isoFinAuj} THEN 1 END) as nb_auj,
-          SUM(CASE WHEN date BETWEEN ${isoAuj} AND ${isoFinAuj} THEN "montantTotal" ELSE 0 END) as ca_auj,
-          COUNT(CASE WHEN date BETWEEN ${isoHier} AND ${isoFinHier} THEN 1 END) as nb_hier,
-          SUM(CASE WHEN date BETWEEN ${isoHier} AND ${isoFinHier} THEN "montantTotal" ELSE 0 END) as ca_hier,
-          SUM(CASE WHEN date >= ${isoMois} THEN "montantTotal" ELSE 0 END) as ca_mois,
-          SUM("montantTotal") as ca_total,
-          COUNT(id) as nb_total
-        FROM "Vente"
-        WHERE statut IN ('VALIDE', 'VALIDEE')
-        ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.sql` `}
-      `.catch(err => {
-        console.error('[dashboard] sales.raw', err)
+      // 0 - Métriques de Ventes (KPIs combinés via Prisma pour fiabilité SQLite)
+      (async () => {
+        const [auj, hier, mois, total] = await Promise.all([
+          prisma.vente.aggregate({
+            where: { date: { gte: isoAuj, lte: isoFinAuj }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
+            _count: { id: true }, _sum: { montantTotal: true }
+          }),
+          prisma.vente.aggregate({
+            where: { date: { gte: isoHier, lte: isoFinHier }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
+            _count: { id: true }, _sum: { montantTotal: true }
+          }),
+          prisma.vente.aggregate({
+            where: { date: { gte: isoMois }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
+            _sum: { montantTotal: true }
+          }),
+          prisma.vente.aggregate({
+            where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
+            _count: { id: true }, _sum: { montantTotal: true }
+          })
+        ])
+        return [{
+          nb_auj: auj._count.id,
+          ca_auj: toNum(auj._sum.montantTotal),
+          nb_hier: hier._count.id,
+          ca_hier: toNum(hier._sum.montantTotal),
+          ca_mois: toNum(mois._sum.montantTotal),
+          ca_total: toNum(total._sum.montantTotal),
+          nb_total: total._count.id
+        }]
+      })().catch(err => {
+        console.error('[dashboard] sales.aggregate', err)
         return [{ nb_auj: 0, ca_auj: 0, nb_hier: 0, ca_hier: 0, ca_mois: 0, ca_total: 0, nb_total: 0 }]
       }),
       // 1 - Mouvements du jour
@@ -126,24 +142,39 @@ export async function GET() {
       }),
       // 9 - Dépenses Totales
       prisma.depense.aggregate({ where: entiteCondition, _count: { id: true }, _sum: { montant: true } }).catch(() => ({ _count: { id: 0 }, _sum: { montant: 0 } })),
-      // 10 - Trésorerie Encaissée (Classe 5)
+      
+      // 10 - Solde Trésorerie Global (Grand Livre)
+      prisma.ecritureComptable.aggregate({
+        where: { compte: { numero: { startsWith: '5' } }, ...entiteCondition as any },
+        _sum: { debit: true, credit: true }
+      }).catch(() => ({ _sum: { debit: 0, credit: 0 } })),
+
+      // 11 - Dettes Fournisseurs (Achats non soldés)
+      prisma.achat.aggregate({
+        where: { statut: { not: 'ANNULE' }, ...entiteCondition as any },
+        _sum: { montantTotal: true, montantPaye: true, fraisApproche: true }
+      }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0, fraisApproche: 0 } })),
+
       // 12 - Créances Clients (Ventes non soldées)
       prisma.vente.aggregate({
         where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
         _sum: { montantTotal: true, montantPaye: true }
       }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0 } })),
-      // 13 - Détail Trésorerie (Caisse vs Banque)
+
+      // 13 - Détail Trésorerie par compte
       prisma.ecritureComptable.groupBy({
         by: ['compteId'],
         where: { compte: { numero: { startsWith: '5' } }, ...entiteCondition as any },
         _sum: { debit: true, credit: true }
       }).catch(() => []) as Promise<any[]>,
+
       // 14 - Alertes Système
       prisma.systemAlerte.findMany({
         where: { lu: false, entiteId: entiteId || undefined },
         orderBy: { date: 'desc' },
         take: 10
       }).catch(catchEmpty('systemAlerte.findMany')),
+
       // 15 - TENDANCES MENSUELLES
       prisma.$queryRaw<any[]>`
         SELECT 
@@ -159,15 +190,22 @@ export async function GET() {
     ])
 
     const timeoutFallback: any[] = [
-      [{ nb_auj: 0, ca_auj: 0, nb_hier: 0, ca_hier: 0, ca_mois: 0, ca_total: 0, nb_total: 0 }],
-      0, 0, 0,
-       [], [], [], [],
-      [{ total_achat: 0, total_vente: 0, nb_ruptures: 0, nb_en_stock: 0 }],
-      { _count: { id: 0 }, _sum: { montant: 0 } },
-      { _sum: { debit: 0, credit: 0 } },
-      { _sum: { montantTotal: 0, montantPaye: 0, fraisApproche: 0 } },
-      { _sum: { montantTotal: 0, montantPaye: 0 } },
-      [],
+      [{ nb_auj: 0, ca_auj: 0, nb_hier: 0, ca_hier: 0, ca_mois: 0, ca_total: 0, nb_total: 0 }], // 0
+      0, // 1
+      0, // 2
+      0, // 3
+      [], // 4
+      [], // 5
+      [], // 6
+      [], // 7
+      [{ total_achat: 0, total_vente: 0, nb_ruptures: 0, nb_en_stock: 0 }], // 8
+      { _count: { id: 0 }, _sum: { montant: 0 } }, // 9
+      { _sum: { debit: 0, credit: 0 } }, // 10
+      { _sum: { montantTotal: 0, montantPaye: 0, fraisApproche: 0 } }, // 11
+      { _sum: { montantTotal: 0, montantPaye: 0 } }, // 12
+      [], // 13
+      [], // 14
+      [], // 15
     ]
 
     const result = await Promise.race([
@@ -262,16 +300,22 @@ export async function GET() {
 
     // Formattage des tendances (12 mois courants vs 12 mois précédents)
     const trends: Record<string, number> = {}
-    tendancesRaw.forEach((t: any) => { trends[t.mois] = toNum(t.montant) })
+    if (Array.isArray(tendancesRaw)) {
+      tendancesRaw.forEach((t: any) => { trends[t.mois] = toNum(t.montant) })
+    }
 
     const monthlyTrends = Array.from({ length: 12 }, (_, i) => {
-      const month = i + 1
-      const year = now.getFullYear()
+      // On recule de (11 - i) mois pour finir par le mois actuel (i=11)
+      const targetDate = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)
+      const year = targetDate.getFullYear()
+      const month = targetDate.getMonth() + 1
       const prevYear = year - 1
+      
       const key = `${year}-${month.toString().padStart(2, '0')}`
       const prevKey = `${prevYear}-${month.toString().padStart(2, '0')}`
+      
       return {
-        month: new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(new Date(year, i)),
+        month: new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(targetDate),
         current: trends[key] || 0,
         previous: trends[prevKey] || 0
       }
@@ -307,18 +351,26 @@ export async function GET() {
         // Détection automatique des alertes de crédit (90% du plafond)
         const clientsWithPlafond = await prisma.client.findMany({
           where: { ...entiteCondition, plafondCredit: { gt: 0 } },
-          select: { id: true, nom: true, plafondCredit: true, soldeInitial: true }
+          select: { id: true, nom: true, plafondCredit: true }
         })
+        
+        if (clientsWithPlafond.length === 0) return []
+
+        // Optimisation : une seule requête d'agrégation groupée par client
+        const debts = await prisma.vente.groupBy({
+          by: ['clientId'],
+          where: { 
+            clientId: { in: clientsWithPlafond.map(c => c.id) },
+            statut: 'VALIDEE'
+          },
+          _sum: { montantTotal: true, montantPaye: true }
+        })
+
+        const debtMap = new Map(debts.map(d => [d.clientId, (toNum(d._sum.montantTotal) - toNum(d._sum.montantPaye))]))
         
         const alerts: any[] = []
         for (const c of clientsWithPlafond) {
-          // Calcul de la dette actuelle
-          const [ca, paye] = await Promise.all([
-            prisma.vente.aggregate({ where: { clientId: c.id, statut: 'VALIDEE' }, _sum: { montantTotal: true } }),
-            prisma.reglementVente.aggregate({ where: { clientId: c.id, statut: 'VALIDE' }, _sum: { montant: true } })
-          ])
-          
-          const dette = (ca._sum.montantTotal || 0) - (paye._sum.montant || 0)
+          const dette = debtMap.get(c.id) || 0
           const ratio = dette / (c.plafondCredit || 1)
           
           if (ratio >= 0.9) {
@@ -332,7 +384,7 @@ export async function GET() {
           }
         }
         return alerts
-      })()),
+      })().catch(() => [])),
       repartition,
       totalDepensesCount: toNum(depensesAgg?._count?.id),
       totalDepensesAmount: toNum(depensesAgg?._sum?.montant),
