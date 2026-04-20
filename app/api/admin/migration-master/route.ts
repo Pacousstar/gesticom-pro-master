@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 import {
   comptabiliserVente,
   comptabiliserAchat,
@@ -18,11 +19,19 @@ import fs from 'fs'
  */
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Route de maintenance désactivée en production.' }, { status: 403 })
+  }
+  const session = await getSession()
+  if (!session || session.role !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  }
+
   // 🛡️ SÉCURITÉ : Vérification de la clé de migration
   const authHeader = request.headers.get('x-migration-key')
-  const envKey = process.env.MIGRATION_KEY || 'GestiComMaster2026'
+  const envKey = process.env.MIGRATION_KEY
   
-  if (authHeader !== envKey) {
+  if (!envKey || authHeader !== envKey) {
     return NextResponse.json({ error: 'Accès non autorisé' }, { status: 401 })
   }
 

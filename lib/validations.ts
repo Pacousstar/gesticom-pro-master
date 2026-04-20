@@ -62,6 +62,7 @@ export const parametresPatchSchema = z.object({
   fideliteActive: z.boolean().optional(),
   fideliteSeuilPoints: z.coerce.number().min(1).optional(),
   fideliteTauxRemise: z.coerce.number().min(0).max(100).optional(),
+  dateCloture: z.string().nullable().optional(),
 })
 
 /** Produit : code, désignation, catégorie, prix */

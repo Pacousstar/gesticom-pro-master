@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     console.log('[API] GET /api/clients/soldes - Start');
     const clients = await prisma.client.findMany({
-      where: { actif: true },
+      where: { actif: true, entiteId },
       select: {
         id: true,
         code: true,
@@ -31,13 +31,13 @@ export async function GET(request: NextRequest) {
 
     const whereVente: any = {
       entiteId,
-      statut: 'VALIDEE',
+      statut: { in: ['VALIDEE', 'VALIDE'] },
       clientId: { not: null },
     }
     
     const whereReglement: any = {
       entiteId,
-      statut: 'VALIDE',
+      statut: { in: ['VALIDEE', 'VALIDE'] },
     }
 
     if (dateDebut && dateFin) {
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     // Requêtes globales pour le solde final absolu
     const ventesGlobales = await prisma.vente.groupBy({
       by: ['clientId'],
-      where: { entiteId, statut: 'VALIDEE', clientId: { not: null } },
+      where: { entiteId, statut: { in: ['VALIDEE', 'VALIDE'] }, clientId: { not: null } },
       _sum: { montantTotal: true },
     })
 
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       by: ['clientId'],
       where: {
         entiteId,
-        statut: 'VALIDE',
+        statut: { in: ['VALIDEE', 'VALIDE'] },
       },
       _sum: { montant: true },
     })
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 
       // Récupérer le numéro de la dernière facture
       const derV = await prisma.vente.findFirst({
-        where: { clientId: c.id, statut: 'VALIDEE' },
+        where: { clientId: c.id, entiteId, statut: { in: ['VALIDEE', 'VALIDE'] } },
         orderBy: { date: 'desc' },
         select: { numero: true, numeroBon: true }
       })

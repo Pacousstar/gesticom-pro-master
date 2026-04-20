@@ -98,10 +98,11 @@ export async function PATCH(request: NextRequest) {
           backupDestination: data.backupDestination ?? 'LOCAL',
           backupEmailDest: data.backupEmailDest ?? null,
           mentionSpeciale: data.mentionSpeciale ?? null,
+          dateCloture: data.dateCloture ? new Date(data.dateCloture) : null,
         },
       })
     } else {
-      const update: Record<string, string | number | boolean | null> = {}
+      const update: Record<string, any> = {}
       if (data.nomEntreprise !== undefined) update.nomEntreprise = data.nomEntreprise
       if (data.slogan !== undefined) update.slogan = data.slogan || null
       if (data.contact !== undefined) update.contact = data.contact
@@ -130,6 +131,11 @@ export async function PATCH(request: NextRequest) {
       if (data.fideliteSeuilPoints !== undefined) update.fideliteSeuilPoints = data.fideliteSeuilPoints
       if (data.fideliteTauxRemise !== undefined) update.fideliteTauxRemise = data.fideliteTauxRemise
       if (data.mentionSpeciale !== undefined) update.mentionSpeciale = data.mentionSpeciale || null
+
+      // SÉCURITÉ : Seul le Super Admin peut changer la date de clôture
+      if (data.dateCloture !== undefined && session.role === 'SUPER_ADMIN') {
+        update.dateCloture = data.dateCloture ? new Date(data.dateCloture) : null
+      }
 
       if (Object.keys(update).length > 0) {
         p = await prisma.parametre.update({ where: { id: p.id }, data: update })

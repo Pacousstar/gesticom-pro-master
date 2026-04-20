@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function DELETE(
   _request: NextRequest,
@@ -21,12 +22,16 @@ export async function DELETE(
   }
 
   try {
+    const entiteId = await getEntiteId(session)
     const reglement = await prisma.reglementVente.findUnique({
       where: { id },
       include: { vente: true }
     })
 
     if (!reglement) return NextResponse.json({ error: 'Règlement introuvable.' }, { status: 404 })
+    if ((reglement.entiteId || 0) !== entiteId) {
+      return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
+    }
 
     await prisma.$transaction(async (tx) => {
       // 1. Supprimer les écritures comptables
@@ -89,6 +94,7 @@ export async function PATCH(
 
   const id = Number((await params).id)
   try {
+    const entiteId = await getEntiteId(session)
     const body = await request.json()
     const { montant, modePaiement, date, observation } = body
 
@@ -97,6 +103,9 @@ export async function PATCH(
       include: { vente: true }
     })
     if (!old) return NextResponse.json({ error: 'Règlement introuvable.' }, { status: 404 })
+    if ((old.entiteId || 0) !== entiteId) {
+      return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
+    }
 
     // VERROU COMPTABLE : Modification interdite après 24h pour les rôles standards
     const diffHeures = (new Date().getTime() - new Date(old.date).getTime()) / (1000 * 3600)
@@ -137,6 +146,9 @@ export async function PATCH(
             where: { venteId: v.id, statut: 'VALIDE' }
           })
           const totalPaye = tousReglements.reduce((acc, r) => acc + r.montant, 0)
+          if (totalPaye - v.montantTotal > 0.01) {
+            throw new Error(`Paiement invalide : le total des règlements (${totalPaye.toLocaleString()} F) dépasse le montant de la facture (${v.montantTotal.toLocaleString()} F).`)
+          }
           
           await tx.vente.update({
             where: { id: v.id },

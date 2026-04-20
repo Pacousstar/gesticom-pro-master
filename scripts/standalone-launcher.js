@@ -59,6 +59,33 @@ process.env.DATABASE_URL = `file:${dbPath}`;
 // --- MIGRATION AUTOMATIQUE DE LA BASE DE DONNÉES ---
 async function migrateDatabase() {
     console.log('[GestiCom] Vérification des mises à jour de la base de données...');
+    
+    // 1. SAUVEGARDE DE SÉCURITÉ PRÉ-MIGRATION
+    if (fs.existsSync(centralDbPath)) {
+        try {
+            const backupDir = path.join(centralDbDir, 'backups-automatiques');
+            if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+            
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const backupName = `gesticom-pre-maj-${timestamp}.db.bak`;
+            const backupPath = path.join(backupDir, backupName);
+            
+            fs.copyFileSync(centralDbPath, backupPath);
+            console.log(`[GestiCom] Sauvegarde de sécurité créée : ${backupName}`);
+            
+            // Nettoyage : Garder seulement les 5 dernières sauvegardes auto
+            const oldBackups = fs.readdirSync(backupDir)
+                .filter(f => f.startsWith('gesticom-pre-maj-'))
+                .sort((a, b) => fs.statSync(path.join(backupDir, b)).mtimeMs - fs.statSync(path.join(backupDir, a)).mtimeMs);
+            
+            if (oldBackups.length > 5) {
+                oldBackups.slice(5).forEach(f => fs.unlinkSync(path.join(backupDir, f)));
+            }
+        } catch (backupErr) {
+            console.warn('[GestiCom] Attention : Échec de la sauvegarde pré-migration (non bloquant).', backupErr.message);
+        }
+    }
+
     const { execSync } = require('child_process');
     
     // Localiser le CLI Prisma (dans node_modules du standalone ou racine)
@@ -72,31 +99,37 @@ async function migrateDatabase() {
             console.log('[GestiCom] Analyse et synchronisation de la base de données...');
             // On utilise db push pour garantir que les index de performance sont appliqués 
             // SANS risque de perte de données (--accept-data-loss=false)
-            // C'est plus robuste que migrate deploy pour les ajouts d'index simples.
             const cmd = `"${process.execPath}" "${prismaCliPath}" db push --schema="${path.join(projectRoot, 'prisma', 'schema.prisma')}" --accept-data-loss=false`;
             
             execSync(cmd, { 
-                env: { ...process.env, DATABASE_URL: `file:${dbPath}`, PRISMA_SKIP_POSTINSTALL_GENERATE: 'true' },
+                env: { 
+                    ...process.env, 
+                    DATABASE_URL: `file:${dbPath}`, 
+                    PRISMA_SKIP_POSTINSTALL_GENERATE: 'true',
+                    PRISMA_SCHEMA_ENGINE_BINARY: path.join(projectRoot, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe')
+                },
                 stdio: 'inherit' 
             });
-            console.log('[GestiCom] Base de données et index de performance à jour.');
+            console.log('[GestiCom] Base de données et structure à jour.');
 
-            // --- AUTO-STABILISATION ET MAINTENANCE ---
+            // --- AUTO-MAINTENANCE ---
             console.log('[GestiCom] Exécution de la maintenance automatique...');
-            const maintenanceCmd = `"${process.execPath}" "${path.join(projectRoot, 'scripts', 'maintenance-runner.js')}"`;
-            try {
-                execSync(maintenanceCmd, {
-                    env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
-                    stdio: 'inherit'
-                });
-            } catch (maintError) {
-                console.warn('[GestiCom] Note : Erreur mineure lors de la maintenance automatique.');
+            const maintenanceScript = path.join(projectRoot, 'scripts', 'maintenance-runner.js');
+            if (fs.existsSync(maintenanceScript)) {
+                try {
+                    execSync(`"${process.execPath}" "${maintenanceScript}"`, {
+                        env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
+                        stdio: 'inherit'
+                    });
+                } catch (maintError) {
+                    console.warn('[GestiCom] Note : Erreur mineure lors de la maintenance automatique.');
+                }
             }
         } catch (error) {
-            console.warn('[GestiCom] Note : La base était probablement déjà synchronisée ou une migration est nécessaire.');
+            console.warn('[GestiCom] Note : La base de données est déjà à jour ou une intervention manuelle est requise.');
         }
     } else {
-        console.warn('[GestiCom] CLI Prisma introuvable. Assurez-vous que l\'installation est complète.');
+        console.warn('[GestiCom] CLI Prisma introuvable. La mise à jour du schéma sera ignorée.');
     }
 }
 

@@ -29,9 +29,7 @@ export default function ValeurStockPage() {
   const itemsPerPage = 20
   const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-   const [entreprise, setEntreprise] = useState<any>(null)
-   const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
+  const [entreprise, setEntreprise] = useState<any>(null)
 
   const ITEMS_PER_PRINT_PAGE = 25
 
@@ -114,146 +112,29 @@ export default function ValeurStockPage() {
           <h1 className="text-2xl font-bold text-white uppercase tracking-tight">Valeur de Stock</h1>
           <p className="text-sm text-white/90 font-medium">Estimation financière du stock disponible à une date donnée</p>
         </div>
-        <div className="flex gap-3 no-print">
+        <div className="flex gap-2 no-print">
           <button 
-            onClick={() => setIsPreviewOpen(true)}
+            onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
             disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50 uppercase"
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50"
           >
-            <Printer className="h-4 w-4" /> 
-            APERÇU & IMPRESSION
-          </button>
-          <button 
-            onClick={() => {
-              const url = `/api/rapports/inventaire/valeur/export?dateFin=${dateFin}&magasinId=${selectedMagasin}`
-              window.open(url, '_blank')
-            }}
-            className="flex items-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 shadow-lg transition-all active:scale-95 uppercase"
-          >
-            <Download className="h-4 w-4 text-emerald-600" /> EXCEL
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
+            IMPRIMER LA LISTE
           </button>
         </div>
       </div>
 
       {/* Titre Impression (Invisible à l'écran) - Géré par ListPrintWrapper désomais */}
 
-      {/* MODALE D'APERÇU IMPRESSION VALORISATION (ZenPrint) */}
-      {isPreviewOpen && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-gray-900/95 backdrop-blur-md no-print font-sans text-slate-900 uppercase italic tracking-tighter">
-          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl not-italic tracking-normal">
-              <div className="flex items-center gap-6">
-                 <div>
-                   <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Rapport de Valorisation</h2>
-                   <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
-                     Estimation Financière des Stocks Disponibles
-                   </p>
-                 </div>
-                 <div className="h-10 w-px bg-gray-200" />
-                 <div className="flex items-center gap-4">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-black text-emerald-600 italic uppercase">Dépôt : {selectedMagasin === 'TOUT' ? 'Global' : magasins.find(m => m.id === Number(selectedMagasin))?.nom || 'Inconnu'}</span>
-                      <span className="text-xs font-black text-emerald-600 italic uppercase text-[10px]">Arrêté au : {new Date(dateFin).toLocaleDateString('fr-FR')}</span>
-                    </div>
-                    <div className="h-10 w-px bg-gray-200" />
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
-                      <select 
-                        value={printLayout}
-                        onChange={(e) => setPrintLayout(e.target.value as any)}
-                        className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
-                      >
-                        <option value="portrait">Portrait</option>
-                        <option value="landscape">Paysage</option>
-                      </select>
-                    </div>
-                 </div>
-              </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setIsPreviewOpen(false)}
-                  className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
-                >
-                  Fermer
-                </button>
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
-                >
-                  <Printer className="h-4 w-4" />
-                  Imprimer
-                </button>
-              </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-              <div className={`mx-auto shadow-2xl bg-white ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} min-h-screen p-4 text-slate-900 not-italic tracking-normal`}>
-                  {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: ProduitValo[], index: number, allChunks: ProduitValo[][]) => (
-                      <div key={index} className="page-break-after border-b-2 border-dashed border-gray-200 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
-                          <ListPrintWrapper
-                              title="RAPPORT DE VALORISATION DES STOCKS"
-                              subtitle={`Dépôt : ${selectedMagasin === 'TOUT' ? 'Global' : magasins.find(m => m.id === Number(selectedMagasin))?.nom || 'Inconnu'} | Inventaire au : ${new Date(dateFin).toLocaleDateString('fr-FR')}`}
-                              pageNumber={index + 1}
-                              totalPages={allChunks.length}
-                              layout={printLayout}
-                              enterprise={entreprise}
-                          >
-                              <table className="w-full text-[13px] border-collapse border-2 border-black font-sans">
-                                  <thead>
-                                      <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                                          <th className="border border-black px-2 py-3 text-center w-10 italic">N°</th>
-                                          <th className="border border-black px-2 py-3 text-left">Référence / Désignation</th>
-                                          <th className="border border-black px-2 py-3 text-center">Catégorie</th>
-                                          <th className="border border-black px-2 py-3 text-right">Qté</th>
-                                          <th className="border border-black px-2 py-3 text-right text-[11px]">PAMP / Achat</th>
-                                          <th className="border border-black px-2 py-3 text-right bg-emerald-50 underline decoration-double font-black">VALEUR TOTALE</th>
-                                      </tr>
-                                  </thead>
-                                  <tbody>
-                                      {chunk.map((p: ProduitValo, idx: number) => (
-                                          <tr key={idx} className="border-b border-black">
-                                              <td className="border border-black px-2 py-2 text-center font-bold">
-                                                  {index * ITEMS_PER_PRINT_PAGE + idx + 1}
-                                              </td>
-                                              <td className="border border-black px-2 py-2">
-                                                  <div className="font-black uppercase text-[12px]">{p.designation}</div>
-                                                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{p.code || 'SANS REF'} • {p.unite}</div>
-                                              </td>
-                                              <td className="border border-black px-2 py-2 text-center italic text-[10px] font-bold uppercase">
-                                                  {p.categorie}
-                                              </td>
-                                              <td className="border border-black px-2 py-2 text-right font-black text-[14px]">
-                                                  {p.quantite.toLocaleString()}
-                                              </td>
-                                              <td className="border border-black px-2 py-2 text-right tabular-nums">
-                                                  {p.pamp.toLocaleString('fr-FR')}
-                                              </td>
-                                              <td className="border border-black px-2 py-2 text-right font-black bg-emerald-50/20 text-[14px] tabular-nums">
-                                                  {p.valeurTotal.toLocaleString('fr-FR')} F
-                                              </td>
-                                          </tr>
-                                      ))}
-                                  </tbody>
-                                  {index === allChunks.length - 1 && (
-                                      <tfoot>
-                                          <tr className="bg-emerald-900 font-black text-[15px] border-t-4 border-black uppercase italic text-white shadow-2xl">
-                                              <td colSpan={3} className="border border-black px-4 py-8 text-right bg-emerald-950 tracking-widest leading-none">
-                                                VALORISATION TOTALE DU STOCK :
-                                                <div className="text-[9px] not-italic tracking-normal mt-1 opacity-60">Calcul basé sur le PAMP du jour</div>
-                                              </td>
-                                              <td className="border border-black px-4 py-8 text-right bg-emerald-900 tabular-nums">
-                                                  {totalQuantite.toLocaleString()}
-                                              </td>
-                                              <td colSpan={2} className="border border-black px-4 py-8 text-right text-2xl bg-emerald-900 tabular-nums shadow-inner">
-                                                  {totalValeur.toLocaleString('fr-FR')} FCFA
-                                              </td>
-                                          </tr>
-                                      </tfoot>
-                                  )}
-                              </table>
-                          </ListPrintWrapper>
-                      </div>
-                  ))}
-              </div>
+      {/* ÉCRAN DE PRÉPARATION (Overlay) */}
+      {isPrinting && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md no-print">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm border-4 border-emerald-500 transform scale-110">
+            <Loader2 className="h-16 w-16 animate-spin mx-auto text-emerald-500 mb-6" />
+            <h3 className="text-2xl font-black text-gray-900 uppercase italic">Valorisation Financière</h3>
+            <p className="mt-2 text-gray-600 font-bold uppercase text-[11px] tracking-widest">
+              Génération du rapport de valeur en cours...
+            </p>
           </div>
         </div>
       )}
@@ -393,24 +274,12 @@ export default function ValeurStockPage() {
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
                <Coins className="h-24 w-24" />
             </div>
-            <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">
-              Valeur Totale du Stock
-              {(search.trim() || selectedCategorie !== 'TOUTE' || selectedMagasin !== 'TOUT') && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-black text-amber-900 uppercase tracking-tighter">
-                  ⚠️ Filtré
-                </span>
-              )}
-            </p>
+            <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Valeur Totale du Stock</p>
             <p className="text-3xl font-black mb-1">{totalValeur.toLocaleString('fr-FR')} F</p>
             <div className="pt-2 border-t border-emerald-800 flex justify-between items-center text-sm">
                <span className="text-emerald-400">Total Articles :</span>
                <span className="font-bold">{totalQuantite.toLocaleString()}</span>
             </div>
-            {(search.trim() || selectedCategorie !== 'TOUTE' || selectedMagasin !== 'TOUT') && (
-              <p className="text-[10px] text-amber-300 italic font-medium mt-1">
-                ⚠️ Totaux calculés sur la sélection actuelle uniquement. Effacez les filtres pour voir le total global.
-              </p>
-            )}
           </div>
         </div>
 

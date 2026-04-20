@@ -11,7 +11,6 @@ import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
 
 type Magasin = { id: number; code: string; nom: string }
-type Banque = { id: number; nomBanque: string; libelle: string; soldeActuel: number }
 type Depense = {
   id: number
   date: string
@@ -78,13 +77,11 @@ const MODES_PAIEMENT = ['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE']
 
 export default function DepensesPage() {
   const [magasins, setMagasins] = useState<Magasin[]>([])
-  const [banques, setBanques] = useState<Banque[]>([])
   const [depenses, setDepenses] = useState<Depense[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
   const [editing, setEditing] = useState<Depense | null>(null)
   const [err, setErr] = useState('')
-  const [submitting, setSubmitting] = useState(false)
   const { success: showSuccess, error: showError } = useToast()
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -95,7 +92,6 @@ export default function DepensesPage() {
     montant: '',
     montantPaye: '',
     modePaiement: 'ESPECES',
-    banqueId: '',
     beneficiaire: '',
     pieceJustificative: '',
     observation: '',
@@ -122,9 +118,6 @@ export default function DepensesPage() {
     fetch('/api/magasins')
       .then((r) => (r.ok ? r.json() : []))
       .then(setMagasins)
-    fetch('/api/banques')
-      .then((r) => r.ok ? r.json() : { data: [] })
-      .then((d) => setBanques(d.data || []))
   }, [])
 
 
@@ -173,7 +166,6 @@ export default function DepensesPage() {
       montant: '',
       montantPaye: '',
       modePaiement: 'ESPECES',
-      banqueId: '',
       beneficiaire: '',
       pieceJustificative: '',
       observation: '',
@@ -195,7 +187,6 @@ export default function DepensesPage() {
       montant: Number(formData.montant),
       montantPaye: formData.montantPaye !== '' ? Number(formData.montantPaye) : undefined,
       modePaiement: formData.modePaiement as 'ESPECES' | 'MOBILE_MONEY' | 'CREDIT' | 'VIREMENT' | 'CHEQUE',
-      banqueId: ['ESPECES', 'CREDIT'].includes(formData.modePaiement) ? null : (formData.banqueId ? Number(formData.banqueId) : null),
       beneficiaire: formData.beneficiaire.trim() || null,
     }
 
@@ -215,7 +206,6 @@ export default function DepensesPage() {
     // Dans GestiCom Offline, l'enregistrement se fait toujours directement vers le serveur local.
 
     try {
-      setSubmitting(true)
       const url = editing ? `/api/depenses/${editing.id}` : '/api/depenses'
       const method = editing ? 'PATCH' : 'POST'
       const res = await fetch(url, {
@@ -238,8 +228,6 @@ export default function DepensesPage() {
       const errorMsg = formatApiError(e)
       setErr(errorMsg)
       showError(errorMsg)
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -255,7 +243,6 @@ export default function DepensesPage() {
       montant: String(depense.montant),
       montantPaye: depense.montantPaye != null ? String(depense.montantPaye) : '',
       modePaiement: depense.modePaiement,
-      banqueId: (depense as any).banqueId ? String((depense as any).banqueId) : '',
       beneficiaire: depense.beneficiaire || '',
       pieceJustificative: depense.pieceJustificative || '',
       observation: depense.observation || '',
@@ -658,22 +645,6 @@ export default function DepensesPage() {
                   />
                   <p className="mt-0.5 text-xs text-gray-500">Laisser vide = tout payé (sauf si Crédit)</p>
                 </div>
-                {['MOBILE_MONEY', 'VIREMENT', 'CHEQUE'].includes(formData.modePaiement) && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Compte Bancaire *</label>
-                    <select
-                      required
-                      value={formData.banqueId}
-                      onChange={(e) => setFormData({ ...formData, banqueId: e.target.value })}
-                      className="w-full rounded-lg border-2 border-orange-200 px-3 py-2 text-sm focus:border-orange-500 outline-none"
-                    >
-                      <option value="">— Sélectionner une banque —</option>
-                      {banques.map((b) => (
-                        <option key={b.id} value={String(b.id)}>{b.nomBanque} - {b.libelle} ({b.soldeActuel.toLocaleString()} F)</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Reste à payer</label>
                   <p className="mt-1 font-semibold text-amber-800">
@@ -730,10 +701,8 @@ export default function DepensesPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+                  className="rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
                 >
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {editing ? 'Modifier' : 'Enregistrer'}
                 </button>
               </div>

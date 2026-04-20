@@ -19,8 +19,7 @@ import {
   CheckCircle,
   CreditCard,
   Pencil,
-  Trash2,
-  MessageCircle
+  Trash2
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 
@@ -62,7 +61,6 @@ export default function CompteCourantClientPage() {
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [allVentesDetail, setAllVentesDetail] = useState<any[]>([])
   const [isPreparingPrint, setIsPreparingPrint] = useState(false)
-  const [isRelancing, setIsRelancing] = useState(false)
   const { success: showSuccess } = useToast()
 
   const handleLettrage = async (reglement: Operation) => {
@@ -97,27 +95,6 @@ export default function CompteCourantClientPage() {
       }
     } catch (e) {
       showError("Erreur réseau.")
-    }
-  }
-
-  const handleRelanceWhatsApp = async () => {
-    setIsRelancing(true)
-    try {
-      const res = await fetch(`/api/clients/${id}/relance`)
-      if (res.ok) {
-        const json = await res.json()
-        if (json.whatsappUrl) {
-          window.open(json.whatsappUrl, '_blank')
-        } else {
-          showError("Ce client n'a pas de numéro de téléphone enregistré ou n'a pas de dette.")
-        }
-      } else {
-        showError("Impossible de générer la relance.")
-      }
-    } catch (e) {
-      showError("Erreur réseau.")
-    } finally {
-      setIsRelancing(false)
     }
   }
 
@@ -404,14 +381,6 @@ export default function CompteCourantClientPage() {
                 className="flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-black text-white hover:bg-orange-600 transition-all shadow-lg hover:-translate-y-1 uppercase tracking-widest no-print"
               >
                 <DollarSign className="h-4 w-4" /> Nouveau Règlement
-             </button>
-             <button 
-                onClick={handleRelanceWhatsApp}
-                disabled={isRelancing}
-                className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-3 text-sm font-black text-white hover:bg-green-700 transition-all shadow-lg hover:-translate-y-1 uppercase tracking-widest no-print"
-              >
-                {isRelancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-                WhatsApp
              </button>
              <button 
                onClick={() => window.print()}

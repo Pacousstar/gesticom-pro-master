@@ -6,6 +6,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { logAction, getIpAddress } from '@/lib/audit'
 import { comptabiliserVente } from '@/lib/comptabilisation'
+import { montantLigneTTC } from '@/lib/calculs-commerciaux'
 
 /**
  * API : Ventes Historiques (Anciennes Ventes)
@@ -142,8 +143,12 @@ export async function POST(request: NextRequest) {
       }
 
       const designation = produit?.designation || String(l?.designation || '')
-      const montantHT = quantite * prixUnitaire
-      const montant = Math.round((montantHT * (1 + tva / 100)) - remise)
+      const montant = montantLigneTTC({
+        quantite,
+        prixUnitaire,
+        remiseLigne: remise,
+        tvaPourcent: tva,
+      })
       montantTotalCalcule += montant
       lignesValides.push({ produitId, designation, quantite, prixUnitaire, tva, remise, montant })
     }

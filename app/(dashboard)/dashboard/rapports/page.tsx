@@ -43,13 +43,10 @@ type Comparaison = {
 
 type RapportClient = {
   clientId: number | null
-  nom: string
-  telephone: string
-  pointsFidelite: number
-  nombreVentes: number
-  caTotal: number
-  totalPaye: number
-  soldeDu: number
+  client: string
+  code: string | null
+  chiffreAffaires: number
+  frequenceAchat: number
 }
 
 type RapportPaiement = {
@@ -150,6 +147,8 @@ export default function RapportsPage() {
   const [facturesVentes, setFacturesVentes] = useState<RapportFacture[]>([])
   const [produitsParClient, setProduitsParClient] = useState<RapportProduitClient[]>([])
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null)
+  const [selectedFournisseurId, setSelectedFournisseurId] = useState<number | null>(null)
+  const [produitsParFournisseur, setProduitsParFournisseur] = useState<any[]>([])
 
   // Stock & Logistique State
   const [valeurStock, setValeurStock] = useState<{ totalValeur: number; data: any[] } | null>(null)
@@ -302,6 +301,17 @@ export default function RapportsPage() {
       setProduitsParClient(Array.isArray(data) ? data : [])
     } catch (e) {
       showError('Erreur chargement produits client')
+    }
+  }
+
+  const fetchProduitsFournisseur = async (fournisseurId: number) => {
+    setSelectedFournisseurId(fournisseurId)
+    try {
+      const res = await fetch(`/api/rapports/achats/fournisseurs/produits?fournisseurId=${fournisseurId}&start=${dateDebut}&end=${dateFin}`)
+      const data = await res.json()
+      setProduitsParFournisseur(Array.isArray(data) ? data : [])
+    } catch (e) {
+      showError('Erreur chargement produits fournisseur')
     }
   }
 
@@ -672,33 +682,6 @@ export default function RapportsPage() {
         {activeTab === 'ventes' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-            {/* NOUVEAUTÉ : CARTE TOP 10 STARS (Fidélité) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="lg:col-span-4 bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden border-2 border-indigo-500/30">
-                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                  <Star className="h-64 w-64 text-indigo-400" />
-                </div>
-                <div className="relative z-10">
-                  <h3 className="text-xl font-black text-white uppercase tracking-tighter italic flex items-center gap-3">
-                    <Star className="h-6 w-6 text-amber-400 fill-amber-400" />
-                    Top 10 Clients Stars (Fidélité & Volume)
-                  </h3>
-                  <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                    {caClients.slice(0, 10).map((c, idx) => (
-                      <div key={idx} className="bg-white/5 backdrop-blur-md border border-white/10 p-5 rounded-3xl hover:bg-white/10 transition-all group">
-                         <div className="flex justify-between items-start mb-2">
-                            <span className="text-[10px] font-black bg-amber-400 text-amber-900 h-6 w-6 rounded-full flex items-center justify-center italic">#{idx + 1}</span>
-                            <span className="text-[10px] font-black text-indigo-300 uppercase italic">{c.pointsFidelite} pts</span>
-                         </div>
-                         <p className="text-sm font-black text-white uppercase tracking-tighter truncate italic">{c.nom}</p>
-                         <p className="text-xl font-black text-amber-400 tabular-nums tracking-tighter mt-1">{(c.caTotal || 0).toLocaleString()} <span className="text-[10px] opacity-40">F</span></p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <div className="grid lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1 border border-gray-100 bg-white p-8 rounded-[2.5rem] shadow-xl">
                 <h3 className="text-lg font-black text-slate-900 mb-8 flex items-center gap-3 uppercase tracking-tighter italic">
@@ -798,12 +781,72 @@ export default function RapportsPage() {
               searchTerm={searchTerm}
             />
             
-            <PaiementTable
-              title="État de Paiement des Dettes Fournisseurs (Récapitulatif)"
-              data={etatPaiementAchats}
-              type="achats"
-              searchTerm={searchTerm}
-            />
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-1">
+              <PaiementTable
+                title="État de Paiement des Dettes Fournisseurs (Récapitulatif)"
+                data={etatPaiementAchats}
+                type="achats"
+                searchTerm={searchTerm}
+                onSelect={(id: number) => fetchProduitsFournisseur(id)}
+                selectedId={selectedFournisseurId}
+              />
+            </div>
+            
+            <div className="lg:col-span-2 border border-blue-100 bg-white p-8 rounded-[2.5rem] shadow-xl h-fit">
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3 italic">
+                  <ShoppingBag className="h-5 w-5 text-blue-600" />
+                  Composition du panier d'achat (Fournisseur)
+                </h3>
+                {selectedFournisseurId && (
+                  <span className="text-[10px] font-black bg-blue-600 text-white px-4 py-1.5 rounded-full uppercase tracking-widest italic">
+                    Détail Articles
+                  </span>
+                )}
+              </div>
+              
+              {selectedFournisseurId ? (
+                <div className="overflow-x-auto rounded-3xl border border-gray-50 bg-gray-50/20">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-white border-b border-gray-50 italic">
+                        <th className="px-8 py-6">Désignation</th>
+                        <th className="px-8 py-6 text-right">Unités</th>
+                        <th className="px-8 py-6 text-right">Montant</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {produitsParFournisseur.map((p, i) => (
+                        <tr key={i} className="hover:bg-blue-50/50 transition-all duration-300">
+                          <td className="px-8 py-7 text-sm font-black text-slate-900 uppercase tracking-tighter italic">{p.produit}</td>
+                          <td className="px-8 py-7 text-sm text-right font-black text-slate-400 tabular-nums">
+                            <span className="bg-white border border-gray-100 px-3 py-1 rounded-lg shadow-sm text-slate-900">
+                              {p.quantiteAchetee}
+                            </span>
+                          </td>
+                          <td className="px-8 py-7 text-right">
+                            <span className="text-xl font-black text-emerald-600 tabular-nums">{p.montantAchat.toLocaleString()}</span>
+                            <span className="text-[10px] font-bold text-slate-300 ml-1 opacity-50 italic">F</span>
+                          </td>
+                        </tr>
+                      ))}
+                      {produitsParFournisseur.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-8 py-20 text-center text-slate-200 font-black uppercase italic tracking-[0.4em] text-xs font-mono">Aucun article enregistré pour la période</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-40 text-slate-200">
+                  <CreditCard className="h-20 w-20 mb-6 opacity-20 animate-pulse" />
+                  <p className="text-xs font-black uppercase tracking-[0.3em] italic">Sélectionnez un fournisseur pour voir sa composition panier</p>
+                </div>
+              )}
+            </div>
+          </div>
           </div>
         )}
       </div>
@@ -914,9 +957,14 @@ function LogistiqueTop({ top, searchTerm }: { top: any[], searchTerm: string }) 
 }
 
 
-function PaiementTable({ title, data, type, searchTerm }: any) {
+function PaiementTable({ title, data, type, searchTerm, onSelect, selectedId }: any) {
   const [page, setPage] = useState(1)
-  const itemsPerPage = 10
+  const itemsPerPage = 8
+
+  // On remet la page à 1 si on cherche quelque chose
+  useEffect(() => {
+    setPage(1)
+  }, [searchTerm])
   const filteredData = (Array.isArray(data) ? data : []).filter((d: any) => ((d.client || d.fournisseur) || d.nom || '').toLowerCase().includes(searchTerm.toLowerCase()))
   const totalPages = Math.ceil(filteredData.length / itemsPerPage)
   const paginatedData = filteredData.slice((page - 1) * itemsPerPage, page * itemsPerPage)
@@ -943,10 +991,22 @@ function PaiementTable({ title, data, type, searchTerm }: any) {
           </thead>
           <tbody className="divide-y divide-gray-50">
             {paginatedData.map((d: any, i: number) => (
-                <tr key={i} className="hover:bg-orange-50/30 transition-all duration-300 group">
+                <tr 
+                    key={i} 
+                    onClick={() => onSelect && onSelect(d.fournisseurId || d.clientId)}
+                    className={`transition-all duration-300 group cursor-pointer ${
+                        (d.fournisseurId || d.clientId) === selectedId 
+                        ? 'bg-blue-600 shadow-xl scale-[1.01] text-white' 
+                        : 'hover:bg-orange-50/30'
+                    }`}
+                >
                     <td className="px-8 py-7">
-                        <div className="text-sm font-black text-slate-900 uppercase tracking-tighter italic group-hover:text-blue-600 transition-colors uppercase italic">{d.client || d.fournisseur || d.nom}</div>
-                        <div className="text-[10px] text-slate-300 font-mono tracking-tighter uppercase italic opacity-60">ID: {d.clientId || d.fournisseurId || '---'}</div>
+                        <div className={`text-sm font-black uppercase tracking-tighter italic transition-colors ${
+                            (d.fournisseurId || d.clientId) === selectedId ? 'text-white' : 'text-slate-900 group-hover:text-blue-600'
+                        }`}>{d.client || d.fournisseur || d.nom}</div>
+                        <div className={`text-[10px] font-mono tracking-tighter uppercase italic opacity-60 ${
+                            (d.fournisseurId || d.clientId) === selectedId ? 'text-blue-100' : 'text-slate-300'
+                        }`}>ID: {d.clientId || d.fournisseurId || '---'}</div>
                     </td>
                     <td className="px-8 py-7 text-center">
                         <span className="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-black tabular-nums shadow-lg">

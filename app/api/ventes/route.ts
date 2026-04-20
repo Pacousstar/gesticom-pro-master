@@ -7,8 +7,12 @@ import { logAction, getIpAddress, getUserAgent } from '@/lib/audit'
 import { comptabiliserVente, comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-import { ensureActivated } from '@/lib/security'
-import { enregistrerMouvementCaisse, estModeEspeces } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/caisse'
+import {
+  montantLigneTTC,
+  montantTotalVenteDocument,
+  pointsFideliteDepuisEncaissement,
+} from '@/lib/calculs-commerciaux'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -109,6 +113,7 @@ export async function POST(request: NextRequest) {
       : 'ESPECES'
     
     let montantPaye = 0
+    let autoReglementComplet = false
     let listReglements: { mode: string; montant: number }[] = []
 
     if (reglementsPayload.length > 0) {
@@ -125,7 +130,8 @@ export async function POST(request: NextRequest) {
          montantPaye = montantPayeRaw
          listReglements.push({ mode: modePaiementPrincipal, montant: montantPaye })
       } else {
-         montantPaye = modePaiementPrincipal === 'CREDIT' ? 0 : 999999999
+         montantPaye = 0
+         autoReglementComplet = modePaiementPrincipal !== 'CREDIT'
       }
     }
 
@@ -186,9 +192,13 @@ export async function POST(request: NextRequest) {
 
       const designation = produit.designation
       const coutUnitaire = produit.pamp || produit.prixAchat || 0
-      const montantHT = quantite * prixUnitaire
-      const montantLigne = Math.round((montantHT - remise) * (1 + tva / 100))
-      
+      const montantLigne = montantLigneTTC({
+        quantite,
+        prixUnitaire,
+        remiseLigne: remise,
+        tvaPourcent: tva,
+      })
+
       montantTotalAVantRemise += montantLigne
       lignesValides.push({ produitId, designation, quantite, prixUnitaire, coutUnitaire, tva, remise, montant: montantLigne })
     }
@@ -197,27 +207,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Lignes de vente invalides.' }, { status: 400 })
     }
 
-    const montantTotal = Math.max(0, Math.round(montantTotalAVantRemise - remiseGlobale + fraisApproche))
-    
-    let surplusAvoir = 0
-    if (montantPaye > montantTotal + 1) {
-       if (clientId) {
-          surplusAvoir = Math.round(montantPaye - montantTotal)
-          montantPaye = montantTotal
-       } else {
-          return NextResponse.json({ 
-            error: `Paiement invalide : Pas d'avoir possible pour un client anonyme. Le total versé (${montantPaye.toLocaleString()} F) dépasse la facture (${montantTotal.toLocaleString()} F).` 
-          }, { status: 400 })
-       }
-    }
+    const montantTotal = montantTotalVenteDocument(
+      montantTotalAVantRemise,
+      remiseGlobale,
+      fraisApproche
+    )
 
-    if (reglementsPayload.length === 0 && modePaiementPrincipal !== 'CREDIT' && montantPaye === 0) {
+    if (reglementsPayload.length === 0 && autoReglementComplet && montantPaye === 0) {
         montantPaye = montantTotal
         listReglements = [{ mode: modePaiementPrincipal, montant: montantPaye }]
     }
+
+    if (montantPaye > montantTotal + 0.01) {
+      return NextResponse.json({
+        error: `Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse la facture (${montantTotal.toLocaleString()} F).`
+      }, { status: 400 })
+    }
     
     const statutPaiement = montantPaye >= montantTotal ? 'PAYE' : montantPaye > 0 ? 'PARTIEL' : 'CREDIT'
-    const pointsGagnes = Math.floor(montantTotal)
+    const pointsGagnes = pointsFideliteDepuisEncaissement(montantTotal)
 
     let needCreditAlerte = false
     let alerteType = 'INFO'
@@ -338,16 +346,6 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      if (clientId && pointsGagnes > 0) {
-        const clientObj = await tx.client.findUnique({ where: { id: clientId } })
-        if (clientObj && clientObj.code !== 'PASSAGE' && clientObj.code !== 'ANONYME') {
-          await tx.client.update({
-            where: { id: clientId },
-            data: { pointsFidelite: { increment: pointsGagnes } }
-          })
-        }
-      }
-
       for (const reg of listReglements) {
         const montantReg = Math.min(reg.montant, montantTotal)
         if (montantReg <= 0) continue
@@ -393,32 +391,6 @@ export async function POST(request: NextRequest) {
             }, tx)
           }
         }
-      }
-
-      if (surplusAvoir > 0) {
-        const modeAvoir = listReglements.length > 0 ? listReglements[0].mode : modePaiementPrincipal
-        await tx.reglementVente.create({
-          data: {
-            clientId,
-            entiteId,
-            montant: surplusAvoir,
-            modePaiement: modeAvoir,
-            utilisateurId: session.userId,
-            observation: `AVOIR généré par trop-perçu sur vente ${num}`,
-            date: dateVente,
-          }
-        })
-        
-        await comptabiliserReglementVente({
-          venteId: null, 
-          numeroVente: `${num} (AVOIR)`,
-          date: dateVente,
-          montant: surplusAvoir,
-          modePaiement: modeAvoir,
-          utilisateurId: session.userId,
-          entiteId: entiteId,
-          magasinId: magasinId
-        }, tx)
       }
 
       await comptabiliserVente({

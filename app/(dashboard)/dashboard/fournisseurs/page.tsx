@@ -206,6 +206,7 @@ export default function FournisseursPage() {
           setEditing(null)
           setCurrentPage(1)
           fetchList(1)
+          setTimeout(() => fetchList(1), 500)
           showSuccess(MESSAGES.FOURNISSEUR_MODIFIE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la modification.')
@@ -223,6 +224,7 @@ export default function FournisseursPage() {
           setForm(false)
           setCurrentPage(1)
           fetchList(1)
+          setTimeout(() => fetchList(1), 500)
           showSuccess(MESSAGES.FOURNISSEUR_ENREGISTRE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
@@ -255,10 +257,7 @@ export default function FournisseursPage() {
       const res = await fetch(`/api/rapports/finances/etat-paiements?type=ACHAT&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31`)
       if (res.ok) {
         const allInvoices = await res.json()
-        // CORRECTION #8 : Filtrage par ID fournisseur (robuste) plutôt que par nom (fragile en cas d'homonymie)
-        const providerInvoices = allInvoices.filter((inv: any) => 
-          inv.fournisseurId === f.id || inv.fournisseur?.id === f.id || inv.tier === f.nom
-        )
+        const providerInvoices = allInvoices.filter((inv: any) => inv.tier === f.nom)
         if (providerInvoices.length === 0) {
             showError("Aucun achat impayé trouvé pour ce fournisseur.")
             return
@@ -272,10 +271,13 @@ export default function FournisseursPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 no-print">
         <div>
-          <h1 className="text-3xl font-bold text-white">Fournisseurs</h1>
-          <p className="mt-1 text-white/90">Fiches fournisseurs</p>
+          <h1 className="text-3xl font-bold text-white uppercase tracking-tight flex items-center gap-3">
+             <Truck className="h-8 w-8" />
+             Partenaires Fournisseurs
+          </h1>
+          <p className="mt-1 text-white/90 font-medium italic">Gestion des fiches tiers et suivi des engagements d'approvisionnement</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ImportExcelButton 
@@ -288,31 +290,75 @@ export default function FournisseursPage() {
               if (q) params.set('q', q)
               window.location.href = `/api/fournisseurs/export-excel?${params.toString()}`
             }}
-            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-orange-600 transition-colors shadow-sm"
+            className="group flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white hover:bg-emerald-700 shadow-lg shadow-emerald-900/20 transition-all active:scale-95"
           >
-            <FileSpreadsheet className="h-4 w-4" />
-            Exporter Excel
+            <FileSpreadsheet className="h-5 w-5" />
+            EXPORTER EXCEL
           </button>
           <button
             onClick={() => openForm()}
-            className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 shadow-sm"
+            className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-white hover:bg-orange-700 shadow-lg shadow-orange-900/20 transition-all active:scale-95"
           >
-            <Plus className="h-4 w-4" />
-            Nouveau
+            <Plus className="h-5 w-5" />
+            NOUVEAU COMPTE
           </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex-1 min-w-[200px]">
+      {/* COMPTEURS DE PERFORMANCE FOURNISSEURS */}
+      <div className="space-y-2 no-print">
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6 italic">Analyse de la Dette Fournisseurs : Zéro Erreur</p>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+          {[
+            { 
+              label: "Encours Total Dû", 
+              val: (list.reduce((acc, f) => acc + (f.dette ?? 0), 0)).toLocaleString('fr-FR') + ' F', 
+              icon: DollarSign, 
+              color: "from-blue-600 to-indigo-700", 
+              sub: "Engagements financiers cumulés" 
+            },
+            { 
+              label: "Volume d'Achats", 
+              val: (list.length).toLocaleString() + ' Partenaires', 
+              icon: Truck, 
+              color: "from-emerald-600 to-teal-700", 
+              sub: "Réseau d'approvisionnement" 
+            },
+            { 
+              label: "Alerte Trésorerie", 
+              val: list.filter(f => (f.dette ?? 0) > 1000000).length.toLocaleString() + ' Tiers', 
+              icon: Clock, 
+              color: "from-orange-500 to-rose-600", 
+              sub: "Dettes > 1 000 000 F" 
+            },
+          ].map((c, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br ${c.color} p-6 h-36 shadow-2xl transition-all border border-white/10 group`}>
+               <div className="relative z-10 text-white flex flex-col justify-between h-full">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
+                    <c.icon className="h-4 w-4" />
+                    {c.label}
+                  </div>
+                  <div>
+                    <h3 className="text-3xl font-black tracking-tighter italic">{c.val}</h3>
+                    <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
+                  </div>
+               </div>
+               <c.icon className="absolute right-[-10px] bottom-[-10px] h-24 w-24 text-white opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-500" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 rounded-[2rem] bg-slate-800/50 border border-slate-700 p-4 backdrop-blur-sm shadow-xl no-print">
+        <div className="relative flex-1 min-w-[300px]">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
             <input
               type="search"
-              placeholder="Rechercher par code, nom, tél. ou email..."
+              placeholder="Rechercher par nom, code ou numéro de camion..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+              className="w-full rounded-2xl border-2 border-slate-700 bg-slate-900/50 py-3 pl-12 pr-4 text-sm font-bold text-white placeholder:text-slate-600 focus:border-orange-500 focus:outline-none transition-all"
             />
           </div>
         </div>
@@ -321,11 +367,11 @@ export default function FournisseursPage() {
             type="button"
             onClick={handlePrintAll}
             disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md active:scale-95 disabled:opacity-50"
-            title="Imprimer la liste complète"
+            className="flex items-center gap-2 rounded-xl border-2 border-slate-700 bg-slate-800 px-6 py-2.5 text-xs font-black text-slate-400 hover:text-white hover:border-slate-500 transition-all shadow-md active:scale-95"
+            title="Imprimer le répertoire"
           >
-            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            IMPRIMER LA LISTE
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Printer className="h-4 w-4" />}
+            IMPRIMER RÉPERTOIRE
           </button>
         </div>
       </div>
@@ -498,76 +544,83 @@ export default function FournisseursPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-hidden rounded-[2rem] border border-slate-700 bg-white shadow-2xl no-print">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-12 w-12 animate-spin text-orange-500" />
           </div>
         ) : list.length === 0 ? (
-          <p className="py-12 text-center text-gray-500">Aucun fournisseur.</p>
+          <div className="py-20 text-center">
+            <Truck className="h-16 w-16 mx-auto mb-4 text-slate-200" />
+            <p className="text-slate-500 font-bold italic uppercase">Aucun partenaire trouvé dans le réseau.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Nom</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Tél.</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Email</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">NCC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Localisation</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">N° Camion</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Dette Initiale</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Dette Totale</th>
-                  <th className="px-4 py-3"></th>
+            <table className="min-w-full divide-y divide-slate-100">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Identifiant</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Partenaire / Contact</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Canal / Camion</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Localisation</th>
+                  <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Engagement Initial</th>
+                  <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 bg-slate-100 italic">Net à Payer</th>
+                  <th className="px-6 py-4 text-center text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Gestion</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-slate-50 bg-white">
                 {list.map((f) => (
-                  <tr key={f.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-gray-600">{f.code || '—'}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{f.nom}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.telephone || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.email || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.ncc || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.localisation || '—'}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-orange-600">{f.numeroCamion || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 font-medium text-right">{Number(f.soldeInitial || 0).toLocaleString('fr-FR')} F</td>
-                    <td className={`px-4 py-3 text-right text-sm font-bold ${f.dette && f.dette > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  <tr key={f.id} className="hover:bg-slate-50/80 transition-all group">
+                    <td className="px-6 py-4 font-mono text-[11px] font-black text-slate-400">{f.code || '—'}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-slate-900 uppercase italic group-hover:text-orange-600 transition-colors">{f.nom}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{f.telephone || 'Aucun contact'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-1 w-fit border border-orange-100">
+                        <Truck className="h-3 w-3 text-orange-600" />
+                        <span className="text-[11px] font-black text-orange-700 uppercase tracking-tighter">{f.numeroCamion || 'FLOTTE'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-400 italic font-medium uppercase">{f.localisation || '—'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-500 font-bold text-right italic">{Number(f.soldeInitial || 0).toLocaleString('fr-FR')} F</td>
+                    <td className={`px-6 py-4 text-right text-base font-black italic tabular-nums bg-slate-50/50 ${f.dette && f.dette > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                       {Number(f.dette ?? 0).toLocaleString('fr-FR')} F
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => fetchHistory(f)}
-                            className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600"
+                            className="rounded-xl p-2 text-slate-600 hover:bg-white hover:text-blue-600 hover:shadow-md transition-all"
                             title="Historique des opérations"
                           >
-                            <Clock className="h-4 w-4" />
+                            <Clock className="h-5 w-5" />
                           </button>
                           {Number(f.dette ?? 0) > 0 && (
                             <button
                               onClick={() => openPaymentModal(f)}
-                              className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
-                              title="Régler / Payer fournisseur"
+                              className="rounded-xl p-2 text-emerald-600 hover:bg-white hover:shadow-md transition-all"
+                              title="Payer fournisseur"
                             >
-                              <DollarSign className="h-4 w-4" />
+                              <DollarSign className="h-5 w-5" />
                             </button>
                           )}
                           <button
                             onClick={() => openForm(f)}
-                            className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-orange-600"
+                            className="rounded-xl p-2 text-slate-600 hover:bg-white hover:text-orange-600 hover:shadow-md transition-all"
                             title="Modifier"
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-5 w-5" />
                           </button>
                         {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                           <button
                             onClick={() => handleDelete(f)}
-                            className="rounded p-1.5 text-red-600 hover:bg-red-50"
-                            title="Supprimer définitivement (Super Admin)"
+                            className="rounded-xl p-2 text-rose-600 hover:bg-rose-50 transition-all"
+                            title="Supprimer"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-5 w-5" />
                           </button>
                         )}
                       </div>

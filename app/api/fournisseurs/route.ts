@@ -73,14 +73,14 @@ export async function GET(request: NextRequest) {
     // 1. Dettes Globales (Achats VALIDE)
     const Dettes_Globales = await prisma.achat.groupBy({
       by: ['fournisseurId'],
-      where: { fournisseurId: { in: fournisseurIds }, statut: 'VALIDE' },
+      where: { fournisseurId: { in: fournisseurIds }, statut: { in: ['VALIDEE', 'VALIDE'] } },
       _sum: { montantTotal: true },
     })
     
     // 2. Paiements Globaux (Règlements VALIDE)
     const Paiements_Globaux = await prisma.reglementAchat.groupBy({
       by: ['fournisseurId'],
-      where: { fournisseurId: { in: fournisseurIds }, statut: 'VALIDE' },
+      where: { fournisseurId: { in: fournisseurIds }, statut: { in: ['VALIDEE', 'VALIDE'] } },
       _sum: { montant: true }
     })
 

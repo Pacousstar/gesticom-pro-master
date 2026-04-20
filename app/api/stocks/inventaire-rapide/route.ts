@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { verifierCloture } from '@/lib/cloture'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -12,6 +13,9 @@ export async function POST(request: NextRequest) {
     if (!produitId || !magasinId || nouvelleQuantite === undefined) {
       return NextResponse.json({ error: 'Données manquantes' }, { status: 400 })
     }
+
+    // VERROU DE CLÔTURE (On vérifie la date du jour pour un inventaire)
+    await verifierCloture(new Date(), session)
 
     const res = await prisma.$transaction(async (tx) => {
       // 1. Récupérer l'ancien stock
@@ -40,7 +44,7 @@ export async function POST(request: NextRequest) {
           entiteId: session.entiteId || 1,
           utilisateurId: session.userId,
           quantite: Math.abs(difference),
-          observation: observation || `Inventaire Rapide - Régularisation (${ancienneQte} -> ${nouvelleQuantite})`,
+          observation: observation || `[INVENTAIRE] Régularisation (${ancienneQte} -> ${nouvelleQuantite})`,
           dateOperation: new Date()
         }
       })

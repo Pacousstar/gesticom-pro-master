@@ -217,16 +217,20 @@ export async function GET(request: NextRequest) {
       prisma.reglementVente.aggregate({
         where: {
           date: { gte: deb, lte: fin },
-          statut: 'VALIDE',
-          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
+          statut: { in: ['VALIDEE', 'VALIDE'] },
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
+             utilisateur: { entiteId }
+          } : {}),
         },
         _sum: { montant: true }
       }),
       prisma.reglementVente.aggregate({
         where: {
           date: { gte: debPrecedent, lte: finPrecedent },
-          statut: 'VALIDE',
-          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
+          statut: { in: ['VALIDEE', 'VALIDE'] },
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
+             utilisateur: { entiteId }
+          } : {}),
         },
         _sum: { montant: true }
       })

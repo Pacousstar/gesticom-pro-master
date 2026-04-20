@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
               utilisateurId: session.userId,
               montant: montantPaye,
               type: 'SORTIE',
-              motif: `Dépense : ${libelle}${beneficiaire ? ' (' + beneficiaire + ')' : ''}`,
+              motif: `Dépense #${d.id} : ${libelle}${beneficiaire ? ' (' + beneficiaire + ')' : ''}`,
               date
             }
           })
@@ -251,10 +251,10 @@ export async function POST(request: NextRequest) {
               entiteId,
               date,
               type: 'DEPENSE',
-              libelle: `Dépense : ${libelle}`,
+              libelle: `Dépense #${d.id} : ${libelle}`,
               montant: montantPaye,
               utilisateurId: session.userId,
-              reference: pieceJustificative || `EXP-${Date.now()}`,
+              reference: pieceJustificative || `EXP-${d.id}`,
               observation: observation
             }, tx)
           }

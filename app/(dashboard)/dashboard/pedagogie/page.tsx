@@ -166,7 +166,58 @@ const PEDAGOGIE_DATA: MenuSection[] = [
         example: "Si vous avez une base de 1 200 clients identifiés pour vos programmes de fidélité ou vos factures.",
         analysis: "Votre base client est votre plus grand actif. Il coûte 5 fois plus cher d'acquérir un nouveau client que de fidéliser un existant. Exploitez vos fiches clients pour de la relance !",
         color: 'cyan'
+      },
+      {
+        id: 'dettes_fourn_dash',
+        title: "Dettes Fournisseurs",
+        icon: Scale,
+        what: "C'est le montant total des factures d'achat que vous n'avez pas encore réglées à vos partenaires.",
+        how: "Somme des restes à payer sur toutes les factures fournisseurs validées.",
+        example: "Si vous devez 500 000 F à un fournisseur A et 300 000 F à un fournisseur B, votre dette est de 800 000 F.",
+        analysis: "Une dette maîtrisée est un levier, mais une dette trop élevée par rapport à votre cash peut bloquer vos futurs approvisionnements.",
+        color: 'red'
+      },
+      {
+        id: 'creances_clients_dash',
+        title: "Créances Clients",
+        icon: UserCheck,
+        what: "C'est l'argent que vos clients vous doivent suite à des ventes effectuées à crédit.",
+        how: "Somme des restes à percevoir sur toutes les factures clients.",
+        example: "Un client a pris pour 100 000 F de marchandise et a promis de payer dans 15 jours.",
+        analysis: "C'est de la trésorerie 'dehors'. Plus ce chiffre est élevé, plus vous devez être rigoureux dans vos relances pour éviter les impayés.",
+        color: 'emerald'
+      },
+      {
+        id: 'liq_totale_dash',
+        title: "Liquidité Totale",
+        icon: Landmark,
+        what: "C'est la somme de tout l'argent immédiatement disponible, que ce soit en caisse physique ou sur vos comptes bancaires/mobiles.",
+        how: "Solde Caisse + Solde Banques + Solde Mobile Money.",
+        example: "200k en caisse + 800k en banque = 1 000 000 F de liquidité totale.",
+        analysis: "C'est votre réserve de sécurité. Elle doit toujours être supérieure à vos dettes immédiates pour garantir la survie de l'entreprise.",
+        color: 'blue'
+      },
+      {
+        id: 'en_caisse_dash',
+        title: "En Caisse (Cash)",
+        icon: Banknote,
+        what: "Représente uniquement l'argent liquide (billets et pièces) présent physiquement dans vos tiroirs-caisses.",
+        how: "Solde théorique du journal de caisse après toutes les entrées et sorties.",
+        example: "Le soir après la fermeture, vous comptez 150 000 F dans le tiroir.",
+        analysis: "Le cash est volatil. Un contrôle quotidien (arrêté de caisse) est indispensable pour éviter les erreurs ou les fuites.",
+        color: 'orange'
+      },
+      {
+        id: 'banque_mm_dash',
+        title: "Banque & Mobile Money",
+        icon: Zap,
+        what: "C'est l'argent stocké sur vos comptes digitaux (Banques classiques et services comme Wave ou Orange Money).",
+        how: "Somme des soldes de tous les comptes financiers hors caisse physique.",
+        example: "Vous avez 500 000 F sur le compte Wave et 2 000 000 F à la banque.",
+        analysis: "Ces fonds sont plus sécurisés que le cash et facilitent les règlements fournisseurs de gros montants.",
+        color: 'indigo'
       }
+
     ]
   },
   {
@@ -996,7 +1047,112 @@ const PEDAGOGIE_DATA: MenuSection[] = [
         color: 'indigo'
       }
     ]
+  },
+  {
+    id: 'analytique_mouvements',
+    label: '📦 Mouvements de Stock',
+    icon: RefreshCw,
+    description: 'Analyse physique des flux de marchandises entrants et sortants.',
+    counters: [
+      {
+        id: 'stock_entrees_periode',
+        title: "Total Entrées",
+        icon: ArrowRight,
+        what: "Volume total de marchandises réceptionnées en magasin (Achats, Retours clients, Transferts Entrants).",
+        how: "Somme des quantités de tous les mouvements de type 'Entrée' sur la période.",
+        example: "Réception de 500 cartons de jus cette semaine.",
+        analysis: "Indique l'intensité du réapprovisionnement. Doit être corrélé à la capacité de stockage et aux prévisions de vente.",
+        color: 'emerald'
+      },
+      {
+        id: 'stock_sorties_periode',
+        title: "Total Sorties",
+        icon: ArrowLeft,
+        what: "Volume total de marchandises ayant quitté le magasin (Ventes, Pertes, Transferts Sortants).",
+        how: "Somme des quantités de tous les mouvements de type 'Sortie'.",
+        example: "Vente de 450 cartons de jus sur la même période.",
+        analysis: "Mesure la vitesse de vidage des rayons. Une sortie forte sans vente (perte/casse) doit être auditée immédiatement.",
+        color: 'orange'
+      },
+      {
+        id: 'stock_flux_net',
+        title: "Flux Net Stock",
+        icon: Scale,
+        what: "Différence entre ce qui est entré et ce qui est sorti. Indique si votre stock global augmente ou diminue.",
+        how: "Total Entrées - Total Sorties.",
+        example: "500 entrées - 450 sorties = +50 articles en stock supplémentaire.",
+        analysis: "Un flux net positif permanent peut mener à un surstockage coûteux. Un flux net négatif constant mène à la rupture.",
+        color: 'blue'
+      }
+    ]
+  },
+  {
+    id: 'analytique_paiements',
+    label: '💳 État des Paiements',
+    icon: Wallet,
+    description: 'Synthèse financière de l\'équilibre entre facturation et encaissement/décaissement.',
+    counters: [
+      {
+        id: 'paiements_montant_total',
+        title: "Montant Total (TTC)",
+        icon: Target,
+        what: "La valeur totale de toutes les transactions facturées (Ventes ou Achats) incluant les taxes.",
+        how: "Somme des montants TTC des factures de la sélection.",
+        example: "Une vente de 1 000 000 F TTC (incluant 18% de TVA par exemple).",
+        analysis: "C'est votre base d'engagement financier. C'est le montant que vous DEVEZ percevoir ou payer au total.",
+        color: 'orange'
+      },
+      {
+        id: 'paiements_total_regle',
+        title: "Total Réglé",
+        icon: ShieldCheck,
+        what: "La part du montant total qui a déjà fait l'objet d'un paiement réel (partiel ou total).",
+        how: "Somme de tous les règlements liés aux factures de la sélection.",
+        example: "Sur 1 000 000 F facturés, le client a déjà versé 600 000 F.",
+        analysis: "C'est l'argent déjà sécurisé en trésorerie. Il permet de mesurer l'avancement de la collecte de cash.",
+        color: 'emerald'
+      },
+      {
+        id: 'paiements_solde_du',
+        title: "Reste à Payer (Solde)",
+        icon: Scale,
+        what: "Le reliquat financier qu'il reste à liquider pour solder les transactions.",
+        how: "Montant Total - Total Réglé.",
+        example: "Il reste 400 000 F à payer ou encaisser sur cette transaction.",
+        analysis: "C'est votre risque ou votre dette. Ce chiffre doit être surveillé pour éviter les retards de paiement prolongés.",
+        color: 'red'
+      }
+    ]
+  },
+  {
+    id: 'analytique_rentabilite',
+    label: '📈 Rentabilité',
+    icon: TrendingUp,
+    description: 'Analyse de la performance bénéficiaire réelle de votre activité.',
+    counters: [
+      {
+        id: 'rentabilite_marge_globale',
+        title: "Marge Globale",
+        icon: Calculator,
+        what: "Le bénéfice brut réalisé après avoir soustrait le coût d'achat (PAMP) du prix de vente.",
+        how: "CA HT - Coût des Marchandises Vendues (PAMP).",
+        example: "Article vendu 1 000 F, acheté 600 F. Marge = 400 F.",
+        analysis: "C'est ce qui reste pour payer vos charges fixes (loyer, salaires). Si elle est négative, vous vendez à perte !",
+        color: 'emerald'
+      },
+      {
+        id: 'rentabilite_taux_moyen',
+        title: "Taux Moyen (%)",
+        icon: PieChart,
+        what: "Le pourcentage de bénéfice réalisé sur chaque franc de chiffre d'affaires. Mesure l'efficacité de votre prix.",
+        how: "(Marge / CA HT) x 100.",
+        example: "400 F de marge sur 1 000 F de vente = 40% de taux de marge.",
+        analysis: "Permet de comparer la performance de différents magasins ou périodes indépendamment de leur volume de vente.",
+        color: 'purple'
+      }
+    ]
   }
+
 ]
 
 export default function PedagogiePage() {

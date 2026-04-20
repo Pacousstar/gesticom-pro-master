@@ -49,8 +49,6 @@ export default function TousLesAchatsPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const { error: showError } = useToast()
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
   const [printType, setPrintType] = useState<'GLOBAL' | 'DETAIL' | null>(null)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
@@ -112,9 +110,12 @@ export default function TousLesAchatsPage() {
     fetchData(startDate, endDate)
   }
 
-  const handleOpenPreview = (type: 'GLOBAL' | 'DETAIL') => {
+  const handlePrint = (type: 'GLOBAL' | 'DETAIL') => {
     setPrintType(type)
-    setIsPreviewOpen(true)
+    setTimeout(() => {
+      window.print()
+      setPrintType(null)
+    }, 500)
   }
 
   const filteredData = data.filter(a => 
@@ -151,22 +152,20 @@ export default function TousLesAchatsPage() {
             </div>
             <div className="flex gap-3 no-print">
                <button 
-                onClick={() => handleOpenPreview('GLOBAL')}
+                onClick={() => handlePrint('GLOBAL')}
                 className="flex items-center gap-2 rounded-xl bg-indigo-600 border-2 border-indigo-400 px-6 py-3 text-sm font-black text-white hover:bg-indigo-700 transition-all uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50"
+                disabled={printType !== null}
               >
-                <Printer className="h-4 w-4" />
-                IMPRIMER JOURNAL
+                {printType === 'GLOBAL' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                JOURNAL GLOBAL
               </button>
-              <button 
-                onClick={() => {
-                  let url = `/api/achats/export?dateDebut=${startDate}&dateFin=${endDate}`
-                  if (search) url += `&search=${encodeURIComponent(search)}`
-                  window.open(url, '_blank')
-                }}
-                className="flex items-center gap-2 rounded-xl bg-white border-2 border-slate-200 px-6 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 transition-all uppercase tracking-widest shadow-xl active:scale-95"
+               <button 
+                onClick={() => handlePrint('DETAIL')}
+                className="flex items-center gap-2 rounded-xl bg-gray-900 border-2 border-gray-700 px-6 py-3 text-sm font-black text-white hover:bg-black transition-all uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50"
+                disabled={printType !== null}
               >
-                <Download className="h-4 w-4 text-emerald-600" />
-                EXPORTER EXCEL
+                {printType === 'DETAIL' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                JOURNAL DÉTAILLÉ
               </button>
             </div>
           </div>
@@ -180,12 +179,11 @@ export default function TousLesAchatsPage() {
         {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
-              title={printType === 'GLOBAL' ? "Journal Global des Achats" : "Journal Détaillé des Achats"}
-              subtitle={`Rapport des approvisionnements - Période du ${startDate} au ${endDate}`}
+              title="Journal Global des Achats"
+              subtitle="Rapport des approvisionnements"
+              dateRange={{ start: startDate, end: endDate }}
               pageNumber={index + 1}
               totalPages={allChunks.length}
-              layout={printLayout}
-              enterprise={entreprise}
             >
               <table className="w-full text-[14px] border-collapse border border-gray-300">
                 <thead>
@@ -261,10 +259,9 @@ export default function TousLesAchatsPage() {
             <ListPrintWrapper
               title="Journal Détaillé des Achats"
               subtitle="Détail des achats comprenant les produits"
+              dateRange={{ start: startDate, end: endDate }}
               pageNumber={index + 1}
               totalPages={allChunks.length}
-              layout={printLayout}
-              enterprise={entreprise}
             >
               <table className="w-full text-[14px] border-collapse border border-gray-300">
                 <thead>
@@ -498,143 +495,6 @@ export default function TousLesAchatsPage() {
         achatId={editingAchatId || 0}
         onSuccess={() => fetchData(startDate, endDate)}
       />
-
-      {/* MODALE D'APERÇU IMPRESSION ACHATS (ZenPrint) */}
-      {isPreviewOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-md no-print font-sans text-slate-900 uppercase italic tracking-tighter">
-          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl not-italic tracking-normal">
-              <div className="flex items-center gap-6">
-                 <div>
-                   <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Journal des Achats</h2>
-                   <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
-                     {printType === 'GLOBAL' ? 'Consolidation des Approvisionnements' : 'Détails des Articles par Facture'}
-                   </p>
-                 </div>
-                 <div className="h-10 w-px bg-gray-200" />
-                 <div className="flex items-center gap-4">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-black text-blue-600 italic uppercase">Période : {new Date(startDate).toLocaleDateString()}</span>
-                      <span className="text-xs font-black text-blue-600 italic uppercase">jusqu'au : {new Date(endDate).toLocaleDateString()}</span>
-                    </div>
-                    <div className="h-10 w-px bg-gray-200" />
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
-                      <select 
-                        value={printLayout}
-                        onChange={(e) => setPrintLayout(e.target.value as any)}
-                        className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
-                      >
-                        <option value="portrait">Portrait</option>
-                        <option value="landscape">Paysage</option>
-                      </select>
-                    </div>
-                 </div>
-              </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setIsPreviewOpen(false)}
-                  className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
-                >
-                  Fermer
-                </button>
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
-                >
-                  <Printer className="h-4 w-4" />
-                  Imprimer
-                </button>
-              </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-              <div className={`mx-auto shadow-2xl bg-white ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} min-h-screen p-4 text-slate-900 not-italic tracking-normal`}>
-                  {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
-                      <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
-                          <ListPrintWrapper
-                              title={printType === 'GLOBAL' ? "Journal Global des Achats" : "Journal Détaillé des Achats"}
-                              subtitle={`Période du ${new Date(startDate).toLocaleDateString()} au ${new Date(endDate).toLocaleDateString()}`}
-                              pageNumber={index + 1}
-                              totalPages={allChunks.length}
-                              layout={printLayout}
-                              enterprise={entreprise}
-                          >
-                             {/* Injection dynamique du contenu selon le type */}
-                             {printType === 'GLOBAL' ? (
-                               <table className="w-full text-[13px] border-collapse border-2 border-black font-sans">
-                                 <thead>
-                                   <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                                     <th className="border border-black px-3 py-3 text-left">Réf / Date</th>
-                                     <th className="border border-black px-3 py-3 text-left w-1/4">Fournisseur</th>
-                                     <th className="border border-black px-3 py-3 text-center">Paiement</th>
-                                     <th className="border border-black px-3 py-3 text-right">Montant</th>
-                                     <th className="border border-black px-3 py-3 text-right">Versé</th>
-                                     <th className="border border-black px-3 py-3 text-right">Solde</th>
-                                   </tr>
-                                 </thead>
-                                 <tbody>
-                                   {chunk.map((a) => (
-                                     <tr key={a.id} className="border-b border-black">
-                                       <td className="border border-black px-3 py-2">
-                                         <span className="font-black text-blue-800">{a.numero}</span><br/>
-                                         {new Date(a.date).toLocaleDateString('fr-FR')}
-                                       </td>
-                                       <td className="border border-black px-3 py-2 font-black uppercase text-gray-700">{a.fournisseur}</td>
-                                       <td className="border border-black px-3 py-2 text-center text-[10px] font-black uppercase">{a.modePaiement}</td>
-                                       <td className="border border-black px-3 py-2 text-right font-black">{a.montantTotal.toLocaleString()} F</td>
-                                       <td className="border border-black px-3 py-2 text-right text-emerald-700 font-bold">{a.montantPaye.toLocaleString()} F</td>
-                                       <td className="border border-black px-3 py-2 text-right font-black text-rose-700 bg-rose-50/10">{(a.montantTotal - a.montantPaye).toLocaleString()} F</td>
-                                     </tr>
-                                   ))}
-                                 </tbody>
-                                 {index === allChunks.length - 1 && (
-                                   <tfoot>
-                                     <tr className="bg-gray-50 font-black text-[14px] border-t-2 border-black tracking-widest leading-none">
-                                       <td colSpan={3} className="border border-black px-3 py-4 text-right bg-white shadow-inner uppercase italic">Volume Global Transactions :</td>
-                                       <td className="border border-black px-3 py-4 text-right bg-white text-blue-900 underline decoration-double">{caMonth.toLocaleString()} F</td>
-                                       <td className="border border-black px-3 py-4 text-right bg-white text-emerald-800 underline decoration-double">{decaisseMonth.toLocaleString()} F</td>
-                                       <td className="border border-black px-3 py-4 text-right bg-rose-50 text-rose-800 underline decoration-double shadow-2xl">{(caMonth - decaisseMonth).toLocaleString()} F</td>
-                                     </tr>
-                                   </tfoot>
-                                 )}
-                               </table>
-                             ) : (
-                               <table className="w-full text-[13px] border-collapse border-2 border-black font-sans">
-                                 <thead>
-                                   <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                                     <th className="border border-black px-2 py-3 text-left w-24">Référence</th>
-                                     <th className="border border-black px-2 py-3 text-left w-1/4">Fournisseur</th>
-                                     <th className="border border-black px-2 py-3 text-left">Détail des Produits</th>
-                                     <th className="border border-black px-2 py-3 text-right w-28">Net à Payer</th>
-                                   </tr>
-                                 </thead>
-                                 <tbody>
-                                   {chunk.map((a) => (
-                                     <tr key={a.id} className="border-b border-black">
-                                       <td className="border border-black px-2 py-2 font-black text-blue-800 text-[11px]">{a.numero}</td>
-                                       <td className="border border-black px-2 py-2 font-black uppercase text-[11px] leading-tight">{a.fournisseur}</td>
-                                       <td className="border border-black px-2 py-2 text-[10px] italic font-medium text-gray-600 leading-none">{(a as any).produits || '-'}</td>
-                                       <td className="border border-black px-2 py-2 text-right font-black text-[14px] tabular-nums">{a.montantTotal.toLocaleString()} F</td>
-                                     </tr>
-                                   ))}
-                                 </tbody>
-                                 {index === allChunks.length - 1 && (
-                                   <tfoot>
-                                     <tr className="bg-emerald-950 text-white font-black text-[16px] border-t-4 border-black uppercase italic shadow-2xl">
-                                       <td colSpan={3} className="border border-black px-4 py-6 text-right tracking-[0.2em] bg-emerald-950">TOTAL CUMULÉ DES APPROVISIONNEMENTS :</td>
-                                       <td className="border border-black px-4 py-6 text-right bg-emerald-900 shadow-inner tabular-nums">{caMonth.toLocaleString()} FCFA</td>
-                                     </tr>
-                                   </tfoot>
-                                 )}
-                               </table>
-                             )}
-                          </ListPrintWrapper>
-                      </div>
-                  ))}
-              </div>
-          </div>
-        </div>
-      )}
 
     </div>
   )

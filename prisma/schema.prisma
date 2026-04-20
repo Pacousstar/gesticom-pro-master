@@ -359,6 +359,7 @@ model Parametre {
   logoLocal           String?
   registreCommerce    String?
   mentionSpeciale     String?  @default("Les produits sortis du magasin ne seront plus repris. Veuillez exiger votre facture avant de partir.")
+  dateCloture         DateTime?
 }
 
 model Vente {
@@ -378,6 +379,7 @@ model Vente {
   modePaiement   String
   pointsGagnes   Int              @default(0)
   statut         String           @default("VALIDEE")
+  estVenteRapide Boolean          @default(false)
   observation    String?
   numeroBon      String?
   dateOperation  DateTime         @default(now())

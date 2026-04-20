@@ -24,8 +24,7 @@ export async function GET(request: NextRequest) {
         by: ['modePaiement'],
         where: {
           date: { gte: deb, lte: fin },
-          // Filtrage par entité via la vente ou l'utilisateur créateur (plus sûr)
-          // Note: Si venteId est null, on se rabat sur le magasin du règlement via l'utilisateur
+          statut: { in: ['VALIDE', 'VALIDEE'] },
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
             utilisateur: { entiteId }
           } : {}),
@@ -37,6 +36,7 @@ export async function GET(request: NextRequest) {
       const transactions = await prisma.reglementVente.findMany({
         where: {
           date: { gte: deb, lte: fin },
+          statut: { in: ['VALIDE', 'VALIDEE'] },
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
             utilisateur: { entiteId }
           } : {}),
@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
         by: ['modePaiement'],
         where: {
           date: { gte: deb, lte: fin },
+          statut: { in: ['VALIDE', 'VALIDEE'] },
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
             utilisateur: { entiteId }
           } : {}),
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
       const transactions = await prisma.reglementAchat.findMany({
         where: {
           date: { gte: deb, lte: fin },
+          statut: { in: ['VALIDE', 'VALIDEE'] },
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
             utilisateur: { entiteId }
           } : {}),

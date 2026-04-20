@@ -4,7 +4,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { comptabiliserReglementAchat } from '@/lib/comptabilisation'
-import { enregistrerMouvementCaisse, estModeEspeces } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/caisse'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -39,7 +40,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire pour un règlement en espèces.' }, { status: 400 })
     }
 
-    const entiteId = session.entiteId || 1
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
 
     const res = await prisma.$transaction(async (tx: any) => {
       // --- VERROU SÉMANTIQUE (Idempotence) ---
@@ -60,8 +64,27 @@ export async function POST(request: NextRequest) {
       }
 
       const a = achatId ? await tx.achat.findUnique({ where: { id: achatId } }) : null
+      if (a && a.entiteId !== entiteId) {
+        throw new Error('Accès refusé à cette facture (entité différente).')
+      }
       const targetFournisseurId = achatId ? a?.fournisseurId : fournisseurId
       if (!targetFournisseurId) throw new Error('Fournisseur introuvable')
+
+      const fournisseur = await tx.fournisseur.findUnique({
+        where: { id: targetFournisseurId },
+        select: { id: true, entiteId: true }
+      })
+      if (!fournisseur) throw new Error('Fournisseur introuvable')
+      if (fournisseur.entiteId && fournisseur.entiteId !== entiteId) {
+        throw new Error('Accès refusé à ce fournisseur (entité différente).')
+      }
+
+      if (achatId && a) {
+        const resteAPayer = Math.max(0, (a.montantTotal || 0) - (a.montantPaye || 0))
+        if (montant - resteAPayer > 0.01) {
+          throw new Error(`Paiement invalide: le montant (${montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
+        }
+      }
 
       const reglement = await tx.reglementAchat.create({
         data: {
@@ -77,7 +100,7 @@ export async function POST(request: NextRequest) {
       })
 
       if (achatId && a) {
-        const nouveauMontantPaye = (a.montantPaye || 0) + montant
+        const nouveauMontantPaye = Math.min(a.montantTotal, (a.montantPaye || 0) + montant)
         const nouveauStatutPaiement = nouveauMontantPaye >= a.montantTotal - 0.01 ? 'PAYE' : 'PARTIEL'
         await tx.achat.update({
           where: { id: achatId },

@@ -57,8 +57,6 @@ export default function CommandesFournisseursPage() {
   const [loadingDetail, setLoadingDetail] = useState<number | null>(null)
   const [transforming, setTransforming] = useState<number | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [searchBC, setSearchBC] = useState('')
-  const [filtreStatutBC, setFiltreStatutBC] = useState('')
 
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printData, setPrintData] = useState<TemplateData | null>(null)
@@ -216,10 +214,7 @@ export default function CommandesFournisseursPage() {
   const fetchCommandes = (page?: number) => {
     setLoading(true)
     const p = page ?? currentPage
-    const params = new URLSearchParams({ page: String(p), limit: '20' })
-    if (searchBC.trim()) params.set('search', searchBC.trim())
-    if (filtreStatutBC) params.set('statut', filtreStatutBC)
-    fetch(`/api/commandes-fournisseurs?${params.toString()}`)
+    fetch(`/api/commandes-fournisseurs?page=${p}&limit=20`)
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((res) => {
         setCommandes(res.data)
@@ -227,11 +222,6 @@ export default function CommandesFournisseursPage() {
       })
       .finally(() => setLoading(false))
   }
-
-  useEffect(() => {
-    setCurrentPage(1)
-    fetchCommandes(1)
-  }, [searchBC, filtreStatutBC])
 
   const addLigne = () => {
     const pid = Number(ajoutProduit.produitId)
@@ -265,22 +255,12 @@ export default function CommandesFournisseursPage() {
       const url = editingId ? `/api/commandes-fournisseurs/${editingId}` : '/api/commandes-fournisseurs'
       const method = editingId ? 'PATCH' : 'POST'
       
-      // L-3: Recalculer les montants de chaque ligne avant envoi pour garantir la cohérence
-      const lignesVerifiees = formData.lignes.map((l) => ({
-        ...l,
-        quantite: Math.max(0, Number(l.quantite) || 0),
-        prixUnitaire: Math.max(0, Number(l.prixUnitaire) || 0),
-        montant: Math.max(0, Number(l.quantite) || 0) * Math.max(0, Number(l.prixUnitaire) || 0),
-      }))
-      const montantTotal = lignesVerifiees.reduce((acc, l) => acc + l.montant, 0)
-
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          lignes: lignesVerifiees,
-          montantTotal,
+          montantTotal: formData.lignes.reduce((acc, l) => acc + l.montant, 0)
         })
       })
       
@@ -571,40 +551,6 @@ export default function CommandesFournisseursPage() {
           </form>
         </div>
       )}
-
-      {/* L-4: Barre de recherche et filtre de statut */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
-          <input
-            type="text"
-            placeholder="Rechercher un BC (numéro, fournisseur, magasin)..."
-            value={searchBC}
-            onChange={(e) => setSearchBC(e.target.value)}
-            className="w-full rounded-xl border border-white/20 bg-white/10 py-2 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:border-orange-400 focus:outline-none backdrop-blur-md"
-          />
-        </div>
-        <select
-          value={filtreStatutBC}
-          onChange={(e) => setFiltreStatutBC(e.target.value)}
-          className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur-md focus:border-orange-400 focus:outline-none"
-        >
-          <option value="" className="bg-gray-800">Tous les statuts</option>
-          <option value="BROUILLON" className="bg-gray-800">Brouillon</option>
-          <option value="ENVOYEE" className="bg-gray-800">Envoyée</option>
-          <option value="RECUE" className="bg-gray-800">Reçue</option>
-          <option value="ANNULEE" className="bg-gray-800">Annulée</option>
-        </select>
-        {(searchBC || filtreStatutBC) && (
-          <button
-            type="button"
-            onClick={() => { setSearchBC(''); setFiltreStatutBC('') }}
-            className="rounded-xl border border-red-400/50 bg-red-500/20 px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/30 transition-all"
-          >
-            Réinitialiser
-          </button>
-        )}
-      </div>
 
       <div className="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl overflow-hidden">
         {loading ? (

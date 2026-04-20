@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
+import { verifierCloture } from '@/lib/cloture'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import { logSuppression, getIpAddress } from '@/lib/audit'
 
 export async function GET(
   _request: NextRequest,
@@ -54,7 +57,7 @@ export async function PATCH(
     const entiteId = await getEntiteId(session)
     const oldCharge = await prisma.charge.findUnique({ where: { id } })
     if (!oldCharge) return NextResponse.json({ error: 'Charge introuvable.' }, { status: 404 })
-    
+
     // Sécurité Multi-Entité
     if (session.role !== 'SUPER_ADMIN' && oldCharge.entiteId !== entiteId) {
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
@@ -93,14 +96,19 @@ export async function PATCH(
       return NextResponse.json({ error: 'Aucune donnée à mettre à jour.' }, { status: 400 })
     }
 
-    const charge = await prisma.charge.update({
-      where: { id },
-      data: updateData,
-      include: {
-        magasin: { select: { code: true, nom: true } },
-        entite: { select: { code: true, nom: true } },
-        utilisateur: { select: { nom: true, login: true } },
-      },
+    const charge = await prisma.$transaction(async (tx) => {
+      // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
+      await verifierCloture(oldCharge.date, session, tx)
+
+      return await tx.charge.update({
+        where: { id },
+        data: updateData,
+        include: {
+          magasin: { select: { code: true, nom: true } },
+          entite: { select: { code: true, nom: true } },
+          utilisateur: { select: { nom: true, login: true } },
+        },
+      })
     })
 
     return NextResponse.json(charge)
@@ -128,20 +136,74 @@ export async function DELETE(
       return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
     }
 
-    const entiteId = await getEntiteId(session)
-    const charge = await prisma.charge.findUnique({ where: { id } })
-    if (!charge) return NextResponse.json({ error: 'Charge introuvable.' }, { status: 404 })
+    await prisma.$transaction(async (tx) => {
+      const entiteId = await getEntiteId(session)
+      const charge = await tx.charge.findUnique({ where: { id } })
+      if (!charge) throw new Error('Charge introuvable.')
 
-    // Sécurité Multi-Entité
-    if (session.role !== 'SUPER_ADMIN' && charge.entiteId !== entiteId) {
-       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
-    }
+      // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
+      await verifierCloture(charge.date, session, tx)
 
-    await deleteEcrituresByReference('CHARGE', id)
-    await prisma.charge.delete({ where: { id } })
+      // Sécurité Multi-Entité
+      if (session.role !== 'SUPER_ADMIN' && charge.entiteId !== entiteId) {
+        throw new Error('Non autorisé : Cette charge ne vous appartient pas.')
+      }
+
+      // 1. Nettoyer compta (Grand Livre)
+      await deleteEcrituresByReference('CHARGE', id, tx)
+
+      // 2. Nettoyage Trésorerie : CAISSE
+      // On cherche les sorties caisse dont le motif correspond au libellé/rubrique de la charge
+      await tx.caisse.deleteMany({
+        where: {
+          entiteId: charge.entiteId,
+          type: 'SORTIE',
+          OR: [
+            { motif: { contains: charge.rubrique } },
+            { motif: { contains: charge.beneficiaire ?? '___X___' } },
+          ]
+        }
+      })
+
+      // 3. Nettoyage Trésorerie : BANQUE
+      // On cherche les opérations bancaires liées à cette entité dont le libellé contient la rubrique
+      const opsBancaires = await tx.operationBancaire.findMany({
+        where: {
+          libelle: { contains: charge.rubrique },
+          banque: { entiteId: charge.entiteId }
+        }
+      })
+
+      for (const op of opsBancaires) {
+        // Rollback du solde bancaire (la charge était une sortie, on réincrémente)
+        await tx.banque.update({
+          where: { id: op.banqueId },
+          data: { soldeActuel: { increment: op.montant } }
+        })
+        await tx.operationBancaire.delete({ where: { id: op.id } })
+      }
+
+      // 4. Supprimer la charge
+      await tx.charge.delete({ where: { id } })
+
+      // 5. LOG D'AUDIT
+      await logSuppression(
+        session,
+        'CHARGE',
+        id,
+        `SUPPRESSION : Charge "${charge.rubrique}" (${charge.montant} F) annulée avec régul. trésorerie`,
+        { id, rubrique: charge.rubrique, montant: charge.montant, type: charge.type },
+        getIpAddress(_request)
+      )
+    }, { timeout: 20000 })
+
+    revalidatePath('/dashboard/charges')
+    revalidatePath('/api/charges')
+
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/charges/[id]:', e)
-    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+    const errorMsg = e instanceof Error ? e.message : 'Erreur lors de la suppression.'
+    return NextResponse.json({ error: errorMsg }, { status: 500 })
   }
 }

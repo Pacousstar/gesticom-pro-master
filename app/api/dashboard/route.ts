@@ -175,14 +175,14 @@ export async function GET() {
         take: 10
       }).catch(catchEmpty('systemAlerte.findMany')),
 
-      // 15 - TENDANCES MENSUELLES
+      // 15 - TENDANCES MENSUELLES (Version pour Dates en Entiers/Unix)
       prisma.$queryRaw<any[]>`
         SELECT 
-          SUBSTR(date, 1, 7) as mois,
-          SUM("montantTotal") as montant
-        FROM "Vente"
+          strftime('%Y-%m', date / 1000, 'unixepoch') as mois,
+          SUM(montantTotal) as montant
+        FROM Vente
         WHERE statut IN ('VALIDE', 'VALIDEE')
-        AND date >= date('now', '-24 month', 'start of month')
+        AND date >= ${new Date(now.getFullYear() - 2, now.getMonth(), 1).getTime()}
         ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.sql` `}
         GROUP BY mois
         ORDER BY mois ASC
@@ -301,7 +301,11 @@ export async function GET() {
     // Formattage des tendances (12 mois courants vs 12 mois précédents)
     const trends: Record<string, number> = {}
     if (Array.isArray(tendancesRaw)) {
-      tendancesRaw.forEach((t: any) => { trends[t.mois] = toNum(t.montant) })
+      tendancesRaw.forEach((t: any) => { 
+        const m = t.mois || t.MOIS
+        const val = t.montant || t.MONTANT
+        if (m) trends[m] = toNum(val) 
+      })
     }
 
     const monthlyTrends = Array.from({ length: 12 }, (_, i) => {
@@ -345,6 +349,12 @@ export async function GET() {
         stock: s.quantite || 0,
         min: s.produit_seuilMin || 0,
         category: s.produit_categorie || '',
+      })),
+      recentSales: (recentSalesRaw as any[]).map((s: any) => ({
+        id: s.id,
+        client: s.client?.nom || s.clientLibre || 'Client Inconnu',
+        montant: s.montantTotal || 0,
+        time: new Date(s.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
       })),
       systemAlertes: systemAlertesRaw || [],
       creditAlerts: (await (async () => {

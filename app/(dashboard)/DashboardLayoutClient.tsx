@@ -156,8 +156,6 @@ export default function DashboardLayoutClient({
   const pathname = usePathname()
   const router = useRouter()
   const [isServerConnected, setIsServerConnected] = useState(true)
-  const [syncQueueLength, setSyncQueueLength] = useState(0)
-  const [syncing, setSyncing] = useState(false)
   const [toutesLues, setToutesLues] = useState(false)
   const [expandedSections, setExpandedSections] = useState<string[]>(['🛒 COMMERCE']) // Commerce ouvert par défaut
   const [dailyPerformance, setDailyPerformance] = useState({ ca: 0, count: 0 })
@@ -165,15 +163,14 @@ export default function DashboardLayoutClient({
 
   // Fetch sidebar counters for reassurance in UI
   const fetchSidebarCounters = async () => {
-    if (!isServerConnected) return
     try {
       const res = await fetch('/api/maintenance/sidebar-counters')
       if (res.ok) {
         const data = await res.json()
         setSidebarCounters(data || {})
       }
-    } catch (e: any) {
-      if (e.name !== 'TypeError') console.error('Erreur fetch sidebar counters:', e)
+    } catch (e) {
+      console.error('Erreur fetch sidebar counters:', e)
     }
   }
 
@@ -185,7 +182,6 @@ export default function DashboardLayoutClient({
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
   const fetchDailyPerformance = async () => {
-    if (!isServerConnected) return
     try {
       const res = await fetch('/api/dashboard/bilan-journalier')
       if (res.ok) {
@@ -195,8 +191,8 @@ export default function DashboardLayoutClient({
           count: data.count || 0
         })
       }
-    } catch (e: any) {
-      if (e.name !== 'TypeError') console.error('Erreur fetch performance:', e)
+    } catch (e) {
+      console.error('Erreur fetch performance:', e)
     }
   }
 
@@ -242,66 +238,6 @@ export default function DashboardLayoutClient({
     return () => clearInterval(interval);
   }, [])
 
-  // Vérifier la file d'attente au chargement
-  useEffect(() => {
-    checkSyncQueue();
-  }, []);
-
-  // Vérifier la file d'attente toutes les 30 secondes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (document.hidden) return;
-      checkSyncQueue();
-      if (isServerConnected) {
-        syncPendingOperations();
-      }
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [isServerConnected]);
-
-  function checkSyncQueue() {
-    if (typeof window === 'undefined') return
-    try {
-      const queue = JSON.parse(localStorage.getItem('gesticom_sync_queue') || '[]')
-      setSyncQueueLength(queue.length)
-    } catch (e) {
-      setSyncQueueLength(0)
-    }
-  }
-
-  async function syncPendingOperations() {
-    if (typeof window === 'undefined' || !isServerConnected || syncing) return
-
-    try {
-      const queueStr = localStorage.getItem('gesticom_sync_queue')
-      if (!queueStr || queueStr === '[]') return
-
-      setSyncing(true)
-      const { syncAll } = await import('@/lib/offline-sync')
-
-      const { success, failed, errors } = await syncAll()
-
-      if (success > 0) {
-        showSuccess(`${success} élément(s) synchronisé(s) avec succès.`)
-        checkSyncQueue()
-      }
-
-      if (failed > 0) {
-        showError(`${failed} élément(s) en échec de synchronisation. Vérifiez votre connexion.`)
-        if (errors.length > 0) {
-          console.error('Détail erreurs sync:', errors)
-        }
-      }
-
-      // Mettre à jour le compteur quoi qu'il arrive
-      checkSyncQueue()
-
-    } catch (e) {
-      console.error('Erreur synchronisation:', e)
-    } finally {
-      setSyncing(false)
-    }
-  }
 
   // Charger l'entité actuelle depuis la session
   useEffect(() => {
@@ -426,7 +362,6 @@ export default function DashboardLayoutClient({
   }
 
   async function loadNotifications() {
-    if (!isServerConnected) return
     setLoadingNotifications(true)
     try {
       const res = await fetch('/api/notifications')
@@ -436,8 +371,8 @@ export default function DashboardLayoutClient({
         setNonLues(data.nonLues || 0)
         setToutesLues(false) // Réinitialiser à chaque rechargement
       }
-    } catch (e: any) {
-      if (e.name !== 'TypeError') console.error('Erreur chargement notifications:', e)
+    } catch (e) {
+      console.error('Erreur chargement notifications:', e)
     } finally {
       setLoadingNotifications(false)
     }
@@ -801,26 +736,6 @@ export default function DashboardLayoutClient({
                 <div className="flex items-center gap-2 rounded-lg bg-red-100 px-3 py-1.5 text-sm text-red-800">
                   <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse"></div>
                   <span>Serveur Déconnecté</span>
-                </div>
-              )}
-              {isServerConnected && syncQueueLength > 0 && (
-                <div className="flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-1.5 text-sm text-blue-800">
-                  {syncing ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Synchronisation...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>{syncQueueLength} en attente</span>
-                      <button
-                        onClick={syncPendingOperations}
-                        className="ml-1 rounded px-2 py-0.5 text-xs hover:bg-blue-200"
-                      >
-                        Sync
-                      </button>
-                    </>
-                  )}
                 </div>
               )}
 

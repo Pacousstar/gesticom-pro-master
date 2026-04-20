@@ -16,16 +16,21 @@ async function repareCaisses() {
          select: { type: true, montant: true }
        });
 
-       let soldeReel = 0;
-       for (const op of operations) {
-         if (op.type === 'ENTREE') soldeReel += op.montant;
-         else if (op.type === 'SORTIE') soldeReel -= op.montant;
+       const soldeReel = operations.reduce((acc, op) => {
+         return op.type === 'ENTREE' ? acc + op.montant : acc - op.montant;
+       }, 0);
+
+       // Toujours synchroniser le solde stocké avec le solde réel
+       if (Math.abs(magasin.soldeCaisse - soldeReel) > 0.01) {
+         await prisma.magasin.update({
+           where: { id: magasin.id },
+           data: { soldeCaisse: soldeReel }
+         });
        }
 
+       // Si après synchronisation c'est toujours négatif, on régularise à 0
        if (soldeReel < 0) {
          const montantReparation = Math.abs(soldeReel);
-
-         // 1. Création mouvement de caisse
          await prisma.caisse.create({
            data: {
              magasinId: magasin.id,
@@ -39,46 +44,6 @@ async function repareCaisses() {
            }
          });
 
-         // 2. Écritures comptables (OD)
-         const journalOD = await prisma.journal.findUnique({ where: { code: 'OD' } });
-         const compte531 = await prisma.planCompte.findUnique({ where: { numero: '531' } });
-         const compte101 = await prisma.planCompte.findUnique({ where: { numero: '101' } });
-
-         if (journalOD && compte531 && compte101) {
-           const commonNum = `REGUL-CAISSE-${magasin.code}-${Date.now()}`;
-           
-           // Débit Caisse (531)
-           await prisma.ecritureComptable.create({
-             data: {
-               numero: `${commonNum}-D`,
-               journalId: journalOD.id,
-               compteId: compte531.id,
-               debit: montantReparation,
-               credit: 0,
-               libelle: `Régul. Caisse ${magasin.nom} (Auto)`,
-               utilisateurId: 1,
-               entiteId: magasin.entiteId,
-               date: new Date()
-             }
-           });
-
-           // Crédit Capital (101)
-           await prisma.ecritureComptable.create({
-             data: {
-               numero: `${commonNum}-C`,
-               journalId: journalOD.id,
-               compteId: compte101.id,
-               debit: 0,
-               credit: montantReparation,
-               libelle: `Régul. Caisse ${magasin.nom} (Auto)`,
-               utilisateurId: 1,
-               entiteId: magasin.entiteId,
-               date: new Date()
-             }
-           });
-         }
-
-         // 3. Correction du champ soldeCaisse
          await prisma.magasin.update({
            where: { id: magasin.id },
            data: { soldeCaisse: 0 }
@@ -86,7 +51,7 @@ async function repareCaisses() {
        }
     }
   } catch (e) {
-    // Silence total sauf erreur critique (on pourrait loguer dans un fichier si besoin)
+    // Silence
   }
 }
 
@@ -99,18 +64,23 @@ async function repareBanques() {
         select: { type: true, montant: true }
       });
 
-      let soldeReel = 0;
-      for (const op of operations) {
+      const totalMouvements = operations.reduce((acc, op) => {
         const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(op.type);
-        if (isEntree) soldeReel += op.montant;
-        else soldeReel -= op.montant;
+        return isEntree ? acc + op.montant : acc - op.montant;
+      }, 0);
+
+      const soldeReel = banque.soldeInitial + totalMouvements;
+
+      // Toujours synchroniser
+      if (Math.abs(banque.soldeActuel - soldeReel) > 0.01) {
+        await prisma.banque.update({
+          where: { id: banque.id },
+          data: { soldeActuel: soldeReel }
+        });
       }
 
       if (soldeReel < 0) {
         const montantReparation = Math.abs(soldeReel);
-        const soldeAvant = banque.soldeActuel;
-        const soldeApres = soldeAvant + montantReparation;
-
         await prisma.operationBancaire.create({
           data: {
             banqueId: banque.id,
@@ -118,47 +88,12 @@ async function repareBanques() {
             type: 'DEPOT',
             libelle: 'Régularisation solde négatif (Auto-Maintenance)',
             montant: montantReparation,
-            soldeAvant: soldeAvant,
-            soldeApres: soldeApres,
+            soldeAvant: 0,
+            soldeApres: montantReparation,
             utilisateurId: 1,
-            observation: 'Correction automatique du solde négatif au démarrage.'
+            observation: 'Correction automatique du solde négatif.'
           }
         });
-
-        const journalOD = await prisma.journal.findUnique({ where: { code: 'OD' } });
-        const compte521 = await prisma.planCompte.findUnique({ where: { numero: '521' } });
-        const compte101 = await prisma.planCompte.findUnique({ where: { numero: '101' } });
-
-        if (journalOD && compte521 && compte101) {
-          const commonNum = `REGUL-BANQUE-${banque.id}-${Date.now()}`;
-          await prisma.ecritureComptable.create({
-            data: {
-              numero: `${commonNum}-D`,
-              journalId: journalOD.id,
-              compteId: compte521.id,
-              debit: montantReparation,
-              credit: 0,
-              libelle: `Régul. Banque ${banque.nomBanque} (Auto)`,
-              utilisateurId: 1,
-              entiteId: banque.entiteId,
-              date: new Date()
-            }
-          });
-
-          await prisma.ecritureComptable.create({
-            data: {
-              numero: `${commonNum}-C`,
-              journalId: journalOD.id,
-              compteId: compte101.id,
-              debit: 0,
-              credit: montantReparation,
-              libelle: `Régul. Banque ${banque.nomBanque} (Auto)`,
-              utilisateurId: 1,
-              entiteId: banque.entiteId,
-              date: new Date()
-            }
-          });
-        }
 
         await prisma.banque.update({
           where: { id: banque.id },
@@ -167,7 +102,107 @@ async function repareBanques() {
       }
     }
   } catch (e) {
-    // Silence total
+    // Silence
+  }
+}
+
+async function repareStocks() {
+  try {
+    const stocks = await prisma.stock.findMany();
+    for (const s of stocks) {
+      const mouvements = await prisma.mouvement.findMany({
+        where: { produitId: s.produitId, magasinId: s.magasinId },
+        select: { type: true, quantite: true }
+      });
+
+      const quantiteCalculee = mouvements.reduce((acc, m) => {
+        const isEntree = ['ENTREE', 'ACHAT', 'RETOUR_CLIENT', 'TRANSFERT_IN', 'AJUSTEMENT_POSITIF', 'INITIAL'].includes(m.type);
+        return isEntree ? acc + m.quantite : acc - m.quantite;
+      }, 0);
+
+      if (Math.abs(s.quantite - quantiteCalculee) > 0.001) {
+        await prisma.stock.update({
+          where: { id: s.id },
+          data: { quantite: quantiteCalculee }
+        });
+      }
+    }
+  } catch (e) {
+    // Silence
+  }
+}
+
+async function repareTiers() {
+  try {
+    // 1. RECALCUL DETTES CLIENTS
+    const clients = await prisma.client.findMany();
+    for (const client of clients) {
+      // Somme des ventes validées
+      const statsVentes = await prisma.vente.aggregate({
+        where: { 
+          clientId: client.id, 
+          statut: { in: ['VALIDE', 'VALIDEE'] } 
+        },
+        _sum: { montantTotal: true }
+      });
+
+      // Somme des règlements validés
+      const statsReglements = await prisma.reglementVente.aggregate({
+        where: { 
+          clientId: client.id, 
+          statut: { in: ['VALIDE', 'VALIDEE'] } 
+        },
+        _sum: { montant: true }
+      });
+
+      const totalVentes = statsVentes._sum.montantTotal || 0;
+      const totalReglements = statsReglements._sum.montant || 0;
+      const detteReelle = totalVentes - totalReglements;
+
+      // Correction si écart détecté
+      if (Math.abs((client.dette || 0) - detteReelle) > 0.1) {
+        await prisma.client.update({
+          where: { id: client.id },
+          data: { dette: detteReelle }
+        });
+      }
+    }
+
+    // 2. RECALCUL DETTES FOURNISSEURS
+    const fournisseurs = await prisma.fournisseur.findMany();
+    for (const f of fournisseurs) {
+      // Somme des achats validés
+      const statsAchats = await prisma.achat.aggregate({
+        where: { 
+          fournisseurId: f.id, 
+          statut: { in: ['VALIDE', 'VALIDEE'] } 
+        },
+        _sum: { montantTotal: true, fraisApproche: true }
+      });
+
+      // Somme des règlements validés
+      const statsReglements = await prisma.reglementAchat.aggregate({
+        where: { 
+          fournisseurId: f.id, 
+          statut: { in: ['VALIDE', 'VALIDEE'] } 
+        },
+        _sum: { montant: true }
+      });
+
+      const totalAchats = (statsAchats._sum.montantTotal || 0) + (statsAchats._sum.fraisApproche || 0);
+      const totalReglements = statsReglements._sum.montant || 0;
+      const detteReelle = totalAchats - totalReglements;
+
+      // Correction si écart détecté
+      if (Math.abs((f.dette || 0) - detteReelle) > 0.1) {
+        await prisma.fournisseur.update({
+          where: { id: f.id },
+          data: { dette: detteReelle }
+        });
+      }
+    }
+  } catch (e) {
+    // Silence
   }
 }
 
@@ -230,9 +265,11 @@ async function runMaintenance() {
       });
     }
 
-    // 3. MÉDECINE DE CAISSE & BANQUE (Auto-correction des soldes négatifs)
+    // 3. MÉDECINE FINANCIÈRE (Auto-correction + Synchronisation)
     await repareCaisses();
     await repareBanques();
+    await repareStocks();
+    await repareTiers();
 
   } catch (error) {
     // Erreurs ignorées en mode silencieux, le système continue le démarrage

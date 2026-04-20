@@ -45,14 +45,17 @@ export async function GET(request: NextRequest) {
               vente: {
                 ...whereBase,
                 date: { gte: deb, lte: fin },
-                statut: 'VALIDEE',
+                statut: { in: ['VALIDE', 'VALIDEE'] },
               },
             },
             select: { produitId: true, quantite: true },
           })
         : prisma.venteLigne.groupBy({ 
             by: ['produitId'], 
-            where: whereBase,
+            where: {
+              ...whereBase,
+              vente: { statut: { in: ['VALIDE', 'VALIDEE'] } }
+            },
             _sum: { quantite: true } 
           }),
       prisma.mouvement.findMany({

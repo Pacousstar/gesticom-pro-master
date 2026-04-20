@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   const where: any = {
     entiteId,
-    statut: 'VALIDEE',
+    statut: { in: ['VALIDE', 'VALIDEE'] },
   }
 
   if (dateDebut && dateFin) {

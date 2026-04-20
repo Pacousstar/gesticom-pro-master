@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { logSuppression, getIpAddress } from '@/lib/audit'
+import { verifierCloture } from '@/lib/cloture'
 
 export async function GET(
   _request: NextRequest,
@@ -161,6 +162,9 @@ export async function DELETE(
       const d = await tx.depense.findUnique({ where: { id } })
       if (!d) throw new Error('Dépense introuvable.')
 
+      // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
+      await verifierCloture(d.date, session, tx)
+
       // Sécurité Multi-Entité
       if (session.role !== 'SUPER_ADMIN' && d.entiteId !== entiteId) {
         throw new Error('Non autorisé : Cette dépense ne vous appartient pas.')
@@ -169,24 +173,33 @@ export async function DELETE(
       // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('DEPENSE', id, tx)
 
-      // 2. Nettoyage Trésorerie : CAISSE
-      // On cherche les mouvements de caisse type SORTIE dont le motif correspond au format standard d'une dépense
+      // 2. Nettoyage Trésorerie : CAISSE (Recherche chirurgicale par Montant + Date + Motif)
       await tx.caisse.deleteMany({
         where: {
           entiteId: d.entiteId,
           type: 'SORTIE',
+          montant: d.montantPaye || d.montant,
           OR: [
-             { motif: { contains: `Dépense : ${d.libelle}` } },
-             { motif: { contains: d.libelle } }
+             { motif: { contains: `Dépense #${id}` } }, // Format sécurisé (Nouvelles dépenses)
+             { 
+               AND: [
+                 { motif: { contains: d.libelle } },
+                 { date: d.date } // Match temporel pour les anciennes dépenses
+               ]
+             }
           ]
         }
       })
 
-      // 3. Nettoyage Trésorerie : BANQUE
-      // On cherche les opérations bancaires de cette entité dont le libellé contient le motif de la dépense
+      // 3. Nettoyage Trésorerie : BANQUE (Recherche chirurgicale par Montant + Date + Libellé)
       const opsBancaires = await tx.operationBancaire.findMany({
         where: { 
-          libelle: { contains: d.libelle },
+          montant: d.montantPaye || d.montant,
+          date: d.date,
+          OR: [
+            { libelle: { contains: `Dépense #${id}` } },
+            { libelle: { contains: d.libelle } }
+          ],
           banque: { entiteId: d.entiteId }
         }
       })
@@ -205,7 +218,7 @@ export async function DELETE(
       await tx.depense.delete({ where: { id } })
 
       // 5. LOG D'AUDIT (Correction : entiteId correct)
-      await logSuppression(session, 'DEPENSE', d.entiteId, `SUPPRESSION RADICALE : Dépense "${d.libelle}" (${d.montant} F) annulée avec régul. trésorerie`, { id, libelle: d.libelle, montant: d.montant }, getIpAddress(_request))
+      await logSuppression(session, 'DEPENSE', id, `SUPPRESSION RADICALE : Dépense "${d.libelle}" (${d.montant} F) annulée avec régul. trésorerie`, { id, libelle: d.libelle, montant: d.montant }, getIpAddress(_request))
     }, { timeout: 20000 })
 
     revalidatePath('/dashboard/depenses')

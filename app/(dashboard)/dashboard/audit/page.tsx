@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Loader2, Search, Filter, Download, Calendar, User, Activity, FileSpreadsheet, FileText, X, ChevronDown, ChevronUp, Printer } from 'lucide-react'
-import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 
@@ -43,10 +42,6 @@ export default function AuditPage() {
     dateFrom: '',
     dateTo: '',
   })
-  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
-  const [allLogsForPrint, setAllLogsForPrint] = useState<AuditLog[]>([])
-  const [isPrintingFull, setIsPrintingFull] = useState(false)
-  const [entreprise, setEntreprise] = useState<any>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   const loadLogs = async () => {
@@ -114,7 +109,6 @@ export default function AuditPage() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/parametres').then(r => r.ok && r.json()).then(setEntreprise).catch(() => {})
     setPage(1) // Réinitialiser à la page 1 quand les filtres changent
     loadLogs()
   }, [filters, searchTerm])
@@ -140,64 +134,26 @@ export default function AuditPage() {
     }
   }
 
-  const handlePrint = async () => {
-    setIsPrintingFull(true)
-    try {
-      const params = new URLSearchParams()
-      if (filters.utilisateurId) params.set('utilisateurId', filters.utilisateurId)
-      if (filters.action) params.set('action', filters.action)
-      if (filters.type) params.set('type', filters.type)
-      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
-      if (filters.dateTo) params.set('dateTo', filters.dateTo)
-      if (searchTerm) params.set('search', searchTerm)
-      params.set('limit', '10000')
-
-      const res = await fetch(`/api/audit?${params.toString()}`)
-      if (res.ok) {
-        const data = await res.json()
-        setAllLogsForPrint(data.logs || [])
-        setIsPreviewOpen(true)
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setIsPrintingFull(false)
-    }
-  }
-  const handleRestore = async (logId: number) => {
-    if (!confirm('Êtes-vous sûr de vouloir restaurer cet enregistrement ? Cela ré-incrémentera les stocks et recréera les écritures comptables.')) {
-      return
-    }
-
-    try {
-      const res = await fetch('/api/audit/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logId })
-      })
-
-      const data = await res.json()
-      if (res.ok) {
-        alert(data.message || 'Restauration réussie !')
-        loadLogs()
-      } else {
-        alert(data.error || 'Erreur lors de la restauration.')
-      }
-    } catch (e) {
-      console.error('Restore error:', e)
-      alert('Une erreur critique est survenue.')
-    }
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Journal d'audit {(filters.utilisateurId || filters.action || filters.type || filters.dateFrom || filters.dateTo || searchTerm) && <span className="ml-1" title="Filtre actif">⚠️</span>}</h1>
-          <p className="text-white/80 mt-1 text-[10px] font-bold uppercase tracking-widest opacity-80 italic">Traçabilité des actions des utilisateurs</p>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Journal d'audit</h1>
+          <p className="text-white/80 mt-1 text-[10px] font-bold uppercase tracking-widest">Traçabilité des actions des utilisateurs</p>
           {totalLogs > 0 && (
             <p className="text-white/60 mt-1 text-[9px] font-black uppercase tracking-tighter">
-              {totalLogs} TRANSACTION{totalLogs > 1 ? 'S' : ''} RÉPERTORIÉE{totalLogs > 1 ? 'S' : ''} SUR LA SÉLECTION
+              {totalLogs} TRANSACTION{totalLogs > 1 ? 'S' : ''} RÉPERTORIÉE{totalLogs > 1 ? 'S' : ''}
             </p>
           )}
         </div>
@@ -237,7 +193,7 @@ export default function AuditPage() {
             PDF
           </button>
                 <div className="hidden print:block absolute inset-0 bg-white">
-                    {chunkArray(allLogsForPrint.length > 0 ? allLogsForPrint : logs, ITEMS_PER_PRINT_PAGE).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
+                    {chunkArray(logs, ITEMS_PER_PRINT_PAGE).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
                         <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                             <ListPrintWrapper
                                 title="Journal d'Audit Transféré"
@@ -246,8 +202,6 @@ export default function AuditPage() {
                                 totalPages={allChunks.length}
                                 hideHeader={index > 0}
                                 hideVisa={index < allChunks.length - 1}
-                                layout={printLayout}
-                                enterprise={entreprise}
                             >
                                 <table className="w-full text-[14px] border-collapse border-2 border-black">
                                     <thead>
@@ -300,18 +254,6 @@ export default function AuditPage() {
                              <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
                                {totalLogs} Évènements
                              </span>
-                             <div className="h-10 w-px bg-gray-200" />
-                             <div className="flex items-center gap-2">
-                               <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
-                               <select 
-                                 value={printLayout}
-                                 onChange={(e) => setPrintLayout(e.target.value as any)}
-                                 className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
-                               >
-                                 <option value="portrait">Portrait</option>
-                                 <option value="landscape">Paysage</option>
-                               </select>
-                             </div>
                            </div>
                         </div>
                         <div className="flex gap-4">
@@ -332,18 +274,16 @@ export default function AuditPage() {
                     </div>
 
                     <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-                        <div className={`mx-auto shadow-2xl bg-white ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} min-h-screen p-4 text-slate-900 not-italic tracking-normal`}>
-                            {chunkArray(allLogsForPrint.length > 0 ? allLogsForPrint : logs, ITEMS_PER_PRINT_PAGE).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
+                        <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
+                            {chunkArray(logs, ITEMS_PER_PRINT_PAGE).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
                                 <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                                     <ListPrintWrapper
                                         title="JOURNAL D'AUDIT SYSTÈME"
-                                        subtitle={`Rapport de traçabilité consolidé - ${allLogsForPrint.length || totalLogs} entrées`}
+                                        subtitle={`Rapport de traçabilité consolidé - ${totalLogs} entrées`}
                                         pageNumber={index + 1}
                                         totalPages={allChunks.length}
                                         hideHeader={index > 0}
                                         hideVisa={index < allChunks.length - 1}
-                                        layout={printLayout}
-                                        enterprise={entreprise}
                                     >
                                         <table className="w-full text-[14px] border-collapse border-2 border-black">
                                             <thead>
@@ -382,34 +322,14 @@ export default function AuditPage() {
                     </div>
                   </div>
                 )}
-          <div className="flex gap-2">
-            <button
-              onClick={handlePrint}
-              disabled={isPrintingFull}
-              className="flex items-center gap-2 rounded-lg border-2 border-slate-800 bg-slate-100 px-4 py-2 text-sm font-black text-slate-900 hover:bg-slate-200 shadow-xl no-print uppercase transition-all active:scale-95"
-              title="Aperçu avant impression"
-            >
-              {isPrintingFull ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-              IMPRIMER
-            </button>
-            <button
-              onClick={() => {
-                const params = new URLSearchParams()
-                if (filters.utilisateurId) params.set('utilisateurId', filters.utilisateurId)
-                if (filters.action) params.set('action', filters.action)
-                if (filters.type) params.set('type', filters.type)
-                if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
-                if (filters.dateTo) params.set('dateTo', filters.dateTo)
-                if (searchTerm) params.set('search', searchTerm)
-                window.open(`/api/audit/export-excel?${params.toString()}`, '_blank')
-              }}
-              className="flex items-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 shadow-lg no-print uppercase transition-all active:scale-95"
-              title="Exporter le journal d'audit en Excel"
-            >
-              <Download className="h-4 w-4 text-emerald-600" />
-              EXCEL
-            </button>
-          </div>
+          <button
+            onClick={() => setIsPreviewOpen(true)}
+            className="flex items-center gap-2 rounded-lg border-2 border-slate-800 bg-slate-100 px-4 py-2 text-sm font-black text-slate-900 hover:bg-slate-200 shadow-lg no-print uppercase transition-all active:scale-95"
+            title="Aperçu avant impression"
+          >
+            <Printer className="h-4 w-4" />
+            Aperçu Impression
+          </button>
         </div>
       </div>
 
@@ -606,17 +526,6 @@ export default function AuditPage() {
                             <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
                               {JSON.stringify(log.details, null, 2)}
                             </pre>
-                            {log.action === 'SUPPRESSION' && log.type === 'VENTE' && log.details?.numero && (
-                              <div className="mt-4 flex justify-end">
-                                <button
-                                  onClick={() => handleRestore(log.id)}
-                                  className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-black text-white hover:bg-red-700 shadow-lg uppercase italic tracking-tighter transition-all active:scale-95"
-                                >
-                                  <Activity className="h-4 w-4" />
-                                  Restaurer la facture {log.details.numero}
-                                </button>
-                              </div>
-                            )}
                           </div>
                         )}
                       </td>

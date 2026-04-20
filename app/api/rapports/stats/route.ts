@@ -52,7 +52,6 @@ export async function GET(request: NextRequest) {
     }
     const whereFinance: any = {
       date: { gte: dateDebut, lte: dateFin },
-      statut: { in: ['VALIDE', 'VALIDEE'] },
     }
 
     if (entiteId) {

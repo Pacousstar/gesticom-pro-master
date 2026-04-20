@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Users, Search, Plus, Loader2, Pencil, Trash2, X, FileSpreadsheet, Download, Clock, Calendar, FileText, ChevronRight, DollarSign, CheckCircle2, Printer, Bell } from 'lucide-react'
+import { Users, Search, Plus, Loader2, Pencil, Trash2, X, FileSpreadsheet, Download, Clock, Calendar, FileText, ChevronRight, DollarSign, CheckCircle2, Printer } from 'lucide-react'
 import PaymentModal from '@/components/dashboard/PaymentModal'
-import RelanceModal from '@/components/dashboard/RelanceModal'
 import { useToast } from '@/hooks/useToast'
 import { clientSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
@@ -63,15 +62,12 @@ export default function ClientsPage() {
   const [tempDebt, setTempDebt] = useState('')
   const [editingDebt, setEditingDebt] = useState<number | null>(null)
   const [paymentModal, setPaymentModal] = useState<{ client: Client; invoices: any[] } | null>(null)
-  const [relanceModal, setRelanceModal] = useState<{ id: number; nom: string } | null>(null)
   const [isPrinting, setIsPrinting] = useState(false)
   const [allClientsForPrint, setAllClientsForPrint] = useState<Client[]>([])
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
   const [printType, setPrintType] = useState<'PORTEFEUILLE' | 'REPERTOIRE'>('PORTEFEUILLE')
   const [entreprise, setEntreprise] = useState<any>(null)
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
 
   useEffect(() => {
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => { })
@@ -138,11 +134,13 @@ export default function ClientsPage() {
       if (res.ok) {
         const response = await res.json()
         setAllClientsForPrint(response.data || [])
-        setIsPreviewOpen(true)
+        setTimeout(() => {
+          window.print()
+          setIsPrinting(false)
+        }, 500)
       }
     } catch (e) {
       console.error(e)
-    } finally {
       setIsPrinting(false)
     }
   }
@@ -235,6 +233,7 @@ export default function ClientsPage() {
           setEditing(null)
           setCurrentPage(1)
           fetchList(1)
+          setTimeout(() => fetchList(1), 500)
           showSuccess(MESSAGES.CLIENT_MODIFIE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la modification.')
@@ -252,6 +251,7 @@ export default function ClientsPage() {
           setForm(false)
           setCurrentPage(1)
           fetchList(1)
+          setTimeout(() => fetchList(1), 500)
           showSuccess(MESSAGES.CLIENT_ENREGISTRE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
@@ -281,13 +281,33 @@ export default function ClientsPage() {
     }
   }
 
-  // T-1 AUDIT : handleUpdateDebt est désactivé car il modifiait soldeInitial directement,
-  // ce qui corrompait tous les calculs de solde de façon cumulée et irréversible.
-  // Pour ajuster une dette client, utiliser la modale de paiement (encaissement exceptionnel).
   const handleUpdateDebt = async (client: Client) => {
-    showError('⛔ Correction directe de dette désactivée pour protéger l\'intégrité des données. Utilisez la modale de paiement (bouton 💰) pour enregistrer un règlement ou un avoir.')
-    setEditingDebt(null)
-    openPaymentModal(client)
+    if (updatingDebt) return
+    setUpdatingDebt(true)
+    try {
+      const nouvelleValeur = Number(tempDebt)
+      const valeurActuelle = client.dette || 0
+      const ecart = nouvelleValeur - valeurActuelle
+      
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          soldeInitial: (client.soldeInitial || 0) + ecart 
+        }),
+      })
+      if (res.ok) {
+        showSuccess("Dette corrigée avec succès.")
+        setEditingDebt(null)
+        fetchList()
+      } else {
+        showError("Erreur lors de la correction.")
+      }
+    } catch (e) {
+      showError("Erreur réseau.")
+    } finally {
+      setUpdatingDebt(false)
+    }
   }
 
   const openPaymentModal = async (c: Client) => {
@@ -295,10 +315,7 @@ export default function ClientsPage() {
       const res = await fetch(`/api/rapports/finances/etat-paiements?type=VENTE&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31`)
       if (res.ok) {
         const allInvoices = await res.json()
-        // T-11 AUDIT : Filtrage uniquement par ID client (robuste) — fallback nom supprimé (fragile en cas d'homonymie)
-        const clientInvoices = allInvoices.filter((inv: any) => 
-          inv.clientId === c.id || inv.client?.id === c.id
-        )
+        const clientInvoices = allInvoices.filter((inv: any) => inv.tier === c.nom || (inv.client?.nom === c.nom))
         if (clientInvoices.length === 0) {
             showError("Aucune facture impayée trouvée pour ce client.")
             return
@@ -354,10 +371,10 @@ export default function ClientsPage() {
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
             <input
               type="search"
-              placeholder="Nom, code, téléphone..."
+              placeholder="Rechercher nom, code, téléphone..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-gray-900"
+              className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 focus:outline-none bg-white text-sm text-gray-900 transition-all font-medium"
             />
           </div>
         </div>
@@ -623,13 +640,6 @@ export default function ClientsPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => setRelanceModal({ id: c.id, nom: c.nom })}
-                            className="rounded p-1.5 text-indigo-600 hover:bg-indigo-50"
-                            title="Relance Client (WhatsApp, Email, PDF)"
-                          >
-                            <Bell className="h-4 w-4" />
-                          </button>
-                          <button
                             onClick={() => openForm(c)}
                             className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-orange-600"
                             title="Modifier"
@@ -809,16 +819,6 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {/* Relance Modal */}
-      {relanceModal && (
-        <RelanceModal
-          isOpen={!!relanceModal}
-          onClose={() => setRelanceModal(null)}
-          clientId={relanceModal.id}
-          tierNom={relanceModal.nom}
-        />
-      )}
-
       {paymentModal && (
         <PaymentModal
           isOpen={!!paymentModal}
@@ -831,149 +831,6 @@ export default function ClientsPage() {
           invoices={paymentModal.invoices}
         />
       )}
-      
-      {/* MODALE D'APERÇU IMPRESSION CLIENTS */}
-      {isPreviewOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
-          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
-            <div className="flex items-center gap-6">
-               <div>
-                 <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu Impression</h2>
-                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic">{printType === 'PORTEFEUILLE' ? 'Liste du Portefeuille Clients' : 'Répertoire des Contacts'}</p>
-               </div>
-               <div className="h-10 w-px bg-gray-200" />
-               <div className="flex items-center gap-2">
-                 <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
-                 <select 
-                   value={printLayout}
-                   onChange={(e) => setPrintLayout(e.target.value as any)}
-                   className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
-                 >
-                   <option value="portrait">Portrait</option>
-                   <option value="landscape">Paysage</option>
-                 </select>
-               </div>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setIsPreviewOpen(false)}
-                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
-              >
-                Fermer
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
-              >
-                <Printer className="h-4 w-4" />
-                Lancer l'impression
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-            <div className={`mx-auto shadow-2xl bg-white ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'}`}>
-              {chunkArray(allClientsForPrint.length > 0 ? allClientsForPrint : list, 25).map((chunk, index, allChunks) => (
-                <div key={index} className={index < allChunks.length - 1 ? 'page-break mb-8 border-b-2 border-dashed border-gray-100 pb-8' : ''}>
-                  <ListPrintWrapper
-                    title={printType === 'PORTEFEUILLE' ? "Portefeuille des Clients" : "Répertoire des Clients"}
-                    subtitle={q ? `Filtre: "${q}"` : "Contenu Global"}
-                    pageNumber={index + 1}
-                    totalPages={allChunks.length}
-                    layout={printLayout}
-                  >
-                    <table className="w-full text-[14px] border-collapse border-2 border-black">
-                      <thead>
-                        <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                          <th className="border-r-2 border-black px-2 py-3 text-center w-10">N°</th>
-                          {printType === 'PORTEFEUILLE' ? (
-                            <>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Code</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Nom</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
-                              {dateDebut && dateFin && (
-                                <th className="border-r-2 border-black px-3 py-3 text-right">Dette Période</th>
-                              )}
-                              <th className="px-3 py-3 text-right">Solde Global</th>
-                            </>
-                          ) : (
-                            <>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Nom</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Téléphone</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Email</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left text-xs italic">Localisation</th>
-                              <th className="px-3 py-3 text-left">NCC</th>
-                            </>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {chunk.map((c, idx) => (
-                          <tr key={idx} className="border-b border-black">
-                            <td className="border-r-2 border-black px-2 py-2 text-center font-bold">
-                              {index * 25 + idx + 1}
-                            </td>
-                            {printType === 'PORTEFEUILLE' ? (
-                              <>
-                                <td className="border-r-2 border-black px-3 py-2 font-mono">{c.code || '-'}</td>
-                                <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{c.nom}</td>
-                                <td className="border-r-2 border-black px-3 py-2 font-medium">{c.type}</td>
-                                {dateDebut && dateFin && (
-                                  <td className="border-r-2 border-black px-3 py-2 text-right font-black bg-orange-50/50 italic text-[11px]">
-                                    {((c as any).dettePeriode ?? 0).toLocaleString('fr-FR')} F
-                                  </td>
-                                )}
-                                <td className={`px-3 py-2 text-right font-black ${Number(c.dette ?? 0) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                                  {Number(c.dette ?? 0) > 0 ? '+' : ''}{Number(c.dette ?? 0).toLocaleString('fr-FR')} F
-                                </td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{c.nom}</td>
-                                <td className="border-r-2 border-black px-3 py-2">{c.telephone || '-'}</td>
-                                <td className="border-r-2 border-black px-3 py-2 text-xs truncate max-w-[150px]">{c.email || '-'}</td>
-                                <td className="border-r-2 border-black px-3 py-2 italic text-xs">{c.localisation || '-'}</td>
-                                <td className="px-3 py-2 text-xs">{c.ncc || '-'}</td>
-                              </>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                      {index === allChunks.length - 1 && (
-                        <tfoot>
-                          <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black uppercase italic">
-                            {printType === 'PORTEFEUILLE' ? (
-                              <>
-                                <td colSpan={dateDebut && dateFin ? 4 : 4} className="border-r-2 border-black px-3 py-5 text-right bg-white tracking-widest text-xs italic">SITUATION DU PORTEFEUILLE</td>
-                                {dateDebut && dateFin && (
-                                  <td className="border-r-2 border-black px-3 py-4 text-right bg-orange-100/50 text-orange-900 font-black text-[12px]">
-                                    PÉRIODE: {(allClientsForPrint.length > 0 ? allClientsForPrint : list).reduce((acc, c) => acc + ((c as any).dettePeriode ?? 0), 0).toLocaleString()} F
-                                  </td>
-                                )}
-                                <td className="px-3 py-4 text-right bg-white text-sm">
-                                  <div className="flex flex-col gap-1 items-end">
-                                    <div className="border-t-2 border-black pt-1 font-black underline decoration-double text-slate-900 text-lg">
-                                      {(allClientsForPrint.length > 0 ? allClientsForPrint : list).reduce((acc, c) => acc + (c.dette ?? 0), 0).toLocaleString()} F
-                                    </div>
-                                  </div>
-                                </td>
-                              </>
-                            ) : (
-                              <td colSpan={6} className="px-3 py-8 text-center bg-white tracking-[0.2em] font-black text-slate-900 italic text-lg shadow-inner">
-                                RÉPERTOIRE : {(allClientsForPrint.length > 0 ? allClientsForPrint : list).length} CONTACTS
-                              </td>
-                            )}
-                          </tr>
-                        </tfoot>
-                      )}
-                    </table>
-                  </ListPrintWrapper>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
       <div className="hidden print:block">
         {chunkArray(allClientsForPrint.length > 0 ? allClientsForPrint : list, 25).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
@@ -982,7 +839,6 @@ export default function ClientsPage() {
               subtitle={q ? `Filtre: "${q}"` : "Portefeuille Global"}
               pageNumber={index + 1}
               totalPages={allChunks.length}
-              layout={printLayout}
             >
               <table className="w-full text-[14px] border-collapse border border-gray-300">
                 <thead>

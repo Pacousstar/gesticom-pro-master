@@ -27,7 +27,6 @@ export default function ParVendeurPage() {
     const [historyData, setHistoryData] = useState<any[]>([])
     const [loadingHistory, setLoadingHistory] = useState(false)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-    const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
 
     useEffect(() => {
         const now = new Date()
@@ -105,7 +104,7 @@ export default function ParVendeurPage() {
                                 className="bg-slate-800 text-white px-6 py-2 rounded-xl text-xs font-black hover:bg-slate-900 flex items-center gap-2 h-[42px] transition-all hover:scale-105 active:scale-95 shadow-lg disabled:opacity-50 uppercase tracking-widest no-print"
                             >
                                 {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-                                Imprimer
+                                Aperçu Impression
                             </button>
                             <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end bg-gray-50/50 p-6 rounded-2xl border border-gray-100 shadow-inner">
                                 <div className="space-y-1.5">
@@ -140,7 +139,7 @@ export default function ParVendeurPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 no-print">
                     <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100 relative overflow-hidden group">
                         <div className="relative z-10">
-                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 opacity-80">Chiffre d'Affaires Équipe {(startDate || endDate) && <span className="ml-1" title="Période filtrée">⚠️</span>}</p>
+                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 opacity-80">Chiffre d'Affaires Équipe</p>
                             <p className="text-4xl font-black text-slate-900 tabular-nums tracking-tighter italic">
                                 {formatCurrency(totalCA)}
                             </p>
@@ -150,7 +149,7 @@ export default function ParVendeurPage() {
                     </div>
                     <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100 relative overflow-hidden group">
                         <div className="relative z-10">
-                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 opacity-80">Nombre Total de Ventes {(startDate || endDate) && <span className="ml-1" title="Période filtrée">⚠️</span>}</p>
+                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 opacity-80">Nombre Total de Ventes</p>
                             <p className="text-4xl font-black text-slate-300 tabular-nums tracking-tighter italic group-hover:text-slate-900 transition-colors duration-500">
                                 {totalVentes}
                             </p>
@@ -299,7 +298,6 @@ export default function ParVendeurPage() {
                                 totalPages={allChunks.length}
                                 hideHeader={index > 0}
                                 hideVisa={index < allChunks.length - 1}
-                                layout={printLayout}
                             >
                                 <table className="w-full text-[14px] border-collapse border-2 border-black">
                                     <thead>
@@ -355,18 +353,6 @@ export default function ParVendeurPage() {
                              <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
                                 Du {startDate} au {endDate}
                              </span>
-                             <div className="h-10 w-px bg-gray-200" />
-                             <div className="flex items-center gap-2">
-                               <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
-                               <select 
-                                 value={printLayout}
-                                 onChange={(e) => setPrintLayout(e.target.value as any)}
-                                 className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
-                               >
-                                 <option value="portrait">Portrait</option>
-                                 <option value="landscape">Paysage</option>
-                               </select>
-                             </div>
                            </div>
                         </div>
                         <div className="flex gap-4">
@@ -387,7 +373,7 @@ export default function ParVendeurPage() {
                     </div>
 
                     <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-                        <div className={`mx-auto ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} bg-white shadow-2xl min-h-screen p-4 text-slate-900`}>
+                        <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900">
                             {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
                                 <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                                     <ListPrintWrapper
@@ -397,7 +383,6 @@ export default function ParVendeurPage() {
                                         totalPages={allChunks.length}
                                         hideHeader={index > 0}
                                         hideVisa={index < allChunks.length - 1}
-                                        layout={printLayout}
                                     >
                                         <table className="w-full text-[14px] border-collapse border-2 border-black">
                                             <thead>

@@ -16,6 +16,12 @@ import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
+import {
+  montantLigneTTC,
+  montantTvaImpliciteLigne,
+  montantTotalVenteDocument,
+  pointsFideliteDepuisEncaissement,
+} from '@/lib/calculs-commerciaux'
 
 // Chargement dynamique du scanner (évite les erreurs SSR liées au DOM et à la webcam)
 const BarcodeScanner = dynamic(() => import('@/components/scanner/BarcodeScanner'), { ssr: false })
@@ -170,11 +176,14 @@ export default function ArchivesVentesNouvellePage() {
       const r = Number(l.remise) || 0
       const t = l.tvaPerc || 0
       const ht = q * pu
-      const htNet = ht - r
-      const tva = htNet * (t / 100)
       acc.ht += ht
       acc.remise += r
-      acc.tva += tva
+      acc.tva += montantTvaImpliciteLigne({
+        quantite: q,
+        prixUnitaire: pu,
+        remiseLigne: r,
+        tvaPourcent: t,
+      })
       return acc
     }, { ht: 0, remise: 0, tva: 0 })
     
@@ -199,7 +208,7 @@ export default function ArchivesVentesNouvellePage() {
       CLIENT_NCC: d.client?.ncc || undefined,
       LIGNES: lignesHtml,
       TOTAL_HT: `${totalCalc.ht.toLocaleString('fr-FR')} FCFA`,
-      TOTAL_TVA: totalCalc.tva > 0 ? `${Math.round(totalCalc.tva).toLocaleString('fr-FR')} FCFA` : undefined,
+      TOTAL_TVA: totalCalc.tva > 0 ? `${totalCalc.tva.toLocaleString('fr-FR')} FCFA` : undefined,
       TOTAL_REMISE: totalCalc.remise > 0 ? `${totalCalc.remise.toLocaleString('fr-FR')} FCFA` : undefined,
       REMISE_GLOBALE: d.remiseGlobale > 0 ? `${Number(d.remiseGlobale).toLocaleString('fr-FR')} FCFA` : undefined,
       TOTAL: `${Number(d.montantTotal).toLocaleString('fr-FR')} FCFA`,
@@ -394,24 +403,42 @@ export default function ArchivesVentesNouvellePage() {
       const q = val.quantite
       const pu = val.prixUnitaire
       const t = val.tvaPerc || 0
-      const r = val.remise || 0
+      const r = Number(val.remise) || 0
       const ht = q * pu
-      const htNet = ht - r
-      const tvaMontant = htNet * (t / 100)
-      const montantLigne = htNet + tvaMontant
+      const montantLigne = montantLigneTTC({
+        quantite: q,
+        prixUnitaire: pu,
+        remiseLigne: r,
+        tvaPourcent: t,
+      })
 
       acc.totalHT += ht
-      acc.totalTVA += tvaMontant
+      acc.totalTVA += montantTvaImpliciteLigne({
+        quantite: q,
+        prixUnitaire: pu,
+        remiseLigne: r,
+        tvaPourcent: t,
+      })
       acc.totalRemise += r
       acc.totalAvantRemiseGlobale += montantLigne
       return acc
     },
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalAvantRemiseGlobale: 0 }
   )
-  const total = Math.max(0, totalAvantRemiseGlobale)
-  const pointsGagnes = Math.floor(total)
+  const total = montantTotalVenteDocument(totalAvantRemiseGlobale, 0, 0)
+  const pointsGagnes = pointsFideliteDepuisEncaissement(total)
 
-  const popupTotal = popupLignes.reduce((s, l) => s + ( (l.quantite * l.prixUnitaire) - (l.remise || 0) ) * (1 + (l.tvaPerc || 0) / 100), 0)
+  const popupTotal = popupLignes.reduce(
+    (s, l) =>
+      s +
+      montantLigneTTC({
+        quantite: l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        remiseLigne: Number(l.remise) || 0,
+        tvaPourcent: l.tvaPerc || 0,
+      }),
+    0
+  )
 
   const doEnregistrerVente = async (lignes: Ligne[]) => {
     const magasinId = Number(formData.magasinId)
@@ -1092,7 +1119,12 @@ export default function ArchivesVentesNouvellePage() {
                       const t = Number(ajoutProduit.tvaPerc || 0)
                       const ht = q * pu
                       const rv = ajoutProduit.remiseType === 'MONTANT' ? r : ht * (r / 100)
-                      return Math.round((ht - rv) * (1 + t / 100)).toLocaleString('fr-FR')
+                      return montantLigneTTC({
+                        quantite: q,
+                        prixUnitaire: pu,
+                        remiseLigne: rv,
+                        tvaPourcent: t,
+                      }).toLocaleString('fr-FR')
                     })()} F
                   </div>
                 </div>
@@ -1122,9 +1154,12 @@ export default function ArchivesVentesNouvellePage() {
                     <tbody>
                       {formData.lignes.map((l, i) => {
                         const ht = l.quantite * l.prixUnitaire
-                        const htApresRemise = ht - (l.remise || 0)
-                        const tva = htApresRemise * ((l.tvaPerc || 0) / 100)
-                        const ttc = htApresRemise + tva
+                        const ttc = montantLigneTTC({
+                          quantite: l.quantite,
+                          prixUnitaire: l.prixUnitaire,
+                          remiseLigne: Number(l.remise) || 0,
+                          tvaPourcent: l.tvaPerc || 0,
+                        })
                         return (
                           <tr key={i} className="border-b border-gray-100">
                             <td className="py-2">{l.designation}</td>
@@ -1133,7 +1168,7 @@ export default function ArchivesVentesNouvellePage() {
                             <td className="text-right">{ht.toLocaleString('fr-FR')} F</td>
                             <td className="text-right text-red-600">-{(l.remise || 0).toLocaleString('fr-FR')} F</td>
                             <td className="text-right">{l.tvaPerc}%</td>
-                            <td className="text-right font-bold text-emerald-700">{Math.round(ttc).toLocaleString('fr-FR')} F</td>
+                            <td className="text-right font-bold text-emerald-700">{ttc.toLocaleString('fr-FR')} F</td>
                             <td className="w-16">
                               <div className="flex items-center gap-1 justify-end">
                                 <button
@@ -1319,9 +1354,12 @@ export default function ArchivesVentesNouvellePage() {
                       const pu = Number(popupAjoutProduit.prixUnitaire || 0)
                       const r = Number(popupAjoutProduit.remise || 0)
                       const t = Number(popupAjoutProduit.tvaPerc || 0)
-                      const ht = q * pu
-                      // Le popup n'a pas encore de type de remise, on suppose MONTANT pour rester conforme au comportement actuel du popup
-                      return Math.round((ht - r) * (1 + t / 100)).toLocaleString('fr-FR')
+                      return montantLigneTTC({
+                        quantite: q,
+                        prixUnitaire: pu,
+                        remiseLigne: r,
+                        tvaPourcent: t,
+                      }).toLocaleString('fr-FR')
                     })()} F
                   </div>
                 </div>
@@ -1346,10 +1384,12 @@ export default function ArchivesVentesNouvellePage() {
                       </thead>
                       <tbody>
                         {popupLignes.map((l, i) => {
-                          const lHT = l.quantite * l.prixUnitaire
-                          const lHTNet = lHT - (l.remise || 0)
-                          const lTva = lHTNet * ((l.tvaPerc || 0) / 100)
-                          const lTTC = lHTNet + lTva
+                          const lTTC = montantLigneTTC({
+                            quantite: l.quantite,
+                            prixUnitaire: l.prixUnitaire,
+                            remiseLigne: Number(l.remise) || 0,
+                            tvaPourcent: l.tvaPerc || 0,
+                          })
                           return (
                             <tr key={i} className="border-b border-gray-100">
                               <td className="py-2">{l.designation}</td>
@@ -1357,7 +1397,7 @@ export default function ArchivesVentesNouvellePage() {
                               <td className="text-right">{l.prixUnitaire.toLocaleString('fr-FR')} F</td>
                               <td className="text-right text-red-600">-{ (l.remise || 0).toLocaleString('fr-FR') }</td>
                               <td className="text-right">{l.tvaPerc || 0}%</td>
-                              <td className="text-right font-bold text-emerald-700">{Math.round(lTTC).toLocaleString('fr-FR')} F</td>
+                              <td className="text-right font-bold text-emerald-700">{lTTC.toLocaleString('fr-FR')} F</td>
                               <td>
                                 <button type="button" onClick={() => removePopupLigne(i)} className="rounded p-1.5 text-red-600 hover:bg-red-100" title="Supprimer"><Trash2 className="h-4 w-4" /></button>
                               </td>

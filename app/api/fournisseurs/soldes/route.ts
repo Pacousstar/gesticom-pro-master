@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const fournisseurs = await prisma.fournisseur.findMany({
-      where: { actif: true },
+      where: { actif: true, entiteId },
       select: {
         id: true,
         code: true,
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
       // Récupérer le numéro de la dernière facture d'achat
       const derA = await prisma.achat.findFirst({
-        where: { fournisseurId: f.id },
+        where: { fournisseurId: f.id, entiteId },
         orderBy: { date: 'desc' },
         select: { numero: true }
       })

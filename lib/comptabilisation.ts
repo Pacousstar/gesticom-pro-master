@@ -1,4 +1,9 @@
 import { prisma } from './db'
+import {
+  htNetDepuisTtcEtTauxGlobal,
+  montantHtNetTotalLignesCompta,
+  montantTvaDepuisTtcEtHtNet,
+} from './calculs-commerciaux'
 
 /**
  * Service de comptabilisation automatique SYSCOHADA
@@ -171,18 +176,19 @@ export async function comptabiliserVente(data: {
   let montantTVA = 0
   
   if (data.lignes && data.lignes.length > 0) {
-    montantHT = data.lignes.reduce((sum, l) => sum + (l.prixUnitaire * l.quantite - (l.remise || 0)), 0)
-    montantTVA = montantTTC - montantHT
+    montantHT = montantHtNetTotalLignesCompta(
+      data.lignes.map((l) => ({
+        quantite: l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        remise: l.remise ?? 0,
+      }))
+    )
+    montantTVA = montantTvaDepuisTtcEtHtNet(montantTTC, montantHT)
   } else {
-    // Si pas de lignes détaillées (rare), on assume que le TTC inclut la TVA par défaut de l'entité
-    const param = await p.parametre.findFirst()
-    const tvaTaux = (param?.tvaParDefaut || 18) / 100
-    montantHT = montantTTC / (1 + tvaTaux)
-    montantTVA = montantTTC - montantHT
+    const param = await p.parametre.findFirst({ orderBy: { id: 'asc' } })
+    montantHT = htNetDepuisTtcEtTauxGlobal(montantTTC, param?.tvaParDefaut || 0)
+    montantTVA = montantTvaDepuisTtcEtHtNet(montantTTC, montantHT)
   }
-  
-  // montantHT = Math.round(montantHT)
-  // montantTVA = Math.round(montantTVA)
 
   // 1. Écriture de CRÉDIT (Ventes HT)
   await createEcriture({
@@ -431,8 +437,9 @@ export async function comptabiliserReglementVente(data: {
     utilisateurId: data.utilisateurId,
   }, tx)
 
-  // NOTE: Les mouvements physiques de Caisse/Banque sont désormais gérés uniquement par les APIs métier
-  // pour éviter les doublons constatés.
+  // NOTE: Les mouvements physiques de Caisse/Banque ne sont JAMAIS gérés ici.
+  // C'est à l'API métier de décider si le paiement doit impacter la trésorerie physique
+  // (selon la règle de flexibilité métier adoptée).
 }
 
 /**
@@ -481,17 +488,19 @@ export async function comptabiliserAchat(data: {
   let montantTVA = 0
   
   if (data.lignes && data.lignes.length > 0) {
-    montantHT = data.lignes.reduce((sum, l) => sum + (l.prixUnitaire * l.quantite - (l.remise || 0)), 0)
-    montantTVA = montantTTC - montantHT
+    montantHT = montantHtNetTotalLignesCompta(
+      data.lignes.map((l) => ({
+        quantite: l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        remise: l.remise ?? 0,
+      }))
+    )
+    montantTVA = montantTvaDepuisTtcEtHtNet(montantTTC, montantHT)
   } else {
-    const param = await p.parametre.findFirst()
-    const tvaTaux = (param?.tvaParDefaut || 18) / 100
-    montantHT = montantTTC / (1 + tvaTaux)
-    montantTVA = montantTTC - montantHT
+    const param = await p.parametre.findFirst({ orderBy: { id: 'asc' } })
+    montantHT = htNetDepuisTtcEtTauxGlobal(montantTTC, param?.tvaParDefaut || 0)
+    montantTVA = montantTvaDepuisTtcEtHtNet(montantTTC, montantHT)
   }
-  
-  // montantHT = Math.round(montantHT)
-  // montantTVA = Math.round(montantTVA)
 
   // 1. Écriture de DÉBIT (Achats HT)
   await createEcriture({
@@ -674,7 +683,8 @@ export async function comptabiliserReglementAchat(data: {
     utilisateurId: data.utilisateurId,
   }, tx)
 
-  // NOTE: Les mouvements physiques de Caisse/Banque sont uniquement gérés par les APIs métier.
+  // NOTE: Les mouvements physiques de Caisse/Banque ne sont JAMAIS gérés ici (Lib).
+  // C'est à l'API métier de décider si le paiement doit impacter la trésorerie physique.
 }
 
 /**

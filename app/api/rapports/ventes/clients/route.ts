@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const clientId = request.nextUrl.searchParams.get('clientId')
 
   const where: any = {
-    statut: 'VALIDEE'
+    statut: { in: ['VALIDE', 'VALIDEE'] }
   }
 
   if (dateDebut && dateFin) {

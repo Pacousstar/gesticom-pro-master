@@ -11,6 +11,9 @@ import {
 } from '@/lib/comptabilisation'
 
 export async function POST() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Route de maintenance désactivée en production.' }, { status: 403 })
+  }
   const session = await getSession()
   if (!session || session.role !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })

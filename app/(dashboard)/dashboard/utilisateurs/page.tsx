@@ -298,16 +298,16 @@ export default function UtilisateursPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Gestion des utilisateurs {utilisateurs.length < 5 && <span className="ml-1" title="Filtre actif">⚠️</span>}</h1>
-          <p className="text-white/90 mt-1 text-[10px] font-bold uppercase tracking-widest opacity-80">Créer et gérer les utilisateurs du système</p>
+          <h1 className="text-3xl font-bold text-white">Gestion des utilisateurs</h1>
+          <p className="text-white/90 mt-1">Créer et gérer les utilisateurs du système</p>
         </div>
         <div className="flex items-center gap-2">
                 <div className="hidden print:block absolute inset-0 bg-white">
                     {chunkArray(utilisateurs, ITEMS_PER_PRINT_PAGE).map((chunk: Utilisateur[], index: number, allChunks: Utilisateur[][]) => (
                         <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                             <ListPrintWrapper
-                                title="RÉPERTOIRE OFFICIEL DU PERSONNEL"
-                                subtitle={`Organigramme et Accès Système - ${utilisateurs.length} Profils répertoriés`}
+                                title="Répertoire du Personnel"
+                                subtitle={`Organigramme et Accès Système - ${utilisateurs.length} Utilisateurs`}
                                 pageNumber={index + 1}
                                 totalPages={allChunks.length}
                                 hideHeader={index > 0}

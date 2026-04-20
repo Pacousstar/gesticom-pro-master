@@ -125,21 +125,6 @@ export default function PaiementsClientsPage() {
           <button type="submit" className="bg-orange-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-orange-700 flex items-center gap-2 h-[34px]">
             <Filter className="h-4 w-4" /> Filtrer
           </button>
-          {/* T-9 AUDIT : Bouton reset pour revenir aux 30 derniers jours */}
-          <button
-            type="button"
-            onClick={() => {
-              const now = new Date()
-              const d30 = new Date(); d30.setDate(now.getDate() - 30)
-              const s = d30.toISOString().split('T')[0]
-              const e = now.toISOString().split('T')[0]
-              setStartDate(s); setEndDate(e)
-              fetchData(s, e)
-            }}
-            className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-200 h-[34px]"
-          >
-            Derniers 30j
-          </button>
         </form>
 
         <div className="relative w-full md:max-w-xs">
@@ -157,10 +142,8 @@ export default function PaiementsClientsPage() {
       {/* Résumé par mode de paiement */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         <div className="rounded-lg bg-orange-100 px-4 py-3 border border-orange-200 md:col-span-2 shadow-sm">
-          <p className="text-sm text-orange-800 font-bold uppercase">Total Encaissé {search ? '(Résultats filtrés)' : '(Période)'}</p>
+          <p className="text-sm text-orange-800 font-bold uppercase">Total Encaissé (Période)</p>
           <p className="text-2xl font-black text-orange-900">{total.toLocaleString('fr-FR')} F</p>
-          {/* CORRECTION #7 : Note contextuelle pour éviter la confusion entre total filtré et total période */}
-          {search && <p className="text-[10px] text-orange-600 italic mt-1">⚠️ Ce montant correspond uniquement aux lignes affichées (filtre actif : "{search}")</p>}
         </div>
         {Object.entries(totalsByMode).map(([mode, sum]) => (
           <div key={mode} className="rounded-lg bg-white px-4 py-3 border border-gray-200 shadow-sm flex flex-col justify-between">

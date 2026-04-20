@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       by: ['clientId'],
       where: {
         clientId: { in: clientIds },
-        statut: 'VALIDEE'
+        statut: { in: ['VALIDEE', 'VALIDE'] }
       },
       _sum: { montantTotal: true },
     })
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       by: ['clientId'],
       where: {
         clientId: { in: clientIds },
-        statut: 'VALIDE'
+        statut: { in: ['VALIDEE', 'VALIDE'] }
       },
       _sum: { montant: true }
     })
@@ -99,13 +99,13 @@ export async function GET(request: NextRequest) {
 
       const CA_Periode = await prisma.vente.groupBy({
         by: ['clientId'],
-        where: { clientId: { in: clientIds }, statut: 'VALIDEE', date: { gte, lte } },
+        where: { clientId: { in: clientIds }, statut: { in: ['VALIDEE', 'VALIDE'] }, date: { gte, lte } },
         _sum: { montantTotal: true },
       })
       
       const Enc_Periode = await prisma.reglementVente.groupBy({
         by: ['clientId'],
-        where: { clientId: { in: clientIds }, statut: 'VALIDE', date: { gte, lte } },
+        where: { clientId: { in: clientIds }, statut: { in: ['VALIDEE', 'VALIDE'] }, date: { gte, lte } },
         _sum: { montant: true }
       })
 

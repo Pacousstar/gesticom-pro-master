@@ -4,7 +4,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { comptabiliserReglementVente } from '@/lib/comptabilisation'
-import { enregistrerMouvementCaisse, estModeEspeces } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/caisse'
+import { getEntiteId } from '@/lib/get-entite-id'
+import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -43,7 +45,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire pour un règlement en espèces.' }, { status: 400 })
     }
 
-    const entiteId = session.entiteId || 1
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
 
     // Transaction Prisma
     const res = await prisma.$transaction(async (tx: any) => {
@@ -65,8 +70,27 @@ export async function POST(request: NextRequest) {
       }
 
       const v = venteId ? await tx.vente.findUnique({ where: { id: venteId } }) : null
+      if (v && v.entiteId !== entiteId) {
+        throw new Error('Accès refusé à cette facture (entité différente).')
+      }
       const targetClientId = venteId ? v?.clientId : clientId
       if (!targetClientId) throw new Error('Client introuvable')
+
+      const client = await tx.client.findUnique({
+        where: { id: targetClientId },
+        select: { id: true, entiteId: true, code: true }
+      })
+      if (!client) throw new Error('Client introuvable')
+      if (client.entiteId && client.entiteId !== entiteId) {
+        throw new Error('Accès refusé à ce client (entité différente).')
+      }
+
+      if (venteId && v) {
+        const resteAPayer = Math.max(0, (v.montantTotal || 0) - (v.montantPaye || 0))
+        if (montant - resteAPayer > 0.01) {
+          throw new Error(`Paiement invalide: le montant (${montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
+        }
+      }
 
       const reglement = await tx.reglementVente.create({
         data: {
@@ -82,7 +106,7 @@ export async function POST(request: NextRequest) {
       })
 
       if (venteId && v) {
-        const nouveauMontantPaye = (v.montantPaye || 0) + montant
+        const nouveauMontantPaye = Math.min(v.montantTotal, (v.montantPaye || 0) + montant)
         const nouveauStatutPaiement = nouveauMontantPaye >= v.montantTotal - 0.01 ? 'PAYE' : 'PARTIEL'
         await tx.vente.update({
           where: { id: venteId },
@@ -91,10 +115,12 @@ export async function POST(request: NextRequest) {
       }
 
       // Points de fidélité
-      await tx.client.update({
-        where: { id: targetClientId },
-        data: { pointsFidelite: { increment: Math.floor(montant) } }
-      })
+      if (client.code !== 'PASSAGE' && client.code !== 'ANONYME') {
+        await tx.client.update({
+          where: { id: targetClientId },
+          data: { pointsFidelite: { increment: pointsFideliteDepuisEncaissement(montant) } }
+        })
+      }
 
       // ✅ COMPTEUR CAISSE GLOBAL
       if (estModeEspeces(modePaiement)) {

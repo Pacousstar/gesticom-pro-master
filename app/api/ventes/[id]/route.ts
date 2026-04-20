@@ -5,6 +5,11 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
+import {
+  montantLigneTTC,
+  montantTotalVenteDocument,
+  pointsFideliteDepuisEncaissement,
+} from '@/lib/calculs-commerciaux'
 
 export async function GET(
   _request: NextRequest,
@@ -171,6 +176,19 @@ export async function PATCH(
       })
 
       if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
+      if (session.role !== 'SUPER_ADMIN') {
+        const entiteId = await getEntiteId(session)
+        if (vente.entiteId !== entiteId) {
+          return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
+        }
+      }
+
+      const resteAPayer = Math.max(0, (vente.montantTotal || 0) - (vente.montantPaye || 0))
+      if (montantReglement - resteAPayer > 0.01) {
+        return NextResponse.json({
+          error: `Paiement invalide : le montant (${montantReglement.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`
+        }, { status: 400 })
+      }
 
       const result = await prisma.$transaction(async (tx) => {
         const nouveauMontantPaye = Math.min(vente.montantTotal, (vente.montantPaye || 0) + montantReglement)
@@ -189,6 +207,7 @@ export async function PATCH(
             data: {
               venteId: id,
               clientId: vente.clientId,
+              entiteId: vente.entiteId,
               montant: montantReglement,
               modePaiement,
               utilisateurId: session.userId,
@@ -196,6 +215,17 @@ export async function PATCH(
               observation: body?.observation || `Paiement sur facture ${vente.numero}`
             }
           })
+
+          const client = await tx.client.findUnique({
+            where: { id: vente.clientId },
+            select: { id: true, code: true }
+          })
+          if (client && client.code !== 'PASSAGE' && client.code !== 'ANONYME') {
+            await tx.client.update({
+              where: { id: client.id },
+              data: { pointsFidelite: { increment: pointsFideliteDepuisEncaissement(montantReglement) } }
+            })
+          }
         }
 
         const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
@@ -272,7 +302,12 @@ export async function PATCH(
           const pu = Math.max(0, Number(l.prixUnitaire))
           const tva = Math.max(0, Number(l.tva || 0))
           const rem = Math.max(0, Number(l.remise || 0))
-          const mnt = Math.round((q * pu - rem) * (1 + tva / 100))
+          const mnt = montantLigneTTC({
+            quantite: q,
+            prixUnitaire: pu,
+            remiseLigne: rem,
+            tvaPourcent: tva,
+          })
           
           newTotalHT += mnt
           lignesAcreer.push({
@@ -292,7 +327,7 @@ export async function PATCH(
 
         const globalRem = Math.max(0, Number(remiseGlobale || 0))
         const finalFrais = Math.max(0, Number(fraisApproche || oldVente.fraisApproche || 0))
-        const totalFinal = Math.max(0, newTotalHT - globalRem + finalFrais)
+        const totalFinal = montantTotalVenteDocument(newTotalHT, globalRem, finalFrais)
         
         // Gestion Multi-Paiement
         const regsData = Array.isArray(reglements) ? reglements : []

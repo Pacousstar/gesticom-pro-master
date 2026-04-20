@@ -10,7 +10,7 @@
     "start": "node scripts/standalone-launcher.js",
     "start:next": "next start",
     "start:standalone": "node scripts/standalone-launcher.js",
-    "lint": "eslint",
+    "lint": "next lint",
     "audit": "npm audit",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",

@@ -21,11 +21,13 @@ export async function enregistrerMouvementCaisse({
   utilisateurId,
   entiteId = 1,
   date = new Date()
-}: MouvementCaisseParams) {
+}: MouvementCaisseParams, tx?: any) {
   if (montant <= 0) return null
 
+  const prismaClient = tx || prisma
+
   try {
-    return await prisma.caisse.create({
+    return await prismaClient.caisse.create({
       data: {
         magasinId,
         type,

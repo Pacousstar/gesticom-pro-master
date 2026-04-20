@@ -5,8 +5,14 @@ import { prisma } from '@/lib/db'
 import { comptabiliserAchat, comptabiliserReglementAchat } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-import { ensureActivated } from '@/lib/security'
-import { enregistrerMouvementCaisse, estModeEspeces } from '@/lib/caisse'
+import {
+  htNetLigne,
+  montantLigneTTC,
+  montantTotalAchatSommeLignes,
+  nouveauPampApresAchatLigne,
+  partFraisApprocheLigne,
+  valeurAchatNetAvecFrais,
+} from '@/lib/calculs-commerciaux'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -20,9 +26,20 @@ export async function GET(request: NextRequest) {
 
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
+  const q = request.nextUrl.searchParams.get('q')?.trim()
   
   const entiteId = await getEntiteId(session)
   const where: any = {}
+
+  if (q) {
+    where.OR = [
+      { numero: { contains: q, mode: 'insensitive' } },
+      { fournisseur: { nom: { contains: q, mode: 'insensitive' } } },
+      { fournisseur: { code: { contains: q, mode: 'insensitive' } } },
+      { fournisseur: { telephone: { contains: q, mode: 'insensitive' } } },
+      { fournisseurLibre: { contains: q, mode: 'insensitive' } }
+    ]
+  }
 
   if (dateDebut && dateFin) {
     where.date = {
@@ -105,6 +122,7 @@ export async function POST(request: NextRequest) {
       : 'ESPECES'
 
     let montantPaye = 0
+    let autoReglementComplet = false
     let listReglements: { mode: string; montant: number }[] = []
 
     if (reglementsPayload.length > 0) {
@@ -121,7 +139,8 @@ export async function POST(request: NextRequest) {
         montantPaye = montantPayeRaw
         listReglements.push({ mode: modePaiementPrincipal, montant: montantPaye })
       } else {
-        montantPaye = modePaiementPrincipal === 'CREDIT' ? 0 : 999999999 // Sera ajusté au total
+        montantPaye = 0
+        autoReglementComplet = modePaiementPrincipal !== 'CREDIT'
       }
     }
 
@@ -177,37 +196,42 @@ export async function POST(request: NextRequest) {
       if (!produit) continue
 
       const designation = produit.designation
-      const montantHT = quantite * prixUnitaire
-      const montantLigne = Math.round((montantHT - remise) * (1 + tva / 100))
-      
-      montantFactureHT += (montantHT - remise) // Base pour prorata des frais
-      lignesValides.push({ produitId, designation, quantite, prixUnitaire, tva, remise, montant: montantLigne, htNet: (montantHT - remise) })
+      const htNet = htNetLigne(quantite, prixUnitaire, remise)
+      const montantLigne = montantLigneTTC({
+        quantite,
+        prixUnitaire,
+        remiseLigne: remise,
+        tvaPourcent: tva,
+      })
+
+      montantFactureHT += htNet
+      lignesValides.push({
+        produitId,
+        designation,
+        quantite,
+        prixUnitaire,
+        tva,
+        remise,
+        montant: montantLigne,
+        htNet,
+      })
     }
 
     if (!lignesValides.length) {
       return NextResponse.json({ error: 'Lignes invalides.' }, { status: 400 })
     }
 
-    const montantTotal = lignesValides.reduce((acc, l) => acc + l.montant, 0)
-    
-    // --- SECURITE : Gestion des Trop-perçus et Avoirs Fournisseurs ---
-    let surplusAvoir = 0
-    if (montantPaye > montantTotal + 1) {
-       if (fournisseurId) {
-          // Fournisseur identifié : On accepte le surplus et on le transforme en avoir
-          surplusAvoir = Math.round(montantPaye - montantTotal)
-          montantPaye = montantTotal
-       } else {
-          // Pas de fournisseur identifié => Blocage
-          return NextResponse.json({ 
-            error: `Paiement invalide : Pas d'avoir possible sans fournisseur identifié. Le total versé (${montantPaye.toLocaleString()} F) dépasse l'achat (${montantTotal.toLocaleString()} F).` 
-          }, { status: 400 })
-       }
-    }
+    const montantTotal = montantTotalAchatSommeLignes(lignesValides.map((l) => l.montant))
 
-    if (reglementsPayload.length === 0 && modePaiementPrincipal !== 'CREDIT' && montantPaye === 0) {
+    if (reglementsPayload.length === 0 && autoReglementComplet && montantPaye === 0) {
         montantPaye = montantTotal
         listReglements = [{ mode: modePaiementPrincipal, montant: montantPaye }]
+    }
+
+    if (montantPaye > montantTotal + 0.01) {
+      return NextResponse.json({
+        error: `Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse l'achat (${montantTotal.toLocaleString()} F).`
+      }, { status: 400 })
     }
 
     
@@ -273,25 +297,16 @@ export async function POST(request: NextRequest) {
           const stockGlobalAvant = targetProduit.stocks.reduce((acc: number, s: any) => acc + s.quantite, 0)
           const pampActuel = targetProduit.pamp || targetProduit.prixAchat || 0
           
-          // Calcul de la part des frais d'approche au prorata de la valeur HT de cette ligne
-          const partFrais = montantFactureHT > 0 ? (l.htNet / montantFactureHT) * fraisApproche : 0
-          const valeurAchatNet = l.htNet + partFrais
-          
-          let nouveauPamp = pampActuel
-          
-          if (stockGlobalAvant <= 0) {
-            // Cas Stock Négatif ou Vide : Le nouveau prix d'achat devient la référence
-            nouveauPamp = (l.quantite > 0) ? valeurAchatNet / l.quantite : pampActuel
-          } else {
-            // Formule standard PAMP : (Valeur Stock Existant + Valeur Achat) / Quantité Totale
-            const valeurStockExistant = stockGlobalAvant * pampActuel
-            nouveauPamp = (valeurStockExistant + valeurAchatNet) / (stockGlobalAvant + l.quantite)
-          }
-          
-          // Sécurité contre NaN/Infinity
-          if (isNaN(nouveauPamp) || !isFinite(nouveauPamp)) nouveauPamp = l.prixUnitaire
-          
-          const pampAjuste = Math.round(nouveauPamp)
+          const partFrais = partFraisApprocheLigne(l.htNet, montantFactureHT, fraisApproche)
+          const valeurAchatNet = valeurAchatNetAvecFrais(l.htNet, partFrais)
+
+          const pampAjuste = nouveauPampApresAchatLigne({
+            stockGlobalAvant,
+            pampActuel,
+            quantiteLigne: l.quantite,
+            valeurAchatNet,
+            prixUnitaireFallback: l.prixUnitaire,
+          })
           
           await tx.produit.update({
             where: { id: l.produitId },
@@ -348,34 +363,6 @@ export async function POST(request: NextRequest) {
         })
 
         // 4. Mouvement de caisse : Désormais géré automatiquement par comptabiliserAchat
-      }
-
-      // 5. Création de l'AVOIR FOURNISSEUR si surplus
-      if (surplusAvoir > 0) {
-        const modeAvoir = listReglements.length > 0 ? listReglements[0].mode : modePaiementPrincipal
-        await tx.reglementAchat.create({
-          data: {
-            fournisseurId,
-            entiteId,
-            montant: surplusAvoir,
-            modePaiement: modeAvoir,
-            utilisateurId: session.userId,
-            observation: `AVOIR généré par trop-perçu sur achat ${num}`,
-            date: dateAchat,
-          }
-        })
-        
-        // Comptabilisation de l'avoir fournisseur
-        await comptabiliserReglementAchat({
-          achatId: null, 
-          numeroAchat: `${num} (AVOIR)`,
-          date: dateAchat,
-          montant: surplusAvoir,
-          modePaiement: modeAvoir,
-          utilisateurId: session.userId,
-          entiteId: entiteId,
-          magasinId: magasinId
-        }, tx)
       }
 
       // 6. Comptabilisation

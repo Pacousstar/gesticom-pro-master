@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X,
   Search, Scan, Camera, Edit2, Pencil, Trash, CreditCard, Wallet, UserPlus,
-  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent, ShieldCheck
+  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -108,8 +108,7 @@ export default function AchatsPage() {
   const [userRole, setUserRole] = useState<string>('')
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
-  // CORRECTION #13 : Ajout du champ date au règlement achat (comme dans Ventes) pour permettre la rétro-datation
-  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', date: new Date().toISOString().split('T')[0] })
+  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES' })
   const [submitting, setSubmitting] = useState(false)
   const [savingReglement, setSavingReglement] = useState(false)
   const [formFournisseurSearch, setFormFournisseurSearch] = useState('')
@@ -151,7 +150,7 @@ export default function AchatsPage() {
     return () => window.removeEventListener('produit-created', handleProduitCreated)
   }, [])
 
-  const fetchAchats = (overrideDeb?: string, overrideFin?: string, page?: number, overrideSearch?: string) => {
+  const fetchAchats = (overrideDeb?: string, overrideFin?: string, page?: number) => {
     setLoading(true)
     const params = new URLSearchParams({
       page: String(page ?? currentPage),
@@ -159,11 +158,9 @@ export default function AchatsPage() {
     })
     const deb = overrideDeb ?? dateDebut
     const fin = overrideFin ?? dateFin
-    // CORRECTION #11 : Passage du searchQuery dans les paramètres API
-    const q = overrideSearch !== undefined ? overrideSearch : searchQuery
     if (deb) params.set('dateDebut', deb)
     if (fin) params.set('dateFin', fin)
-    if (q) params.set('q', q)
+    if (searchQuery) params.set('q', searchQuery)
     fetch('/api/achats?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [], pagination: null, totals: null }))
       .then((response) => {
@@ -315,8 +312,6 @@ export default function AchatsPage() {
     }
   }
 
-  // CORRECTION #4 : Inclusion des frais d'approche dans le total affiché (cohérent avec le montant facturé réel)
-  // CORRECTION Achats #1 : Arrondi global après la somme (comme dans Ventes)
   const { totalHT, totalTVA, totalRemise, totalHTNet, totalAchatTTC } = formData.lignes.reduce(
     (acc, val) => {
       const q = val.quantite
@@ -326,19 +321,18 @@ export default function AchatsPage() {
       const ht = q * pu
       const htNet = ht - r
       const tvaMontant = htNet * (t / 100)
-      // Accumulation brute, arrondi global une seule fois à la fin
+      const montantLigne = Math.round(htNet + tvaMontant) // Arrondi par ligne comme au backend
+      
       acc.totalHT += ht
       acc.totalTVA += tvaMontant
       acc.totalRemise += r
       acc.totalHTNet += htNet
-      acc.totalAchatTTC += htNet + tvaMontant
+      acc.totalAchatTTC += montantLigne
       return acc
     },
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalHTNet: 0, totalAchatTTC: 0 }
   )
-  // Total = TTC arrondi + Frais d'approche (correction #4)
-  const fraisApproche = Number(formData.fraisApproche) || 0
-  const total = Math.round(totalAchatTTC) + fraisApproche
+  const total = totalAchatTTC
 
   // Récupérer le templateId par défaut pour ACHAT
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
@@ -441,21 +435,16 @@ export default function AchatsPage() {
         quantite: l.quantite,
         prixUnitaire: l.prixUnitaire,
         tva: l.tvaPerc,
-      remise: l.remise,
+        remise: l.remise,
       })),
     }
 
-    // --- IDEMPOTENCE : Génération du numéro côté client pour éviter les doublons au renvoi ---
-    const numeroStable = editingAchatId ? undefined : `A-${Math.floor(Date.now() / 1000)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase()
-    const requestDataFinal = { 
-      ...requestData, 
-      numero: numeroStable 
-    }
+    // Dans GestiCom Offline, l'enregistrement se fait toujours directement vers le serveur local.
 
     if (editingAchatId) {
-      await doModifierAchat(requestDataFinal)
+      await doModifierAchat(requestData)
     } else {
-      await doEnregistrerAchat(requestDataFinal)
+      await doEnregistrerAchat(requestData)
     }
   }
 
@@ -563,15 +552,13 @@ export default function AchatsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           montant,
-          modePaiement: reglementData.modePaiement,
-          // CORRECTION #13 : Envoi de la date du règlement
-          date: reglementData.date || new Date().toISOString().split('T')[0]
+          modePaiement: reglementData.modePaiement
         }),
       })
       if (res.ok) {
         showSuccess('Règlement enregistré avec succès.')
         setShowReglement(null)
-        setReglementData({ montant: '', modePaiement: 'ESPECES', date: new Date().toISOString().split('T')[0] })
+        setReglementData({ montant: '', modePaiement: 'ESPECES' })
         fetchAchats()
         if (detailAchat?.id === showReglement.id) {
           handleVoirDetail(showReglement.id)
@@ -616,103 +603,110 @@ export default function AchatsPage() {
 
       {/* COMPTEURS DE PERFORMANCE (Analyse de Compteur) */}
       <div className="space-y-2">
-        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6">Analyse de Compteur : 1 / 3</p>
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6 italic">Analyse des flux achats : Période en cours</p>
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 no-print">
-
-        {[
-          { label: "Total Facturé", val: (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F', sub: "Engagements fournisseurs", icon: ShoppingCart, color: "bg-gradient-to-br from-indigo-700 to-blue-800" },
-          { label: "Total Décaissé", val: (totals?.montantPaye || 0).toLocaleString('fr-FR') + ' F', sub: "Paiements effectués", icon: Wallet, color: "bg-gradient-to-br from-violet-600 to-purple-700" },
-          { label: "Reste à Payer", val: (totals?.resteAPayer || 0).toLocaleString('fr-FR') + ' F', sub: "Dettes fournisseurs en cours", icon: ShieldCheck, color: "bg-gradient-to-br from-rose-600 to-pink-700" },
-        ].map((c, i) => (
-          <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group shadow-indigo-900/10`}>
-             <div className="relative z-10 text-white flex flex-col justify-between h-full">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
-                <div>
-                  <h3 className="text-2xl font-black tracking-tighter">{c.val}</h3>
-                  <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
-                </div>
-             </div>
-             <c.icon className="absolute right-4 bottom-4 h-12 w-12 text-white opacity-10 group-hover:scale-110 transition-transform" />
-          </div>
-        ))}
+          {[
+            { label: "Total Facturé", val: (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F', sub: "Volume achat brut", icon: ShoppingBag, color: "from-blue-600 to-indigo-700" },
+            { label: "Règlements Effectués", val: (totals?.montantPaye || 0).toLocaleString('fr-FR') + ' F', sub: "Sorties de trésorerie", icon: Wallet, color: "from-emerald-600 to-teal-700" },
+            { label: "Restes à Payer", val: (totals?.resteAPayer || 0).toLocaleString('fr-FR') + ' F', sub: "Dettes fournisseurs", icon: AlertTriangle, color: "from-orange-500 to-rose-600" },
+          ].map((c, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br ${c.color} p-6 h-36 shadow-2xl hover:scale-[1.02] transition-all group border border-white/10`}>
+               <div className="relative z-10 text-white flex flex-col justify-between h-full">
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-md">
+                      <c.icon className="h-4 w-4" />
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-3xl font-black tracking-tighter italic">{c.val}</h3>
+                    <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
+                  </div>
+               </div>
+               <c.icon className="absolute right-[-10px] bottom-[-10px] h-24 w-24 text-white opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-500" />
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
 
-
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <label className="block text-xs font-medium text-gray-700 mb-1">Rechercher</label>
+      <div className="flex flex-wrap items-center gap-4 rounded-[2rem] bg-slate-800/50 border border-slate-700 p-4 backdrop-blur-sm shadow-xl">
+        <div className="relative flex-1 min-w-[250px]">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
             <input
               type="search"
-              placeholder="N°, fournisseur..."
+              placeholder="Rechercher par N°, fournisseur, camion..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 py-[6px] pl-9 pr-4 focus:border-orange-500 focus:outline-none bg-white text-sm"
+              className="w-full rounded-2xl border-2 border-slate-700 bg-slate-900/50 py-3 pl-12 pr-4 text-sm font-bold text-white placeholder:text-slate-600 focus:border-orange-500 focus:outline-none transition-all"
             />
           </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700">Du</label>
-          <input
-            type="date"
-            value={dateDebut}
-            onChange={(e) => setDateDebut(e.target.value)}
-            className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 bg-white focus:border-orange-500 focus:outline-none"
-          />
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-500 uppercase ml-2 mb-1">Période du</span>
+            <input
+              type="date"
+              value={dateDebut}
+              onChange={(e) => setDateDebut(e.target.value)}
+              className="rounded-xl border-2 border-slate-700 bg-slate-900/50 px-3 py-2 text-sm font-bold text-white focus:border-orange-500 focus:outline-none transition-all"
+            />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-500 uppercase ml-2 mb-1">au</span>
+            <input
+              type="date"
+              value={dateFin}
+              onChange={(e) => setDateFin(e.target.value)}
+              className="rounded-xl border-2 border-slate-700 bg-slate-900/50 px-3 py-2 text-sm font-bold text-white focus:border-orange-500 focus:outline-none transition-all"
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700">Au</label>
-          <input
-            type="date"
-            value={dateFin}
-            onChange={(e) => setDateFin(e.target.value)}
-            className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 bg-white"
-          />
+        <div className="flex items-end gap-2 pt-4 sm:pt-0">
+          <button
+            type="button"
+            onClick={() => { setCurrentPage(1); fetchAchats(undefined, undefined, 1); }}
+            className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-white hover:bg-orange-700 shadow-lg shadow-orange-900/20 transition-all active:scale-95"
+          >
+            FILTRER
+          </button>
+          <button
+            type="button"
+            onClick={() => { setDateDebut(''); setDateFin(''); setCurrentPage(1); fetchAchats('', '', 1); }}
+            className="flex items-center gap-2 rounded-xl border-2 border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-400 hover:text-white hover:border-slate-500 transition-all"
+          >
+            RESET
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => { setCurrentPage(1); fetchAchats(undefined, undefined, 1); }}
-          className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
-        >
-          Filtrer
-        </button>
-        <button
-          type="button"
-          onClick={() => { setDateDebut(''); setDateFin(''); setSearchQuery(''); setCurrentPage(1); fetchAchats('', '', 1, ''); }}
-          className="rounded-lg border-2 border-orange-400 bg-orange-100 px-3 py-1.5 text-sm font-medium text-orange-900 hover:bg-orange-200"
-        >
-          Réinitialiser
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const params = new URLSearchParams()
-            if (dateDebut) params.set('dateDebut', dateDebut)
-            if (dateFin) params.set('dateFin', dateFin)
-            window.location.href = `/api/achats/export?${params.toString()}`
-          }}
-          className="rounded-lg border-2 border-green-500 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 flex items-center gap-1.5"
-          title="Exporter la liste des achats en Excel"
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          Exporter Excel
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const params = new URLSearchParams()
-            if (dateDebut) params.set('dateDebut', dateDebut)
-            if (dateFin) params.set('dateFin', dateFin)
-            window.location.href = `/api/achats/export-pdf?${params.toString()}`
-          }}
-          className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 flex items-center gap-1.5"
-          title="Exporter la liste des achats en PDF"
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          Exporter PDF
-        </button>
+        <div className="h-10 w-[1px] bg-slate-700 mx-2 hidden lg:block" />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (dateDebut) params.set('dateDebut', dateDebut)
+              if (dateFin) params.set('dateFin', dateFin)
+              window.location.href = `/api/achats/export?${params.toString()}`
+            }}
+            className="group relative flex items-center justify-center rounded-xl bg-emerald-600/10 border-2 border-emerald-600/30 p-3 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all"
+            title="Exporter en Excel"
+          >
+            <FileSpreadsheet className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (dateDebut) params.set('dateDebut', dateDebut)
+              if (dateFin) params.set('dateFin', dateFin)
+              window.location.href = `/api/achats/export-pdf?${params.toString()}`
+            }}
+            className="group relative flex items-center justify-center rounded-xl bg-red-600/10 border-2 border-red-600/30 p-3 text-red-500 hover:bg-red-600 hover:text-white transition-all"
+            title="Exporter en PDF"
+          >
+            <FileText className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {form && (

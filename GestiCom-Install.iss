@@ -19,6 +19,12 @@ AllowNoIcons=yes
 OutputDir=.
 OutputBaseFilename=GestiCom-Installateur
 SetupIconFile=public\gesticom.ico
+; --- VISUELS PREMIUM ORANGE (VALIDÉS) ---
+WizardImageFile=public\wizard-side.bmp
+WizardSmallImageFile=public\wizard-top.bmp
+; --- LICENSE (VALIDÉE) ---
+LicenseFile=license.rtf
+; ----------------------------------------
 Compression=lzma2/ultra64
 SolidCompression=yes
 InternalCompressLevel=ultra
@@ -74,6 +80,9 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "http://127.0.0.1:3001"; IconFilename: "{app}\public\gesticom.ico"; Tasks: desktopicon
 
 [Run]
+; Optimisation et Recalcul automatique de la base de données (MAJ)
+Filename: "{app}\node.exe"; Parameters: "{app}\scripts\maintenance-runner.js"; Flags: runhidden; StatusMsg: "Optimisation des données et calcul des soldes..."
+
 ; Installation et démarrage du service silencieux en fin d'install
 Filename: "{app}\{#MyAppExeName}"; Parameters: "install"; Flags: runhidden
 Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Flags: runhidden

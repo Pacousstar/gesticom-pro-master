@@ -58,7 +58,6 @@ export default function EcrituresPage() {
   const [filtreJournal, setFiltreJournal] = useState('')
   const [filtreCompte, setFiltreCompte] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [backfilling, setBackfilling] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
   const [toutesLesDates, setToutesLesDates] = useState(false)

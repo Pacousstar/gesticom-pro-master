@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, AlertTriangle, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
-import { addToSyncQueue } from '@/lib/offline-sync'
 
 type Produit = { 
   id: number; 
@@ -14,6 +13,7 @@ type Produit = {
   prixAchat?: number | null;
   prixMinimum?: number | null;
   stocks?: Array<{ magasinId: number; quantite: number }>
+  categorie?: string
 }
 type Ligne = { produitId: number; designation: string; quantite: number; prixUnitaire: number; montant: number }
 
@@ -32,6 +32,8 @@ export default function VenteRapidePage() {
   const [numeroBon, setNumeroBon] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [selectedCategorie, setSelectedCategorie] = useState<string>('TOUS')
+  const [categories, setCategories] = useState<string[]>([])
   const { success: showSuccess, error: showError } = useToast()
   
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -44,11 +46,16 @@ export default function VenteRapidePage() {
       fetch('/api/magasins').then(r => r.ok ? r.json() : []),
       fetch('/api/clients').then(r => r.ok ? r.json() : [])
     ]).then(([p, m, c]) => {
-      setProduits(Array.isArray(p) ? p : [])
+      const pList = Array.isArray(p) ? p : []
+      setProduits(pList)
       setMagasins(Array.isArray(m) ? m : [])
       const clientData = c.data && Array.isArray(c.data) ? c.data : (Array.isArray(c) ? c : [])
       setClients(clientData)
       
+      // Extraction des catégories uniques
+      const cats = Array.from(new Set(pList.map((prod: any) => prod.categorie).filter(Boolean))) as string[]
+      setCategories(cats.sort())
+
       if (m.length > 0) setMagasinId(String(m[0].id))
       setLoading(false)
     })
@@ -170,34 +177,30 @@ export default function VenteRapidePage() {
   }
 
   const handleValidate = async () => {
+    if (!magasinId || cart.length === 0) return
     setSubmitting(true)
-
-    const numAuto = `VR-${Math.floor(Date.now() / 1000)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase()
-    
-    const requestData = {
-      numero: numAuto,
-      magasinId: Number(magasinId),
-      clientId: clientId ? Number(clientId) : null,
-      modePaiement,
-      montantPaye: modePaiement === 'CREDIT' ? (montantPaye !== '' ? Number(montantPaye) : 0) : Number(montantPaye) || total,
-      remiseGlobale: remiseVal,
-      numeroBon: numeroBon || null,
-      lignes: cart.map(l => ({
-        produitId: l.produitId,
-        quantite: l.quantite,
-        prixUnitaire: l.prixUnitaire
-      }))
-    }
-
     try {
       const res = await fetch('/api/ventes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData)
+        body: JSON.stringify({
+          magasinId: Number(magasinId),
+          clientId: clientId ? Number(clientId) : null,
+          modePaiement,
+          montantPaye: modePaiement === 'CREDIT' ? (montantPaye !== '' ? Number(montantPaye) : 0) : Number(montantPaye) || total,
+          remiseGlobale: remiseVal,
+          numeroBon: numeroBon || null,
+          estVenteRapide: true,
+          lignes: cart.map(l => ({
+            produitId: l.produitId,
+            quantite: l.quantite,
+            prixUnitaire: l.prixUnitaire
+          }))
+        })
       })
 
-      if (res.ok || res.status === 409) {
-        showSuccess(res.status === 409 ? 'Vente déjà enregistrée (Doublon ignoré).' : 'Vente validée avec succès !')
+      if (res.ok) {
+        showSuccess('Vente validée avec succès !')
         setCart([])
         setShowPayment(false)
         setSearch('')
@@ -208,33 +211,17 @@ export default function VenteRapidePage() {
         const d = await res.json()
         showError(formatApiError(d.error))
       }
-    } catch (e: any) {
-      // --- LOGIQUE HORS-LIGNE ---
-      const isNetworkError = e instanceof TypeError || String(e).includes('fetch') || !navigator.onLine
-      
-      if (isNetworkError) {
-        addToSyncQueue({
-          action: 'CREATE',
-          entity: 'VENTE',
-          data: requestData,
-          endpoint: '/api/ventes',
-          method: 'POST'
-        })
-        
-        showSuccess('Vente enregistrée localement (HORS-LIGNE) !')
-        setCart([])
-        setShowPayment(false)
-        setSearch('')
-        setRemise('0')
-        setMontantPaye('')
-        setNumeroBon('')
-      } else {
-        showError('Erreur lors de la validation : ' + formatApiError(e))
-      }
+    } catch (e) {
+      showError('Erreur lors de la validation')
     } finally {
       setSubmitting(false)
     }
   }
+
+  const selectedClient = clients.find(c => String(c.id) === clientId)
+  const filteredProduits = selectedCategorie === 'TOUS' 
+    ? produits.filter(p => p.designation.toLowerCase().includes(search.toLowerCase()) || p.code.toLowerCase().includes(search.toLowerCase()))
+    : produits.filter(p => p.categorie === selectedCategorie && (p.designation.toLowerCase().includes(search.toLowerCase()) || p.code.toLowerCase().includes(search.toLowerCase())))
 
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-900"><Loader2 className="h-10 w-10 animate-spin text-orange-500" /></div>
 
@@ -243,21 +230,34 @@ export default function VenteRapidePage() {
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <ShoppingCart className="h-8 w-8 text-orange-500" />
-          <h1 className="text-3xl font-black uppercase tracking-tighter italic">Vente Rapide <span className="text-orange-500 underline">PRO</span></h1>
+          <div className="rounded-2xl bg-orange-500 p-2 shadow-lg shadow-orange-900/40">
+            <ShoppingCart className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black uppercase tracking-tighter italic leading-none">Vente Rapide <span className="text-orange-500 underline">PRO</span></h1>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em] mt-1">Terminal de point de vente industriel</p>
+          </div>
         </div>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
+          {selectedClient && (
+            <div className={`flex flex-col items-end px-4 py-1 rounded-xl border ${selectedClient.dette > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
+              <span className="text-[10px] font-black uppercase opacity-60">Solde {selectedClient.nom}</span>
+              <span className={`text-xl font-black ${selectedClient.dette > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                {selectedClient.dette?.toLocaleString('fr-FR')} F
+              </span>
+            </div>
+          )}
           <select 
             value={magasinId} 
             onChange={e => setMagasinId(e.target.value)}
-            className="rounded-lg bg-slate-800 border-2 border-slate-700 px-4 py-2 text-sm font-bold focus:border-orange-500 outline-none"
+            className="rounded-xl bg-slate-800 border-2 border-slate-700 px-4 py-3 text-sm font-bold focus:border-orange-500 outline-none transition-all shadow-lg"
           >
             {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
           </select>
           <select 
             value={clientId} 
             onChange={e => setClientId(e.target.value)}
-            className="rounded-lg bg-slate-800 border-2 border-slate-700 px-4 py-2 text-sm font-bold focus:border-orange-500 outline-none"
+            className="rounded-xl bg-slate-800 border-2 border-slate-700 px-4 py-3 text-sm font-bold focus:border-orange-500 outline-none transition-all shadow-lg"
           >
             <option value="">Client de passage</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
@@ -267,49 +267,85 @@ export default function VenteRapidePage() {
 
       {/* Main Content */}
       <div className="flex flex-1 gap-6 overflow-hidden">
-        {/* Cart Side */}
-        <div className="flex flex-1 flex-col rounded-3xl bg-slate-800 p-6 shadow-2xl border border-slate-700">
-          <div className="mb-4 flex items-center gap-3">
-             <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-6 w-6" />
-                <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={search}
-                    onChange={e => handleSearch(e.target.value)}
-                    onKeyDown={handleKeyDownInput}
-                    placeholder="Scanner ou saisir code produit... (ENTRÉE)"
-                    className="w-full rounded-2xl bg-slate-900 border-2 border-slate-700 py-4 pl-12 pr-4 text-xl font-bold placeholder:text-slate-600 focus:border-orange-500 outline-none transition-all"
-                />
-             </div>
-          </div>
+        {/* Categories Side */}
+        <div className="w-48 flex flex-col gap-2 overflow-y-auto pr-2 scrollbar-hide">
+          <button 
+            onClick={() => setSelectedCategorie('TOUS')}
+            className={`w-full rounded-2xl p-4 text-left font-black transition-all ${selectedCategorie === 'TOUS' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40 translate-x-2' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+          >
+            TOUS
+          </button>
+          {categories.map(cat => (
+            <button 
+              key={cat}
+              onClick={() => setSelectedCategorie(cat)}
+              className={`w-full rounded-2xl p-4 text-left text-xs font-black uppercase tracking-widest break-words leading-tight transition-all ${selectedCategorie === cat ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40 translate-x-2' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
 
-          <div className="flex-1 overflow-y-auto pr-2 space-y-2">
-            {cart.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center opacity-20">
-                    <ShoppingCart className="h-32 w-32" />
-                    <p className="mt-4 text-2xl font-bold">Panier vide</p>
-                </div>
-            ) : (
-                cart.map(l => (
-                    <div key={l.produitId} className="flex items-center justify-between rounded-2xl bg-slate-900 p-4 border border-slate-700/50 hover:border-slate-500 transition-colors">
-                        <div className="flex-1">
-                            <p className="text-xl font-bold">{l.designation}</p>
-                            <p className="text-sm text-slate-400">{l.prixUnitaire.toLocaleString('fr-FR')} F / unité</p>
-                        </div>
-                        <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => updateQty(l.produitId, -1)} className="rounded-xl bg-slate-800 p-2 hover:bg-slate-700 transition-colors"><Minus className="h-6 w-6" /></button>
-                                <span className="w-12 text-center text-3xl font-black">{l.quantite}</span>
-                                <button onClick={() => updateQty(l.produitId, 1)} className="rounded-xl bg-slate-800 p-2 hover:bg-slate-700 transition-colors"><Plus className="h-6 w-6" /></button>
-                            </div>
-                            <p className="w-32 text-right text-2xl font-black text-orange-400">{l.montant.toLocaleString('fr-FR')} F</p>
-                            <button onClick={() => removeItem(l.produitId)} className="text-red-500 hover:text-red-400 p-2"><Trash2 className="h-6 w-6" /></button>
-                        </div>
-                    </div>
-                ))
-            )}
-          </div>
+        {/* Catalog / Cart Middle */}
+        <div className="flex flex-1 flex-col gap-4 overflow-hidden">
+           {/* Grid of products (Visual selection) */}
+           <div className="grid grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto max-h-48 pr-2">
+              {filteredProduits.slice(0, 12).map(p => (
+                <button 
+                  key={p.id}
+                  onClick={() => addToCart(p)}
+                  className="group flex flex-col items-start justify-between rounded-2xl bg-slate-800 p-3 text-left border border-slate-700 hover:border-orange-500 transition-all hover:-translate-y-1 active:scale-95"
+                >
+                   <span className="text-[10px] font-bold text-slate-500 uppercase">{p.code}</span>
+                   <span className="line-clamp-2 text-xs font-black text-white group-hover:text-orange-400">{p.designation}</span>
+                   <span className="mt-2 text-sm font-black text-orange-500">{(p.prixVente || 0).toLocaleString()} F</span>
+                </button>
+              ))}
+           </div>
+
+           <div className="flex flex-1 flex-col rounded-3xl bg-slate-800 p-6 shadow-2xl border border-slate-700 overflow-hidden">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="relative flex-1">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-6 w-6" />
+                  <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={search}
+                      onChange={e => handleSearch(e.target.value)}
+                      onKeyDown={handleKeyDownInput}
+                      placeholder="Scanner ou saisir code... (ENTRÉE)"
+                      className="w-full rounded-2xl bg-slate-900 border-2 border-slate-700 py-4 pl-12 pr-4 text-xl font-bold placeholder:text-slate-600 focus:border-orange-500 outline-none transition-all shadow-inner"
+                  />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 space-y-2">
+              {cart.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center opacity-20">
+                      <ShoppingCart className="h-32 w-32" />
+                      <p className="mt-4 text-2xl font-bold">Panier vide</p>
+                  </div>
+              ) : (
+                  cart.map(l => (
+                      <div key={l.produitId} className="flex items-center justify-between rounded-2xl bg-slate-900 p-4 border border-slate-700/50 hover:border-slate-500 transition-colors animate-in slide-in-from-right-4 duration-200">
+                          <div className="flex-1">
+                              <p className="text-xl font-bold leading-none">{l.designation}</p>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">{l.prixUnitaire.toLocaleString('fr-FR')} FCFA / UNITÉ</p>
+                          </div>
+                          <div className="flex items-center gap-6">
+                              <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                                  <button onClick={() => updateQty(l.produitId, -1)} className="rounded-lg bg-slate-900 p-2 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"><Minus className="h-4 w-4" /></button>
+                                  <span className="w-10 text-center text-xl font-black">{l.quantite}</span>
+                                  <button onClick={() => updateQty(l.produitId, 1)} className="rounded-lg bg-slate-900 p-2 hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-400 transition-colors"><Plus className="h-4 w-4" /></button>
+                              </div>
+                              <p className="w-28 text-right text-xl font-black text-orange-400">{l.montant.toLocaleString('fr-FR')} F</p>
+                              <button onClick={() => removeItem(l.produitId)} className="text-slate-600 hover:text-red-500 p-2 transition-colors"><Trash2 className="h-6 w-6" /></button>
+                          </div>
+                      </div>
+                  ))
+              )}
+            </div>
+           </div>
         </div>
 
         {/* Totals Side */}
@@ -428,34 +464,51 @@ export default function VenteRapidePage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm font-black text-slate-400 uppercase mb-2 tracking-widest">Montant Encaissé (F)</label>
-                            <input 
-                                type="number"
-                                autoFocus
-                                value={montantPaye}
-                                onChange={e => setMontantPaye(e.target.value)}
-                                placeholder={modePaiement === 'CREDIT' ? '0' : String(total)}
-                                className="w-full rounded-2xl bg-slate-800 border-2 border-slate-700 p-5 text-3xl font-black text-emerald-400 focus:border-emerald-500 outline-none transition-all placeholder:text-slate-700"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-black text-slate-400 uppercase mb-2 tracking-widest">Rendu / Trop perçu</label>
-                            <div className="w-full rounded-2xl bg-slate-950 border-2 border-slate-800 p-5 text-3xl font-black text-slate-600 italic">
-                                {Math.max(0, (Number(montantPaye) || 0) - total).toLocaleString('fr-FR')} F
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-black text-slate-400 uppercase mb-2 tracking-widest leading-none">Coupures rapides</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[1000, 2000, 5000, 10000, 15000, 20000].map(amt => (
+                                        <button 
+                                            key={amt}
+                                            onClick={() => setMontantPaye(String(amt))}
+                                            className="rounded-xl bg-slate-800 border-2 border-slate-700 py-3 text-xs font-black hover:bg-slate-700 hover:border-slate-500 transition-all active:scale-90"
+                                        >
+                                            {amt.toLocaleString()} F
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-black text-slate-400 uppercase mb-2 tracking-widest">Montant Encaissé (F)</label>
+                                <input 
+                                    type="number"
+                                    autoFocus
+                                    value={montantPaye}
+                                    onChange={e => setMontantPaye(e.target.value)}
+                                    placeholder={modePaiement === 'CREDIT' ? '0' : String(total)}
+                                    className="w-full rounded-2xl bg-slate-800 border-2 border-slate-700 p-5 text-4xl font-black text-emerald-400 focus:border-emerald-500 outline-none transition-all placeholder:text-slate-700 shadow-inner"
+                                />
                             </div>
                         </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-black text-slate-400 uppercase mb-2 tracking-widest text-orange-500">Numéro de BON (Facultatif)</label>
-                        <input 
-                            type="text"
-                            value={numeroBon}
-                            onChange={e => setNumeroBon(e.target.value)}
-                            placeholder="Ex: BON-2024-001"
-                            className="w-full rounded-2xl bg-slate-800 border-2 border-slate-700 p-4 text-xl font-bold text-white focus:border-orange-500 outline-none transition-all placeholder:text-slate-700"
-                        />
+                        <div className="flex flex-col justify-between">
+                            <div>
+                                <label className="block text-sm font-black text-slate-400 uppercase mb-2 tracking-widest uppercase">Rendu / Trop perçu</label>
+                                <div className={`w-full rounded-2xl border-2 p-5 text-4xl font-black text-center italic transition-all ${Math.max(0, (Number(montantPaye) || 0) - total) > 0 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 shadow-lg shadow-emerald-900/20' : 'bg-slate-950 border-slate-800 text-slate-700'}`}>
+                                    {Math.max(0, (Number(montantPaye) || 0) - total).toLocaleString('fr-FR')} F
+                                </div>
+                            </div>
+                            <div className="pt-4">
+                                <label className="block text-[10px] font-black text-orange-500 uppercase mb-2 tracking-widest text-center leading-none">Informations complémentaires</label>
+                                <input 
+                                    type="text"
+                                    value={numeroBon}
+                                    onChange={e => setNumeroBon(e.target.value)}
+                                    placeholder="N° de BON ou Observation..."
+                                    className="w-full rounded-2xl bg-slate-800 border-2 border-slate-700 p-4 text-lg font-bold text-white focus:border-orange-500 outline-none transition-all placeholder:text-slate-700"
+                                />
+                            </div>
+                        </div>
                     </div>
                   </div>
 

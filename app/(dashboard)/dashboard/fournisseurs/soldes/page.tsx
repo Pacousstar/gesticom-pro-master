@@ -112,20 +112,14 @@ export default function SoldesFournisseursPage() {
       </div>
 
       {/* Cartes de Totaux */}
-      {/* T-6 AUDIT : Badge ⚠️ quand search est actif */}
-      {search && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 no-print">
-          ⚠️ Filtre actif : les totaux ci-dessous ne concernent que les fournisseurs correspondant à « {search} » — ils ne représentent pas la situation globale.
-        </div>
-      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 no-print">
-        <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-4 shadow-sm">
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-purple-500 p-2 text-white">
+            <div className="rounded-lg bg-indigo-500 p-2 text-white">
               <ShoppingBag className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">Achats (Période){search && ' ⚠️'}</p>
+              <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">Achats (Période)</p>
               <p className="text-xl font-bold text-gray-900">{totals.achats.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -137,7 +131,7 @@ export default function SoldesFournisseursPage() {
               <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-emerald-600 uppercase tracking-wider">Payé (Période){search && ' ⚠️'}</p>
+              <p className="text-xs font-medium text-emerald-600 uppercase tracking-wider">Payé (Période)</p>
               <p className="text-xl font-bold text-gray-900">{totals.paiements.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -149,7 +143,7 @@ export default function SoldesFournisseursPage() {
               <FileText className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Variation Dette{search && ' ⚠️'}</p>
+              <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Variation Dette</p>
               <p className="text-xl font-bold text-gray-900">{totals.variationPeriode.toLocaleString('fr-FR')} F</p>
             </div>
           </div>
@@ -162,7 +156,7 @@ export default function SoldesFournisseursPage() {
             </div>
             <div>
               <p className={`text-xs font-medium uppercase tracking-wider ${totals.soldeGlobal > 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                Dette Totale Net{search && ' ⚠️'}
+                Dette Totale Net
               </p>
               <p className="text-xl font-bold text-gray-900">{totals.soldeGlobal.toLocaleString('fr-FR')} F</p>
             </div>
@@ -179,7 +173,7 @@ export default function SoldesFournisseursPage() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500"
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-orange-500 focus:border-orange-500 outline-none"
             />
           </div>
           <div>
@@ -188,10 +182,10 @@ export default function SoldesFournisseursPage() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500"
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-orange-500 focus:border-orange-500 outline-none"
             />
           </div>
-          <button type="submit" className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-purple-700 flex items-center gap-2 h-[34px]">
+          <button type="submit" className="bg-orange-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-orange-700 flex items-center gap-2 h-[34px] transition-all active:scale-95">
             <Filter className="h-4 w-4" /> Filtrer
           </button>
         </form>
@@ -204,10 +198,71 @@ export default function SoldesFournisseursPage() {
               placeholder="Rechercher par nom, code ou localisation..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-              className="w-full rounded-lg border border-gray-200 py-1.5 pl-10 pr-4 mt-auto text-sm focus:border-purple-500 focus:outline-none shadow-sm transition-all h-[34px]"
+              className="w-full rounded-lg border border-gray-200 py-1.5 pl-10 pr-4 mt-auto text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 focus:outline-none bg-white shadow-sm transition-all h-[34px]"
             />
           </div>
         </div>
+      </div>
+
+      {/* TABLEAU POUR L'ÉCRAN (Interactivité) */}
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl no-print">
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-10 w-10 animate-spin text-orange-600" />
+          </div>
+        ) : filteredData.length === 0 ? (
+          <div className="py-20 text-center">
+            <Search className="mx-auto h-12 w-12 text-gray-200 mb-4" />
+            <p className="text-gray-500 font-bold uppercase text-xs tracking-widest">Aucun résultat trouvé</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr className="bg-gray-50/50 uppercase text-[10px] font-black tracking-widest text-gray-400">
+                  <th className="px-6 py-4 text-left">Fournisseur</th>
+                  <th className="px-6 py-4 text-right">Achats (Période)</th>
+                  <th className="px-6 py-4 text-right">Payé (Période)</th>
+                  <th className="px-6 py-4 text-right">Variation</th>
+                  <th className="px-6 py-4 text-right bg-orange-50/30 text-orange-900 border-x border-orange-100 italic">Solde Global</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {paginatedData.map((f, i) => (
+                  <tr key={i} className="group hover:bg-orange-50/10 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-black text-gray-900 uppercase text-sm tracking-tighter">{f.nom}</div>
+                      <div className="text-[10px] text-gray-400 font-mono">#{f.code || '---'}</div>
+                    </td>
+                    <td className="px-6 py-4 text-right tabular-nums text-sm font-medium text-indigo-600">
+                      {f.achats.toLocaleString()} F
+                    </td>
+                    <td className="px-6 py-4 text-right tabular-nums text-sm font-bold text-emerald-600 italic">
+                      {f.paiements.toLocaleString()} F
+                    </td>
+                    <td className={`px-6 py-4 text-right tabular-nums text-sm font-black ${f.variationPeriode >= 0 ? 'text-amber-600' : 'text-emerald-500'}`}>
+                      {f.variationPeriode >= 0 ? '+' : ''}{f.variationPeriode.toLocaleString()} F
+                    </td>
+                    <td className={`px-6 py-4 text-right tabular-nums text-lg font-black bg-orange-50/10 border-x border-orange-50/50 ${f.soldeGlobal > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                      {f.soldeGlobal.toLocaleString()} F
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div className="border-t border-gray-100 p-4 bg-gray-50/50">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filteredData.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
       </div>
 
       {isPrinting && (

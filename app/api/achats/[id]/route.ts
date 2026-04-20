@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
+import { montantLigneTTC } from '@/lib/calculs-commerciaux'
 
 export async function GET(
   _request: NextRequest,
@@ -157,6 +158,19 @@ export async function PATCH(
       })
 
       if (!achat) return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
+      if (session.role !== 'SUPER_ADMIN') {
+        const entiteId = await getEntiteId(session)
+        if (achat.entiteId !== entiteId) {
+          return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
+        }
+      }
+
+      const resteAPayer = Math.max(0, (achat.montantTotal || 0) - (achat.montantPaye || 0))
+      if (montantReglement - resteAPayer > 0.01) {
+        return NextResponse.json({
+          error: `Paiement invalide : le montant (${montantReglement.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`
+        }, { status: 400 })
+      }
 
       const nouveauMontantPaye = Math.min(achat.montantTotal, (achat.montantPaye || 0) + montantReglement)
       const nouveauStatut = nouveauMontantPaye >= achat.montantTotal ? 'PAYE' : 'PARTIEL'
@@ -173,6 +187,7 @@ export async function PATCH(
         data: {
           achatId: id,
           fournisseurId: achat.fournisseurId!,
+          entiteId: achat.entiteId,
           montant: montantReglement,
           modePaiement: modePaiement,
           utilisateurId: session.userId,
@@ -250,7 +265,12 @@ export async function PATCH(
           const pu = Math.max(0, Number(l.prixUnitaire))
           const tva = Math.max(0, Number(l.tva || 0))
           const rem = Math.max(0, Number(l.remise || 0))
-          const mnt = Math.round((q * pu - rem) * (1 + tva / 100))
+          const mnt = montantLigneTTC({
+            quantite: q,
+            prixUnitaire: pu,
+            remiseLigne: rem,
+            tvaPourcent: tva,
+          })
           
           newTotalHT += mnt
           nouvellesLignes.push({

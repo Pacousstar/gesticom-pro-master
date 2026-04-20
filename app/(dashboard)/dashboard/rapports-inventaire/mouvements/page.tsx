@@ -34,22 +34,9 @@ export default function MouvementsStockPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
   const [selectedMouvement, setSelectedMouvement] = useState<Mouvement | null>(null)
-  const { success: showSuccess, error: showError } = useToast()
+  const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [allMouvementsForPrint, setAllMouvementsForPrint] = useState<Mouvement[]>([])
-  const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
   const [entreprise, setEntreprise] = useState<any>(null)
-
-  const ITEMS_PER_PRINT_PAGE = 25
-
-  function chunkArray<T>(array: T[], size: number): T[][] {
-    const result = []
-    for (let i = 0; i < array.length; i += size) {
-      result.push(array.slice(i, i + size))
-    }
-    return result
-  }
 
   useEffect(() => {
     const now = new Date()
@@ -165,46 +152,18 @@ export default function MouvementsStockPage() {
         </div>
         <div className="flex gap-2 no-print">
           <button 
-            onClick={async () => {
-              setIsPrinting(true)
-              try {
-                // On s'assure d'avoir toutes les données pour l'impression
-                let url = `/api/rapports/inventaire/mouvements?dateDebut=${startDate}&dateFin=${endDate}`
-                if (selectedProduct !== 'TOUT') url += `&produitId=${selectedProduct}`
-                if (selectedMagasin !== 'TOUT') url += `&magasinId=${selectedMagasin}`
-                if (selectedType !== 'TOUT') url += `&type=${selectedType}`
-                url += `&limit=10000`
-
-                const res = await fetch(url)
-                if (res.ok) {
-                  const d = await res.json()
-                  setAllMouvementsForPrint(Array.isArray(d) ? d : [])
-                  setIsPreviewOpen(true)
-                }
-              } catch (e) {
-                 console.error(e)
-                 showError("Erreur lors de la préparation de l'impression.")
-              } finally {
-                 setIsPrinting(false)
-              }
-            }}
+            onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
             disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-xl transition-all active:scale-95 disabled:opacity-50 uppercase"
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
-            IMPRIMER
+            IMPRIMER LA LISTE
           </button>
           <button 
-            onClick={() => {
-              let url = `/api/rapports/inventaire/mouvements/export?dateDebut=${startDate}&dateFin=${endDate}`
-              if (selectedProduct !== 'TOUT') url += `&produitId=${selectedProduct}`
-              if (selectedMagasin !== 'TOUT') url += `&magasinId=${selectedMagasin}`
-              if (selectedType !== 'TOUT') url += `&type=${selectedType}`
-              window.open(url, '_blank')
-            }}
-            className="flex items-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 shadow-lg transition-all active:scale-95 uppercase"
+            onClick={() => {}}
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
           >
-            <Download className="h-4 w-4 text-emerald-600" /> EXCEL
+            <Download className="h-4 w-4" /> Excel
           </button>
         </div>
       </div>
@@ -247,184 +206,59 @@ export default function MouvementsStockPage() {
         </div>
       </div>
 
-      {/* ZONE D'IMPRESSION (Masquée à l'écran) */}
-      <div className="hidden print:block absolute inset-0 bg-white shadow-2xl">
-        {chunkArray(allMouvementsForPrint.length > 0 ? allMouvementsForPrint : filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: Mouvement[], index: number, allChunks: Mouvement[][]) => (
-          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-            <ListPrintWrapper
-              title="JOURNAL DES MOUVEMENTS DE STOCK"
-              subtitle={`Flux de produits du ${startDate} au ${endDate}`}
-              pageNumber={index + 1}
-              totalPages={allChunks.length}
-              layout={printLayout}
-              enterprise={entreprise}
-            >
-              <table className="w-full text-[12px] border-collapse border-2 border-black font-sans">
-                <thead>
-                  <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                    <th className="border-r-2 border-black px-2 py-3 text-left">Date Opération</th>
-                    <th className="border-r-2 border-black px-2 py-3 text-left">Produit / Magasin</th>
-                    <th className="border-r-2 border-black px-2 py-3 text-center">Type</th>
-                    <th className="border-r-2 border-black px-2 py-3 text-right">Quantité</th>
-                    <th className="px-2 py-3 text-left text-[10px]">Observations / Signature</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {chunk.map((m, idx) => (
-                    <tr key={idx} className="border-b border-black">
-                      <td className="border-r-2 border-black px-2 py-2 font-mono text-[10px]">
-                        {new Date(m.dateOperation).toLocaleString('fr-FR')}
-                      </td>
-                      <td className="border-r-2 border-black px-2 py-2">
-                        <div className="font-black uppercase text-[12px]">{m.produit}</div>
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{m.magasin}</div>
-                      </td>
-                      <td className="border-r-2 border-black px-2 py-2 text-center font-black uppercase text-[10px] italic">
-                        {m.type}
-                      </td>
-                      <td className={`border-r-2 border-black px-2 py-2 text-right font-black text-[14px] ${m.type === 'SORTIE' ? 'text-red-700' : 'text-emerald-700'}`}>
-                        {m.type === 'SORTIE' ? '-' : '+'}{m.quantite.toLocaleString()} {m.unite}
-                      </td>
-                      <td className="px-2 py-2 italic text-[10px]">
-                        <p className="font-bold uppercase tracking-tighter opacity-70 mb-1">{m.utilisateur}</p>
-                        <p className="leading-tight">{m.observation || '-'}</p>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {index === allChunks.length - 1 && (
-                  <tfoot>
-                    <tr className="bg-gray-50 font-black text-[14px] border-t-2 border-black uppercase italic shadow-2xl">
-                        <td colSpan={3} className="border-r-2 border-black px-3 py-6 text-right tracking-[0.2em] underline decoration-double">FLUX NET DE PÉRIODE</td>
-                        <td className="border-r-2 border-black px-3 py-6 text-right text-lg tabular-nums bg-gray-100 ring-2 ring-black">
-                           {netFlux > 0 ? '+' : ''}{netFlux.toLocaleString()}
-                        </td>
-                        <td className="px-3 py-6 bg-white text-[10px] not-italic opacity-60">
-                           Entrées: {totalEntrees.toLocaleString()} | Sorties: {totalSorties.toLocaleString()}
-                        </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </ListPrintWrapper>
-          </div>
-        ))}
+      <div className="hidden print:block">
+        <ListPrintWrapper
+          title="Journal des Mouvements de Stock"
+          subtitle="Rapport technique des flux"
+          dateRange={{ start: startDate, end: endDate }}
+        >
+          <table className="w-full text-[10px] border-collapse border border-gray-300">
+            <thead>
+              <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                <th className="border border-gray-300 px-3 py-3 text-left">Date Opération</th>
+                <th className="border border-gray-300 px-3 py-3 text-left">Produit / Magasin</th>
+                <th className="border border-gray-300 px-3 py-3 text-center">Type</th>
+                <th className="border border-gray-300 px-3 py-3 text-right">Quantité</th>
+                <th className="border border-gray-300 px-3 py-3 text-left">Obs / Utilisateur</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredData.map((m, idx) => (
+                <tr key={idx} className="border-b border-gray-200">
+                  <td className="border border-gray-300 px-3 py-2">
+                    {new Date(m.dateOperation).toLocaleString('fr-FR')}
+                  </td>
+                  <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
+                    {m.produit}<br/>
+                    <small className="font-normal italic text-gray-500">{m.magasin}</small>
+                  </td>
+                  <td className="border border-gray-300 px-3 py-2 text-center font-black uppercase italic text-[9px]">
+                    {m.type}
+                  </td>
+                  <td className={`border border-gray-300 px-3 py-2 text-right font-black ${m.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {m.type === 'SORTIE' ? '-' : '+'}{m.quantite.toLocaleString()} {m.unite}
+                  </td>
+                  <td className="border border-gray-300 px-3 py-2 text-[8px]">
+                    <p className="font-bold uppercase tracking-tighter">{m.utilisateur}</p>
+                    <p className="italic text-gray-500">{m.observation || '-'}</p>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+               <tr className="bg-gray-50 font-black text-sm">
+                  <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Bilan des Flux (Période)</td>
+                  <td className="border border-gray-300 px-3 py-4 text-right text-orange-700">
+                     {netFlux > 0 ? '+' : ''}{netFlux.toLocaleString()} UNITÉS
+                  </td>
+                  <td className="border border-gray-300 px-3 py-4 text-[9px] text-gray-500 font-normal">
+                     E: {totalEntrees.toLocaleString()} / S: {totalSorties.toLocaleString()}
+                  </td>
+               </tr>
+            </tfoot>
+          </table>
+        </ListPrintWrapper>
       </div>
-
-      {/* MODALE D'APERÇU IMPRESSION MOUVEMENTS (ZenPrint) */}
-      {isPreviewOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans text-slate-900 uppercase italic tracking-tighter">
-          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl not-italic tracking-normal">
-              <div className="flex items-center gap-6">
-                 <div>
-                   <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Journal des Flux</h2>
-                   <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
-                     Traçabilité Intégrale des Mouvements de Stock
-                   </p>
-                 </div>
-                 <div className="h-10 w-px bg-gray-200" />
-                 <div className="flex items-center gap-4">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Période du</span>
-                      <span className="text-xs font-black text-orange-600 italic uppercase">{startDate} au {endDate}</span>
-                    </div>
-                    <div className="h-10 w-px bg-gray-200" />
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
-                      <select 
-                        value={printLayout}
-                        onChange={(e) => setPrintLayout(e.target.value as any)}
-                        className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
-                      >
-                        <option value="portrait">Portrait</option>
-                        <option value="landscape">Paysage</option>
-                      </select>
-                    </div>
-                 </div>
-              </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setIsPreviewOpen(false)}
-                  className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
-                >
-                  Fermer
-                </button>
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
-                >
-                  <Printer className="h-4 w-4" />
-                  Lancer l'impression
-                </button>
-              </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-              <div className={`mx-auto shadow-2xl bg-white ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} min-h-screen p-12 text-slate-900 not-italic tracking-normal`}>
-                  {chunkArray(allMouvementsForPrint.length > 0 ? allMouvementsForPrint : filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: Mouvement[], index: number, allChunks: Mouvement[][]) => (
-                      <div key={index} className="page-break-after border-b-2 border-dashed border-gray-200 mb-12 pb-12 last:border-0 last:mb-0 last:pb-0 shadow-sm">
-                          <ListPrintWrapper
-                              title="JOURNAL RÉCAPITULATIF DES MOUVEMENTS"
-                              subtitle={`Audit des flux logistiques - Du ${startDate} au ${endDate}`}
-                              pageNumber={index + 1}
-                              totalPages={allChunks.length}
-                              layout={printLayout}
-                              enterprise={entreprise}
-                          >
-                              <table className="w-full text-[14px] border-collapse border-2 border-black font-sans shadow-xl">
-                                <thead>
-                                  <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                                    <th className="border-r-2 border-black px-3 py-3 text-left">Horodatage</th>
-                                    <th className="border-r-2 border-black px-3 py-3 text-left">Produit & Dépôt</th>
-                                    <th className="border-r-2 border-black px-3 py-3 text-center">Type</th>
-                                    <th className="border-r-2 border-black px-3 py-3 text-right">Quantité</th>
-                                    <th className="px-3 py-3 text-left">Opérateur / Obs</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {chunk.map((m, idx) => (
-                                    <tr key={idx} className="border-b border-black group hover:bg-orange-50/20 transition-colors">
-                                      <td className="border-r-2 border-black px-3 py-2 font-mono text-[11px] font-bold text-gray-500">
-                                        {new Date(m.dateOperation).toLocaleString('fr-FR')}
-                                      </td>
-                                      <td className="border-r-2 border-black px-3 py-2">
-                                        <div className="font-black uppercase text-slate-800 tracking-tight leading-none mb-1">{m.produit}</div>
-                                        <div className="text-[10px] font-black text-orange-600 uppercase tracking-widest">{m.magasin}</div>
-                                      </td>
-                                      <td className="border-r-2 border-black px-3 py-2 text-center">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase italic ${getTypeStyle(m.type)}`}>
-                                          {m.type}
-                                        </span>
-                                      </td>
-                                      <td className={`border-r-2 border-black px-3 py-2 text-right font-black tabular-nums text-lg ${m.type === 'SORTIE' ? 'text-red-600 bg-red-50/10' : 'text-emerald-600 bg-emerald-50/10'}`}>
-                                        {m.type === 'SORTIE' ? '-' : '+'}{m.quantite.toLocaleString()} <span className="text-[10px] opacity-40">{m.unite}</span>
-                                      </td>
-                                      <td className="px-3 py-2 italic text-[11px] leading-tight">
-                                        <div className="font-black text-slate-900 uppercase mb-1">{m.utilisateur}</div>
-                                        <div className="opacity-70">{m.observation || '—'}</div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                                {index === allChunks.length - 1 && (
-                                  <tfoot>
-                                    <tr className="bg-slate-900 text-white font-black text-[16px] border-t-2 border-black uppercase italic shadow-2xl">
-                                        <td colSpan={3} className="px-4 py-8 text-right bg-slate-800 tracking-widest underline decoration-orange-500 underline-offset-8">BILAN NET DES UNITÉS TRANSFÉRÉES</td>
-                                        <td className="px-4 py-8 text-right text-3xl tabular-nums bg-slate-900 shadow-inner ring-4 ring-slate-800 ring-inset">
-                                           {netFlux > 0 ? '+' : ''}{netFlux.toLocaleString()}
-                                        </td>
-                                        <td className="bg-slate-800"></td>
-                                    </tr>
-                                  </tfoot>
-                                )}
-                              </table>
-                          </ListPrintWrapper>
-                      </div>
-                  ))}
-              </div>
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
         <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end">

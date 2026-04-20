@@ -9,10 +9,8 @@ import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
 interface ProduitData {
     produitId: number
     designation: string
-    categorie: string
     quantiteTotale: number
     caTotal: number
-    coutTotal: number
     margeBrute: number
     tauxMarge: number
     nombreTransactions: number
@@ -29,7 +27,6 @@ export default function ParProduitPage() {
     const [endDate, setEndDate] = useState('')
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [isPrinting, setIsPrinting] = useState(false)
-    const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('portrait')
 
     useEffect(() => {
         const now = new Date()
@@ -61,8 +58,9 @@ export default function ParProduitPage() {
     }
 
     const totalQty = data.reduce((acc, c) => acc + c.quantiteTotale, 0)
-    const totalCA = data.reduce((acc, c) => acc + (c.caTotal || 0), 0)
+    const totalCA = data.reduce((acc, c) => acc + c.caTotal, 0)
     const totalMarge = data.reduce((acc, c) => acc + (c.margeBrute || 0), 0)
+    const avgTaux = totalCA > 0 ? (totalMarge / totalCA) * 100 : 0
 
     return (
         <>
@@ -78,10 +76,10 @@ export default function ParProduitPage() {
                                 <div className="p-3 bg-orange-50 rounded-2xl shadow-sm">
                                     <Package className="h-8 w-8 text-orange-600" />
                                 </div>
-                                Rentabilité Produits {(startDate || endDate) && <span className="ml-1" title="Période filtrée">⚠️</span>}
+                                Rentabilité Produits
                             </h1>
                             <p className="text-slate-500 text-sm mt-3 max-w-xl font-bold uppercase tracking-widest opacity-80">
-                                Analyse des rotations de stock et de la performance par article (Marge Réelle incluse)
+                                Analyse des rotations de stock, des marges brutes et de la performance par article
                             </p>
                         </div>
 
@@ -92,7 +90,7 @@ export default function ParProduitPage() {
                                 className="bg-slate-800 text-white px-6 py-2 rounded-xl text-xs font-black hover:bg-slate-900 flex items-center gap-2 h-[42px] transition-all hover:scale-105 active:scale-95 shadow-lg no-print uppercase tracking-widest"
                             >
                                 <Printer className="h-4 w-4" />
-                                Imprimer
+                                Aperçu Impression
                             </button>
                             <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end bg-gray-50/50 p-6 rounded-2xl border border-gray-100 shadow-inner">
                                 <div className="space-y-1.5">
@@ -124,6 +122,30 @@ export default function ParProduitPage() {
                     <div className="absolute bottom-0 left-0 -ml-16 -mb-16 h-48 w-48 rounded-full bg-blue-500/5 blur-3xl"></div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 no-print">
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-xl relative overflow-hidden group">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Articles Vendus</p>
+                        <p className="text-3xl font-black text-slate-900 tabular-nums">{totalQty.toLocaleString()}</p>
+                        <div className="mt-4 h-1 w-12 bg-blue-500 rounded-full" />
+                        <Package className="absolute -right-4 -bottom-4 h-24 w-24 text-blue-500/5 group-hover:scale-110 transition-transform" />
+                    </div>
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-xl relative overflow-hidden group">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">C.A Global (HT)</p>
+                        <p className="text-3xl font-black text-slate-900 tabular-nums">{totalCA.toLocaleString()} <span className="text-xs">F</span></p>
+                        <div className="mt-4 h-1 w-12 bg-orange-500 rounded-full" />
+                    </div>
+                    <div className="bg-emerald-600 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group text-white ring-4 ring-emerald-500/20">
+                        <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1 italic">Marge Brute Totale</p>
+                        <p className="text-3xl font-black tabular-nums">{totalMarge.toLocaleString()} <span className="text-xs">F</span></p>
+                        <div className="mt-4 h-1 w-12 bg-white/30 rounded-full" />
+                    </div>
+                    <div className="bg-slate-900 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group text-white">
+                        <p className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-1">Taux de Marge Moyen</p>
+                        <p className="text-3xl font-black tabular-nums">{avgTaux.toFixed(1)} %</p>
+                        <div className="mt-4 h-1 w-12 bg-emerald-500 rounded-full" />
+                    </div>
+                </div>
+
                 <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden mb-12 no-print">
                     {loading ? (
                         <div className="p-24 flex flex-col justify-center items-center text-orange-600 gap-6">
@@ -136,39 +158,34 @@ export default function ParProduitPage() {
                                 <thead>
                                     <tr className="bg-gray-50/50 border-b border-gray-100 font-black text-[10px] uppercase tracking-[0.2em] text-slate-400 italic">
                                         <th className="px-8 py-6">Désignation Article</th>
-                                        <th className="px-8 py-6">Catégorie</th>
                                         <th className="px-8 py-6 text-right">Qté Vendue</th>
-                                        <th className="px-8 py-6 text-right">Valeur Ventes</th>
-                                        <th className="px-8 py-6 text-right text-orange-600">Marge Brute</th>
-                                        <th className="px-8 py-6 text-right">Masse CA</th>
+                                        <th className="px-8 py-6 text-right">C.A Généré</th>
+                                        <th className="px-8 py-6 text-right text-emerald-600">Marge Brute</th>
+                                        <th className="px-8 py-6 text-right">Taux (%)</th>
+                                        <th className="px-8 py-6 text-right text-orange-400">Poids CA</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-50">
+                                <tbody className="divide-y divide-gray-100">
                                     {data.map((row, idx) => (
-                                        <tr key={idx} className="hover:bg-orange-50/30 transition-all duration-300 group">
+                                        <tr key={idx} className="hover:bg-gray-50 transition-all duration-300 group">
                                             <td className="px-8 py-7 font-black text-slate-900 uppercase tracking-tighter italic group-hover:text-orange-600 transition-colors">
                                                 {row.designation}
                                             </td>
-                                            <td className="px-8 py-7">
-                                                <span className="bg-white text-slate-400 px-3 py-1 rounded-full text-[10px] font-black tracking-[0.1em] border border-gray-100 shadow-sm uppercase italic">
-                                                    Article
-                                                </span>
-                                            </td>
                                             <td className="px-8 py-7 text-right">
-                                                <span className="bg-orange-50 text-orange-600 px-4 py-1.5 rounded-xl text-sm font-black tabular-nums border border-orange-100 shadow-sm italic">
+                                                <span className="bg-gray-100 text-slate-900 px-3 py-1 rounded-xl text-sm font-black tabular-nums border border-gray-200">
                                                     {row.quantiteTotale}
                                                 </span>
                                             </td>
                                             <td className="px-8 py-7 text-right text-blue-600 font-black tracking-tighter text-xl tabular-nums">
                                                 {formatCurrency(row.caTotal)}
                                             </td>
+                                            <td className="px-8 py-7 text-right text-emerald-600 font-bold tabular-nums">
+                                                {formatCurrency(row.margeBrute)}
+                                            </td>
                                             <td className="px-8 py-7 text-right">
-                                                <div className="font-black tabular-nums text-emerald-600 italic">
-                                                    {formatCurrency(row.margeBrute)}
-                                                </div>
-                                                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                                                    {row.tauxMarge.toFixed(1)}% de marge
-                                                </div>
+                                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black ${row.tauxMarge >= 20 ? 'bg-emerald-100 text-emerald-800' : row.tauxMarge >= 10 ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'}`}>
+                                                    {row.tauxMarge.toFixed(1)}%
+                                                 </span>
                                             </td>
                                             <td className="px-8 py-7 text-right">
                                                 <span className="bg-orange-50 text-orange-600 px-3 py-1 rounded-xl text-[10px] font-black border border-orange-100 tracking-tight">
@@ -179,7 +196,7 @@ export default function ParProduitPage() {
                                     ))}
                                     {data.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} className="px-8 py-32 text-center text-slate-200 font-black uppercase italic tracking-[0.5em] text-xs">
+                                            <td colSpan={6} className="px-8 py-32 text-center text-slate-200 font-black uppercase italic tracking-[0.5em] text-xs">
                                                 Aucune transaction enregistrée
                                             </td>
                                         </tr>
@@ -201,36 +218,37 @@ export default function ParProduitPage() {
                             totalPages={allChunks.length}
                             hideHeader={index > 0}
                             hideVisa={index < allChunks.length - 1}
-                            layout={printLayout}
                         >
-                            <table className="w-full text-[14px] border-collapse border-2 border-black">
+                            <table className="w-full text-[13px] border-collapse border-2 border-black">
                                 <thead>
                                     <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
                                         <th className="border-r-2 border-black px-3 py-3 text-left">Désignation</th>
-                                        <th className="border-r-2 border-black px-3 py-3 text-right">Qté Vendue</th>
-                                        <th className="border-r-2 border-black px-3 py-3 text-right">Valeur Ventes (CA)</th>
-                                        <th className="px-3 py-3 text-right">Part (%)</th>
+                                        <th className="border-r-2 border-black px-3 py-3 text-right">Qté</th>
+                                        <th className="border-r-2 border-black px-3 py-3 text-right">CA Net</th>
+                                        <th className="border-r-2 border-black px-3 py-3 text-right">Marge Brute</th>
+                                        <th className="px-3 py-3 text-right">Taux (%)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {chunk.map((row, idx) => (
                                         <tr key={idx} className="border-b border-black">
                                             <td className="border-r-2 border-black px-3 py-2 font-bold uppercase">{row.designation}</td>
-                                            <td className="border-r-2 border-black px-3 py-2 text-right">{row.quantiteTotale} Unités</td>
+                                            <td className="border-r-2 border-black px-3 py-2 text-right">{row.quantiteTotale}</td>
                                             <td className="border-r-2 border-black px-3 py-2 text-right font-black tabular-nums">{row.caTotal.toLocaleString()} F</td>
+                                            <td className="border-r-2 border-black px-3 py-2 text-right font-black italic">{row.margeBrute.toLocaleString()} F</td>
                                             <td className="px-3 py-2 text-right italic font-medium">
-                                                {totalCA > 0 ? ((row.caTotal / totalCA) * 100).toFixed(1) : 0}%
+                                                {row.tauxMarge.toFixed(1)}%
                                             </td>
                                         </tr>
                                     ))}
                                 </tbody>
                                 {index === allChunks.length - 1 && (
                                     <tfoot>
-                                        <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
-                                            <td className="border-r-2 border-black px-3 py-4 text-right">TOTAL ANALYSE</td>
-                                            <td className="border-r-2 border-black px-3 py-4 text-right bg-white underline tabular-nums">{totalQty} Articles</td>
-                                            <td className="border-r-2 border-black px-3 py-4 text-right bg-white text-blue-900 underline underline-offset-4 decoration-double">{totalCA.toLocaleString()} F</td>
-                                            <td className="px-3 py-4 bg-white">100%</td>
+                                        <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black uppercase italic">
+                                            <td colSpan={2} className="border-r-2 border-black px-3 py-4 text-right">SYNTHÈSE ANALYTIQUE :</td>
+                                            <td className="border-r-2 border-black px-3 py-4 text-right bg-white text-blue-900 shadow-inner">{totalCA.toLocaleString()} F</td>
+                                            <td className="border-r-2 border-black px-3 py-4 text-right bg-white text-emerald-900">{totalMarge.toLocaleString()} F</td>
+                                            <td className="px-3 py-4 bg-white text-slate-900">{avgTaux.toFixed(1)}%</td>
                                         </tr>
                                     </tfoot>
                                 )}
@@ -245,28 +263,14 @@ export default function ParProduitPage() {
               <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print font-sans text-slate-900 uppercase italic tracking-tighter">
                 <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl not-italic tracking-normal">
                     <div className="flex items-center gap-6">
+                        <div className="p-3 bg-emerald-100 rounded-2xl">
+                             <Package className="h-8 w-8 text-emerald-700" />
+                        </div>
                        <div>
-                         <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Rentabilité Produits</h2>
+                         <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Intelligence Analytique / Produits</h2>
                          <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
-                           Analyse des Rotations et de la Performance Stock
+                           Performance Catalogue & Rentabilité Brute par Article
                          </p>
-                       </div>
-                       <div className="h-10 w-px bg-gray-200" />
-                       <div className="flex flex-col">
-                         <span className="text-xs font-black text-emerald-600 italic uppercase">Période : {startDate}</span>
-                         <span className="text-xs font-black text-emerald-600 italic uppercase">jusqu'au : {endDate}</span>
-                       </div>
-                       <div className="h-10 w-px bg-gray-200" />
-                       <div className="flex items-center gap-2">
-                         <label className="text-[10px] font-black text-gray-400 uppercase">Orientation :</label>
-                         <select 
-                           value={printLayout}
-                           onChange={(e) => setPrintLayout(e.target.value as any)}
-                           className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-orange-500"
-                         >
-                           <option value="portrait">Portrait</option>
-                           <option value="landscape">Paysage</option>
-                         </select>
                        </div>
                     </div>
                     <div className="flex gap-4">
@@ -281,52 +285,53 @@ export default function ParProduitPage() {
                         className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
                       >
                         <Printer className="h-4 w-4" />
-                        Lancer l'impression
+                        Confirmer Impression
                       </button>
                     </div>
                 </div>
 
                 <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-                    <div className={`mx-auto ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'} bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal`}>
+                    <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-12 text-slate-900 not-italic tracking-normal">
                         {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
-                            <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
+                            <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-12 pb-12 last:border-0 last:mb-0 last:pb-0">
                                 <ListPrintWrapper
-                                    title="RENTABILITÉ & PERFORMANCE PRODUITS"
-                                    subtitle={`Analyse statistique consolidée - Rapport d'activité`}
+                                    title="RAPPORT DE RENTABILITÉ DÉTAILLÉ"
+                                    subtitle={`Analyse statistique consolidée - Période du ${startDate} au ${endDate}`}
                                     pageNumber={index + 1}
                                     totalPages={allChunks.length}
                                     hideHeader={index > 0}
                                     hideVisa={index < allChunks.length - 1}
-                                    layout={printLayout}
                                 >
-                                    <table className="w-full text-[14px] border-collapse border-2 border-black">
+                                    <table className="w-full text-[14px] border-collapse border-4 border-black shadow-2xl">
                                         <thead>
-                                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                                                <th className="border-r-2 border-black px-3 py-3 text-left">Désignation de l'Article</th>
-                                                <th className="border-r-2 border-black px-3 py-3 text-right tabular-nums">Volume Vendu</th>
-                                                <th className="border-r-2 border-black px-3 py-3 text-right">Chiffre d'Affaires</th>
-                                                <th className="px-3 py-3 text-right">Masse (%)</th>
+                                            <tr className="bg-black text-white uppercase font-black">
+                                                <th className="border-r-2 border-white px-3 py-4 text-left italic">Désignation de l'Article</th>
+                                                <th className="border-r-2 border-white px-3 py-4 text-right tabular-nums">Volume</th>
+                                                <th className="border-r-2 border-white px-3 py-4 text-right">CA Net (XOF)</th>
+                                                <th className="border-r-2 border-white px-3 py-4 text-right bg-emerald-900">Marge Brute</th>
+                                                <th className="px-3 py-4 text-right">Tx (%)</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {chunk.map((row, idx) => (
-                                                <tr key={idx} className="border-b border-black text-[13px]">
-                                                    <td className="border-r-2 border-black px-3 py-2 font-black uppercase text-slate-800">{row.designation}</td>
-                                                    <td className="border-r-2 border-black px-3 py-2 text-right font-bold tabular-nums">{row.quantiteTotale}</td>
-                                                    <td className="border-r-2 border-black px-3 py-2 text-right font-black tabular-nums text-blue-800">{row.caTotal.toLocaleString()} F</td>
-                                                    <td className="px-3 py-2 text-right font-black italic tabular-nums shadow-inner text-orange-600">
-                                                        {totalCA > 0 ? ((row.caTotal / totalCA) * 100).toFixed(1) : 0}%
+                                                <tr key={idx} className="border-b-2 border-black text-[13px] hover:bg-gray-50 transition-colors">
+                                                    <td className="border-r-2 border-black px-3 py-3 font-black uppercase text-slate-800">{row.designation}</td>
+                                                    <td className="border-r-2 border-black px-3 py-3 text-right font-bold tabular-nums">{row.quantiteTotale}</td>
+                                                    <td className="border-r-2 border-black px-3 py-3 text-right font-black tabular-nums text-blue-900">{row.caTotal.toLocaleString()}</td>
+                                                    <td className="border-r-2 border-black px-3 py-3 text-right font-black tabular-nums text-emerald-800 bg-emerald-50/20">{row.margeBrute.toLocaleString()}</td>
+                                                    <td className="px-3 py-3 text-right font-black italic tabular-nums text-orange-600 shadow-inner">
+                                                        {row.tauxMarge.toFixed(1)}%
                                                     </td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                         {index === allChunks.length - 1 && (
                                             <tfoot>
-                                                <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic">
-                                                    <td className="border-r-2 border-black px-3 py-4 text-right bg-white shadow-inner">EXTRACT TOTAL PERFORMANCE</td>
-                                                    <td className="border-r-2 border-black px-3 py-4 bg-white italic tabular-nums">{totalQty} Unités</td>
-                                                    <td className="border-r-2 border-black px-3 py-4 bg-white text-blue-900 underline underline-offset-4 decoration-double tabular-nums shadow-inner">{totalCA.toLocaleString()} F</td>
-                                                    <td className="px-3 py-4 bg-white text-orange-700 underline decoration-double shadow-inner">100 %</td>
+                                                <tr className="bg-black text-white font-black text-[18px] border-t-4 border-black uppercase italic shadow-2xl">
+                                                    <td colSpan={2} className="px-4 py-8 text-right underline decoration-white decoration-2 underline-offset-8">PERFORMANCE GLOBALE :</td>
+                                                    <td className="px-4 py-8 text-right tabular-nums bg-blue-900 border-x-2 border-white">{totalCA.toLocaleString()}</td>
+                                                    <td className="px-4 py-8 text-right tabular-nums bg-emerald-900 border-r-2 border-white">{totalMarge.toLocaleString()}</td>
+                                                    <td className="px-4 py-8 text-right tabular-nums bg-slate-900">{avgTaux.toFixed(1)} %</td>
                                                 </tr>
                                             </tfoot>
                                         )}

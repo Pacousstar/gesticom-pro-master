@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Archive, Plus, Loader2, Trash2, Eye, Search, Filter, FileSpreadsheet, X, ShoppingCart } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatDate } from '@/lib/format-date'
+import { montantLigneTTC } from '@/lib/calculs-commerciaux'
 import Pagination from '@/components/ui/Pagination'
 
 type Client = { id: number; nom: string }
@@ -101,11 +102,17 @@ export default function AnciennesVentesPage() {
     setAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tva: '', remise: '', recherche: '' })
   }
 
-  const total = formData.lignes.reduce((acc, l) => {
-    const ht = l.quantite * l.prixUnitaire
-    const ttc = ht * (1 + (l.tva || 0) / 100) - (l.remise || 0)
-    return acc + ttc
-  }, 0)
+  const total = formData.lignes.reduce(
+    (acc, l) =>
+      acc +
+      montantLigneTTC({
+        quantite: l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        remiseLigne: Number(l.remise) || 0,
+        tvaPourcent: l.tva || 0,
+      }),
+    0
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -345,7 +352,12 @@ export default function AnciennesVentesPage() {
                     </thead>
                     <tbody>
                       {formData.lignes.map((l, i) => {
-                        const ttc = (l.quantite * l.prixUnitaire) * (1 + (l.tva || 0) / 100) - (l.remise || 0)
+                        const ttc = montantLigneTTC({
+                          quantite: l.quantite,
+                          prixUnitaire: l.prixUnitaire,
+                          remiseLigne: Number(l.remise) || 0,
+                          tvaPourcent: l.tva || 0,
+                        })
                         return (
                           <tr key={i} className="border-b border-gray-100">
                             <td className="py-2">{l.designation}</td>
@@ -353,7 +365,7 @@ export default function AnciennesVentesPage() {
                             <td className="text-right">{l.prixUnitaire.toLocaleString('fr-FR')} F</td>
                             <td className="text-right">{l.tva || 0}%</td>
                             <td className="text-right text-red-500">{l.remise ? `-${l.remise} F` : '—'}</td>
-                            <td className="text-right font-medium">{Math.round(ttc).toLocaleString('fr-FR')} F</td>
+                            <td className="text-right font-medium">{ttc.toLocaleString('fr-FR')} F</td>
                             <td>
                               <button type="button" onClick={() => setFormData(f => ({ ...f, lignes: f.lignes.filter((_, j) => j !== i) }))}
                                 className="rounded p-1 text-red-600 hover:bg-red-50">
