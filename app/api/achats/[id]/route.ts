@@ -253,7 +253,8 @@ export async function PATCH(
         })
 
         // 3. Valider nouvelles lignes
-        let newTotalHT = 0
+        let newTotalTTC = 0
+        let totalHTNet = 0
         const nouvellesLignes: any[] = []
         const currentMagasinId = Number(magasinId || oldAchat.magasinId)
 
@@ -265,14 +266,15 @@ export async function PATCH(
           const pu = Math.max(0, Number(l.prixUnitaire))
           const tva = Math.max(0, Number(l.tva || 0))
           const rem = Math.max(0, Number(l.remise || 0))
-          const mnt = montantLigneTTC({
-            quantite: q,
-            prixUnitaire: pu,
-            remiseLigne: rem,
-            tvaPourcent: tva,
-          })
           
-          newTotalHT += mnt
+          // Calcul TTC pour le total document
+          const mntTTC = Math.round((q * pu - rem) * (1 + tva / 100))
+          // Calcul HT Net pour la répartition des frais et le PAMP
+          const htNet = (q * pu - rem)
+          
+          newTotalTTC += mntTTC
+          totalHTNet += htNet
+
           nouvellesLignes.push({
             produitId: p.id,
             designation: p.designation,
@@ -280,7 +282,8 @@ export async function PATCH(
             prixUnitaire: pu,
             tva,
             remise: rem,
-            montant: mnt
+            montant: mntTTC,
+            htNet: htNet // Stocké temporairement pour le calcul PAMP
           })
         }
 
@@ -308,14 +311,17 @@ export async function PATCH(
             date: dateFinale,
             magasinId: currentMagasinId,
             observation: observation || null,
-            montantTotal: newTotalHT,
+            montantTotal: newTotalTTC,
             fraisApproche: fApprocheTotal,
-            montantPaye: Math.min(newTotalHT, mntPaye),
-            statutPaiement: mntPaye >= newTotalHT ? 'PAYE' : mntPaye > 0 ? 'PARTIEL' : 'CREDIT',
+            montantPaye: Math.min(newTotalTTC, mntPaye),
+            statutPaiement: mntPaye >= newTotalTTC ? 'PAYE' : mntPaye > 0 ? 'PARTIEL' : 'CREDIT',
             modePaiement: regsData.length > 1 ? 'MULTI' : (regsData[0]?.mode || modePaiement || oldAchat.modePaiement),
             lignes: {
               deleteMany: {},
-              create: nouvellesLignes
+              create: nouvellesLignes.map(nl => {
+                const { htNet, ...data } = nl
+                return data
+              })
             }
           },
           include: { 
@@ -326,9 +332,9 @@ export async function PATCH(
         })
 
         // 5. Appliquer nouveaux stocks (Entrée) + MAJ PAMP
-        // Calcul du prorata des frais d'approche par ligne
-        const ratioFrais = newTotalHT > 0 ? fApprocheTotal / newTotalHT : 0
-
+        // Calcul du prorata des frais d'approche par ligne (Sur base HT NETTE)
+        const totalFrais = fApprocheTotal
+        
         for (const l of nouvellesLignes) {
           const product = await tx.produit.findUnique({ where: { id: l.produitId } })
           const stock = await tx.stock.findUnique({ 
@@ -336,15 +342,22 @@ export async function PATCH(
           })
 
           const qteStockAvant = stock?.quantite || 0
-          const puNetWithFrais = l.prixUnitaire + (l.prixUnitaire * ratioFrais)
+          const partFraisLigne = totalHTNet > 0 ? (l.htNet / totalHTNet) * totalFrais : 0
+          const valeurLigneAvecFrais = l.htNet + partFraisLigne
           
           // Nouveau PAMP = (Valeur Stock Actuel + Valeur Nouvel Achat) / Quantité Totale
-          // On considère le stock comme 0 s'il est négatif pour ne pas fausser le PAMP
-          const valeurStockActuel = Math.max(0, qteStockAvant) * (product?.pamp || product?.prixAchat || 0)
-          const valeurNouvelAchat = l.quantite * puNetWithFrais
-          const nouvelleQteTotal = Math.max(0, qteStockAvant) + l.quantite
-          
-          const nouveauPamp = Math.round((valeurStockActuel + valeurNouvelAchat) / nouvelleQteTotal)
+          const pampActuel = product?.pamp || product?.prixAchat || 0
+          let nouveauPamp = pampActuel
+
+          if (qteStockAvant <= 0) {
+            nouveauPamp = l.quantite > 0 ? valeurLigneAvecFrais / l.quantite : pampActuel
+          } else {
+            const valeurStockActuel = qteStockAvant * pampActuel
+            nouveauPamp = (valeurStockActuel + valeurLigneAvecFrais) / (qteStockAvant + l.quantite)
+          }
+
+          nouveauPamp = Math.round(nouveauPamp)
+          if (isNaN(nouveauPamp) || !isFinite(nouveauPamp)) nouveauPamp = l.prixUnitaire
 
           await tx.produit.update({
             where: { id: l.produitId },

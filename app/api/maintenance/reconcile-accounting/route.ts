@@ -32,13 +32,25 @@ export async function GET() {
     let totalIgnorees = 0
 
     for (const v of ventes) {
-      // Vérifier s'il y a des anomalies
+      // Vérifier si toutes les écritures (Vente, Stock, Frais, Règlements) sont présentes et équilibrées (Point 4 Audit)
       const ecritures = await prisma.ecritureComptable.findMany({
-        where: { referenceType: 'VENTE', referenceId: v.id }
+        where: { 
+          referenceId: v.id, 
+          referenceType: { in: ['VENTE', 'VENTE_STOCK', 'VENTE_FRAIS', 'VENTE_REGLEMENT'] } 
+        }
       })
 
       const totalDebit = ecritures.reduce((acc, e) => acc + e.debit, 0)
-      const aReparer = ecritures.length === 0 || Math.abs(totalDebit - v.montantTotal) > 1
+      const totalCredit = ecritures.reduce((acc, e) => acc + e.credit, 0)
+      
+      // La réconciliation vérifie maintenant :
+      // 1. L'existence d'écritures
+      // 2. L'équilibre Débit/Crédit (Double Entrée)
+      // 3. La cohérence avec le montant TTC de la vente
+      const estEquilibre = ecritures.length > 0 && Math.abs(totalDebit - totalCredit) < 1
+      const montantCoherent = ecritures.some(e => e.referenceType === 'VENTE' && Math.abs(e.debit - v.montantTotal) < 1)
+      
+      const aReparer = !estEquilibre || !montantCoherent
 
       if (aReparer) {
         // RECOMPTABILISATION CHIRURGICALE

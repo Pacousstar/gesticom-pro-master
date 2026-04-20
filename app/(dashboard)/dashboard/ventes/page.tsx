@@ -231,12 +231,12 @@ export default function VentesPage() {
         return acc
       }, { ht: 0, remise: 0, tva: 0 })
       
-      const lignesHtml = generateLignesHTML(lignes.map((l) => ({
+      const lignesHtml = generateLignesHTML(lignes.map((l: any) => ({
         designation: l.designation,
         quantite: l.quantite,
         prixUnitaire: l.prixUnitaire,
         remise: l.remise,
-        montant: l.montant,
+        montant: l.montant || (l.prixUnitaire * l.quantite),
       })))
 
       // Construction des données du template

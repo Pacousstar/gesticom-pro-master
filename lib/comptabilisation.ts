@@ -404,8 +404,12 @@ export async function comptabiliserReglementVente(data: {
   }
   
   // Écriture : Débit Caisse/Banque (entrée d'argent), Crédit Clients (réduit la créance)
-  // FIX: Utiliser le reglementId pour l'idempotence et la référence exacte
+  // FIX: Sécurisation de l'idempotence (Point 3 Audit)
+  // Si reglementId est absent, on génère une clé basée sur le montant et la date pour éviter les collisions
   const referenceId = data.reglementId || data.venteId || 0
+  const uniqueRef = data.reglementId 
+    ? `REG-VEN-${data.reglementId}` 
+    : `REG-VEN-V${data.venteId}-M${data.montant}-${data.date.getTime()}`
 
   await createEcriture({
     date: data.date,
@@ -416,7 +420,7 @@ export async function comptabiliserReglementVente(data: {
     compteId: compteTresorerie.id,
     debit: data.montant,
     credit: 0,
-    reference: `REG-VEN-${referenceId}`,
+    reference: uniqueRef,
     referenceType: 'VENTE_REGLEMENT',
     referenceId: referenceId,
     utilisateurId: data.utilisateurId,
@@ -431,7 +435,7 @@ export async function comptabiliserReglementVente(data: {
     compteId: compteClient.id,
     debit: 0,
     credit: data.montant,
-    reference: `REG-VEN-${referenceId}`,
+    reference: uniqueRef,
     referenceType: 'VENTE_REGLEMENT',
     referenceId: referenceId,
     utilisateurId: data.utilisateurId,
