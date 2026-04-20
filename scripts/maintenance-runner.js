@@ -268,7 +268,7 @@ async function runMaintenance() {
     // 3. MÉDECINE FINANCIÈRE (Auto-correction + Synchronisation)
     await repareCaisses();
     await repareBanques();
-    await repareStocks();
+    // await repareStocks(); // Désactivé : Pose problème avec l'historique manuel
     await repareTiers();
 
   } catch (error) {
