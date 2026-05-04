@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, DollarSign, CreditCard, Wallet, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 
@@ -25,9 +25,9 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
   const [observation, setObservation] = useState('')
   const { success: showSuccess, error: showError } = useToast()
 
-  useState(() => {
+  useEffect(() => {
     fetch('/api/magasins').then(r => r.ok ? r.json() : []).then(setMagasins)
-  })
+  }, [])
 
   if (!isOpen) return null
 
@@ -46,8 +46,13 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
         magasinId: selectedMagasinId ? Number(selectedMagasinId) : null 
       }
       
-      if (type === 'VENTE') payload.venteId = selectedInvoceId || null
-      else payload.achatId = selectedInvoceId || null
+      if (type === 'VENTE') {
+        payload.venteId = selectedInvoceId || null
+        payload.clientId = tierId
+      } else {
+        payload.achatId = selectedInvoceId || null
+        payload.fournisseurId = tierId
+      }
 
       if (!selectedInvoceId && !selectedMagasinId && modePaiement === 'ESPECES') {
          setLoading(false)

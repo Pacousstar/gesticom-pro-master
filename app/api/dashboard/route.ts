@@ -106,7 +106,7 @@ export async function GET() {
         INNER JOIN "Produit" p ON s."produitId" = p.id
         INNER JOIN "Magasin" m ON s."magasinId" = m.id
         WHERE p.actif = 1 AND s.quantite < p."seuilMin"
-        ${entiteId ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.sql` `}
+        ${entiteId ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
         ORDER BY s.quantite ASC LIMIT 5
       `.catch(catchEmpty('stock.low')),
       // 5 - Ventes récentes
@@ -135,7 +135,7 @@ export async function GET() {
         INNER JOIN "Produit" p ON s."produitId" = p.id
         INNER JOIN "Magasin" m ON s."magasinId" = m.id
         WHERE p.actif = 1
-        ${entiteId ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.sql` `}
+        ${entiteId ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
       `.catch(err => {
         console.error('[dashboard] stock.raw', err)
         return [{ total_achat: 0, total_vente: 0, nb_ruptures: 0, nb_en_stock: 0 }]
@@ -178,12 +178,12 @@ export async function GET() {
       // 15 - TENDANCES MENSUELLES (Version pour Dates en Entiers/Unix)
       prisma.$queryRaw<any[]>`
         SELECT 
-          strftime('%Y-%m', date / 1000, 'unixepoch') as mois,
+          strftime('%Y-%m', date) as mois,
           SUM(montantTotal) as montant
         FROM Vente
         WHERE statut IN ('VALIDE', 'VALIDEE')
-        AND date >= ${new Date(now.getFullYear() - 2, now.getMonth(), 1).getTime()}
-        ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.sql` `}
+        AND date >= datetime(${new Date(now.getFullYear() - 2, now.getMonth(), 1).toISOString()})
+        ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.empty}
         GROUP BY mois
         ORDER BY mois ASC
       `.catch(catchEmpty('tendances.raw')),
@@ -271,16 +271,22 @@ export async function GET() {
 
     const tresorerieReelle = toNum(soldeCompte._sum?.debit) - toNum(soldeCompte._sum?.credit)
     
-    // On va aussi récupérer les soldes physiques des tables Caisse et Banque qui sont plus fiables pour la gestion
+    // Soldes de trésorerie consolidés depuis les mouvements, pour éviter les dérives
+    // liées au champ magasin.soldeCaisse historique.
+    // FILTRAGE PAR DATE : Caisse = mouvements créés aujourd'hui (createdAt), pas date comptable
+    // Banque = solde actuel (toutes dates)
     const [soldesPhysiques] = await Promise.all([
       prisma.$transaction([
         prisma.banque.aggregate({ where: entiteCondition, _sum: { soldeActuel: true } }),
-        prisma.magasin.aggregate({ where: entiteCondition, _sum: { soldeCaisse: true } })
+        prisma.caisse.aggregate({ where: { createdAt: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'ENTREE' }, _sum: { montant: true } }),
+        prisma.caisse.aggregate({ where: { createdAt: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'SORTIE' }, _sum: { montant: true } })
       ])
     ])
 
     tresorerieBanque = toNum(soldesPhysiques[0]._sum?.soldeActuel)
-    tresorerieCaisse = toNum(soldesPhysiques[1]._sum?.soldeCaisse)
+    const caisseEntrees = toNum(soldesPhysiques[1]._sum?.montant)
+    const caisseSorties = toNum(soldesPhysiques[2]._sum?.montant)
+    tresorerieCaisse = caisseEntrees - caisseSorties
 
     const totalDettes = (toNum(dettesAgg._sum?.montantTotal) + toNum(dettesAgg._sum?.fraisApproche)) - toNum(dettesAgg._sum?.montantPaye)
     const totalCreances = toNum(creancesAgg._sum?.montantTotal) - toNum(creancesAgg._sum?.montantPaye)

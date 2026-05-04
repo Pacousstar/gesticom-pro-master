@@ -5,7 +5,9 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
-import { montantLigneTTC } from '@/lib/calculs-commerciaux'
+import { montantLigneTTC, htNetLigne, partFraisApprocheLigne, valeurAchatNetAvecFrais, nouveauPampApresAchatLigne } from '@/lib/calculs-commerciaux'
+import { estModeEspeces } from '@/lib/caisse'
+import { estModeBanque } from '@/lib/banque'
 
 export async function GET(
   _request: NextRequest,
@@ -73,25 +75,30 @@ export async function DELETE(
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
       await deleteEcrituresByReference('ACHAT_STOCK', id, tx)
 
-      // 2. Nettoyage des mouvements de stocks (Annulation de l'entrée)
-      await tx.mouvement.deleteMany({
-        where: { observation: { contains: a.numero } }
-      })
-
-      // 3. Retrait des produits du stock (Décrément car c'était un achat)
-      for (const l of a.lignes) {
-        await tx.stock.updateMany({
-          where: { produitId: l.produitId, magasinId: a.magasinId },
-          data: { quantite: { decrement: l.quantite } }
-        })
+      // 2/3. Stock : éviter le double retour si l'achat a déjà été annulé.
+       if (a.statut !== 'ANNULEE') {
+         await tx.mouvement.deleteMany({
+           where: {
+             OR: [
+               { observation: `Achat ${a.numero}` },
+               { observation: `Modif Achat ${a.numero}` }
+             ]
+           }
+         })
+        for (const l of a.lignes) {
+          await tx.stock.updateMany({
+            where: { produitId: l.produitId, magasinId: a.magasinId },
+            data: { quantite: { decrement: l.quantite } },
+          })
+        }
       }
 
-      // 4. Nettoyage Trésorerie : CAISSE
+      // 4. Nettoyage Trésorerie : CAISSE (correspondance exacte, pas de contains)
       await tx.caisse.deleteMany({
         where: {
           OR: [
-            { motif: { contains: a.numero } },
-            { motif: { contains: `REGLEMENT ACHAT ${a.numero}` } }
+            { motif: `Achat ${a.numero}` },
+            { motif: `Règlement Achat ${a.numero}` }
           ]
         }
       })
@@ -147,6 +154,13 @@ export async function PATCH(
     if (action === 'PAGEMENT') {
       const montantReglement = Math.max(0, Number(body?.montant) || 0)
       const modePaiement = body?.modePaiement || 'ESPECES'
+      const banqueId = body?.banqueId ? Number(body.banqueId) : null
+      const now = new Date()
+      let dateReglement = body?.date ? new Date(body.date) : now
+      // Si la date vient d'un sélecteur (YYYY-MM-DD), on ajoute l'heure actuelle
+      if (body?.date && String(body.date).length <= 10) {
+        dateReglement.setHours(now.getHours(), now.getMinutes(), now.getSeconds())
+      }
 
       if (montantReglement <= 0) {
         return NextResponse.json({ error: 'Montant invalide.' }, { status: 400 })
@@ -166,7 +180,7 @@ export async function PATCH(
       }
 
       const resteAPayer = Math.max(0, (achat.montantTotal || 0) - (achat.montantPaye || 0))
-      if (montantReglement - resteAPayer > 0.01) {
+      if (montantReglement - resteAPayer > 1) {
         return NextResponse.json({
           error: `Paiement invalide : le montant (${montantReglement.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`
         }, { status: 400 })
@@ -175,37 +189,74 @@ export async function PATCH(
       const nouveauMontantPaye = Math.min(achat.montantTotal, (achat.montantPaye || 0) + montantReglement)
       const nouveauStatut = nouveauMontantPaye >= achat.montantTotal ? 'PAYE' : 'PARTIEL'
 
-      const updatedAchat = await prisma.achat.update({
-        where: { id },
-        data: {
-          montantPaye: nouveauMontantPaye,
-          statutPaiement: nouveauStatut
-        }
-      })
+      const { estModeBanque, enregistrerOperationBancaire } = await import('@/lib/banque')
+      const { estModeEspeces } = await import('@/lib/caisse')
+      const { comptabiliserReglementAchat } = await import('@/lib/comptabilisation')
 
-      await prisma.reglementAchat.create({
-        data: {
-          achatId: id,
-          fournisseurId: achat.fournisseurId!,
-          entiteId: achat.entiteId,
+      const updatedAchat = await prisma.$transaction(async (tx) => {
+        const up = await tx.achat.update({
+          where: { id },
+          data: {
+            montantPaye: nouveauMontantPaye,
+            statutPaiement: nouveauStatut
+          }
+        })
+
+        await tx.reglementAchat.create({
+          data: {
+            achatId: id,
+            fournisseurId: achat.fournisseurId!,
+            entiteId: achat.entiteId,
+            montant: montantReglement,
+            modePaiement: modePaiement,
+            utilisateurId: session.userId,
+            date: dateReglement,
+            observation: `Paiement sur facture ${achat.numero}`
+          }
+        })
+
+        // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque)
+        if (estModeEspeces(modePaiement)) {
+          await tx.caisse.create({
+            data: {
+              magasinId: achat.magasinId,
+              entiteId: achat.entiteId,
+              utilisateurId: session.userId,
+              montant: montantReglement,
+              type: 'SORTIE',
+              motif: `Règlement Achat ${achat.numero}`,
+              date: dateReglement,
+            }
+          })
+        } else if (estModeBanque(modePaiement)) {
+          if (!banqueId || !Number.isFinite(banqueId)) {
+            throw new Error('Banque requise pour les règlements non espèces.')
+          }
+          await enregistrerOperationBancaire({
+            banqueId,
+            entiteId: achat.entiteId,
+            date: dateReglement,
+            type: 'REGLEMENT_FOURNISSEUR',
+            libelle: `Règlement Achat ${achat.numero}`,
+            montant: montantReglement,
+            utilisateurId: session.userId,
+            reference: achat.numero,
+            observation: `Paiement via ${modePaiement}`,
+          }, tx)
+        }
+
+        await comptabiliserReglementAchat({
+          achatId: achat.id,
+          numeroAchat: achat.numero,
+          date: dateReglement,
           montant: montantReglement,
           modePaiement: modePaiement,
           utilisateurId: session.userId,
-          date: new Date(),
-          observation: `Paiement sur facture ${achat.numero}`
-        }
-      })
+          magasinId: achat.magasinId,
+          entiteId: achat.entiteId,
+        }, tx)
 
-      const { comptabiliserReglementAchat } = await import('@/lib/comptabilisation')
-      await comptabiliserReglementAchat({
-        achatId: achat.id,
-        numeroAchat: achat.numero,
-        date: new Date(),
-        montant: montantReglement,
-        modePaiement: modePaiement,
-        utilisateurId: session.userId,
-        magasinId: achat.magasinId,
-        entiteId: achat.entiteId,
+        return up
       })
 
       revalidatePath('/dashboard/achats')
@@ -237,20 +288,38 @@ export async function PATCH(
           })
         }
         await tx.mouvement.deleteMany({
-          where: { observation: { contains: oldAchat.numero } }
+          where: {
+            OR: [
+              { observation: `Achat ${oldAchat.numero}` },
+              { observation: `Modif Achat ${oldAchat.numero}` },
+            ]
+          }
         })
 
         // 2. Nettoyer compta et règlements auto
         await deleteEcrituresByReference('ACHAT', id, tx)
+        await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
+        await deleteEcrituresByReference('ACHAT_STOCK', id, tx)
         await tx.reglementAchat.deleteMany({ where: { achatId: id } })
-        // On supprime tout mouvement de caisse lié à ce numéro de commande/facture
+        // On supprime les mouvements de caisse liés exactement à ce numéro
         await tx.caisse.deleteMany({ 
           where: { 
             OR: [
-              { motif: { contains: oldAchat.numero } },
+              { motif: `Règlement Achat ${oldAchat.numero}` },
             ]
           } 
         })
+        // Supprimer les opérations bancaires liées à cet achat
+        const opsBancairesOld = await tx.operationBancaire.findMany({
+          where: { reference: oldAchat.numero }
+        })
+        for (const op of opsBancairesOld) {
+          await tx.banque.update({
+            where: { id: op.banqueId },
+            data: { soldeActuel: { increment: op.montant } }
+          })
+          await tx.operationBancaire.delete({ where: { id: op.id } })
+        }
 
         // 3. Valider nouvelles lignes
         let newTotalTTC = 0
@@ -267,10 +336,13 @@ export async function PATCH(
           const tva = Math.max(0, Number(l.tva || 0))
           const rem = Math.max(0, Number(l.remise || 0))
           
-          // Calcul TTC pour le total document
-          const mntTTC = Math.round((q * pu - rem) * (1 + tva / 100))
-          // Calcul HT Net pour la répartition des frais et le PAMP
-          const htNet = (q * pu - rem)
+          const htNet = htNetLigne(q, pu, rem)
+          const mntTTC = montantLigneTTC({
+            quantite: q,
+            prixUnitaire: pu,
+            remiseLigne: rem,
+            tvaPourcent: tva,
+          })
           
           newTotalTTC += mntTTC
           totalHTNet += htNet
@@ -283,11 +355,12 @@ export async function PATCH(
             tva,
             remise: rem,
             montant: mntTTC,
-            htNet: htNet // Stocké temporairement pour le calcul PAMP
+            htNet: htNet
           })
         }
 
         const fApprocheTotal = Math.max(0, Number(fraisApproche || 0))
+        const totalFinal = newTotalTTC + fApprocheTotal
         const regsData = Array.isArray(reglements) ? reglements : []
         const mntPaye = regsData.reduce((acc: number, r: any) => acc + (Number(r.montant) || 0), 0)
 
@@ -311,10 +384,10 @@ export async function PATCH(
             date: dateFinale,
             magasinId: currentMagasinId,
             observation: observation || null,
-            montantTotal: newTotalTTC,
+            montantTotal: totalFinal,
             fraisApproche: fApprocheTotal,
-            montantPaye: Math.min(newTotalTTC, mntPaye),
-            statutPaiement: mntPaye >= newTotalTTC ? 'PAYE' : mntPaye > 0 ? 'PARTIEL' : 'CREDIT',
+            montantPaye: Math.min(totalFinal, mntPaye),
+            statutPaiement: mntPaye >= totalFinal ? 'PAYE' : mntPaye > 0 ? 'PARTIEL' : 'CREDIT',
             modePaiement: regsData.length > 1 ? 'MULTI' : (regsData[0]?.mode || modePaiement || oldAchat.modePaiement),
             lignes: {
               deleteMany: {},
@@ -337,27 +410,19 @@ export async function PATCH(
         
         for (const l of nouvellesLignes) {
           const product = await tx.produit.findUnique({ where: { id: l.produitId } })
-          const stock = await tx.stock.findUnique({ 
-            where: { produitId_magasinId: { produitId: l.produitId, magasinId: updated.magasinId } } 
-          })
-
-          const qteStockAvant = stock?.quantite || 0
-          const partFraisLigne = totalHTNet > 0 ? (l.htNet / totalHTNet) * totalFrais : 0
-          const valeurLigneAvecFrais = l.htNet + partFraisLigne
-          
-          // Nouveau PAMP = (Valeur Stock Actuel + Valeur Nouvel Achat) / Quantité Totale
+          const stockGlobalAvant = product?.stocks?.reduce((acc: number, s: any) => acc + s.quantite, 0) ?? 0
           const pampActuel = product?.pamp || product?.prixAchat || 0
-          let nouveauPamp = pampActuel
-
-          if (qteStockAvant <= 0) {
-            nouveauPamp = l.quantite > 0 ? valeurLigneAvecFrais / l.quantite : pampActuel
-          } else {
-            const valeurStockActuel = qteStockAvant * pampActuel
-            nouveauPamp = (valeurStockActuel + valeurLigneAvecFrais) / (qteStockAvant + l.quantite)
-          }
-
-          nouveauPamp = Math.round(nouveauPamp)
-          if (isNaN(nouveauPamp) || !isFinite(nouveauPamp)) nouveauPamp = l.prixUnitaire
+          
+          const partFraisLigne = partFraisApprocheLigne(l.htNet, totalHTNet, totalFrais)
+          const valeurLigneAvecFrais = valeurAchatNetAvecFrais(l.htNet, partFraisLigne)
+          
+          const nouveauPamp = nouveauPampApresAchatLigne({
+            stockGlobalAvant,
+            pampActuel,
+            quantiteLigne: l.quantite,
+            valeurAchatNet: valeurLigneAvecFrais,
+            prixUnitaireFallback: l.prixUnitaire,
+          })
 
           await tx.produit.update({
             where: { id: l.produitId },
@@ -377,12 +442,13 @@ export async function PATCH(
               entiteId: updated.entiteId,
               utilisateurId: session.userId,
               quantite: l.quantite,
+              dateOperation: updated.date,
               observation: `Modif Achat ${updated.numero}`,
             }
           })
         }
 
-        // 6. Règlements (Multi ou Simple)
+        // 6. Règlements (Multi ou Simple) + synchro trésorerie
         if (mntPaye > 0 || regsData.length > 0) {
           for (const r of regsData) {
             const mntR = Number(r.montant) || 0
@@ -391,6 +457,7 @@ export async function PATCH(
               data: {
                 achatId: updated.id,
                 fournisseurId: updated.fournisseurId,
+                entiteId: updated.entiteId,
                 montant: mntR,
                 modePaiement: r.mode,
                 utilisateurId: session.userId,
@@ -398,31 +465,58 @@ export async function PATCH(
                 date: updated.date,
               }
             })
+            // Synchro physique trésorerie
+            const modeR = String(r.mode).toUpperCase()
+            if (estModeEspeces(modeR)) {
+              await tx.caisse.create({
+                data: {
+                  date: updated.date,
+                  magasinId: updated.magasinId,
+                  type: 'SORTIE',
+                  motif: `Règlement Achat ${updated.numero}`,
+                  montant: mntR,
+                  utilisateurId: session.userId,
+                  entiteId: updated.entiteId,
+                }
+              })
+            } else if (estModeBanque(modeR)) {
+              const { enregistrerOperationBancaire } = await import('@/lib/banque')
+              await enregistrerOperationBancaire({
+                banqueId: r.banqueId ? Number(r.banqueId) : null,
+                entiteId: updated.entiteId,
+                date: updated.date,
+                type: 'REGLEMENT_FOURNISSEUR',
+                libelle: `Règlement Achat ${updated.numero}`,
+                montant: mntR,
+                utilisateurId: session.userId,
+                reference: updated.numero,
+              }, tx)
+            }
           }
         }
 
-        // 7. LOG D'AUDIT : Mouchard de modification
+        // 7. Comptabilisation (dans la transaction)
+        const { comptabiliserAchat } = await import('@/lib/comptabilisation')
+        await comptabiliserAchat({
+          achatId: updated.id,
+          numeroAchat: updated.numero,
+          date: updated.date,
+          montantTotal: updated.montantTotal,
+          fraisApproche: updated.fraisApproche,
+          modePaiement: updated.modePaiement,
+          fournisseurId: updated.fournisseurId,
+          utilisateurId: session.userId,
+          magasinId: updated.magasinId,
+          entiteId: updated.entiteId,
+          reglements: regsData.map((r: any) => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+          lignes: updated.lignes,
+        }, tx)
+
+        // 8. LOG D'AUDIT
         await logModification(session, 'ACHAT', updated.id, `Mise à jour complète de l'achat ${updated.numero}`, oldAchat, updated, getIpAddress(request))
 
         return updated
-      }, { timeout: 15000 })
-
-      // 7. Comptabiliser
-      const { comptabiliserAchat } = await import('@/lib/comptabilisation')
-      await comptabiliserAchat({
-        achatId: result.id,
-        numeroAchat: result.numero,
-        date: result.date,
-        montantTotal: result.montantTotal,
-        fraisApproche: result.fraisApproche,
-        modePaiement: result.modePaiement,
-        fournisseurId: result.fournisseurId,
-        utilisateurId: session.userId,
-        magasinId: result.magasinId,
-        entiteId: result.entiteId,
-        reglements: body.reglements || [],
-        lignes: result.lignes,
-      })
+      }, { timeout: 30000 })
 
       revalidatePath('/dashboard/achats')
       revalidatePath('/api/achats')

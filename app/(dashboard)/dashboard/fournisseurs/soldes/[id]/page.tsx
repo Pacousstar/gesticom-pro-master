@@ -17,7 +17,9 @@ import {
   DollarSign,
   X,
   CheckCircle,
-  ShoppingBag
+  ShoppingBag,
+  Pencil,
+  Trash2
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 
@@ -45,8 +47,14 @@ export default function CompteCourantFournisseurPage() {
   const [payAmount, setPayAmount] = useState('')
   const [payMode, setPayMode] = useState('ESPECES')
   const [magasins, setMagasins] = useState<{ id: number; nom: string }[]>([])
+  const [banques, setBanques] = useState<{ id: number; libelle: string; nomBanque: string }[]>([])
   const [selectedMagasinId, setSelectedMagasinId] = useState<string>('')
+  const [selectedBanqueId, setSelectedBanqueId] = useState<string>('')
+  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0])
   const [isPaying, setIsPaying] = useState(false)
+  const [editingReglement, setEditingReglement] = useState<any>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [isDeleting, setIsDeleting] = useState<number | null>(null)
   const [showLettrageModal, setShowLettrageModal] = useState(false)
   const [selectedReglement, setSelectedReglement] = useState<Operation | null>(null)
   const [unpaidInvoices, setUnpaidInvoices] = useState<any[]>([])
@@ -100,6 +108,8 @@ export default function CompteCourantFournisseurPage() {
           montant: Number(payAmount),
           modePaiement: payMode,
           magasinId: selectedMagasinId ? Number(selectedMagasinId) : null,
+          banqueId: selectedBanqueId ? Number(selectedBanqueId) : null,
+          date: payDate,
           observation: 'Règlement rapide depuis Compte Courant'
         })
       })
@@ -107,6 +117,8 @@ export default function CompteCourantFournisseurPage() {
         showSuccess("Règlement fournisseur enregistré !")
         setShowPayModal(false)
         setPayAmount('')
+        setSelectedMagasinId('')
+        setSelectedBanqueId('')
         fetchData()
       } else {
         const errData = await res.json()
@@ -119,9 +131,67 @@ export default function CompteCourantFournisseurPage() {
     }
   }
 
+  const handleEditReglement = (op: any) => {
+    setEditingReglement(op)
+    setPayAmount(String(op.credit))
+    setPayMode(op.mode || 'ESPECES')
+    setPayDate(new Date(op.date).toISOString().split('T')[0])
+    setShowEditModal(true)
+  }
+
+  const submitEditReglement = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingReglement) return
+    setIsPaying(true)
+    try {
+      const res = await fetch(`/api/reglements/achats/${editingReglement.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          montant: Number(payAmount),
+          modePaiement: payMode,
+          date: payDate,
+          observation: `Mise à jour règlement - ${editingReglement.libelle}`
+        })
+      })
+      if (res.ok) {
+        showSuccess("Règlement modifié avec succès.")
+        setShowEditModal(false)
+        fetchData()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        showError(err.error || "Erreur lors de la modification.")
+      }
+    } catch (e) {
+      showError("Erreur réseau.")
+    } finally {
+      setIsPaying(false)
+    }
+  }
+
+  const handleDeleteReglement = async (regId: number) => {
+    if (!confirm("Voulez-vous vraiment supprimer ce règlement ? Cette action est irréversible et annulera l'impact sur le solde fournisseur et la caisse/banque.")) return
+    setIsDeleting(regId)
+    try {
+      const res = await fetch(`/api/reglements/achats/${regId}`, { method: 'DELETE' })
+      if (res.ok) {
+        showSuccess("Règlement supprimé avec succès.")
+        fetchData()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        showError(err.error || "Erreur lors de la suppression.")
+      }
+    } catch (e) {
+      showError("Erreur réseau.")
+    } finally {
+      setIsDeleting(null)
+    }
+  }
+
   useEffect(() => {
     fetchData()
     fetch('/api/magasins').then(r => r.ok ? r.json() : []).then(setMagasins)
+    fetch('/api/banques').then(r => r.ok ? r.json() : { data: [] }).then(res => setBanques(res.data || []))
   }, [id])
 
   const fetchData = async () => {
@@ -133,7 +203,7 @@ export default function CompteCourantFournisseurPage() {
         setData(json)
         
         // Calcul du solde total final
-        const total = json.operations.reduce((acc: number, op: Operation) => acc + op.debit - op.credit, 0)
+        const total = Array.isArray(json.operations) ? json.operations.reduce((acc: number, op: Operation) => acc + op.debit - op.credit, 0) : 0
         setSoldeTotal(total)
       } else {
         showError("Impossible de charger le compte courant fournisseur.")
@@ -159,8 +229,9 @@ export default function CompteCourantFournisseurPage() {
   if (!data) return <p className="text-center py-24 text-gray-500 italic">Fournisseur introuvable.</p>
 
   // Calcul du solde progressif
+  const ops = Array.isArray(data?.operations) ? data.operations : []
   let currentSolde = 0
-  const operationsWithSolde = data.operations.map(op => {
+  const operationsWithSolde = ops.map(op => {
     currentSolde += (op.debit - op.credit)
     return { ...op, soldeProgressif: currentSolde }
   })
@@ -214,7 +285,7 @@ export default function CompteCourantFournisseurPage() {
             <div>
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Achats (Débit)</p>
                <h3 className="text-2xl font-black text-gray-900 tabular-nums">
-                  {data.operations.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F
+                   {ops.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F
                </h3>
             </div>
             <ShoppingBag className="h-10 w-10 text-purple-500/20 group-hover:scale-110 transition-transform" />
@@ -224,7 +295,7 @@ export default function CompteCourantFournisseurPage() {
             <div>
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Payé (Crédit)</p>
                <h3 className="text-2xl font-black text-emerald-600 tabular-nums">
-                  {data.operations.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F
+                   {ops.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F
                </h3>
             </div>
             <Wallet className="h-10 w-10 text-emerald-500/20 group-hover:scale-110 transition-transform" />
@@ -253,7 +324,7 @@ export default function CompteCourantFournisseurPage() {
             </h2>
             <div className="flex gap-2">
                <span className="bg-gray-200 text-gray-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
-                  {data.operations.length} Opérations
+                   {ops.length} Opérations
                </span>
             </div>
         </div>
@@ -311,14 +382,35 @@ export default function CompteCourantFournisseurPage() {
                      </p>
                   </td>
                   <td className="px-8 py-6 text-center">
-                    {op.type === 'REGLEMENT' && op.reference === '-' && (
-                      <button 
-                        onClick={() => handleLettrage(op)}
-                        className="rounded-lg bg-indigo-100 px-3 py-1.5 text-[10px] font-black text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all uppercase tracking-widest flex items-center gap-1 mx-auto shadow-sm"
-                      >
-                         <CheckCircle className="h-3 w-3" /> Lettrer
-                      </button>
-                    )}
+                    <div className="flex items-center justify-center gap-2">
+                      {op.type === 'REGLEMENT' && op.reference === '-' && (
+                        <button 
+                          onClick={() => handleLettrage(op)}
+                          className="rounded-lg bg-indigo-100 px-3 py-1.5 text-[10px] font-black text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all uppercase tracking-widest flex items-center gap-1 shadow-sm"
+                        >
+                           <CheckCircle className="h-3 w-3" /> Lettrer
+                        </button>
+                      )}
+                      {op.type === 'REGLEMENT' && (
+                        <>
+                          <button
+                            onClick={() => handleEditReglement(op)}
+                            className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                            title="Modifier ce règlement"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteReglement(op.id!)}
+                            disabled={isDeleting === op.id}
+                            className={`p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-sm ${isDeleting === op.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title="Supprimer ce règlement"
+                          >
+                            {isDeleting === op.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -359,6 +451,15 @@ export default function CompteCourantFournisseurPage() {
 
               <form onSubmit={handleQuickPay} className="p-8 space-y-6">
                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Date du règlement</label>
+                    <input
+                      type="date"
+                      value={payDate}
+                      onChange={e => setPayDate(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-500/5 transition-all"
+                    />
+                 </div>
+                 <div>
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Montant versé (F)</label>
                     <div className="relative group">
                        <input 
@@ -393,11 +494,23 @@ export default function CompteCourantFournisseurPage() {
                        <select 
                          value={selectedMagasinId}
                          onChange={e => setSelectedMagasinId(e.target.value)}
-                         required
+                         required={payMode === 'ESPECES'}
                          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-500/5 transition-all"
                        >
                           <option value="">Sélectionnez...</option>
                           {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                       </select>
+                    </div>
+                    <div className="col-span-2">
+                       <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Banque (paiements non espèces)</label>
+                       <select
+                         value={selectedBanqueId}
+                         onChange={e => setSelectedBanqueId(e.target.value)}
+                         required={payMode !== 'ESPECES'}
+                         className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-500/5 transition-all"
+                       >
+                          <option value="">Sélectionnez...</option>
+                          {banques.map(b => <option key={b.id} value={b.id}>{b.nomBanque} - {b.libelle}</option>)}
                        </select>
                     </div>
                  </div>
@@ -492,6 +605,86 @@ export default function CompteCourantFournisseurPage() {
            </div>
         </div>
       )}
+
+      {/* MODAL D'ÉDITION DE RÈGLEMENT FOURNISSEUR */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className="w-full max-w-lg rounded-[2.5rem] bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100">
+              <div className="bg-blue-50 px-8 py-6 border-b border-blue-100 flex items-center justify-between">
+                 <div>
+                    <h2 className="text-xl font-black text-blue-900 uppercase tracking-tighter italic flex items-center gap-2">
+                       <Pencil className="h-5 w-5" /> Modifier Règlement
+                    </h2>
+                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mt-0.5">Correction d'une erreur de saisie</p>
+                 </div>
+                 <button 
+                   onClick={() => setShowEditModal(false)}
+                   className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-blue-100 text-gray-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all"
+                 >
+                    <X className="h-5 w-5" />
+                 </button>
+              </div>
+
+              <form onSubmit={submitEditReglement} className="p-8 space-y-6">
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Date</label>
+                    <input 
+                        type="date"
+                        value={payDate}
+                        onChange={e => setPayDate(e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 focus:border-blue-500 focus:outline-none transition-all"
+                    />
+                 </div>
+
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Montant (F)</label>
+                    <div className="relative">
+                        <input 
+                            type="number" 
+                            required
+                            value={payAmount}
+                            onChange={e => setPayAmount(e.target.value)}
+                            className="w-full rounded-2xl bg-gray-50 border-2 border-gray-100 px-6 py-5 text-3xl font-black tabular-nums text-gray-900 focus:border-blue-500 focus:outline-none transition-all"
+                        />
+                        <DollarSign className="absolute right-6 top-1/2 -translate-y-1/2 h-8 w-8 text-blue-200" />
+                    </div>
+                 </div>
+
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Mode de Paiement</label>
+                    <select 
+                        value={payMode}
+                        onChange={e => setPayMode(e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 focus:border-blue-500 focus:outline-none transition-all"
+                    >
+                        <option value="ESPECES">Espèces</option>
+                        <option value="MOBILE_MONEY">Mobile Money</option>
+                        <option value="VIREMENT">Virement</option>
+                        <option value="CHEQUE">Chèque</option>
+                    </select>
+                 </div>
+
+                 <div className="pt-4 flex gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setShowEditModal(false)}
+                      className="flex-1 py-4 rounded-2xl border border-gray-200 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:bg-gray-50 transition-all"
+                    >
+                       Annuler
+                    </button>
+                    <button 
+                      type="submit"
+                      disabled={isPaying}
+                      className="flex-[2] py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-600/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                       {isPaying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                       Mettre à jour
+                    </button>
+                 </div>
+              </form>
+           </div>
+        </div>
+      )}
       
       <style jsx global>{`
         @media print {
@@ -502,7 +695,7 @@ export default function CompteCourantFournisseurPage() {
           .text-white, .text-purple-200, .text-purple-400 { color: black !important; }
           table { width: 100% !important; border-collapse: collapse !important; }
           th, td { border: 1pt solid #ddd !important; padding: 8pt 4pt !important; font-size: 9pt !important; }
-          .bg-purple-50\/10 { background: transparent !important; }
+          .bg-purple-50/10 { background: transparent !important; }
           .text-red-500, .text-emerald-700 { color: black !important; font-weight: bold !important; }
         }
       `}</style>

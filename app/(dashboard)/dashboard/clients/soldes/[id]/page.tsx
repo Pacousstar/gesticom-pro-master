@@ -47,7 +47,9 @@ export default function CompteCourantClientPage() {
   const [payAmount, setPayAmount] = useState('')
   const [payMode, setPayMode] = useState('ESPECES')
   const [magasins, setMagasins] = useState<{ id: number; nom: string }[]>([])
+  const [banques, setBanques] = useState<{ id: number; libelle: string; nomBanque: string }[]>([])
   const [selectedMagasinId, setSelectedMagasinId] = useState<string>('')
+  const [selectedBanqueId, setSelectedBanqueId] = useState<string>('')
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0])
   
   // MODIF POINT 7 : États pour l'édition/suppression
@@ -111,6 +113,7 @@ export default function CompteCourantClientPage() {
           montant: Number(payAmount),
           modePaiement: payMode,
           magasinId: selectedMagasinId ? Number(selectedMagasinId) : null,
+          banqueId: selectedBanqueId ? Number(selectedBanqueId) : null,
           date: payDate,
           observation: 'Règlement rapide depuis Compte Courant'
         })
@@ -119,9 +122,12 @@ export default function CompteCourantClientPage() {
         showSuccess("Règlement enregistré !")
         setShowPayModal(false)
         setPayAmount('')
+        setSelectedMagasinId('')
+        setSelectedBanqueId('')
         fetchData()
       } else {
-        showError("Erreur lors du règlement.")
+        const d = await res.json().catch(() => ({}))
+        showError(d.error || "Erreur lors du règlement.")
       }
     } catch (e) {
       showError("Erreur réseau.")
@@ -191,6 +197,7 @@ export default function CompteCourantClientPage() {
   useEffect(() => {
     fetchData()
     fetch('/api/magasins').then(r => r.ok ? r.json() : []).then(setMagasins)
+    fetch('/api/banques').then(r => r.ok ? r.json() : { data: [] }).then(res => setBanques(res.data || []))
   }, [id])
 
   const [params, setParams] = useState<any>(null)
@@ -208,7 +215,7 @@ export default function CompteCourantClientPage() {
         setData(json)
         
         // Calcul du solde total final
-        const total = json.operations.reduce((acc: number, op: Operation) => acc + op.debit - op.credit, 0)
+        const total = Array.isArray(json.operations) ? json.operations.reduce((acc: number, op: Operation) => acc + op.debit - op.credit, 0) : 0
         setSoldeTotal(total)
       } else {
         showError("Impossible de charger le compte courant.")
@@ -287,8 +294,9 @@ export default function CompteCourantClientPage() {
   if (!data) return <p className="text-center py-24 text-gray-500 italic">Client introuvable.</p>
 
   // Calcul du solde progressif
+  const ops = Array.isArray(data?.operations) ? data.operations : []
   let currentSolde = 0
-  const operationsWithSolde = data.operations.map(op => {
+  const operationsWithSolde = ops.map(op => {
     currentSolde += (op.debit - op.credit)
     return { ...op, soldeProgressif: currentSolde }
   })
@@ -307,7 +315,7 @@ export default function CompteCourantClientPage() {
           .text-orange-500, .text-emerald-600 { color: black !important; font-weight: bold !important; }
           table { width: 100% !important; border-collapse: collapse !important; }
           th, td { border: 1px solid #eee !important; padding: 8px !important; }
-          .bg-gray-50\/50, .bg-gray-100\/50 { background: transparent !important; }
+          .bg-gray-50/50, .bg-gray-100/50 { background: transparent !important; }
           .print-header { display: flex !important; justify-content: space-between; align-items: start; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
           .print-logo { max-height: 80px; max-width: 200px; object-contain: contain; }
           .print-only { display: block !important; }
@@ -345,11 +353,11 @@ export default function CompteCourantClientPage() {
         <div className="print-summary">
            <div className="print-card">
               <p className="text-[8px] font-black uppercase">Total Facturé (Débit)</p>
-              <p className="text-lg font-black">{data.operations.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F</p>
+               <p className="text-lg font-black">{ops.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F</p>
            </div>
            <div className="print-card">
               <p className="text-[8px] font-black uppercase">Total Encaissé (Crédit)</p>
-              <p className="text-lg font-black text-emerald-800">{data.operations.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F</p>
+               <p className="text-lg font-black text-emerald-800">{ops.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F</p>
            </div>
            <div className="print-card bg-gray-100">
               <p className="text-[8px] font-black uppercase">Solde Net à Payer</p>
@@ -412,7 +420,7 @@ export default function CompteCourantClientPage() {
             <div>
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Débit (Achats)</p>
                <h3 className="text-2xl font-black text-gray-900 tabular-nums">
-                  {data.operations.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F
+                   {ops.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F
                </h3>
             </div>
             <TrendingUp className="h-10 w-10 text-orange-500/20 group-hover:scale-110 transition-transform" />
@@ -422,7 +430,7 @@ export default function CompteCourantClientPage() {
             <div>
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Crédit (Règlements)</p>
                <h3 className="text-2xl font-black text-emerald-600 tabular-nums">
-                  {data.operations.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F
+                   {ops.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F
                </h3>
             </div>
             <Wallet className="h-10 w-10 text-emerald-500/20 group-hover:scale-110 transition-transform" />
@@ -451,7 +459,7 @@ export default function CompteCourantClientPage() {
             </h2>
             <div className="flex gap-2">
                <span className="bg-gray-200 text-gray-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
-                  {data.operations.length} Événements
+                   {ops.length} Événements
                </span>
             </div>
         </div>
@@ -623,11 +631,23 @@ export default function CompteCourantClientPage() {
                        <select 
                          value={selectedMagasinId}
                          onChange={e => setSelectedMagasinId(e.target.value)}
-                         required
+                         required={payMode === 'ESPECES'}
                          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-500/5 transition-all"
                        >
                           <option value="">Sélectionnez...</option>
                           {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                       </select>
+                    </div>
+                    <div className="col-span-2">
+                       <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Banque (paiements non espèces)</label>
+                       <select
+                         value={selectedBanqueId}
+                         onChange={e => setSelectedBanqueId(e.target.value)}
+                         required={payMode !== 'ESPECES'}
+                         className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-500/5 transition-all"
+                       >
+                          <option value="">Sélectionnez...</option>
+                          {banques.map(b => <option key={b.id} value={b.id}>{b.nomBanque} - {b.libelle}</option>)}
                        </select>
                     </div>
                  </div>

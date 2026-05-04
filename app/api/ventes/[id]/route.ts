@@ -3,13 +3,15 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import { deleteEcrituresByReference, deleteEcrituresByReferenceForIds } from '@/lib/delete-ecritures'
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
 import {
   montantLigneTTC,
   montantTotalVenteDocument,
   pointsFideliteDepuisEncaissement,
 } from '@/lib/calculs-commerciaux'
+import { estModeEspeces } from '@/lib/caisse'
+import { estModeBanque } from '@/lib/banque'
 
 export async function GET(
   _request: NextRequest,
@@ -74,48 +76,56 @@ export async function DELETE(
 
       // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('VENTE', id, tx)
-      await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
+      // VENTE_REGLEMENT entries use reglementId as referenceId, not venteId
+      if (v.reglements.length > 0) {
+        await deleteEcrituresByReferenceForIds('VENTE_REGLEMENT', v.reglements.map((r: any) => r.id), tx)
+      }
       await deleteEcrituresByReference('VENTE_STOCK', id, tx)
       await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
 
-      // 2. Nettoyage des mouvements de stocks (Annulation de la sortie)
-      await tx.mouvement.deleteMany({
-        where: { observation: { contains: v.numero } }
-      })
-
-      // 3. Retour des produits au stock (Incrément)
-      for (const l of v.lignes) {
-        await tx.stock.updateMany({
-          where: { produitId: l.produitId, magasinId: v.magasinId },
-          data: { quantite: { increment: l.quantite } },
-        })
+// 2/3. Stock : éviter le double retour si la vente a déjà été annulée.
+       if (v.statut !== 'ANNULEE') {
+        await tx.mouvement.deleteMany({
+           where: {
+             OR: [
+               { observation: `Annulation vente ${v.numero}` },
+               { observation: `Sortie Vente ${v.numero}` },
+               { observation: `Modif Vente ${v.numero}` }
+             ]
+           }
+         })
+        for (const l of v.lignes) {
+          await tx.stock.updateMany({
+            where: { produitId: l.produitId, magasinId: v.magasinId },
+            data: { quantite: { increment: l.quantite } },
+          })
+        }
       }
 
-      // 4. Nettoyage Trésorerie : CAISSE
+      // 4. Nettoyage Trésorerie : CAISSE (exact match, pas de contains)
       await tx.caisse.deleteMany({
         where: {
           OR: [
-            { motif: { contains: v.numero } },
-            { motif: { contains: `VENTE ${v.numero}` } }
+            { motif: `Vente ${v.numero}` },
+            { motif: `Règlement Vente ${v.numero}` }
           ]
         }
       })
 
-      // 5. Nettoyage Trésorerie : BANQUE (Opérations Bancaires)
-      // On cherche les opérations bancaires liées au numéro de vente
+      // 5. Nettoyage Trésorerie : BANQUE (Opérations Bancaires + inversion solde)
       const opsBancaires = await tx.operationBancaire.findMany({
         where: { reference: v.numero }
       })
-
       for (const op of opsBancaires) {
-        // MAJ du solde de la banque concernée (on soustrait le montant car c'était une entrée)
+        const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
         await tx.banque.update({
           where: { id: op.banqueId },
-          data: { soldeActuel: { decrement: op.montant } }
+          data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
         })
-        // Suppression de l'opération
-        await tx.operationBancaire.delete({ where: { id: op.id } })
       }
+      await tx.operationBancaire.deleteMany({
+        where: { reference: v.numero }
+      })
 
       // 6. Supprimer règlements et vente
       await tx.reglementVente.deleteMany({ where: { venteId: id } })
@@ -159,6 +169,7 @@ export async function PATCH(
     if (action === 'PAGEMENT') {
       const montantReglement = Math.max(0, Number(body?.montant) || 0)
       const modePaiement = body?.modePaiement || 'ESPECES'
+      const banqueId = body?.banqueId ? Number(body.banqueId) : null
       const now = new Date()
       let dateReglement = body?.date ? new Date(body.date) : now
       // Si la date vient d'un sélecteur (YYYY-MM-DD), on ajoute l'heure actuelle
@@ -184,15 +195,19 @@ export async function PATCH(
       }
 
       const resteAPayer = Math.max(0, (vente.montantTotal || 0) - (vente.montantPaye || 0))
-      if (montantReglement - resteAPayer > 0.01) {
+      if (montantReglement - resteAPayer > 1) {
         return NextResponse.json({
           error: `Paiement invalide : le montant (${montantReglement.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`
         }, { status: 400 })
       }
 
       const result = await prisma.$transaction(async (tx) => {
-        const nouveauMontantPaye = Math.min(vente.montantTotal, (vente.montantPaye || 0) + montantReglement)
+        let nouveauMontantPaye = Math.min(vente.montantTotal, (vente.montantPaye || 0) + montantReglement)
+        if (vente.montantTotal - nouveauMontantPaye > 0 && vente.montantTotal - nouveauMontantPaye <= 1) {
+          nouveauMontantPaye = vente.montantTotal
+        }
         const nouveauStatut = nouveauMontantPaye >= vente.montantTotal ? 'PAYE' : 'PARTIEL'
+        const montantReglementApplique = nouveauMontantPaye - (vente.montantPaye || 0)
 
         const updatedVente = await tx.vente.update({
           where: { id },
@@ -202,20 +217,21 @@ export async function PATCH(
           }
         })
 
-        if (vente.clientId) {
-          await tx.reglementVente.create({
-            data: {
-              venteId: id,
-              clientId: vente.clientId,
-              entiteId: vente.entiteId,
-              montant: montantReglement,
-              modePaiement,
-              utilisateurId: session.userId,
-              date: dateReglement,
-              observation: body?.observation || `Paiement sur facture ${vente.numero}`
-            }
-          })
+        // Créer le règlement avec le montant effectivement appliqué
+        await tx.reglementVente.create({
+          data: {
+            venteId: id,
+            clientId: vente.clientId,
+            entiteId: vente.entiteId,
+            montant: montantReglementApplique,
+            modePaiement,
+            utilisateurId: session.userId,
+            date: dateReglement,
+            observation: body?.observation || `Paiement sur facture ${vente.numero}`
+          }
+        })
 
+        if (vente.clientId) {
           const client = await tx.client.findUnique({
             where: { id: vente.clientId },
             select: { id: true, code: true }
@@ -223,9 +239,40 @@ export async function PATCH(
           if (client && client.code !== 'PASSAGE' && client.code !== 'ANONYME') {
             await tx.client.update({
               where: { id: client.id },
-              data: { pointsFidelite: { increment: pointsFideliteDepuisEncaissement(montantReglement) } }
+              data: { pointsFidelite: { increment: pointsFideliteDepuisEncaissement(montantReglementApplique) } }
             })
           }
+        }
+
+        // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque) - avec le montant appliqué
+        if (estModeEspeces(modePaiement)) {
+          await tx.caisse.create({
+            data: {
+              date: dateReglement,
+              magasinId: vente.magasinId,
+              type: 'ENTREE',
+              motif: `Règlement Vente ${vente.numero}`,
+              montant: montantReglementApplique,
+              utilisateurId: session.userId,
+              entiteId: vente.entiteId,
+            }
+          })
+        } else if (estModeBanque(modePaiement)) {
+          if (!banqueId || !Number.isFinite(banqueId)) {
+            throw new Error('Banque requise pour les règlements non espèces.')
+          }
+          const { enregistrerOperationBancaire } = await import('@/lib/banque')
+          await enregistrerOperationBancaire({
+            banqueId,
+            entiteId: vente.entiteId,
+            date: dateReglement,
+            type: 'REGLEMENT_CLIENT',
+            libelle: `Règlement Vente ${vente.numero}`,
+            montant: montantReglementApplique,
+            utilisateurId: session.userId,
+            reference: vente.numero,
+            observation: `Paiement via ${modePaiement}`,
+          }, tx)
         }
 
         const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
@@ -233,7 +280,7 @@ export async function PATCH(
           venteId: vente.id,
           numeroVente: vente.numero,
           date: dateReglement,
-          montant: montantReglement,
+          montant: montantReglementApplique,
           modePaiement,
           utilisateurId: session.userId,
           entiteId: vente.entiteId,
@@ -254,7 +301,7 @@ export async function PATCH(
       const result = await prisma.$transaction(async (tx: any) => {
         const oldVente = await tx.vente.findUnique({
           where: { id },
-          include: { lignes: true }
+          include: { lignes: true, reglements: true }
         })
         if (!oldVente) throw new Error("Vente introuvable")
         if (oldVente.statut === 'ANNULEE') throw new Error("Vente annulée ne peut plus être modifiée")
@@ -271,22 +318,47 @@ export async function PATCH(
             where: { produitId: l.produitId, magasinId: oldVente.magasinId },
             data: { quantite: { increment: l.quantite } }
           })
-        }
-        await tx.mouvement.deleteMany({
-          where: { observation: { contains: oldVente.numero } }
-        })
+}
+         await tx.mouvement.deleteMany({
+           where: {
+             OR: [
+               { observation: `Annulation vente ${oldVente.numero}` },
+               { observation: `Sortie Vente ${oldVente.numero}` },
+               { observation: `Modif Vente ${oldVente.numero}` }
+             ]
+           }
+         })
 
         // 2. Nettoyer compta, règlements auto et caisse
         await deleteEcrituresByReference('VENTE', id, tx)
+        if (oldVente.reglements.length > 0) {
+          await deleteEcrituresByReferenceForIds('VENTE_REGLEMENT', oldVente.reglements.map((r: any) => r.id), tx)
+        }
+        await deleteEcrituresByReference('VENTE_STOCK', id, tx)
+        await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
         await tx.reglementVente.deleteMany({ where: { venteId: id } })
-        // On supprime tout mouvement de caisse lié à ce numéro de facture (ou bon) pour éviter les doublons
+        // On supprime les mouvements de caisse liés exactement à ce numéro
         await tx.caisse.deleteMany({ 
           where: { 
             OR: [
-              { motif: { contains: oldVente.numero } },
-              { motif: { contains: oldVente.numeroBon || '___X___' } }
+              { motif: `Vente ${oldVente.numero}` },
+              { motif: `Règlement Vente ${oldVente.numero}` },
             ]
           } 
+        })
+        // Supprimer les opérations bancaires liées à cette vente (inversion solde + suppression)
+        const opsBancairesOld = await tx.operationBancaire.findMany({
+          where: { reference: oldVente.numero }
+        })
+        for (const op of opsBancairesOld) {
+          const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
+          await tx.banque.update({
+            where: { id: op.banqueId },
+            data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
+          })
+        }
+        await tx.operationBancaire.deleteMany({
+          where: { reference: oldVente.numero }
         })
 
         // 3. Valider nouvelles lignes
@@ -321,7 +393,7 @@ export async function PATCH(
             montant: mnt
           })
 
-          const st = await tx.stock.findUnique({ where: { produitId_magasinId: { produitId: p.id, magasinId: currentMagasinId } } })
+          const st = await tx.stock.findUnique({ where: { produitId_magasinId_entiteId: { produitId: p.id, magasinId: currentMagasinId, entiteId: oldVente.entiteId } } })
           if ((st?.quantite ?? 0) < q) throw new Error(`Stock insuffisant pour ${p.designation}`)
         }
 
@@ -391,7 +463,7 @@ export async function PATCH(
           })
         }
 
-        // 6. Règlements (Multi ou Simple)
+        // 6. Règlements (Multi ou Simple) + synchro trésorerie
         if (mntPaye > 0 || regsData.length > 0) {
           for (const r of regsData) {
             const mntR = Number(r.montant) || 0
@@ -399,7 +471,8 @@ export async function PATCH(
             await tx.reglementVente.create({
               data: {
                 venteId: updated.id,
-                clientId: updated.clientId, // Peut être null si clientLibre
+                clientId: updated.clientId,
+                entiteId: updated.entiteId,
                 montant: mntR,
                 modePaiement: r.mode,
                 utilisateurId: session.userId,
@@ -407,31 +480,58 @@ export async function PATCH(
                 date: updated.date,
               }
             })
+            // Synchro physique trésorerie
+            const modeR = String(r.mode).toUpperCase()
+            if (estModeEspeces(modeR)) {
+              await tx.caisse.create({
+                data: {
+                  date: updated.date,
+                  magasinId: updated.magasinId,
+                  type: 'ENTREE',
+                  motif: `Règlement Vente ${updated.numero}`,
+                  montant: mntR,
+                  utilisateurId: session.userId,
+                  entiteId: updated.entiteId,
+                }
+              })
+            } else if (estModeBanque(modeR)) {
+              const { enregistrerOperationBancaire } = await import('@/lib/banque')
+              await enregistrerOperationBancaire({
+                banqueId: r.banqueId ? Number(r.banqueId) : null,
+                entiteId: updated.entiteId,
+                date: updated.date,
+                type: 'REGLEMENT_CLIENT',
+                libelle: `Règlement Vente ${updated.numero}`,
+                montant: mntR,
+                utilisateurId: session.userId,
+                reference: updated.numero,
+              }, tx)
+            }
           }
         }
 
-        // 7. LOG D'AUDIT : Mouchard de modification
+        // 7. Comptabilisation (dans la transaction)
+        const { comptabiliserVente } = await import('@/lib/comptabilisation')
+        await comptabiliserVente({
+          venteId: updated.id,
+          numeroVente: updated.numero,
+          date: updated.date,
+          montantTotal: updated.montantTotal,
+          modePaiement: updated.modePaiement,
+          clientId: updated.clientId,
+          entiteId: updated.entiteId,
+          utilisateurId: session.userId,
+          magasinId: updated.magasinId,
+          reglements: regsData.map((r: any) => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+          fraisApproche: updated.fraisApproche || 0,
+          lignes: updated.lignes,
+        }, tx)
+
+        // 8. LOG D'AUDIT
         await logModification(session, 'VENTE', updated.id, `Mise à jour complète de la facture ${updated.numero}`, oldVente, updated, getIpAddress(request))
 
         return updated
       }, { timeout: 30000 })
-
-      // 7. Comptabiliser
-      const { comptabiliserVente } = await import('@/lib/comptabilisation')
-      await comptabiliserVente({
-        venteId: result.id,
-        numeroVente: result.numero,
-        date: result.date,
-        montantTotal: result.montantTotal,
-        modePaiement: result.modePaiement,
-        clientId: result.clientId,
-        entiteId: result.entiteId,
-        utilisateurId: session.userId,
-        magasinId: result.magasinId,
-        reglements: body.reglements || [],
-        fraisApproche: result.fraisApproche || 0,
-        lignes: result.lignes,
-      })
 
       revalidatePath('/dashboard/ventes')
       revalidatePath('/api/ventes')
