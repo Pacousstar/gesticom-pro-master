@@ -98,15 +98,20 @@ async function migrateDatabase() {
         try {
             console.log('[GestiCom] Analyse et synchronisation de la base de données...');
             // On utilise db push pour garantir que les index de performance sont appliqués 
-            // SANS risque de perte de données (--accept-data-loss=false)
-            const cmd = `"${process.execPath}" "${prismaCliPath}" db push --schema="${path.join(projectRoot, 'prisma', 'schema.prisma')}" --accept-data-loss=false`;
+            // SANS risque de perte de données (flag --accept-data-loss omis = safe par défaut)
+            const cmd = `"${process.execPath}" "${prismaCliPath}" db push --schema="${path.join(projectRoot, 'prisma', 'schema.prisma')}"`;
+            const schemaEngineCandidates = [
+                path.join(projectRoot, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe'),
+                path.join(projectRoot, '.next', 'standalone', 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe'),
+            ];
+            const schemaEnginePath = schemaEngineCandidates.find((p) => fs.existsSync(p));
             
             execSync(cmd, { 
                 env: { 
                     ...process.env, 
                     DATABASE_URL: `file:${dbPath}`, 
                     PRISMA_SKIP_POSTINSTALL_GENERATE: 'true',
-                    PRISMA_SCHEMA_ENGINE_BINARY: path.join(projectRoot, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe')
+                    ...(schemaEnginePath ? { PRISMA_SCHEMA_ENGINE_BINARY: schemaEnginePath } : {})
                 },
                 stdio: 'inherit' 
             });
@@ -117,8 +122,14 @@ async function migrateDatabase() {
             const maintenanceScript = path.join(projectRoot, 'scripts', 'maintenance-runner.js');
             if (fs.existsSync(maintenanceScript)) {
                 try {
+                    const maintenanceEnv = {
+                        ...process.env,
+                        DATABASE_URL: `file:${dbPath}`,
+                        // Par défaut: maintenance non destructive pour préserver les données clients en prod.
+                        ALLOW_AGGRESSIVE_AUTO_REPAIR: process.env.ALLOW_AGGRESSIVE_AUTO_REPAIR || 'false'
+                    };
                     execSync(`"${process.execPath}" "${maintenanceScript}"`, {
-                        env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
+                        env: maintenanceEnv,
                         stdio: 'inherit'
                     });
                 } catch (maintError) {
@@ -150,7 +161,9 @@ if (fs.existsSync(cssDir)) {
 }
 // ---------------------------------------------------
 
-const PORT = parseInt(process.env.PORT || '3001', 10);
+const BASE_PORT = parseInt(process.env.PORT || '3001', 10);
+// Compat : des sections du launcher utilisent encore PORT
+const PORT = BASE_PORT;
 const HOST = '0.0.0.0';
 
 // On cherche le serveur Next.js (server.js)
@@ -272,9 +285,33 @@ const proxyServer = http.createServer((req, res) => {
     req.pipe(proxyReq, { end: true });
 });
 
-proxyServer.listen(PORT, HOST, () => {
-    console.log(`[GestiCom] Serveur PROXY + STATIC prêt sur http://localhost:${PORT}`);
-});
+function startProxyServer(port, attempt = 0) {
+    proxyServer.once('error', (err) => {
+        if (err && err.code === 'EADDRINUSE' && attempt < 5) {
+            const nextPort = port + 1;
+            console.warn(`[Launcher] Port ${port} déjà utilisé. Tentative sur ${nextPort}...`);
+            // IMPORTANT: il faut recréer un serveur car l'instance est en erreur
+            process.env.PORT = String(nextPort);
+            process.exitCode = 0;
+            // Relancer le process proprement sur un nouveau port
+            const { spawn } = require('child_process');
+            spawn(process.execPath, [__filename], {
+                env: { ...process.env, PORT: String(nextPort) },
+                cwd: projectRoot,
+                stdio: 'inherit'
+            });
+            return;
+        }
+        console.error('[Launcher] Erreur serveur proxy:', err?.message || err);
+        process.exit(1);
+    });
+
+    proxyServer.listen(port, HOST, () => {
+        console.log(`[GestiCom] Serveur PROXY + STATIC prêt sur http://localhost:${port}`);
+    });
+}
+
+startProxyServer(BASE_PORT);
 
 process.on('SIGINT', () => {
     nextProcess.kill();

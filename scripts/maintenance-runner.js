@@ -6,6 +6,260 @@
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const ALLOW_AGGRESSIVE_AUTO_REPAIR = process.env.ALLOW_AGGRESSIVE_AUTO_REPAIR === 'true';
+const REBUILD_ECRITURES_FROM = process.env.REBUILD_ECRITURES_FROM || ''; // ex: 2026-01-01
+const REBUILD_ECRITURES_ENTITE_ID = process.env.REBUILD_ECRITURES_ENTITE_ID || ''; // optionnel
+
+const fs = require('fs');
+const path = require('path');
+
+function safeMkdirp(dir) {
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { /* ignore */ }
+}
+
+function markerPath(fromDate, entiteId) {
+  const base = 'C:\\\\gesticom\\\\maintenance';
+  safeMkdirp(base);
+  const suffix = entiteId ? `-entite-${entiteId}` : '';
+  return path.join(base, `rebuild-ecritures-${fromDate}${suffix}.done`);
+}
+
+function parseStartDate(raw) {
+  const s = String(raw || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  // début journée locale
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(y, m - 1, d, 0, 0, 0);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+async function rebuildEcrituresIfRequested() {
+  const startDate = parseStartDate(REBUILD_ECRITURES_FROM);
+  if (!startDate) return;
+
+  const entiteId = REBUILD_ECRITURES_ENTITE_ID ? Number(REBUILD_ECRITURES_ENTITE_ID) : null;
+  const mark = markerPath(REBUILD_ECRITURES_FROM, entiteId ? String(entiteId) : '');
+  if (fs.existsSync(mark)) return;
+
+  // On ne tente que si les modules compilés existent (environnement installé / standalone)
+  let compta = null;
+  try {
+    const comptaPath = path.join(__dirname, '..', 'lib', 'comptabilisation.js');
+    if (fs.existsSync(comptaPath)) {
+      compta = require(comptaPath);
+    } else {
+      // fallback: certains bundles peuvent résoudre sans extension
+      compta = require(path.join(__dirname, '..', 'lib', 'comptabilisation'));
+    }
+  } catch (e) {
+    return;
+  }
+
+  const {
+    comptabiliserVente,
+    comptabiliserAchat,
+    comptabiliserReglementVente,
+    comptabiliserReglementAchat,
+    comptabiliserDepense,
+    comptabiliserCharge,
+    comptabiliserCaisse,
+    comptabiliserMouvementStock,
+  } = compta || {};
+
+  if (!comptabiliserVente || !comptabiliserAchat) return;
+
+  try {
+    const whereDate = { gte: startDate };
+    const whereEntite = entiteId ? { entiteId } : {};
+
+    // VENTES
+    const ventes = await prisma.vente.findMany({
+      where: { ...whereEntite, statut: { in: ['VALIDE', 'VALIDEE'] }, date: whereDate },
+      include: { lignes: true, reglements: { select: { modePaiement: true, montant: true } } },
+      orderBy: { date: 'asc' }
+    });
+    for (const v of ventes) {
+      await comptabiliserVente({
+        venteId: v.id,
+        numeroVente: v.numero,
+        date: v.date,
+        montantTotal: v.montantTotal,
+        modePaiement: v.modePaiement,
+        clientId: v.clientId,
+        entiteId: v.entiteId,
+        utilisateurId: v.utilisateurId,
+        magasinId: v.magasinId,
+        fraisApproche: v.fraisApproche,
+        reglements: (v.reglements || []).map(r => ({ mode: r.modePaiement, montant: r.montant })),
+        lignes: (v.lignes || []).map(l => ({
+          produitId: l.produitId,
+          designation: l.designation,
+          quantite: l.quantite,
+          prixUnitaire: l.prixUnitaire,
+          coutUnitaire: l.coutUnitaire,
+          tva: l.tva,
+          remise: l.remise
+        }))
+      });
+    }
+
+    // ACHATS
+    if (comptabiliserAchat) {
+      const achats = await prisma.achat.findMany({
+        where: { ...whereEntite, statut: { in: ['VALIDE', 'VALIDEE'] }, date: whereDate },
+        include: { lignes: true, reglements: { select: { modePaiement: true, montant: true } } },
+        orderBy: { date: 'asc' }
+      });
+      for (const a of achats) {
+        await comptabiliserAchat({
+          achatId: a.id,
+          numeroAchat: a.numero,
+          date: a.date,
+          montantTotal: a.montantTotal,
+          fraisApproche: a.fraisApproche,
+          modePaiement: a.modePaiement,
+          fournisseurId: a.fournisseurId,
+          entiteId: a.entiteId,
+          utilisateurId: a.utilisateurId,
+          magasinId: a.magasinId,
+          reglements: (a.reglements || []).map(r => ({ mode: r.modePaiement, montant: r.montant })),
+          lignes: (a.lignes || []).map(l => ({
+            produitId: l.produitId,
+            designation: l.designation,
+            quantite: l.quantite,
+            prixUnitaire: l.prixUnitaire,
+            tva: l.tva,
+            remise: l.remise
+          }))
+        });
+      }
+    }
+
+    // Règlements (sécurité)
+    if (comptabiliserReglementVente) {
+      const regsV = await prisma.reglementVente.findMany({
+        where: { ...whereEntite, statut: { in: ['VALIDE', 'VALIDEE'] }, date: whereDate },
+        include: { vente: { select: { numero: true, entiteId: true } } },
+        orderBy: { date: 'asc' }
+      });
+      for (const r of regsV) {
+        await comptabiliserReglementVente({
+          reglementId: r.id,
+          venteId: r.venteId || 0,
+          numeroVente: (r.vente && r.vente.numero) ? r.vente.numero : `AC-CLI-${r.clientId || r.id}`,
+          date: r.date,
+          montant: r.montant,
+          modePaiement: r.modePaiement,
+          utilisateurId: r.utilisateurId,
+          entiteId: r.entiteId || (r.vente ? r.vente.entiteId : (entiteId || 1))
+        });
+      }
+    }
+    if (comptabiliserReglementAchat) {
+      const regsA = await prisma.reglementAchat.findMany({
+        where: { ...whereEntite, statut: { in: ['VALIDE', 'VALIDEE'] }, date: whereDate },
+        include: { achat: { select: { numero: true, entiteId: true } } },
+        orderBy: { date: 'asc' }
+      });
+      for (const r of regsA) {
+        await comptabiliserReglementAchat({
+          reglementId: r.id,
+          achatId: r.achatId || 0,
+          numeroAchat: (r.achat && r.achat.numero) ? r.achat.numero : `AC-FOURN-${r.fournisseurId || r.id}`,
+          date: r.date,
+          montant: r.montant,
+          modePaiement: r.modePaiement,
+          utilisateurId: r.utilisateurId,
+          entiteId: r.entiteId || (r.achat ? r.achat.entiteId : (entiteId || 1))
+        });
+      }
+    }
+
+    // Dépenses / Charges / Caisse
+    if (comptabiliserDepense) {
+      const deps = await prisma.depense.findMany({ where: { ...whereEntite, date: whereDate }, orderBy: { date: 'asc' } });
+      for (const d of deps) {
+        await comptabiliserDepense({
+          depenseId: d.id,
+          date: d.date,
+          montant: d.montant,
+          categorie: d.categorie,
+          libelle: d.libelle,
+          modePaiement: d.modePaiement,
+          utilisateurId: d.utilisateurId,
+          entiteId: d.entiteId,
+          magasinId: d.magasinId
+        });
+      }
+    }
+    if (comptabiliserCharge) {
+      const ch = await prisma.charge.findMany({ where: { ...whereEntite, date: whereDate }, orderBy: { date: 'asc' } });
+      for (const c of ch) {
+        await comptabiliserCharge({
+          chargeId: c.id,
+          date: c.date,
+          montant: c.montant,
+          rubrique: c.rubrique,
+          libelle: c.observation || null,
+          utilisateurId: c.utilisateurId,
+          entiteId: c.entiteId,
+          magasinId: c.magasinId,
+          modePaiement: c.modePaiement
+        });
+      }
+    }
+    if (comptabiliserCaisse) {
+      const caisses = await prisma.caisse.findMany({ where: { ...whereEntite, date: whereDate }, orderBy: { date: 'asc' } });
+      for (const c of caisses) {
+        await comptabiliserCaisse({
+          caisseId: c.id,
+          date: c.date,
+          type: c.type,
+          montant: c.montant,
+          motif: c.motif,
+          utilisateurId: c.utilisateurId,
+          entiteId: c.entiteId
+        });
+      }
+    }
+
+    // Stock ajustements (stock initial / inventaire / régul)
+    if (comptabiliserMouvementStock) {
+      const mvts = await prisma.mouvement.findMany({
+        where: {
+          ...whereEntite,
+          dateOperation: whereDate,
+          OR: [
+            { observation: { contains: 'Stock initial' } },
+            { observation: { contains: 'Inventaire' } },
+            { observation: { contains: 'Régul' } },
+            { observation: { contains: 'Ajust' } }
+          ]
+        },
+        orderBy: { dateOperation: 'asc' }
+      });
+      for (const m of mvts) {
+        const t = String(m.type).toUpperCase() === 'SORTIE' ? 'SORTIE' : 'ENTREE';
+        await comptabiliserMouvementStock({
+          produitId: m.produitId,
+          magasinId: m.magasinId,
+          type: t,
+          quantite: m.quantite,
+          date: m.dateOperation,
+          motif: m.observation || 'Ajustement stock',
+          utilisateurId: m.utilisateurId,
+          entiteId: m.entiteId,
+          mouvementId: m.id
+        });
+      }
+    }
+
+    // Marquer terminé (verrou)
+    try { fs.writeFileSync(mark, `done:${new Date().toISOString()}`); } catch (e) { /* ignore */ }
+  } catch (e) {
+    // Silence: ne doit pas bloquer l'installation
+  }
+}
 
 async function repareCaisses() {
   try {
@@ -28,8 +282,8 @@ async function repareCaisses() {
          });
        }
 
-       // Si après synchronisation c'est toujours négatif, on régularise à 0
-       if (soldeReel < 0) {
+      // Régularisation intrusive désactivée par défaut en production.
+      if (ALLOW_AGGRESSIVE_AUTO_REPAIR && soldeReel < 0) {
          const montantReparation = Math.abs(soldeReel);
          await prisma.caisse.create({
            data: {
@@ -65,7 +319,7 @@ async function repareBanques() {
       });
 
       const totalMouvements = operations.reduce((acc, op) => {
-        const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(op.type);
+        const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(String(op.type || '').toUpperCase());
         return isEntree ? acc + op.montant : acc - op.montant;
       }, 0);
 
@@ -79,7 +333,7 @@ async function repareBanques() {
         });
       }
 
-      if (soldeReel < 0) {
+      if (ALLOW_AGGRESSIVE_AUTO_REPAIR && soldeReel < 0) {
         const montantReparation = Math.abs(soldeReel);
         await prisma.operationBancaire.create({
           data: {
@@ -99,6 +353,47 @@ async function repareBanques() {
           where: { id: banque.id },
           data: { soldeActuel: 0 }
         });
+      }
+    }
+  } catch (e) {
+    // Silence
+  }
+}
+
+async function reparePaiementsArrondis() {
+  try {
+    // VENTES: corriger les cas "reste 1F" (ou <= 1) sur l'historique
+    const ventes = await prisma.vente.findMany({
+      where: { statut: { in: ['VALIDE', 'VALIDEE'] } },
+      select: { id: true, montantTotal: true, montantPaye: true, statutPaiement: true }
+    })
+
+    for (const v of ventes) {
+      const total = Number(v.montantTotal) || 0
+      const paye = Number(v.montantPaye) || 0
+      const diff = total - paye
+      if (total > 0 && paye > 0 && diff > 0 && diff <= 1) {
+        await prisma.vente.update({
+          where: { id: v.id },
+          data: { montantPaye: total, statutPaiement: 'PAYE' }
+        })
+      }
+    }
+
+    // ACHATS: même logique si besoin
+    const achats = await prisma.achat.findMany({
+      where: { statut: { in: ['VALIDE', 'VALIDEE'] } },
+      select: { id: true, montantTotal: true, montantPaye: true, statutPaiement: true }
+    })
+    for (const a of achats) {
+      const total = Number(a.montantTotal) || 0
+      const paye = Number(a.montantPaye) || 0
+      const diff = total - paye
+      if (total > 0 && paye > 0 && diff > 0 && diff <= 1) {
+        await prisma.achat.update({
+          where: { id: a.id },
+          data: { montantPaye: total, statutPaiement: 'PAYE' }
+        })
       }
     }
   } catch (e) {
@@ -134,71 +429,66 @@ async function repareStocks() {
 
 async function repareTiers() {
   try {
-    // 1. RECALCUL DETTES CLIENTS
+    // 1. RECALCUL DETTES CLIENTS (soldeRestant = ventes - règlements + soldeInitial - avoirInitial)
     const clients = await prisma.client.findMany();
     for (const client of clients) {
-      // Somme des ventes validées
+      const clientEntiteFilter = client.entiteId ? { entiteId: client.entiteId } : {};
       const statsVentes = await prisma.vente.aggregate({
         where: { 
           clientId: client.id, 
-          statut: { in: ['VALIDE', 'VALIDEE'] } 
+          statut: { in: ['VALIDE', 'VALIDEE'] },
+          ...clientEntiteFilter
         },
         _sum: { montantTotal: true }
       });
 
-      // Somme des règlements validés
       const statsReglements = await prisma.reglementVente.aggregate({
         where: { 
           clientId: client.id, 
-          statut: { in: ['VALIDE', 'VALIDEE'] } 
+          statut: { in: ['VALIDE', 'VALIDEE'] },
+          ...clientEntiteFilter
         },
         _sum: { montant: true }
       });
 
       const totalVentes = statsVentes._sum.montantTotal || 0;
       const totalReglements = statsReglements._sum.montant || 0;
-      const detteReelle = totalVentes - totalReglements;
+      const soldeRestant = (totalVentes - totalReglements) + (client.soldeInitial || 0) - (client.avoirInitial || 0);
 
-      // Correction si écart détecté
-      if (Math.abs((client.dette || 0) - detteReelle) > 0.1) {
-        await prisma.client.update({
-          where: { id: client.id },
-          data: { dette: detteReelle }
-        });
+      // Log si écart détecté (pas de champ dette en DB, on se contente de vérifier)
+      if (soldeRestant !== 0) {
+        console.log(`[Maintenance] Client ${client.nom}: solde restant = ${soldeRestant}`);
       }
     }
 
     // 2. RECALCUL DETTES FOURNISSEURS
     const fournisseurs = await prisma.fournisseur.findMany();
     for (const f of fournisseurs) {
-      // Somme des achats validés
+      const fournisseurEntiteFilter = f.entiteId ? { entiteId: f.entiteId } : {};
       const statsAchats = await prisma.achat.aggregate({
         where: { 
           fournisseurId: f.id, 
-          statut: { in: ['VALIDE', 'VALIDEE'] } 
+          statut: { in: ['VALIDE', 'VALIDEE'] },
+          ...fournisseurEntiteFilter
         },
         _sum: { montantTotal: true, fraisApproche: true }
       });
 
-      // Somme des règlements validés
       const statsReglements = await prisma.reglementAchat.aggregate({
         where: { 
           fournisseurId: f.id, 
-          statut: { in: ['VALIDE', 'VALIDEE'] } 
+          statut: { in: ['VALIDE', 'VALIDEE'] },
+          ...fournisseurEntiteFilter
         },
         _sum: { montant: true }
       });
 
-      const totalAchats = (statsAchats._sum.montantTotal || 0) + (statsAchats._sum.fraisApproche || 0);
+      const totalAchats = statsAchats._sum.montantTotal || 0;
       const totalReglements = statsReglements._sum.montant || 0;
-      const detteReelle = totalAchats - totalReglements;
+      const soldeRestant = (totalAchats - totalReglements) + (f.soldeInitial || 0) - (f.avoirInitial || 0);
 
-      // Correction si écart détecté
-      if (Math.abs((f.dette || 0) - detteReelle) > 0.1) {
-        await prisma.fournisseur.update({
-          where: { id: f.id },
-          data: { dette: detteReelle }
-        });
+      if (soldeRestant !== 0) {
+        console.log(`[Maintenance] Fournisseur ${f.nom}: solde restant = ${soldeRestant}`);
       }
     }
   } catch (e) {
@@ -208,20 +498,20 @@ async function repareTiers() {
 
 async function runMaintenance() {
   try {
-    // 1. DÉTECTION MODE MISE À JOUR (Correctif des décimales historiques)
-    const allEntries = await prisma.ecritureComptable.findMany({
-      select: { id: true, debit: true, credit: true }
-    });
-    
-    for (const entry of allEntries) {
-      const dRounded = Math.round(entry.debit);
-      const cRounded = Math.round(entry.credit);
-      
-      if (entry.debit !== dRounded || entry.credit !== cRounded) {
-        await prisma.ecritureComptable.update({
-          where: { id: entry.id },
-          data: { debit: dRounded, credit: cRounded }
-        });
+    // 1. Correction intrusive des écritures historiques (désactivée par défaut).
+    if (ALLOW_AGGRESSIVE_AUTO_REPAIR) {
+      const allEntries = await prisma.ecritureComptable.findMany({
+        select: { id: true, debit: true, credit: true }
+      });
+      for (const entry of allEntries) {
+        const dRounded = Math.round(entry.debit);
+        const cRounded = Math.round(entry.credit);
+        if (entry.debit !== dRounded || entry.credit !== cRounded) {
+          await prisma.ecritureComptable.update({
+            where: { id: entry.id },
+            data: { debit: dRounded, credit: cRounded }
+          });
+        }
       }
     }
 
@@ -266,10 +556,14 @@ async function runMaintenance() {
     }
 
     // 3. MÉDECINE FINANCIÈRE (Auto-correction + Synchronisation)
+    await reparePaiementsArrondis();
     await repareCaisses();
     await repareBanques();
     // await repareStocks(); // Désactivé : Pose problème avec l'historique manuel
     await repareTiers();
+
+    // 4. REBUILD écritures (optionnel, 1 seule fois)
+    await rebuildEcrituresIfRequested();
 
   } catch (error) {
     // Erreurs ignorées en mode silencieux, le système continue le démarrage
