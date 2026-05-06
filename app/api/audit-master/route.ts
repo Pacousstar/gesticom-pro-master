@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { comptabiliserAchat, comptabiliserVente } from '@/lib/comptabilisation'
+import { getSession } from '@/lib/auth'
 
-export async function GET() {
+export async function POST() {
+  const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
+  if (process.env.NODE_ENV === 'production' || !maintenanceEnabled) {
+    return NextResponse.json({ error: 'Route de maintenance désactivée en production.' }, { status: 403 })
+  }
+  const session = await getSession()
+  if (!session || session.role !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  }
+
   const prefix = 'AUDIT-MST-API-';
   const logs: string[] = ['🏁 DÉMARRAGE DE L\'AUDIT MASTER VIA API'];
 
@@ -79,13 +89,17 @@ export async function GET() {
   }
 }
 
+export async function GET() {
+  return NextResponse.json({ error: 'Méthode non autorisée. Utiliser POST.' }, { status: 405 })
+}
+
 async function updateStockAndPAMP(produitId: number, qty: number, valAchatNetHT: number, frais: number, magasinId: number, entiteId: number, userId: number, pieces: string) {
     const p = await prisma.produit.findUnique({ where: { id: produitId }, include: { stocks: true } });
     const stockAvant = p?.stocks.reduce((acc: number, s: any) => acc + s.quantite, 0) || 0;
     const pampAvant = p?.pamp || 0;
     const nouveauPamp = (stockAvant * pampAvant + valAchatNetHT + frais) / (stockAvant + qty);
     await prisma.produit.update({ where: { id: produitId }, data: { pamp: Math.round(nouveauPamp) } });
-    let st = await prisma.stock.findUnique({ where: { produitId_magasinId: { produitId, magasinId } } });
+    let st = await prisma.stock.findUnique({ where: { produitId_magasinId_entiteId: { produitId, magasinId, entiteId } } });
     if (!st) {
         await prisma.stock.create({ data: { produitId, magasinId, entiteId, quantite: qty } });
     } else {
@@ -95,28 +109,30 @@ async function updateStockAndPAMP(produitId: number, qty: number, valAchatNetHT:
 }
 
 async function updateStockForSale(produitId: number, qty: number, magasinId: number, entiteId: number, userId: number, pieces: string) {
-    await prisma.stock.update({ where: { produitId_magasinId: { produitId, magasinId } }, data: { quantite: { decrement: qty } } });
+    await prisma.stock.update({ where: { produitId_magasinId_entiteId: { produitId, magasinId, entiteId } }, data: { quantite: { decrement: qty } } });
     await prisma.mouvement.create({ data: { type: 'SORTIE', produitId, magasinId, entiteId, utilisateurId: userId, quantite: qty, observation: `Audit ${pieces}` } });
 }
 
 async function cleanAuditData(prefix: string) {
-    await prisma.ecritureComptable.deleteMany({ where: { piece: { startsWith: prefix } } });
-    await prisma.caisse.deleteMany({ where: { motif: { contains: prefix } } });
-    await prisma.mouvement.deleteMany({ where: { observation: { contains: prefix } } });
-    const ventes = await prisma.vente.findMany({ where: { numero: { startsWith: prefix } } });
+    await prisma.$transaction([
+        prisma.ecritureComptable.deleteMany({ where: { piece: { startsWith: prefix } } }),
+        prisma.caisse.deleteMany({ where: { motif: { contains: prefix } } }),
+        prisma.mouvement.deleteMany({ where: { observation: { contains: prefix } } }),
+        prisma.stock.deleteMany({ where: { produit: { code: { startsWith: prefix } } } }),
+        prisma.produit.deleteMany({ where: { code: { startsWith: prefix } } }),
+        prisma.fournisseur.deleteMany({ where: { code: { startsWith: prefix } } }),
+        prisma.client.deleteMany({ where: { code: { startsWith: prefix } } }),
+    ])
+    const ventes = await prisma.vente.findMany({ where: { numero: { startsWith: prefix } } })
     for (const v of ventes) {
-        await prisma.venteLigne.deleteMany({ where: { venteId: v.id } });
-        await prisma.reglementVente.deleteMany({ where: { venteId: v.id } });
-        await prisma.vente.delete({ where: { id: v.id } });
+        await prisma.venteLigne.deleteMany({ where: { venteId: v.id } })
+        await prisma.reglementVente.deleteMany({ where: { venteId: v.id } })
+        await prisma.vente.delete({ where: { id: v.id } })
     }
-    const achats = await prisma.achat.findMany({ where: { numero: { startsWith: prefix } } });
+    const achats = await prisma.achat.findMany({ where: { numero: { startsWith: prefix } } })
     for (const a of achats) {
-        await prisma.achatLigne.deleteMany({ where: { achatId: a.id } });
-        await prisma.reglementAchat.deleteMany({ where: { achatId: a.id } });
-        await prisma.achat.delete({ where: { id: a.id } });
+        await prisma.achatLigne.deleteMany({ where: { achatId: a.id } })
+        await prisma.reglementAchat.deleteMany({ where: { achatId: a.id } })
+        await prisma.achat.delete({ where: { id: a.id } })
     }
-    await prisma.stock.deleteMany({ where: { produit: { code: { startsWith: prefix } } } });
-    await prisma.produit.deleteMany({ where: { code: { startsWith: prefix } } });
-    await prisma.fournisseur.deleteMany({ where: { code: { startsWith: prefix } } });
-    await prisma.client.deleteMany({ where: { code: { startsWith: prefix } } });
 }

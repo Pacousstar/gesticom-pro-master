@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
 
+const EXPORT_MAX_ROWS = 1000
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  const authError = requireRole(session, [...ROLES_ADMIN])
+  const authError = requirePermission(session, 'audit:view')
   if (authError) return authError
 
   try {
@@ -21,8 +23,8 @@ export async function GET(request: NextRequest) {
 
     const where: any = {}
 
-    if (session && session.role !== 'SUPER_ADMIN' && session.entiteId) {
-      where.entiteId = session.entiteId
+    if (session?.role !== 'SUPER_ADMIN') {
+      where.entiteId = session?.entiteId
     }
 
     if (utilisateurId) {
@@ -44,7 +46,19 @@ export async function GET(request: NextRequest) {
       }
     }
     if (search) {
-      where.description = { contains: search, mode: 'insensitive' }
+      where.OR = [
+        { description: { contains: search } },
+        { type: { contains: search, mode: 'insensitive' } },
+        { action: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    const totalCount = await prisma.auditLog.count({ where })
+
+    if (totalCount > EXPORT_MAX_ROWS) {
+      return NextResponse.json({ 
+        error: `Trop de données à exporter (${totalCount} lignes). Maximum ${EXPORT_MAX_ROWS} lignes. Veuillez appliquer des filtres plus restrictifs.` 
+      }, { status: 400 })
     }
 
     const logs = await prisma.auditLog.findMany({
@@ -60,7 +74,7 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { date: 'desc' },
-      take: 1000, // Limiter à 1000 logs pour le PDF
+      take: EXPORT_MAX_ROWS,
     })
 
     const parametres = await prisma.parametre.findFirst()
@@ -72,7 +86,6 @@ export async function GET(request: NextRequest) {
     const margin = 15
     const lineHeight = 6
 
-    // En-tête
     doc.setFontSize(16)
     doc.text(`Journal d'Audit - ${nomEntreprise}`, margin, y)
     y += 8
@@ -84,11 +97,9 @@ export async function GET(request: NextRequest) {
     doc.text(`Total : ${logs.length} log(s)`, margin, y)
     y += 10
 
-    // Tableau
     doc.setFontSize(8)
     let currentY = y
 
-    // En-têtes du tableau
     doc.setFont(undefined, 'bold')
     doc.text('Date', margin, currentY)
     doc.text('Utilisateur', margin + 35, currentY)
@@ -124,7 +135,6 @@ export async function GET(request: NextRequest) {
       currentY += lineHeight
     }
 
-    // Pied de page
     const totalPages = doc.internal.pages.length - 1
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i)

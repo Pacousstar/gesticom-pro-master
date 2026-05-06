@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  const authError = requireRole(session, [...ROLES_ADMIN])
+  const authError = requirePermission(session, 'audit:view')
   if (authError) return authError
 
   try {
     const searchParams = request.nextUrl.searchParams
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const limit = parseInt(searchParams.get('limit') || '25')
     const skip = (page - 1) * limit
 
     const utilisateurId = searchParams.get('utilisateurId')
@@ -22,6 +22,10 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
 
     const where: any = {}
+
+    if (session?.role !== 'SUPER_ADMIN') {
+      where.entiteId = session?.entiteId
+    }
 
     if (utilisateurId) {
       where.utilisateurId = parseInt(utilisateurId)
@@ -42,7 +46,11 @@ export async function GET(request: NextRequest) {
       }
     }
     if (search) {
-      where.description = { contains: search }
+      where.OR = [
+        { description: { contains: search } },
+        { type: { contains: search, mode: 'insensitive' } },
+        { action: { contains: search, mode: 'insensitive' } },
+      ]
     }
 
     const [logs, total] = await Promise.all([

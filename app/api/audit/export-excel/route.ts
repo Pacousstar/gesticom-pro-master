@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx-prototype-pollution-fixed')
 
+const EXPORT_MAX_ROWS = 10000
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  const authError = requireRole(session, [...ROLES_ADMIN])
+  const authError = requirePermission(session, 'audit:view')
   if (authError) return authError
 
   try {
@@ -20,6 +22,10 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
 
     const where: any = {}
+
+    if (session?.role !== 'SUPER_ADMIN') {
+      where.entiteId = session?.entiteId
+    }
 
     if (utilisateurId) {
       where.utilisateurId = parseInt(utilisateurId)
@@ -40,7 +46,19 @@ export async function GET(request: NextRequest) {
       }
     }
     if (search) {
-      where.description = { contains: search, mode: 'insensitive' }
+      where.OR = [
+        { description: { contains: search } },
+        { type: { contains: search, mode: 'insensitive' } },
+        { action: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    const totalCount = await prisma.auditLog.count({ where })
+
+    if (totalCount > EXPORT_MAX_ROWS) {
+      return NextResponse.json({ 
+        error: `Trop de données à exporter (${totalCount} lignes). Maximum ${EXPORT_MAX_ROWS} lignes. Veuillez appliquer des filtres plus restrictifs.` 
+      }, { status: 400 })
     }
 
     const logs = await prisma.auditLog.findMany({
@@ -56,6 +74,7 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { date: 'desc' },
+      take: EXPORT_MAX_ROWS,
     })
 
     const rows = logs.map((log) => ({
@@ -73,16 +92,16 @@ export async function GET(request: NextRequest) {
 
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Date: '', Utilisateur: '', Login: '', Rôle: '', Action: '', Type: '', Description: '', 'Adresse IP': '', 'User Agent': '', Détails: '' }])
     const colWidths = [
-      { wch: 20 }, // Date
-      { wch: 20 }, // Utilisateur
-      { wch: 15 }, // Login
-      { wch: 15 }, // Rôle
-      { wch: 15 }, // Action
-      { wch: 15 }, // Type
-      { wch: 50 }, // Description
-      { wch: 18 }, // Adresse IP
-      { wch: 40 }, // User Agent
-      { wch: 50 }, // Détails
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 50 },
+      { wch: 18 },
+      { wch: 40 },
+      { wch: 50 },
     ]
     ws['!cols'] = colWidths
 
