@@ -2,12 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { requireRole } from '@/lib/require-role'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requireRole(session, ['SUPER_ADMIN', 'ADMIN'])
+  if (forbidden) return forbidden
 
   try {
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const type = formData.get('type') as string | null // 'produits', 'clients', 'fournisseurs'
@@ -34,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     if (type === 'produits') {
       const magasinList = await prisma.magasin.findMany({
-        where: { actif: true },
+        where: { actif: true, entiteId },
         select: { id: true, code: true },
       })
       const magasinByCode = new Map(magasinList.map((m) => [m.code.trim().toUpperCase(), m.id]))
@@ -57,7 +66,7 @@ export async function POST(request: NextRequest) {
           const categorie = String(row?.Categorie || row?.categorie || 'DIVERS').trim() || 'DIVERS'
           const seuilMin = Math.max(0, Number(row?.SeuilMin || row?.seuil_min) || 5)
 
-          const existing = await prisma.produit.findUnique({ where: { code } })
+          const existing = await prisma.produit.findFirst({ where: { code, entiteId } })
           if (existing) {
             await prisma.produit.update({
               where: { id: existing.id },
@@ -66,7 +75,7 @@ export async function POST(request: NextRequest) {
             result.updated++
           } else {
             await prisma.produit.create({
-              data: { code, designation, categorie, prixAchat, prixVente, seuilMin, actif: true },
+              data: { code, designation, categorie, prixAchat, prixVente, seuilMin, actif: true, entiteId },
             })
             result.created++
           }
@@ -95,7 +104,7 @@ export async function POST(request: NextRequest) {
 
           // Vérifier si le client existe déjà (par nom) — SQLite : pas de mode insensitive
           const existing = await prisma.client.findFirst({
-            where: { nom },
+            where: { nom, entiteId },
           })
 
           if (existing) {
@@ -106,7 +115,7 @@ export async function POST(request: NextRequest) {
             result.updated++
           } else {
             await prisma.client.create({
-              data: { nom, telephone, type, plafondCredit, actif: true },
+              data: { nom, telephone, type, plafondCredit, actif: true, entiteId },
             })
             result.created++
           }
@@ -132,7 +141,7 @@ export async function POST(request: NextRequest) {
 
           // Vérifier si le fournisseur existe déjà (par nom) — SQLite : pas de mode insensitive
           const existing = await prisma.fournisseur.findFirst({
-            where: { nom },
+            where: { nom, entiteId },
           })
 
           if (existing) {
@@ -143,7 +152,7 @@ export async function POST(request: NextRequest) {
             result.updated++
           } else {
             await prisma.fournisseur.create({
-              data: { nom, telephone, email, actif: true },
+              data: { nom, telephone, email, actif: true, entiteId },
             })
             result.created++
           }

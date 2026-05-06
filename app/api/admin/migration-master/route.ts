@@ -19,7 +19,8 @@ import fs from 'fs'
  */
 
 export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV === 'production') {
+  const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
+  if (process.env.NODE_ENV === 'production' || !maintenanceEnabled) {
     return NextResponse.json({ error: 'Route de maintenance désactivée en production.' }, { status: 403 })
   }
   const session = await getSession()
@@ -30,8 +31,9 @@ export async function POST(request: NextRequest) {
   // 🛡️ SÉCURITÉ : Vérification de la clé de migration
   const authHeader = request.headers.get('x-migration-key')
   const envKey = process.env.MIGRATION_KEY
+  const confirmHeader = request.headers.get('x-maintenance-confirm')
   
-  if (!envKey || authHeader !== envKey) {
+  if (!envKey || authHeader !== envKey || confirmHeader !== 'YES_I_UNDERSTAND_THE_RISKS') {
     return NextResponse.json({ error: 'Accès non autorisé' }, { status: 401 })
   }
 
@@ -44,13 +46,8 @@ export async function POST(request: NextRequest) {
   try {
     addLog('🏁 DÉMARRAGE DE LA MIGRATION INTERNE (VERSION MASTER)')
 
-    // 1. RÉINITIALISATION ADMIN (Mot de passe Admin@123)
-    addLog('🔒 Configuration du compte Administrateur...')
-    const hash = "$2a$10$cI1CEqQEGIqdQ4M6y97K3uplfQnNSF1/SirUpjAtwWUW/8IfHCZtK" 
-    await prisma.utilisateur.updateMany({
-      where: { OR: [{ login: 'admin' }, { role: 'SUPER_ADMIN' }] },
-      data: { motDePasse: hash, actif: true }
-    })
+    // 1. SÉCURITÉ: ne jamais réinitialiser les mots de passe depuis une route de maintenance.
+    addLog('🔒 Étape sécurité: aucune réinitialisation de mot de passe effectuée.')
 
     // 2. RÉPARATIONS STRUCTURELLES MASSIVES (Rattrapage Entité/Magasin)
     addLog('🔍 Réparation massive de la visibilité Master...')
@@ -81,9 +78,11 @@ export async function POST(request: NextRequest) {
       addLog('✅ Toutes les données ont été rattachées à l\'entité et au magasin par défaut.')
     }
 
-    // 3. PURGE COMPTABLE
+    // 3. PURGE COMPTABLE (dans une transaction pour sécurité)
     addLog('🧹 Purge du Grand Livre historique...')
-    await prisma.ecritureComptable.deleteMany({})
+    await prisma.$transaction([
+      prisma.ecritureComptable.deleteMany({}),
+    ])
 
     // 4. RECALCUL DU PAMP
     addLog('📉 Recalcul du Coût Moyen Pondéré (PAMP)...')
@@ -148,7 +147,9 @@ export async function POST(request: NextRequest) {
     try {
       const logPath = path.join(process.cwd(), 'gesticom-error.log')
       fs.appendFileSync(logPath, new Date().toISOString() + ' [migration-api] ' + errorMsg + '\n', 'utf8')
-    } catch (_) {}
+    } catch (_) {
+      // Ignorer l'échec d'écriture du log fichier, l'erreur API est déjà renvoyée.
+    }
     return NextResponse.json({ success: false, error: errorMsg, logs }, { status: 500 })
   }
 }

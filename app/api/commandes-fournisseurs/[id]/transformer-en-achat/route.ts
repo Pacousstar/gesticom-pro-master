@@ -105,7 +105,7 @@ export async function POST(
 
         // b. Stock Magasin
         let st = await tx.stock.findUnique({
-          where: { produitId_magasinId: { produitId: l.produitId, magasinId: achat.magasinId } },
+          where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId: achat.magasinId, entiteId } },
         })
         if (!st) {
           st = await tx.stock.create({
