@@ -8,6 +8,8 @@ interface MouvementCaisseParams {
   utilisateurId: number
   entiteId?: number
   date?: Date
+  observation?: string
+  sousType?: string
 }
 
 /**
@@ -20,7 +22,9 @@ export async function enregistrerMouvementCaisse({
   montant,
   utilisateurId,
   entiteId = 1,
-  date = new Date()
+  date = new Date(),
+  observation,
+  sousType,
 }: MouvementCaisseParams, tx?: any) {
   if (montant <= 0) return null
 
@@ -35,7 +39,9 @@ export async function enregistrerMouvementCaisse({
         montant,
         utilisateurId,
         entiteId,
-        date
+        date,
+        observation: observation || null,
+        sousType: sousType || 'MANUEL',
       }
     })
   } catch (error) {
@@ -44,8 +50,24 @@ export async function enregistrerMouvementCaisse({
   }
 }
 
-export function estModeEspeces(mode: string): boolean {
-  const m = mode?.toUpperCase() || ''
-  // SEULEMENT l'argent physique (Cash) doit impacter la table Caisse
-  return m === 'ESPECES' || m === 'CASH'
+/**
+ * Recalcule le soldeCaisse du magasin à partir des mouvements réels.
+ * À appeler après chaque mouvement de caisse pour maintenir la cohérence.
+ */
+export async function recalculerSoldeCaisse(magasinId: number, tx?: any) {
+  const prismaClient = tx || prisma
+  const entrees = (await prismaClient.caisse.aggregate({
+    where: { magasinId, type: 'ENTREE' },
+    _sum: { montant: true },
+  }))._sum.montant || 0
+  const sorties = (await prismaClient.caisse.aggregate({
+    where: { magasinId, type: 'SORTIE' },
+    _sum: { montant: true },
+  }))._sum.montant || 0
+  const solde = entrees - sorties
+  await prismaClient.magasin.update({
+    where: { id: magasinId },
+    data: { soldeCaisse: solde },
+  })
+  return solde
 }

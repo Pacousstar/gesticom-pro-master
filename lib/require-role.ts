@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import type { Session } from '@/lib/auth'
-import { hasPermission, type Permission, type Role } from './roles-permissions'
+import { hasPermission, ROLES_ADMIN, ROLES_COMPTA, ROLES_USER_MANAGEMENT, type Permission, type Role } from './roles-permissions'
+
+// Ré-exporter les constantes depuis roles-permissions pour la rétrocompatibilité
+export { ROLES_ADMIN, ROLES_COMPTA, ROLES_USER_MANAGEMENT }
 
 /**
  * Vérifie que la session existe et que le rôle est autorisé.
@@ -33,7 +36,6 @@ export function requirePermission(
   if (!session) {
     return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
   }
-  // On passe maintenant les permissions personnalisées de la session à hasPermission
   if (!hasPermission(session.role as Role, permission, session.permissions)) {
     return NextResponse.json(
       { error: 'Droits insuffisants pour cette action.' },
@@ -42,12 +44,3 @@ export function requirePermission(
   }
   return null
 }
-
-/** Rôles pouvant modifier les paramètres et gérer les sauvegardes */
-export const ROLES_ADMIN = ['SUPER_ADMIN', 'ADMIN'] as const
-
-/** Rôles pouvant accéder à la comptabilité */
-export const ROLES_COMPTA = ['SUPER_ADMIN', 'COMPTABLE'] as const
-
-/** Rôles pouvant gérer les utilisateurs */
-export const ROLES_USER_MANAGEMENT = ['SUPER_ADMIN', 'ADMIN'] as const

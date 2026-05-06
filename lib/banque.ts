@@ -1,4 +1,5 @@
 import { prisma } from './db'
+import { estModeBanque, estTypeOperationBanqueEntree } from './enums-commerce'
 
 interface OperationBancaireParams {
   banqueId?: number | null
@@ -52,8 +53,8 @@ export async function enregistrerOperationBancaire(
   // Types entrants : DEPOT, VIREMENT_ENTRANT, INTERETS, REGLEMENT_CLIENT
   // Types sortants : RETRAIT, VIREMENT_SORTANT, FRAIS, REGLEMENT_FOURNISSEUR, DEPENSE, CHARGE
   const t = type.toUpperCase()
-  const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'ENTREE', 'REVENU'].includes(t)
-  
+  const isEntree = estTypeOperationBanqueEntree(t)
+
   if (isEntree) {
     soldeApres += montant
   } else {
@@ -74,6 +75,7 @@ export async function enregistrerOperationBancaire(
       beneficiaire: params.beneficiaire || null,
       utilisateurId: params.utilisateurId,
       observation: params.observation || null,
+      entiteId: entiteId || 1,
     }
   })
 
@@ -86,10 +88,5 @@ export async function enregistrerOperationBancaire(
   return operation
 }
 
-/**
- * Helpers pour identifier les modes de paiement bancaires
- */
-export function estModeBanque(mode: string): boolean {
-  const m = mode?.toUpperCase() || ''
-  return ['CHEQUE', 'VIREMENT', 'MOBILE_MONEY', 'CARTE'].includes(m)
-}
+// RB5: Ré-exporter les helpers depuis enums-commerce pour compatibilité
+export { estModeBanque, estTypeOperationBanqueEntree }

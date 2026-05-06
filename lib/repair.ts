@@ -79,7 +79,7 @@ export async function repairVisibility() {
       prisma.vente.updateMany({ where: { entiteId: { in: [0] } }, data: { entiteId: eid } }),
       prisma.achat.updateMany({ where: { entiteId: { in: [0] } }, data: { entiteId: eid } }),
       prisma.mouvement.updateMany({ where: { entiteId: { in: [0] } }, data: { entiteId: eid } }),
-      prisma.client.updateMany({ where: { OR: [{ entiteId: 0 }, { entiteId: null }] }, data: { entiteId: eid } }),
+      prisma.client.updateMany({ where: { entiteId: { in: [0] } }, data: { entiteId: eid } }),
       prisma.fournisseur.updateMany({ where: { OR: [{ entiteId: 0 }, { entiteId: null }] }, data: { entiteId: eid } }),
       prisma.stock.updateMany({ where: { entiteId: { in: [0] } }, data: { entiteId: eid } }),
       prisma.caisse.updateMany({ where: { entiteId: { in: [0] } }, data: { entiteId: eid } }),

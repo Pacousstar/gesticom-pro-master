@@ -3,8 +3,9 @@ import { prisma } from '@/lib/db'
 import { comptabiliserVente } from '@/lib/comptabilisation'
 import { getSession } from '@/lib/auth'
 
-export async function GET() {
-  if (process.env.NODE_ENV === 'production') {
+export async function POST() {
+  const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
+  if (process.env.NODE_ENV === 'production' || !maintenanceEnabled) {
     return NextResponse.json({ error: 'Route de maintenance désactivée en production.' }, { status: 403 })
   }
   const session = await getSession()
@@ -95,4 +96,8 @@ export async function GET() {
     console.error('Erreur réconciliation:', error)
     return NextResponse.json({ success: false, error: error.message, logs }, { status: 500 })
   }
+}
+
+export async function GET() {
+  return NextResponse.json({ error: 'Méthode non autorisée. Utiliser POST.' }, { status: 405 })
 }

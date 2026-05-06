@@ -1,9 +1,15 @@
+import { randomUUID } from 'crypto'
 import { prisma } from './db'
+import type { PrismaClient } from '@prisma/client'
+import { estModeEspeces } from './enums-commerce'
+import { estModeBanque } from './banque'
 import {
   htNetDepuisTtcEtTauxGlobal,
   montantHtNetTotalLignesCompta,
   montantTvaDepuisTtcEtHtNet,
 } from './calculs-commerciaux'
+
+type TxClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>
 
 /**
  * Service de comptabilisation automatique SYSCOHADA
@@ -19,6 +25,7 @@ export const COMPTES_DEFAUT = {
   // CLASSE 4 - TIERS
   FOURNISSEURS: '401', // Fournisseurs
   CLIENTS: '411', // Clients
+  CLIENTS_AVANCES: '4191', // Clients - avances et acomptes reçus
   TVA_COLLECTEE: '443', // État, TVA collectée (Ventes)
   TVA_DEDUCTIBLE: '445', // État, TVA récupérable (Achats)
   
@@ -46,7 +53,7 @@ const VENTES_MARCHANDISES = COMPTES_DEFAUT.VENTES_MARCHANDISES
 /**
  * Récupère ou crée un compte par son numéro
  */
-async function getOrCreateCompte(numero: string, libelle: string, classe: string, type: string, tx?: any) {
+async function getOrCreateCompte(numero: string, libelle: string, classe: string, type: string, tx?: TxClient) {
   const p = tx || prisma
   return await p.planCompte.upsert({
     where: { numero },
@@ -58,7 +65,7 @@ async function getOrCreateCompte(numero: string, libelle: string, classe: string
 /**
  * Récupère ou crée un journal par son code
  */
-async function getOrCreateJournal(code: string, libelle: string, type: string, tx?: any) {
+async function getOrCreateJournal(code: string, libelle: string, type: string, tx?: TxClient) {
   const p = tx || prisma
   return await p.journal.upsert({
     where: { code },
@@ -83,7 +90,7 @@ async function createEcriture(data: {
   referenceType: string | null
   referenceId: number | null
   utilisateurId: number
-}, tx?: any) {
+}, tx?: TxClient) {
   if ((data.debit || 0) <= 0 && (data.credit || 0) <= 0) {
     console.warn(`[Comptabilisation] Barrière de validation => Ignore l'écriture (${data.libelle}): Débit=${data.debit}, Crédit=${data.credit}`);
     return null;
@@ -109,7 +116,7 @@ async function createEcriture(data: {
     }
   }
 
-  const numero = `ECR-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
+  const numero = `ECR-${Date.now()}-${randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase()}`
   
   return await p.ecritureComptable.create({
     data: {
@@ -138,9 +145,8 @@ export async function comptabiliserVente(data: {
   fraisApproche?: number
   reglements?: { mode: string; montant: number }[]
   lignes?: { produitId: number; designation: string; quantite: number; prixUnitaire: number; coutUnitaire: number; tva?: number; remise?: number }[]
-}, tx?: any) {
+}, tx?: TxClient) {
   const p = tx || prisma
-  console.log(`[DEBUG] comptabiliserVente: numero=${data.numeroVente}, montant=${data.montantTotal}`);
 
   if (data.montantTotal <= 0) {
     // console.log(`[Comptabilisation] Ignore vente nulle : ${data.numeroVente}`);
@@ -148,14 +154,15 @@ export async function comptabiliserVente(data: {
   }
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
-  // Supprime toutes les écritures liées à cette vente ou ses règlements pour éviter les doublons lors des mises à jour
+  // Supprime toutes les écritures liées à cette vente pour éviter les doublons lors des mises à jour
+  // Note: VENTE_REGLEMENT n'est pas nettoyé ici car les entries utilisent reglementId (pas venteId)
+  // Elles sont nettoyées individuellement par comptabiliserReglementVente
   await p.ecritureComptable.deleteMany({
     where: {
       OR: [
         { referenceType: 'VENTE', referenceId: data.venteId },
         { referenceType: 'VENTE_STOCK', referenceId: data.venteId },
         { referenceType: 'VENTE_FRAIS', referenceId: data.venteId },
-        { referenceType: 'VENTE_REGLEMENT', referenceId: data.venteId }
       ]
     }
   })
@@ -244,7 +251,11 @@ export async function comptabiliserVente(data: {
   const fraisVente = data.fraisApproche || 0
   if (fraisVente > 0) {
     const compteTransport = await getOrCreateCompte('624', 'Transport sur vente', '6', 'CHARGES', tx)
-    const compteCaisse = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+    const modePrincipal = data.modePaiement || (data.reglements?.[0]?.mode) || ''
+    const isCashFrais = estModeEspeces(modePrincipal)
+    const compteTresorerieFrais = isCashFrais
+      ? await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+      : await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
     
     await createEcriture({
       date: data.date,
@@ -267,7 +278,7 @@ export async function comptabiliserVente(data: {
       entiteId,
       piece: data.numeroVente,
       libelle: `Paiement frais Vente ${data.numeroVente}`,
-      compteId: compteCaisse.id,
+      compteId: compteTresorerieFrais.id,
       debit: 0,
       credit: fraisVente,
       reference: data.numeroVente,
@@ -276,8 +287,8 @@ export async function comptabiliserVente(data: {
       utilisateurId: data.utilisateurId,
     }, tx)
     
-    // Synchronisation physique de la caisse (Sortie)
-    if (data.magasinId) {
+    // Synchronisation physique de la caisse (Sortie) — uniquement si espèces
+    if (isCashFrais && data.magasinId) {
       await p.caisse.create({
         data: {
           date: data.date,
@@ -360,7 +371,7 @@ export async function comptabiliserReglementVente(data: {
   utilisateurId: number
   entiteId?: number
   magasinId?: number | null
-}, tx?: any) {
+}, tx?: TxClient) {
   const p = tx || prisma
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
@@ -371,13 +382,11 @@ export async function comptabiliserReglementVente(data: {
   }
 
   const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
-  const compteClient = await getOrCreateCompte(
-    COMPTES_DEFAUT.CLIENTS,
-    'Clients',
-    '4',
-    'ACTIF',
-    tx
-  )
+  // Si venteId est null/0 => acompte client (avance) : on crédite 4191 (passif) au lieu de 411.
+  const isAcompteClient = !data.venteId || data.venteId <= 0
+  const compteTiers = isAcompteClient
+    ? await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS_AVANCES, 'Clients - Avances et acomptes reçus', '4', 'PASSIF', tx)
+    : await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS, 'Clients', '4', 'ACTIF', tx)
   const entiteId = data.entiteId
   if (!entiteId) throw new Error('[Comptabilisation] entiteId requis')
   
@@ -403,7 +412,9 @@ export async function comptabiliserReglementVente(data: {
     }
   }
   
-  // Écriture : Débit Caisse/Banque (entrée d'argent), Crédit Clients (réduit la créance)
+  // Écriture : Débit Caisse/Banque (entrée d'argent),
+  // - Crédit 411 si règlement facture (réduit la créance client)
+  // - Crédit 4191 si acompte/avance client (dette envers le client)
   // FIX: Sécurisation de l'idempotence (Point 3 Audit)
   // Si reglementId est absent, on génère une clé basée sur le montant et la date pour éviter les collisions
   const referenceId = data.reglementId || data.venteId || 0
@@ -416,7 +427,7 @@ export async function comptabiliserReglementVente(data: {
     journalId: journal.id,
     entiteId,
     piece: data.numeroVente,
-    libelle: `Règlement Vente ${data.numeroVente}`,
+    libelle: isAcompteClient ? `Acompte Client ${data.numeroVente}` : `Règlement Vente ${data.numeroVente}`,
     compteId: compteTresorerie.id,
     debit: data.montant,
     credit: 0,
@@ -431,8 +442,8 @@ export async function comptabiliserReglementVente(data: {
     journalId: journal.id,
     entiteId,
     piece: data.numeroVente,
-    libelle: `Règlement Vente ${data.numeroVente}`,
-    compteId: compteClient.id,
+    libelle: isAcompteClient ? `Acompte Client ${data.numeroVente}` : `Règlement Vente ${data.numeroVente}`,
+    compteId: compteTiers.id,
     debit: 0,
     credit: data.montant,
     reference: uniqueRef,
@@ -462,7 +473,7 @@ export async function comptabiliserAchat(data: {
   magasinId: number
   reglements?: { mode: string; montant: number }[]
   lignes?: { produitId: number; designation: string; quantite: number; prixUnitaire: number; tva?: number; remise?: number }[]
-}, tx?: any) {
+}, tx?: TxClient) {
   const p = tx || prisma
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
@@ -622,7 +633,8 @@ export async function comptabiliserReglementAchat(data: {
   utilisateurId: number
   entiteId?: number
   magasinId?: number | null
-}, tx?: any) {
+  banqueId?: number | null
+}, tx?: TxClient) {
   const p = tx || prisma
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
@@ -650,8 +662,19 @@ export async function comptabiliserReglementAchat(data: {
   if (isCash) {
     compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
   } else {
-    // Mobile Money, Chèque, Virement vont en 521 (Banque/MM)
-    compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    // Mobile Money, Chèque, Virement : rechercher le compte spécifique de la banque si disponible
+    if (data.banqueId) {
+      const banque = await p.banque.findUnique({ where: { id: data.banqueId }, include: { compte: true } })
+      if (banque?.compteId && banque.compte) {
+        compteTresorerie = { id: banque.compte.id }
+      } else if (banque?.compteId) {
+        compteTresorerie = { id: banque.compteId }
+      } else {
+        compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+      }
+    } else {
+      compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    }
   }
   
   // Écriture : Débit Fournisseurs (réduit la dette), Crédit Caisse/Banque (sortie d'argent)
@@ -704,7 +727,7 @@ export async function comptabiliserMouvementStock(data: {
   utilisateurId: number
   entiteId?: number
   mouvementId?: number | null
-}, tx?: any) {
+}, tx?: TxClient) {
   const p = tx || prisma
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
@@ -806,7 +829,7 @@ export async function comptabiliserDepense(data: {
   utilisateurId: number
   entiteId: number
   magasinId?: number | null
-}, tx?: any) {
+}, tx?: TxClient) {
   const p = tx || prisma
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
@@ -863,7 +886,7 @@ export async function comptabiliserDepense(data: {
   const m = data.modePaiement?.toUpperCase() || ''
   let compteReglement: { id: number }
   
-  if (m === 'ESPECES' || m === 'CASH') {
+  if (m === 'ESPECES' || m === 'CASH' || m === 'ESPECE') {
     compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
   } else {
     // Tentative de récupération du compte spécifique à la banque
@@ -927,7 +950,7 @@ export async function comptabiliserCharge(data: {
   entiteId: number
   magasinId?: number | null
   modePaiement?: string
-}, tx?: any) {
+}, tx?: TxClient) {
   const p = tx || prisma
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
@@ -1040,6 +1063,11 @@ export async function comptabiliserCharge(data: {
 
 /**
  * Comptabilise un mouvement de caisse
+ * sousType détermine le compte de contrepartie :
+ *   ENTREE + MANUEL/PRODUIT → Crédit 758 (Produits divers)
+ *   ENTREE + APPROVISIONNEMENT → Crédit 521 (Banque)
+ *   SORTIE + MANUEL/CHARGE → Débit 658 (Autres charges)
+ *   SORTIE + RETRAIT → Débit 521 (Banque)
  */
 export async function comptabiliserCaisse(data: {
   caisseId: number
@@ -1050,7 +1078,8 @@ export async function comptabiliserCaisse(data: {
   modePaiement?: string
   utilisateurId: number
   entiteId: number
-}, tx?: any) {
+  sousType?: string
+}, tx?: TxClient) {
   const p = tx || prisma
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
@@ -1060,6 +1089,7 @@ export async function comptabiliserCaisse(data: {
 
   const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
   const entiteId = data.entiteId
+  const sousType = data.sousType || 'MANUEL'
   
   const compteCaisse = await getOrCreateCompte(
     COMPTES_DEFAUT.CAISSE,
@@ -1070,58 +1100,19 @@ export async function comptabiliserCaisse(data: {
   )
   
   if (data.type === 'ENTREE') {
-    // Entrée de caisse : Débit Caisse, Crédit Produits divers
-    const compteProduits = await getOrCreateCompte(
-      COMPTES_DEFAUT.PRODUITS_DIVERS,
-      'Produits divers',
-      '7',
-      'PRODUITS',
-      tx
-    )
+    const isAppro = sousType === 'APPROVISIONNEMENT'
+    const compteContrepartie = isAppro
+      ? await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque', '5', 'ACTIF', tx)
+      : await getOrCreateCompte(COMPTES_DEFAUT.PRODUITS_DIVERS, 'Produits divers', '7', 'PRODUITS', tx)
+    const libelleContrepartie = isAppro ? 'Approvisionnement caisse' : 'Entrée caisse'
     
     await createEcriture({
       date: data.date,
       journalId: journal.id,
+      entiteId,
       piece: null,
-      libelle: `Entrée caisse: ${data.motif}`,
+      libelle: `${libelleContrepartie}: ${data.motif}`,
       compteId: compteCaisse.id,
-      debit: data.montant,
-      credit: 0,
-      reference: `CAISSE-${data.caisseId}`,
-      referenceType: 'CAISSE',
-      referenceId: data.caisseId,
-      utilisateurId: data.utilisateurId,
-    }, tx)
-    
-    await createEcriture({
-      date: data.date,
-      journalId: journal.id,
-      piece: null,
-      libelle: `Entrée caisse: ${data.motif}`,
-      compteId: compteProduits.id,
-      debit: 0,
-      credit: data.montant,
-      reference: `CAISSE-${data.caisseId}`,
-      referenceType: 'CAISSE',
-      referenceId: data.caisseId,
-      utilisateurId: data.utilisateurId,
-    }, tx)
-  } else {
-    // Sortie de caisse : Débit Charges diverses, Crédit Caisse
-    const compteCharges = await getOrCreateCompte(
-      COMPTES_DEFAUT.AUTRES_CHARGES,
-      'Autres charges',
-      '6',
-      'CHARGES',
-      tx
-    )
-    
-    await createEcriture({
-      date: data.date,
-      journalId: journal.id,
-      piece: null,
-      libelle: `Sortie caisse: ${data.motif}`,
-      compteId: compteCharges.id,
       debit: data.montant,
       credit: 0,
       reference: `CAISSE-${data.caisseId}`,
@@ -1135,7 +1126,43 @@ export async function comptabiliserCaisse(data: {
       journalId: journal.id,
       entiteId,
       piece: null,
-      libelle: `Sortie caisse: ${data.motif}`,
+      libelle: `${libelleContrepartie}: ${data.motif}`,
+      compteId: compteContrepartie.id,
+      debit: 0,
+      credit: data.montant,
+      reference: `CAISSE-${data.caisseId}`,
+      referenceType: 'CAISSE',
+      referenceId: data.caisseId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  } else {
+    const isRetrait = sousType === 'RETRAIT'
+    const compteContrepartie = isRetrait
+      ? await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque', '5', 'ACTIF', tx)
+      : await getOrCreateCompte(COMPTES_DEFAUT.AUTRES_CHARGES, 'Autres charges', '6', 'CHARGES', tx)
+    const libelleContrepartie = isRetrait ? 'Retrait caisse' : 'Sortie caisse'
+    
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId,
+      piece: null,
+      libelle: `${libelleContrepartie}: ${data.motif}`,
+      compteId: compteContrepartie.id,
+      debit: data.montant,
+      credit: 0,
+      reference: `CAISSE-${data.caisseId}`,
+      referenceType: 'CAISSE',
+      referenceId: data.caisseId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+    
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId,
+      piece: null,
+      libelle: `${libelleContrepartie}: ${data.motif}`,
       compteId: compteCaisse.id,
       debit: 0,
       credit: data.montant,
@@ -1160,7 +1187,7 @@ export async function comptabiliserOperationBancaire(data: {
   compteId: number | null
   utilisateurId: number
   entiteId: number
-}, tx?: any) {
+}, tx?: TxClient) {
   const entiteId = data.entiteId
   const p = tx || prisma
 
@@ -1202,12 +1229,12 @@ export async function comptabiliserOperationBancaire(data: {
         tx
       )
     } else if (data.type === 'VIREMENT_ENTRANT') {
-      // Virement entrant : depuis un autre compte bancaire ou tiers
+      // Virement entrant : depuis un tiers (client souvent)
       compteCredit = await getOrCreateCompte(
-        '411', // Clients ou autre compte selon le contexte
+        '411',
         'Clients',
         '4',
-        'PASSIF',
+        'ACTIF',
         tx
       )
     } else if (data.type === 'INTERETS') {
@@ -1341,9 +1368,11 @@ export async function comptabiliserTransfert(data: {
   magasinDestNom: string
   montantTotal: number
   utilisateurId: number
-}, tx?: any) {
+  entiteId?: number
+}, tx?: TxClient) {
   if (data.montantTotal <= 0) return
   const p = tx || prisma
+  const entiteId = data.entiteId || 1
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
   await p.ecritureComptable.deleteMany({
@@ -1362,6 +1391,7 @@ export async function comptabiliserTransfert(data: {
   await createEcriture({
     date: data.date,
     journalId: journal.id,
+    entiteId,
     piece: data.numero,
     libelle,
     compteId: compteStock.id,
@@ -1375,6 +1405,7 @@ export async function comptabiliserTransfert(data: {
   await createEcriture({
     date: data.date,
     journalId: journal.id,
+    entiteId,
     piece: data.numero,
     libelle,
     compteId: compteStock.id,

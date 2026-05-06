@@ -152,10 +152,10 @@ export default function RelanceModal({ isOpen, onClose, clientId, tierNom }: Rel
 
         {/* Footer Info */}
         <div className="bg-gray-50 p-4 border-t text-center">
-           <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest flex items-center justify-center gap-2">
-              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-              GentiCom Pro Intelligent Recovery System
-           </p>
+<p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest flex items-center justify-center gap-2">
+               <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+               GestiCom Pro Intelligent Recovery System
+            </p>
         </div>
       </div>
     </div>

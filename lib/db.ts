@@ -14,7 +14,9 @@ if (process.env.NODE_ENV !== 'production' && process.platform === 'win32') {
     try {
       const url = fs.readFileSync(prodPath, 'utf8').trim()
       if (url) process.env.DATABASE_URL = url
-    } catch (_) { }
+    } catch (_) {
+      // Ignore la lecture de DB portable si le fichier est inaccessible.
+    }
   }
 }
 // On utilise la DATABASE_URL du .env en priorité absolue.
@@ -34,7 +36,7 @@ if (dbUrl && process.env.NEXT_PHASE !== 'phase-production-build') {
 }
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  log: process.env.NODE_ENV === 'production' ? ['error'] : ['query', 'error', 'warn'], 
+  log: ['error'], 
   datasources: {
     db: {
       url: dbUrl,

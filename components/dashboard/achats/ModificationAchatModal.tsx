@@ -38,7 +38,9 @@ export default function ModificationAchatModal({
     fournisseurId: '',
     fournisseurLibre: '',
     modePaiement: 'ESPECES',
-    montantPaye: '',
+    reglements: [{ mode: 'ESPECES', montant: '' }] as { mode: string; montant: string }[],
+    banqueId: '',
+    fraisApproche: '',
     observation: '',
     lignes: [] as Ligne[]
   })
@@ -52,6 +54,8 @@ export default function ModificationAchatModal({
   })
 
   const { success: showSuccess, error: showError } = useToast()
+  const [banques, setBanques] = useState<any[]>([])
+  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
 
   useEffect(() => {
     if (isOpen && achatId) {
@@ -62,16 +66,18 @@ export default function ModificationAchatModal({
   const loadData = async () => {
     setLoading(true)
     try {
-      const [mAchat, mMag, mFour, mProd] = await Promise.all([
-        fetch(`/api/achats/${achatId}`).then(r => r.json()),
-        fetch('/api/magasins').then(r => r.json()),
+      const [mAchat, mMag, mFour, mProd, mBanques] = await Promise.all([
+        fetch(`/api/achats/${achatId}`).then(r => r.ok ? r.json() : null),
+        fetch('/api/magasins').then(r => r.ok ? r.json() : []),
         fetch('/api/fournisseurs?limit=1000').then(r => r.json().then(d => d.data || d)),
-        fetch('/api/produits?complet=1').then(r => r.json())
+        fetch('/api/produits?complet=1').then(r => r.ok ? r.json() : []),
+        fetch('/api/banques').then(r => r.ok ? r.json() : { data: [] }).then(d => d.data || d || [])
       ])
 
       setMagasins(mMag)
       setFournisseurs(mFour)
       setProduits(mProd)
+      setBanques(mBanques.filter((b: any) => b.actif !== false))
 
       if (mAchat) {
         setFormData({
@@ -80,7 +86,9 @@ export default function ModificationAchatModal({
           fournisseurId: mAchat.fournisseurId ? String(mAchat.fournisseurId) : '',
           fournisseurLibre: mAchat.fournisseurLibre || '',
           modePaiement: mAchat.modePaiement || 'ESPECES',
-          montantPaye: String(mAchat.montantPaye || 0),
+          reglements: mAchat.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode, montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: String(mAchat.montantPaye || 0) }],
+          banqueId: '',
+          fraisApproche: String(mAchat.fraisApproche || '0'),
           observation: mAchat.observation || '',
           lignes: mAchat.lignes.map((l: any) => ({
             produitId: l.produitId,
@@ -107,6 +115,8 @@ export default function ModificationAchatModal({
     
     const q = Number(ajout.quantite)
     const pu = Number(ajout.prixUnitaire)
+    if (q <= 0) { showError('La quantité doit être supérieure à 0.'); return }
+    if (!pu || pu <= 0) { showError('Le prix unitaire doit être supérieur à 0.'); return }
     const tva = Number(ajout.tva)
     const rem = Number(ajout.remise)
     const mnt = Math.round((q * pu - rem) * (1 + tva / 100))
@@ -136,6 +146,11 @@ export default function ModificationAchatModal({
       return
     }
 
+    if (needsBanque && !formData.banqueId) {
+      showError('Sélectionnez une banque pour les règlements non espèces.')
+      return
+    }
+
     setSubmitting(true)
     try {
       const res = await fetch(`/api/achats/${achatId}`, {
@@ -143,7 +158,15 @@ export default function ModificationAchatModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'FULL_UPDATE',
-          ...formData,
+          date: formData.date || undefined,
+          magasinId: Number(formData.magasinId) || undefined,
+          fournisseurId: formData.fournisseurId ? Number(formData.fournisseurId) : null,
+          fournisseurLibre: formData.fournisseurLibre || null,
+          observation: formData.observation || null,
+          fraisApproche: Number(formData.fraisApproche) || 0,
+          modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
+          reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+          banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
           lignes: formData.lignes.map(l => ({
             produitId: l.produitId,
             quantite: l.quantite,
@@ -171,7 +194,8 @@ export default function ModificationAchatModal({
 
   if (!isOpen) return null
 
-  const totalFinal = formData.lignes.reduce((sum, l) => sum + l.montant, 0)
+  const totalLignes = formData.lignes.reduce((sum, l) => sum + l.montant, 0)
+  const totalFinal = totalLignes + (Number(formData.fraisApproche) || 0)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -332,44 +356,121 @@ export default function ModificationAchatModal({
                </table>
             </div>
 
-            {/* TOTALS & SUBMIT */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-4 border-t border-gray-100">
-               <div className="flex flex-wrap gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Déjà Payé</label>
-                    <input
-                      type="number"
-                      value={formData.montantPaye}
-                      onChange={e => setFormData(f => ({ ...f, montantPaye: e.target.value }))}
-                      className="w-40 rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-extrabold focus:ring-2 focus:ring-blue-500 outline-none text-blue-600"
-                    />
-                  </div>
-                  <div className="md:w-64 space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Observation</label>
-                    <input
-                      type="text"
-                      value={formData.observation}
-                      onChange={e => setFormData(f => ({ ...f, observation: e.target.value }))}
-                      className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-               </div>
+{/* TOTALS & SUBMIT */}
+             <div className="flex flex-col md:flex-row items-start justify-between gap-6 pt-4 border-t border-gray-100">
+                <div className="flex flex-col gap-4 w-full md:w-auto">
+                   <div className="flex flex-wrap gap-4">
+                     <div className="space-y-1">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Frais d'approche</label>
+                       <input
+                         type="number"
+                         min="0"
+                         value={formData.fraisApproche}
+                         onChange={e => setFormData(f => ({ ...f, fraisApproche: e.target.value }))}
+                         className="w-40 rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-extrabold focus:ring-2 focus:ring-blue-500 outline-none text-orange-600"
+                         placeholder="0"
+                       />
+                     </div>
+                     <div className="md:w-64 space-y-1">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Observation</label>
+                       <input
+                         type="text"
+                         value={formData.observation}
+                         onChange={e => setFormData(f => ({ ...f, observation: e.target.value }))}
+                         className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                       />
+                     </div>
+                   </div>
 
-               <div className="flex items-center gap-8">
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Total Achat TTC</p>
-                    <p className="text-4xl font-black text-blue-700 tracking-tighter italic">{totalFinal.toLocaleString()} F</p>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="rounded-2xl bg-blue-700 px-10 py-4 text-base font-black text-white hover:bg-blue-800 transition-all shadow-xl shadow-blue-200 flex items-center gap-3 disabled:opacity-50"
-                  >
-                    {submitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <Save className="h-6 w-6" />}
-                    ENREGISTRER LES MODIFICATIONS
-                  </button>
-               </div>
-            </div>
+                   {/* Réglements */}
+                   <div className="space-y-3">
+                     <div className="flex items-center justify-between">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Règlements</label>
+                       <button
+                         type="button"
+                         onClick={() => setFormData(f => ({ ...f, reglements: [...f.reglements, { mode: 'ESPECES', montant: '' }] }))}
+                         className="text-[10px] font-black text-blue-600 hover:text-blue-800 uppercase tracking-widest"
+                       >
+                         + Ajouter un règlement
+                       </button>
+                     </div>
+                     {formData.reglements.map((r, idx) => (
+                       <div key={idx} className="flex items-end gap-3">
+                         <div className="space-y-1 flex-1">
+                           <select
+                             value={r.mode}
+                             onChange={e => {
+                               const newRegs = [...formData.reglements]
+                               newRegs[idx] = { ...newRegs[idx], mode: e.target.value }
+                               setFormData(f => ({ ...f, reglements: newRegs }))
+                             }}
+                             className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                           >
+                             <option value="ESPECES">Espèces</option>
+                             <option value="MOBILE_MONEY">Mobile Money</option>
+                             <option value="CHEQUE">Chèque</option>
+                             <option value="VIREMENT">Virement</option>
+                             <option value="CREDIT">A crédit</option>
+                           </select>
+                         </div>
+                         <div className="space-y-1 flex-1">
+                           <input
+                             type="number"
+                             min="0"
+                             value={r.montant}
+                             onChange={e => {
+                               const newRegs = [...formData.reglements]
+                               newRegs[idx] = { ...newRegs[idx], montant: e.target.value }
+                               setFormData(f => ({ ...f, reglements: newRegs }))
+                             }}
+                             placeholder="Montant"
+                             className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-extrabold focus:ring-2 focus:ring-blue-500 outline-none text-blue-600"
+                           />
+                         </div>
+                         {formData.reglements.length > 1 && (
+                           <button
+                             type="button"
+                             onClick={() => setFormData(f => ({ ...f, reglements: f.reglements.filter((_, i) => i !== idx) }))}
+                             className="rounded-lg p-2 text-rose-500 hover:bg-rose-50 transition-colors"
+                           >
+                             <Trash2 className="h-4 w-4" />
+                           </button>
+                         )}
+                       </div>
+                     ))}
+                     {needsBanque && (
+                       <div className="space-y-1">
+                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Compte bancaire</label>
+                         <select
+                           value={formData.banqueId}
+                           onChange={e => setFormData(f => ({ ...f, banqueId: e.target.value }))}
+                           className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                         >
+                           <option value="">Sélectionner une banque...</option>
+                           {banques.map((b: any) => (
+                             <option key={b.id} value={b.id}>{b.nomBanque} — {b.libelle}</option>
+                           ))}
+                         </select>
+                       </div>
+                     )}
+                   </div>
+                </div>
+
+                <div className="flex items-center gap-8">
+                   <div className="text-right">
+                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Total Achat TTC</p>
+                     <p className="text-4xl font-black text-blue-700 tracking-tighter italic">{totalFinal.toLocaleString()} F</p>
+                   </div>
+                   <button
+                     type="submit"
+                     disabled={submitting}
+                     className="rounded-2xl bg-blue-700 px-10 py-4 text-base font-black text-white hover:bg-blue-800 transition-all shadow-xl shadow-blue-200 flex items-center gap-3 disabled:opacity-50"
+                   >
+                     {submitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <Save className="h-6 w-6" />}
+                     ENREGISTRER LES MODIFICATIONS
+                   </button>
+                </div>
+             </div>
           </form>
         )}
       </div>

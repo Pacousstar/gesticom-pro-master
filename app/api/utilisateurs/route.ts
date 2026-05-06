@@ -1,39 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  const authError = requireRole(session, [...ROLES_ADMIN])
+  const authError = requirePermission(session, 'users:view')
   if (authError) return authError
 
   try {
-    const rawUtilisateurs = await prisma.utilisateur.findMany({
-      select: {
-        id: true,
-        login: true,
-        nom: true,
-        email: true,
-        role: true,
-        permissionsPersonnalisees: true,
-        actif: true,
-        createdAt: true,
-        entiteId: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
+    const where: any = {}
+    if (session?.role !== 'SUPER_ADMIN') {
+      where.entiteId = session?.entiteId
+    }
 
-    const entites = await prisma.entite.findMany({
-      select: { id: true, nom: true }
-    })
+    const [rawUtilisateurs, entites] = await Promise.all([
+      prisma.utilisateur.findMany({
+        where,
+        select: {
+          id: true,
+          login: true,
+          nom: true,
+          email: true,
+          role: true,
+          permissionsPersonnalisees: true,
+          rolesSupplementaires: true,
+          actif: true,
+          createdAt: true,
+          updatedAt: true,
+          lastLoginAt: true,
+          entiteId: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.entite.findMany({
+        select: { id: true, nom: true },
+      }),
+    ])
+
     const entiteMap = new Map(entites.map(e => [e.id, e]))
 
     const utilisateurs = rawUtilisateurs.map(u => ({
       ...u,
-      entite: entiteMap.get(u.entiteId) || { id: u.entiteId, nom: 'Entité inconnue' }
+      entite: entiteMap.get(u.entiteId) || { id: u.entiteId, nom: 'Entité inconnue' },
     }))
 
     return NextResponse.json(utilisateurs)

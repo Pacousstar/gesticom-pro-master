@@ -19,7 +19,7 @@ export function htNetLigne(quantite: number, prixUnitaire: number, remiseLigne: 
   const q = Math.max(0, Number(quantite) || 0)
   const pu = Math.max(0, Number(prixUnitaire) || 0)
   const rem = Math.max(0, Number(remiseLigne) || 0)
-  return q * pu - rem
+  return Math.max(0, q * pu - rem) // Clamper à 0 minimum pour éviter un HT négatif
 }
 
 /**
@@ -34,7 +34,7 @@ export function montantLigneTTC(input: {
 }): number {
   const { quantite, prixUnitaire, remiseLigne, tvaPourcent } = input
   const ht = htNetLigne(quantite, prixUnitaire, remiseLigne)
-  const tva = Math.max(0, Number(tvaPourcent) || 0)
+  const tva = Math.min(100, Math.max(0, Number(tvaPourcent) || 0)) // Clamper entre 0 et 100%
   return roundMoneyFCFA(ht * (1 + tva / 100))
 }
 
@@ -104,7 +104,8 @@ export function nouveauPampApresAchatLigne(input: {
     const valeurStockExistant = stock * pamp
     nouveauPamp = (valeurStockExistant + val) / (stock + q)
   }
-  if (isNaN(nouveauPamp) || !isFinite(nouveauPamp)) nouveauPamp = fallback
+  if (isNaN(nouveauPamp) || !isFinite(nouveauPamp) || nouveauPamp === 0) nouveauPamp = fallback
+  if (nouveauPamp === 0 && fallback > 0) nouveauPamp = fallback
   return roundMoneyFCFA(nouveauPamp)
 }
 
@@ -148,7 +149,12 @@ export function montantTvaImpliciteLigne(input: {
   return Math.max(0, roundMoneyFCFA(ttc - ht))
 }
 
-/** Points fidélité à créditer pour un montant encaissé (FCFA entiers). */
-export function pointsFideliteDepuisEncaissement(montant: number): number {
-  return Math.floor(Math.max(0, Number(montant) || 0))
+/**
+ * Points fidélité à créditer pour un montant encaissé (FCFA entiers).
+ * Taux: 1 point pour chaque tranche de 1000 F (configurable).
+ */
+export function pointsFideliteDepuisEncaissement(montant: number, pointsParMillier: number = 1000): number {
+  const m = Math.max(0, Number(montant) || 0)
+  if (pointsParMillier <= 0) return 0
+  return Math.floor(m / pointsParMillier)
 }

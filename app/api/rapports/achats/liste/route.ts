@@ -9,19 +9,30 @@ export async function GET(request: NextRequest) {
 
   const entiteId = await getEntiteId(session)
   const searchParams = request.nextUrl.searchParams
-  const dateDebut = searchParams.get('dateDebut')
-  const dateFin = searchParams.get('dateFin')
+  const dateDebut = searchParams.get('dateDebut')?.trim()
+  const dateFin = searchParams.get('dateFin')?.trim()
+
+  if (!dateDebut || !dateFin) {
+    return NextResponse.json({ error: 'Dates de début et fin requises.' }, { status: 400 })
+  }
+
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+  if (!dateRegex.test(dateDebut) || !dateRegex.test(dateFin)) {
+    return NextResponse.json({ error: 'Format de date invalide. Utilisez YYYY-MM-DD.' }, { status: 400 })
+  }
+
+  if (new Date(dateDebut) > new Date(dateFin)) {
+    return NextResponse.json({ error: 'La date de début doit être antérieure à la date de fin.' }, { status: 400 })
+  }
 
   const where: any = {
     entiteId,
     statut: { in: ['VALIDE', 'VALIDEE'] },
   }
 
-  if (dateDebut && dateFin) {
-    where.date = {
-      gte: new Date(dateDebut + 'T00:00:00'),
-      lte: new Date(dateFin + 'T23:59:59'),
-    }
+  where.date = {
+    gte: new Date(dateDebut + 'T00:00:00'),
+    lte: new Date(dateFin + 'T23:59:59'),
   }
 
   try {
@@ -45,7 +56,7 @@ export async function GET(request: NextRequest) {
       montantPaye: a.montantPaye,
       statutPaiement: a.statutPaiement,
       modePaiement: a.modePaiement,
-      acheteur: a.utilisateur.nom,
+      acheteur: a.utilisateur?.nom || 'Inconnu',
       magasin: a.magasin.nom,
       produits: a.lignes.map(l => l.designation).join(', ')
     }))

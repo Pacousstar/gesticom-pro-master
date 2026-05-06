@@ -200,6 +200,13 @@ export async function createBackup(): Promise<string> {
   const targetName = backupFileName()
   const targetPath = path.join(/*turbopackIgnore: true*/ dir, targetName)
   
+  // Validation de sécurité : le chemin cible doit être dans le répertoire de sauvegarde
+  const resolvedTarget = path.resolve(targetPath)
+  const resolvedDir = path.resolve(dir)
+  if (!resolvedTarget.startsWith(resolvedDir)) {
+    throw new Error('Chemin de sauvegarde invalide : tentative de path traversal détectée.')
+  }
+  
   try {
     // Utilisation de VACUUM INTO (supporté par SQLite 3.27+)
     // Plus sûr que copyFileSync car gère les transactions en cours.

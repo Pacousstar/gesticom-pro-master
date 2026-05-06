@@ -128,6 +128,24 @@ function escapeHtml(s: string): string {
 }
 
 /**
+ * Sanitize une URL pour éviter les attaques XSS (javascript:, data:, etc.)
+ */
+function sanitizeUrl(url: string): string {
+  if (!url) return ''
+  const trimmed = url.trim().toLowerCase()
+  // Interdire les protocoles dangereux
+  if (trimmed.startsWith('javascript:') || 
+      trimmed.startsWith('data:') || 
+      trimmed.startsWith('vbscript:') ||
+      trimmed.startsWith('onerror=') ||
+      trimmed.startsWith('onload=')) {
+    console.warn('[print-templates] URL bloquée pour sécurité:', trimmed.substring(0, 50))
+    return ''
+  }
+  return url
+}
+
+/**
  * Feuille de styles complète pour l'impression (aperçu écran + impression).
  * @param format 'TICKET' | 'A4'
  */
@@ -349,9 +367,11 @@ export async function printDocument(templateId: number | null, type: 'VENTE' | '
     data.ENTREPRISE_MENTION_SPECIALE = entrepriseData.mentionSpeciale || 'Les produits sortis ne sont plus repris. Veuillez exiger votre facture.'
 
     // Traitement du Logo (Respect de la règle : logo uniquement si présent ou paramètres)
+    // Sécurisé contre XSS
     let logoUrl = logo || entrepriseData.logoLocal || entrepriseData.logo
-    if (logoUrl) {
-       data.ENTREPRISE_LOGO = `<img src="${logoUrl}" alt="Logo" />`
+    const safeLogoUrl = sanitizeUrl(logoUrl)
+    if (safeLogoUrl) {
+       data.ENTREPRISE_LOGO = `<img src="${escapeHtml(safeLogoUrl)}" alt="Logo" />`
     } else {
        data.ENTREPRISE_LOGO = ''
     }

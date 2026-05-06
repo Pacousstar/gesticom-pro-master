@@ -35,3 +35,21 @@ export function chunkArray<T>(array: T[], size: number): T[][] {
  * Nombre de lignes par page recommandé pour les rapports avec police 14-15px.
  */
 export const ITEMS_PER_PRINT_PAGE = 23;
+
+/**
+ * Première page : entête plus haut -> moins de lignes utiles.
+ * Ajustable par page si besoin, mais on fixe une valeur sûre par défaut.
+ */
+export const FIRST_PAGE_ITEMS_PER_PRINT_PAGE = 18
+
+/**
+ * Pagination "impression" : première page plus courte, suivantes à 23 lignes.
+ */
+export function paginateForPrint<T>(
+  array: T[],
+  opts?: { firstPageSize?: number; otherPagesSize?: number }
+): T[][] {
+  const first = Math.max(1, opts?.firstPageSize ?? FIRST_PAGE_ITEMS_PER_PRINT_PAGE)
+  const other = Math.max(1, opts?.otherPagesSize ?? ITEMS_PER_PRINT_PAGE)
+  return paginateArray(array, first, other)
+}

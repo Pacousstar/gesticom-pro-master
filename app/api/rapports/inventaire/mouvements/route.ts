@@ -36,7 +36,9 @@ export async function GET(request: NextRequest) {
       if (!isNaN(d1.getTime()) && !isNaN(d2.getTime())) {
         where.date = { gte: d1, lte: d2 }
       }
-    } catch {}
+    } catch {
+      // Ignore les dates invalides: aucun filtre date appliqué.
+    }
   }
 
   if (produitId && produitId !== 'TOUT') {

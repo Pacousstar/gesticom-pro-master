@@ -19,7 +19,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
   const [loading, setLoading] = useState(false)
   const [magasins, setMagasins] = useState<{ id: number, nom: string }[]>([])
   const [selectedMagasinId, setSelectedMagasinId] = useState<string>('')
-  const [selectedInvoceId, setSelectedInvoiceId] = useState<string>('')
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('')
   const [montant, setMontant] = useState<string>('')
   const [modePaiement, setModePaiement] = useState('ESPECES')
   const [observation, setObservation] = useState('')
@@ -46,15 +46,13 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
         magasinId: selectedMagasinId ? Number(selectedMagasinId) : null 
       }
       
-      if (type === 'VENTE') {
-        payload.venteId = selectedInvoceId || null
-        payload.clientId = tierId
+if (type === 'VENTE') {
+        payload.venteId = selectedInvoiceId || null
       } else {
-        payload.achatId = selectedInvoceId || null
-        payload.fournisseurId = tierId
+        payload.achatId = selectedInvoiceId || null
       }
 
-      if (!selectedInvoceId && !selectedMagasinId && modePaiement === 'ESPECES') {
+      if (!selectedInvoiceId && !selectedMagasinId && modePaiement === 'ESPECES') {
          setLoading(false)
          return showError('Veuillez sélectionner un magasin (Caisse) pour ce règlement libre.')
       }
@@ -97,7 +95,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Facture à solder</label>
             <select
-              value={selectedInvoceId}
+              value={selectedInvoiceId}
               onChange={(e) => {
                 setSelectedInvoiceId(e.target.value)
                 const inv = invoices.find(i => String(i.id) === e.target.value)
@@ -115,7 +113,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
             </select>
           </div>
 
-          {!selectedInvoceId && (
+          {!selectedInvoiceId && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Caisse / Magasin {modePaiement === 'ESPECES' ? '*' : ''}</label>
               <select

@@ -12,16 +12,26 @@ export async function GET(request: NextRequest) {
   const dateDebut = searchParams.get('dateDebut')
   const dateFin = searchParams.get('dateFin')
 
+  if (!dateDebut || !dateFin) {
+    return NextResponse.json({ error: 'Les dates de début et de fin sont requises.' }, { status: 400 })
+  }
+
+  const dateDebutParsed = new Date(dateDebut + 'T00:00:00')
+  const dateFinParsed = new Date(dateFin + 'T23:59:59')
+  if (isNaN(dateDebutParsed.getTime()) || isNaN(dateFinParsed.getTime())) {
+    return NextResponse.json({ error: 'Format de date invalide.' }, { status: 400 })
+  }
+  if (dateDebutParsed > dateFinParsed) {
+    return NextResponse.json({ error: 'La date de début doit être antérieure à la date de fin.' }, { status: 400 })
+  }
+
   const where: any = {
     entiteId,
     statut: { in: ['VALIDE', 'VALIDEE'] },
-  }
-
-  if (dateDebut && dateFin) {
-    where.date = {
-      gte: new Date(dateDebut + 'T00:00:00'),
-      lte: new Date(dateFin + 'T23:59:59'),
-    }
+    date: {
+      gte: dateDebutParsed,
+      lte: dateFinParsed,
+    },
   }
 
   try {
@@ -45,7 +55,7 @@ export async function GET(request: NextRequest) {
       montantPaye: v.montantPaye,
       statutPaiement: v.statutPaiement,
       modePaiement: v.modePaiement,
-      vendeur: v.utilisateur.nom,
+      vendeur: v.utilisateur?.nom || 'Inconnu',
       magasin: v.magasin.nom,
       produits: v.lignes.map(l => l.designation).join(', ')
     }))

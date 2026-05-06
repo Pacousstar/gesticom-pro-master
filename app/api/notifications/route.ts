@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
+    const entiteId = await getEntiteId(session)
+    const scopedWhere = session.role === 'SUPER_ADMIN' && entiteId <= 0
+      ? {}
+      : { entiteId }
+
     // Récupérer les notifications : stocks faibles, ventes récentes, etc.
     const notifications: Array<{
       id: string
@@ -19,75 +25,87 @@ export async function GET(request: NextRequest) {
     }> = []
 
     // 1. Stocks faibles
-    const stocksFaibles = await prisma.stock.findMany({
-      where: {
-        produit: { actif: true },
-      },
-      include: {
-        produit: {
-          select: {
-            id: true,
-            code: true,
-            designation: true,
-            seuilMin: true,
+    try {
+      const stocksFaibles = await prisma.stock.findMany({
+        where: {
+          ...scopedWhere,
+          produit: { actif: true },
+        },
+        include: {
+          produit: {
+            select: {
+              id: true,
+              code: true,
+              designation: true,
+              seuilMin: true,
+            },
+          },
+          magasin: {
+            select: {
+              id: true,
+              code: true,
+              nom: true,
+            },
           },
         },
-        magasin: {
-          select: {
-            id: true,
-            code: true,
-            nom: true,
-          },
-        },
-      },
-      take: 10,
-    })
+        take: 10,
+      })
 
-    for (const stock of stocksFaibles) {
-      if (stock.quantite < stock.produit.seuilMin) {
-        notifications.push({
-          id: `stock-${stock.id}`,
-          type: 'STOCK_FAIBLE',
-          titre: 'Stock faible',
-          message: `${stock.produit.code} - ${stock.produit.designation} (${stock.magasin.code}) : ${stock.quantite} < ${stock.produit.seuilMin}`,
-          date: new Date().toISOString(),
-          lien: `/dashboard/stock?magasinId=${stock.magasinId}`,
-          lu: false,
-        })
+      for (const stock of stocksFaibles) {
+        if (stock.quantite < stock.produit.seuilMin) {
+          notifications.push({
+            id: `stock-${stock.id}`,
+            type: 'STOCK_FAIBLE',
+            titre: 'Stock faible',
+            message: `${stock.produit.code} - ${stock.produit.designation} (${stock.magasin.code}) : ${stock.quantite} < ${stock.produit.seuilMin}`,
+            date: new Date().toISOString(),
+            lien: `/dashboard/stock?magasinId=${stock.magasinId}`,
+            lu: false,
+          })
+        }
       }
+    } catch (e) {
+      // Dégrade gracieusement: on conserve les autres notifications même si une source échoue.
+      console.error('GET /api/notifications (stocks):', e)
     }
 
     // 2. Ventes récentes (dernières 24h)
     const dateHier = new Date()
     dateHier.setHours(dateHier.getHours() - 24)
 
-    const ventesRecentes = await prisma.vente.findMany({
-      where: {
-        date: { gte: dateHier },
-        statut: 'VALIDEE',
-      },
-      include: {
-        magasin: {
-          select: {
-            code: true,
-            nom: true,
+    try {
+      const ventesRecentes = await prisma.vente.findMany({
+        where: {
+          ...scopedWhere,
+          date: { gte: dateHier },
+          statut: 'VALIDEE',
+        },
+        include: {
+          magasin: {
+            select: {
+              code: true,
+              nom: true,
+            },
           },
         },
-      },
-      orderBy: { date: 'desc' },
-      take: 5,
-    })
-
-    for (const vente of ventesRecentes) {
-      notifications.push({
-        id: `vente-${vente.id}`,
-        type: 'VENTE_RECENTE',
-        titre: 'Nouvelle vente',
-        message: `Vente ${vente.numero} - ${vente.magasin?.code || 'N/A'} : ${vente.montantTotal.toFixed(0)} FCFA`,
-        date: vente.date.toISOString(),
-        lien: `/dashboard/ventes`,
-        lu: false,
+        orderBy: { date: 'desc' },
+        take: 5,
       })
+
+      for (const vente of ventesRecentes) {
+        notifications.push({
+          id: `vente-${vente.id}`,
+          type: 'VENTE_RECENTE',
+          titre: 'Nouvelle vente',
+          message: `Vente ${vente.numero} - ${vente.magasin?.code || 'N/A'} : ${vente.montantTotal.toFixed(0)} FCFA`,
+          date: vente.date.toISOString(),
+          lien: `/dashboard/ventes`,
+          lu: false,
+        })
+      }
+    } catch (e) {
+      // Dégrade gracieusement: on conserve les autres notifications même si une source échoue.
+      console.error('GET /api/notifications (ventes):', e)
     }
 
     // Trier par date (plus récentes en premier)

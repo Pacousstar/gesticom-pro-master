@@ -64,24 +64,24 @@ export default function ListPrintWrapper({
                 className="h-16 w-auto mb-2 object-contain"
               />
             )}
-            <h1 className="text-[18px] font-black uppercase tracking-tighter italic">
+            <h1 className="text-[16px] font-black uppercase tracking-tighter">
               {enterprise?.nomEntreprise || 'GESTICOM PRO'}
             </h1>
-            <p className="text-[15px] font-bold uppercase text-gray-700">
+            <p className="text-[14px] font-bold uppercase text-gray-700">
               {enterprise?.localisation || 'Localisation'}
             </p>
-            <p className="text-[15px] font-medium text-gray-500">
+            <p className="text-[14px] font-medium text-gray-500">
               Contact : {enterprise?.contact || 'Non défini'} 
               {enterprise?.email ? ` | Email : ${enterprise.email}` : ''}
             </p>
             <div className="flex gap-4">
               {enterprise?.numNCC && (
-                <p className="text-[15px] font-medium text-gray-500 italic">
+                <p className="text-[14px] font-medium text-gray-500">
                   NCC : {enterprise.numNCC}
                 </p>
               )}
               {enterprise?.registreCommerce && (
-                <p className="text-[15px] font-medium text-gray-500 italic">
+                <p className="text-[14px] font-medium text-gray-500">
                   RC : {enterprise.registreCommerce}
                 </p>
               )}
@@ -89,11 +89,11 @@ export default function ListPrintWrapper({
           </div>
 
           <div className="text-right">
-            <h2 className="text-3xl font-black text-gray-900 uppercase italic tracking-tighter">
+            <h2 className="text-[16px] font-black text-gray-900 uppercase tracking-tight">
               {title}
             </h2>
             {subtitle && (
-              <p className="text-sm font-bold text-gray-700 uppercase mt-1">{subtitle}</p>
+              <p className="text-[14px] font-bold text-gray-700 uppercase mt-1">{subtitle}</p>
             )}
             <div className="mt-3 space-y-1">
               <p className="text-[11px] font-black uppercase text-gray-400">
@@ -111,7 +111,7 @@ export default function ListPrintWrapper({
                 </p>
               )}
               {pageNumber && totalPages && (
-                <p className="text-[15px] font-black text-orange-600 mt-2">
+                <p className="text-[14px] font-black text-orange-600 mt-2">
                   PAGE {pageNumber} / {totalPages}
                 </p>
               )}
@@ -128,20 +128,20 @@ export default function ListPrintWrapper({
       {/* FOOTER & VISA */}
       {!hideVisa && (
         <div className="mt-12 flex justify-between items-end pt-8 border-t-2 border-black print-footer">
-          <div className="text-[15px] italic text-gray-500 uppercase font-black max-w-[50%] leading-tight">
+          <div className="text-[16px] font-black text-gray-800 max-w-[50%] leading-tight">
             Document officiel généré par le système GestiCom Pro. 
             Tous droits réservés. {enterprise?.nomEntreprise || 'GESTICOM'}.
             <br />
-            <span className="text-[13px] font-bold">{enterprise?.mentionSpeciale || 'Veuillez exiger votre reçu pour toute transaction.'}</span>
+            <span className="text-[14px] font-bold">{enterprise?.mentionSpeciale || 'Veuillez exiger votre reçu pour toute transaction.'}</span>
           </div>
           
           <div className="flex gap-12">
             <div className="text-center w-56">
-              <p className="text-[15px] font-black uppercase border-b-2 border-gray-900 pb-1 mb-20 whitespace-nowrap">Le Responsable / Visa</p>
+              <p className="text-[16px] font-black uppercase border-b-2 border-gray-900 pb-1 mb-20 whitespace-nowrap">Le Responsable / Visa</p>
             </div>
             <div className="text-center w-64">
-              <p className="text-[15px] font-black uppercase border-b-2 border-black pb-1 mb-20 whitespace-nowrap">La Direction / Cachet</p>
-              <div className="mt-16 text-[13px] font-bold text-gray-400 italic">
+              <p className="text-[16px] font-black uppercase border-b-2 border-black pb-1 mb-20 whitespace-nowrap">La Direction / Cachet</p>
+              <div className="mt-16 text-[14px] font-bold text-gray-400">
                 (Signature et Cachet)
               </div>
             </div>
@@ -193,7 +193,7 @@ export default function ListPrintWrapper({
             background-color: #f3f4f6 !important;
             border: 2px solid #000 !important;
             padding: 10px 4px !important;
-            font-size: 14px !important;
+            font-size: 15px !important;
             font-weight: 900 !important;
             text-transform: uppercase;
           }

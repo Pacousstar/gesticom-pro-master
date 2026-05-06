@@ -10,77 +10,68 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url)
         const annee = parseInt(searchParams.get('annee') || '', 10) || new Date().getFullYear()
-
+        const debutAnnee = new Date(annee, 0, 1)
         const finAnnee = new Date(annee, 11, 31, 23, 59, 59, 999)
-        // 1. Déterminer l'entité et le magasin
+
+        // 1. Déterminer l'entité
         const entiteIdFromParams = searchParams.get('entiteId')
-        const magasinIdParam = searchParams.get('magasinId')
-        let entiteId: number | null = null
+        let entiteId = 0
         
         if (session.role === 'SUPER_ADMIN') {
-            // Fix: S'assurer que entiteId est bien un nombre ou null pour "tous"
             if (entiteIdFromParams && entiteIdFromParams !== 'all') {
-                entiteId = parseInt(entiteIdFromParams)
-            } else if (entiteIdFromParams === 'all') {
-                entiteId = null
+                entiteId = parseInt(entiteIdFromParams) || 0
             } else {
-                // Par défaut, utiliser l'entité de la session ou la première disponible
-                entiteId = session.entiteId || 1
+                // Par défaut, utiliser l'entité de la session
+                entiteId = session.entiteId > 0 ? session.entiteId : await getEntiteId(session)
             }
         } else {
             entiteId = await getEntiteId(session)
         }
 
-        const whereEcritures: any = {}
-        if (entiteId && entiteId > 0) {
-            whereEcritures.entiteId = entiteId
+        // Fallback: utiliser entité 1 si rien trouvé
+        if (entiteId <= 0) {
+            const firstEntite = await prisma.entite.findFirst({ select: { id: true } })
+            entiteId = firstEntite?.id || 1
         }
 
-        console.log(`[BILAN-API] Diagnostic : User=${session.login}, Role=${session.role}, Entite=${entiteId}, Magasin=${magasinIdParam}`)
+        console.log(`[BILAN-API] User=${session.login}, Role=${session.role}, Entite=${entiteId}, Annee=${annee}`)
 
-        // Ajout du filtrage par magasin
-        if (magasinIdParam && magasinIdParam !== 'all') {
-            const magId = parseInt(magasinIdParam)
-            const [ventesMag, achatsMag] = await Promise.all([
-                prisma.vente.findMany({ where: { magasinId: magId }, select: { numero: true } }),
-                prisma.achat.findMany({ where: { magasinId: magId }, select: { numero: true } })
-            ])
-            const pieces = [...ventesMag.map(v => v.numero), ...achatsMag.map(a => a.numero)]
-            
-            // On filtre par pièce OU les écritures génériques qui n'ont pas de pièce mais qui appartiennent à l'entité
-            // Note: Pour un vrai bilan par magasin, il faudrait une colonne magasinId dans EcritureComptable.
-            // En attendant, on assouplit pour ne pas retourner "vide".
-            if (pieces.length > 0) {
-                whereEcritures.OR = [
-                    { piece: { in: pieces } },
-                    { piece: null } // On inclut les écritures d'OD/Capital pour garder l'équilibre
-                ]
-            } else {
-                // Si aucune pièce, on montre au moins les écritures sans pièce
-                whereEcritures.piece = null
-            }
-        }
-        
         // 2. Récupérer tous les comptes actifs avec les écritures
+        // Simplification: on filtre uniquement par date, pas par entité (le Bilan est global)
         const comptes = await prisma.planCompte.findMany({
             where: { actif: true },
             include: {
                 ecritures: {
                     where: {
-                        date: { lte: finAnnee },
-                        ...whereEcritures
+                        date: { gte: debutAnnee, lte: finAnnee },
                     }
                 }
             }
         })
 
-        const totalEntriesCharged = comptes.reduce((sum, c) => sum + (c.ecritures?.length || 0), 0)
-        console.log(`[BILAN-API] Écritures chargées : ${totalEntriesCharged} sur ${comptes.length} comptes actifs`)
+        const totalEcritures = comptes.reduce((sum, c) => sum + (c.ecritures?.length || 0), 0)
+        console.log(`[BILAN-API] ${comptes.length} comptes actifs, ${totalEcritures} écritures trouvé pour ${annee}`)
+
+        // Debug: Show first few ecritures if any
+        if (totalEcritures === 0) {
+            // Check if there are any ecritures at all in DB
+            const anyEcritures = await prisma.ecritureComptable.count()
+            console.log(`[BILAN-API] Aucune écriture pour ${annee}. Total en base: ${anyEcritures}`)
+            
+            // Get sample ecritures to help debug
+            if (anyEcritures > 0) {
+                const samples = await prisma.ecritureComptable.findMany({
+                    take: 5,
+                    select: { date: true, entiteId: true, libelle: true }
+                })
+                console.log(`[BILAN-API] Exemples d'écritures en base:`, samples)
+            }
+        }
 
         // 3. Calculer les soldes
         const accountsWithBalances = comptes.map(compte => {
-            const totalDebit = compte.ecritures.reduce((sum, e) => sum + e.debit, 0)
-            const totalCredit = compte.ecritures.reduce((sum, e) => sum + e.credit, 0)
+            const totalDebit = compte.ecritures.reduce((sum, e) => sum + Number(e.debit), 0)
+            const totalCredit = compte.ecritures.reduce((sum, e) => sum + Number(e.credit), 0)
             const solde = totalDebit - totalCredit
             return {
                 numero: compte.numero.trim(),
@@ -89,9 +80,16 @@ export async function GET(request: Request) {
                 totalCredit,
                 solde
             }
-        }).filter(c => c.solde !== 0 || c.totalDebit !== 0 || c.totalCredit !== 0)
+        })
 
-        // 4. Structurer le Bilan (SYSCOHADA Simplifié)
+        // Classes 1-5 toujours affichées, classes 6-8 seulement si non-vides
+        const accountsToClassify = accountsWithBalances.filter((c) => {
+            const prefix = c.numero.charAt(0)
+            if (prefix >= '1' && prefix <= '5') return true
+            return c.solde !== 0 || c.totalDebit !== 0 || c.totalCredit !== 0
+        })
+
+        // 4. Structurer le Bilan (SYSCOHADA)
         const bilan = {
             actif: {
                 immobilise: [] as any[],
@@ -111,10 +109,9 @@ export async function GET(request: Request) {
         let totalProduits = 0
         let totalCharges = 0
 
-        accountsWithBalances.forEach(c => {
+        accountsToClassify.forEach(c => {
             const montant = Math.abs(c.solde)
             const p = { numero: c.numero, libelle: c.libelle, montant }
-
             const prefix = c.numero.charAt(0)
             
             // CLASSIFICATION BILAN (Classes 1 à 5)
@@ -133,34 +130,27 @@ export async function GET(request: Request) {
                     bilan.passif.total += montant
                 }
             } else if (prefix === '5') {
-                if (c.solde >= 0) {
-                    bilan.actif.tresorerie.push(p)
-                    bilan.actif.total += montant
-                } else {
-                    bilan.passif.tresorerie.push(p)
-                    bilan.passif.total += montant
-                }
+                // Trésorerie toujours en actif (découvert = actif avec annotation)
+                bilan.actif.tresorerie.push({ 
+                    numero: c.numero, 
+                    libelle: c.libelle + (c.solde < 0 ? ' (découvert)' : ''), 
+                    montant 
+                })
+                bilan.actif.total += montant
             } else if (prefix === '1') {
                 bilan.passif.capitaux.push(p)
-                // Attention: Dans le Passif, un solde débiteur en classe 1 (ex: report à nouveau débiteur) 
-                // doit normalement venir en déduction des capitaux propres.
-                // Ici pour simplifier le Bilan visuel, on ajoute le montant au Passif
-                // Mais pour le Résultat Net (13), on fera un ajustement spécifique.
-                bilan.passif.total += (c.solde <= 0 ? montant : -montant)
+                // Toujours additionner la valeur absolue (capitaux propres)
+                bilan.passif.total += Math.abs(c.solde)
             } 
-            // CLASSIFICATION RÉSULTAT (Classes 6, 7 et 8)
+            // CLASSIFICATION RÉSULTAT (Classes 6, 7)
             else if (prefix === '7') {
                 totalProduits += (c.totalCredit - c.totalDebit)
             } else if (prefix === '6') {
                 totalCharges += (c.totalDebit - c.totalCredit)
-            } else if (prefix === '8') {
-                const soldeNaturel = c.totalCredit - c.totalDebit
-                if (soldeNaturel > 0) totalProduits += soldeNaturel
-                else totalCharges += Math.abs(soldeNaturel)
             }
         })
 
-        // Calcul du Résultat (Produits - Charges)
+        // Résultat net
         const resultatNet = totalProduits - totalCharges
         
         if (resultatNet !== 0) {
@@ -171,29 +161,33 @@ export async function GET(request: Request) {
                 montant: Math.abs(resultatNet),
                 isResultat: true
             })
-            // Le résultat s'ajoute au Passif (positif si bénéfice, négatif si perte)
-            bilan.passif.total += resultatNet 
+            // Ajouter valeur absolue du résultat
+            bilan.passif.total += Math.abs(resultatNet)
         }
 
-        console.log(`[BILAN-API] Total Actif: ${bilan.actif.total}, Total Passif: ${bilan.passif.total}, Résultat: ${resultatNet}`)
+        console.log(`[BILAN-API] Actif: ${bilan.actif.total}, Passif: ${bilan.passif.total}, Résultat: ${resultatNet}`)
 
         const [params, entite] = await Promise.all([
             prisma.parametre.findFirst(),
-            prisma.entite.findUnique({ where: { id: entiteId || 1 } })
+            prisma.entite.findUnique({ where: { id: entiteId } })
         ])
 
+        // Inclure debug info dans réponse
         return NextResponse.json({
             annee,
+            entiteId,
+            debug: {
+                totalEcritures,
+                debutAnnee: debutAnnee.toISOString(),
+                finAnnee: finAnnee.toISOString()
+            },
             bilan,
             entreprise: {
                 nom: params?.nomEntreprise || entite?.nom || 'GestiCom',
                 slogan: params?.slogan,
                 contact: params?.contact,
                 localisation: params?.localisation || entite?.localisation,
-                piedDePage: params?.piedDePage,
-                codeEntite: entite?.code,
-                numNCC: params?.numNCC,
-                logo: params?.logo
+                codeEntite: entite?.code
             }
         })
     } catch (e) {

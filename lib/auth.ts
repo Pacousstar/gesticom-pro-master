@@ -1,8 +1,9 @@
 import { cookies } from 'next/headers'
 import { SignJWT, jwtVerify } from 'jose'
+import { prisma } from './db'
 
 const COOKIE_NAME = 'gesticom_session'
-const DEFAULT_MAX_AGE = 60 * 60 * 24 * 7 // 7 jours
+const DEFAULT_MAX_AGE = 60 * 60 * 24 * 7
 
 export type Session = {
   userId: number
@@ -10,21 +11,14 @@ export type Session = {
   nom: string
   role: string
   entiteId: number
-  permissions?: string[] // Permissions personnalisées (si définies, remplacent les permissions du rôle)
+  permissions?: string[]
+  tokenVersion?: number
 }
 
 function getSecret(): Uint8Array {
-  let s = (process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET)?.trim()
+  const s = process.env.SESSION_SECRET?.trim()
   if (!s || s.length < 32) {
-    if (process.env.NODE_ENV === 'development') {
-      s = 'GestiCom-Dev-Default-Secret-32chars-Minimum!!'
-    } else {
-      // Portable ou prod sans .env : utiliser un secret par défaut long (éviter blocage connexion)
-      s = 'GestiCom-Portable-ChangeMe-InProduction-32chars!!'
-      if (!process.env.SESSION_SECRET) {
-        console.warn('[auth] SESSION_SECRET manquant ou trop court. Utilisez une clé d’au moins 32 caractères dans .env')
-      }
-    }
+    throw new Error('SESSION_SECRET manquant ou trop court (min 32 caractères). Définissez SESSION_SECRET dans votre fichier .env')
   }
   return new TextEncoder().encode(s)
 }
@@ -47,20 +41,43 @@ export async function verifyToken(token: string): Promise<Session | null> {
       role: String(payload.role),
       entiteId: Number(payload.entiteId ?? 0),
       permissions: Array.isArray(payload.permissions) ? (payload.permissions as string[]) : undefined,
+      tokenVersion: payload.tokenVersion ? Number(payload.tokenVersion) : undefined,
     }
   } catch {
     return null
   }
 }
 
-/** Utiliser dans les Server Components et Server Actions. */
 export async function getSession(): Promise<Session | null> {
   const c = await cookies()
   const tok = c.get(COOKIE_NAME)?.value
   if (!tok) return null
-  return verifyToken(tok)
+  const session = await verifyToken(tok)
+  if (!session) return null
+
+  if (session.tokenVersion !== undefined) {
+    const user = await prisma.utilisateur.findUnique({
+      where: { id: session.userId },
+      select: { tokenVersion: true, actif: true },
+    })
+    if (!user || !user.actif) return null
+    if (user.tokenVersion !== session.tokenVersion) return null
+  }
+
+  return session
 }
 
 export function getCookieName(): string {
   return COOKIE_NAME
+}
+
+export async function invalidateUserSessions(userId: number): Promise<void> {
+  try {
+    await prisma.utilisateur.update({
+      where: { id: userId },
+      data: { tokenVersion: { increment: 1 } },
+    })
+  } catch (error) {
+    console.error('Erreur invalidation sessions utilisateur:', error)
+  }
 }

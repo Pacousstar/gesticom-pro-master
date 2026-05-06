@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import {
   comptabiliserDepense,
   comptabiliserCharge,
@@ -11,7 +12,8 @@ import {
 } from '@/lib/comptabilisation'
 
 export async function POST() {
-  if (process.env.NODE_ENV === 'production') {
+  const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
+  if (process.env.NODE_ENV === 'production' || !maintenanceEnabled) {
     return NextResponse.json({ error: 'Route de maintenance désactivée en production.' }, { status: 403 })
   }
   const session = await getSession()
@@ -29,7 +31,10 @@ export async function POST() {
   }
 
   try {
-    const entiteId = session.entiteId || 1
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
 
     // 1. DÉDUPLICATION COMPTABLE
     // On cherche les écritures avec la même référence, compte et montant
@@ -147,7 +152,9 @@ export async function POST() {
                 magasinId: 1 // Default
             })
             results.ecrituresGenerees++
-        } catch (e) {}
+        } catch (e) {
+          // Ignoré: certaines écritures peuvent déjà exister (idempotence).
+        }
     }
 
     // Ventes
@@ -164,7 +171,9 @@ export async function POST() {
                 magasinId: v.magasinId,
                 entiteId: v.entiteId
             })
-        } catch (e) {}
+        } catch (e) {
+          // Ignoré: certaines ventes peuvent déjà être comptabilisées.
+        }
     }
 
     return NextResponse.json({ ok: true, results })

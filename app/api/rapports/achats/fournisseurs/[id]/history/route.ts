@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(
     request: NextRequest,
@@ -15,13 +16,40 @@ export async function GET(
         const start = searchParams.get('start')
         const end = searchParams.get('end')
 
-        const where: any = {}
-        if (id !== 'null' && id !== 'undefined') {
-            where.fournisseurId = Number(id)
-        } else {
-            // Pour les fournisseurs libres, on pourrait filtrer par nom, 
-            // mais l'ID est plus robuste pour les fiches créées.
+        if (id === 'null' || id === 'undefined' || Number.isNaN(Number(id))) {
             return NextResponse.json({ error: 'ID Fournisseur requis pour l\'historique' }, { status: 400 })
+        }
+
+        const fournisseurId = Number(id)
+        const tier = await prisma.fournisseur.findUnique({
+            where: { id: fournisseurId },
+            select: { id: true, nom: true, code: true },
+        })
+        if (!tier) {
+            return NextResponse.json([], { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+        }
+
+        const entiteCur = await getEntiteId(session)
+
+        const where: any = {
+            AND: [
+                {
+                    OR: [
+                        { fournisseurId },
+                        ...(tier.nom.trim()
+                            ? [{ fournisseurLibre: { equals: tier.nom.trim(), mode: 'insensitive' as const } }]
+                            : []),
+                        ...(tier.code?.trim()
+                            ? [{ fournisseurLibre: { equals: tier.code.trim(), mode: 'insensitive' as const } }]
+                            : []),
+                    ],
+                },
+            ],
+            statut: { notIn: ['ANNULE', 'ANNULEE'] },
+        }
+
+        if (entiteCur > 0) {
+            where.AND.push({ entiteId: entiteCur })
         }
 
         if (start && end) {

@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { verifierCloture } from '@/lib/cloture'
+import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import {
+  comptabiliserVente,
+  comptabiliserAchat,
+  comptabiliserDepense,
+  comptabiliserCharge,
+  comptabiliserReglementVente,
+  comptabiliserReglementAchat,
+} from '@/lib/comptabilisation'
 
 export async function GET(
   _request: NextRequest,
@@ -110,6 +120,116 @@ export async function PATCH(
     const existing = await prisma.ecritureComptable.findFirst({ where: checkWhere })
     if (!existing) return NextResponse.json({ error: 'Écriture introuvable ou non autorisée.' }, { status: 404 })
 
+    // RE1: Vérification cloture sur la date actuelle
+    await verifierCloture(existing.date, session)
+
+    // RE2: Re-comptabiliser si écriture liée à une opération source
+    if (existing.referenceType && existing.referenceId) {
+      const refType = existing.referenceType
+      const refId = existing.referenceId
+
+      // Supprimer toutes les écritures liées à cette référence
+      await deleteEcrituresByReference(refType, refId)
+
+      // Re-générer les écritures selon le type de référence
+      if (refType === 'VENTE' || refType === 'VENTE_REGLEMENT') {
+        const vente = await prisma.vente.findUnique({
+          where: { id: refId },
+          select: { numero: true, date: true, montantTotal: true, modePaiement: true, clientId: true, utilisateurId: true, entiteId: true, magasinId: true },
+        })
+        if (vente) {
+          if (refType === 'VENTE') {
+            await comptabiliserVente({
+              venteId: refId,
+              numeroVente: vente.numero,
+              date: vente.date,
+              montantTotal: Number(vente.montantTotal),
+              modePaiement: vente.modePaiement || 'ESPECES',
+              clientId: vente.clientId ?? undefined,
+              utilisateurId: vente.utilisateurId,
+              entiteId: vente.entiteId,
+              magasinId: vente.magasinId,
+            })
+          } else {
+            await comptabiliserReglementVente({
+              venteId: refId,
+              numeroVente: vente.numero,
+              date: existing.date,
+              montant: Number(existing.debit || existing.credit),
+              modePaiement: vente.modePaiement || 'ESPECES',
+              utilisateurId: existing.utilisateurId,
+              entiteId: vente.entiteId,
+            })
+          }
+        }
+      } else if (refType === 'ACHAT' || refType === 'ACHAT_REGLEMENT') {
+        const achat = await prisma.achat.findUnique({
+          where: { id: refId },
+          select: { numero: true, date: true, montantTotal: true, modePaiement: true, fournisseurId: true, utilisateurId: true, entiteId: true, magasinId: true },
+        })
+        if (achat) {
+          if (refType === 'ACHAT') {
+            await comptabiliserAchat({
+              achatId: refId,
+              numeroAchat: achat.numero,
+              date: achat.date,
+              montantTotal: Number(achat.montantTotal),
+              modePaiement: achat.modePaiement || 'ESPECES',
+              fournisseurId: achat.fournisseurId ?? undefined,
+              utilisateurId: achat.utilisateurId,
+              entiteId: achat.entiteId,
+              magasinId: achat.magasinId,
+            })
+          } else {
+            await comptabiliserReglementAchat({
+              achatId: refId,
+              numeroAchat: achat.numero,
+              date: existing.date,
+              montant: Number(existing.debit || existing.credit),
+              modePaiement: achat.modePaiement || 'ESPECES',
+              utilisateurId: existing.utilisateurId,
+              entiteId: achat.entiteId,
+            })
+          }
+        }
+      } else if (refType === 'DEPENSE') {
+        const depense = await prisma.depense.findUnique({
+          where: { id: refId },
+          select: { date: true, montant: true, categorie: true, libelle: true, modePaiement: true, utilisateurId: true, entiteId: true },
+        })
+        if (depense) {
+          await comptabiliserDepense({
+            depenseId: refId,
+            date: depense.date,
+            montant: Number(depense.montant),
+            categorie: depense.categorie,
+            libelle: depense.libelle,
+            modePaiement: depense.modePaiement || 'ESPECES',
+            utilisateurId: depense.utilisateurId,
+            entiteId: depense.entiteId,
+          })
+        }
+      } else if (refType === 'CHARGE') {
+        const charge = await prisma.charge.findUnique({
+          where: { id: refId },
+          select: { date: true, montant: true, rubrique: true, observation: true, utilisateurId: true, entiteId: true, magasinId: true, modePaiement: true },
+        })
+        if (charge) {
+          await comptabiliserCharge({
+            chargeId: refId,
+            date: charge.date,
+            montant: Number(charge.montant),
+            rubrique: charge.rubrique,
+            libelle: charge.observation ?? undefined,
+            utilisateurId: charge.utilisateurId,
+            entiteId: charge.entiteId,
+            magasinId: charge.magasinId,
+            modePaiement: charge.modePaiement,
+          })
+        }
+      }
+    }
+
     const ecriture = await prisma.ecritureComptable.update({
       where: { id },
       data: updateData,
@@ -148,6 +268,48 @@ export async function DELETE(
     }
     const existing = await prisma.ecritureComptable.findFirst({ where: checkWhere })
     if (!existing) return NextResponse.json({ error: 'Écriture introuvable ou non autorisée.' }, { status: 404 })
+
+    // RE3: Vérification cloture
+    await verifierCloture(existing.date, session)
+
+    // RE4: Re-comptabiliser si écriture liée à une opération source
+    const refType = existing.referenceType
+    const refId = existing.referenceId
+    if (refType && refId) {
+      await deleteEcrituresByReference(refType, refId)
+
+      if (refType === 'VENTE') {
+        const vente = await prisma.vente.findUnique({ where: { id: refId }, select: { numero: true, date: true, montantTotal: true, modePaiement: true, clientId: true, utilisateurId: true, entiteId: true, magasinId: true } })
+        if (vente) {
+          await comptabiliserVente({ venteId: refId, numeroVente: vente.numero, date: vente.date, montantTotal: Number(vente.montantTotal), modePaiement: vente.modePaiement || 'ESPECES', clientId: vente.clientId ?? undefined, utilisateurId: vente.utilisateurId, entiteId: vente.entiteId, magasinId: vente.magasinId })
+        }
+      } else if (refType === 'ACHAT') {
+        const achat = await prisma.achat.findUnique({ where: { id: refId }, select: { numero: true, date: true, montantTotal: true, modePaiement: true, fournisseurId: true, utilisateurId: true, entiteId: true, magasinId: true } })
+        if (achat) {
+          await comptabiliserAchat({ achatId: refId, numeroAchat: achat.numero, date: achat.date, montantTotal: Number(achat.montantTotal), modePaiement: achat.modePaiement || 'ESPECES', fournisseurId: achat.fournisseurId ?? undefined, utilisateurId: achat.utilisateurId, entiteId: achat.entiteId, magasinId: achat.magasinId })
+        }
+      } else if (refType === 'DEPENSE') {
+        const depense = await prisma.depense.findUnique({ where: { id: refId }, select: { date: true, montant: true, categorie: true, libelle: true, modePaiement: true, utilisateurId: true, entiteId: true } })
+        if (depense) {
+          await comptabiliserDepense({ depenseId: refId, date: depense.date, montant: Number(depense.montant), categorie: depense.categorie, libelle: depense.libelle, modePaiement: depense.modePaiement || 'ESPECES', utilisateurId: depense.utilisateurId, entiteId: depense.entiteId })
+        }
+      } else if (refType === 'CHARGE') {
+        const charge = await prisma.charge.findUnique({ where: { id: refId }, select: { date: true, montant: true, rubrique: true, observation: true, utilisateurId: true, entiteId: true, magasinId: true, modePaiement: true } })
+        if (charge) {
+          await comptabiliserCharge({ chargeId: refId, date: charge.date, montant: Number(charge.montant), rubrique: charge.rubrique, libelle: charge.observation ?? undefined, utilisateurId: charge.utilisateurId, entiteId: charge.entiteId, magasinId: charge.magasinId, modePaiement: charge.modePaiement })
+        }
+      } else if (refType === 'VENTE_REGLEMENT') {
+        const reglement = await prisma.reglementVente.findUnique({ where: { id: refId }, include: { vente: { select: { numero: true, entiteId: true } } } })
+        if (reglement) {
+          await comptabiliserReglementVente({ venteId: reglement.venteId || 0, numeroVente: reglement.vente?.numero || '', date: reglement.date, montant: Number(reglement.montant), modePaiement: reglement.modePaiement || 'ESPECES', utilisateurId: reglement.utilisateurId, entiteId: reglement.vente?.entiteId || 1 })
+        }
+      } else if (refType === 'ACHAT_REGLEMENT') {
+        const reglement = await prisma.reglementAchat.findUnique({ where: { id: refId }, include: { achat: { select: { numero: true, entiteId: true } } } })
+        if (reglement) {
+          await comptabiliserReglementAchat({ achatId: reglement.achatId || 0, numeroAchat: reglement.achat?.numero || '', date: reglement.date, montant: Number(reglement.montant), modePaiement: reglement.modePaiement || 'ESPECES', utilisateurId: reglement.utilisateurId, entiteId: reglement.achat?.entiteId || 1 })
+        }
+      }
+    }
 
     await prisma.ecritureComptable.delete({ where: { id } })
     return NextResponse.json({ success: true })

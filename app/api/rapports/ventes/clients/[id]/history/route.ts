@@ -15,7 +15,7 @@ export async function GET(
         const start = searchParams.get('start')
         const end = searchParams.get('end')
 
-        const where: any = {}
+        const where: any = { statut: { in: ['VALIDEE', 'VALIDE'] } }
         if (id !== 'null' && id !== 'undefined') {
             where.clientId = Number(id)
         } else {

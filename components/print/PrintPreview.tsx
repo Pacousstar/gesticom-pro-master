@@ -236,9 +236,9 @@ export default function PrintPreview({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-            <div className="flex h-full max-h-[90vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-2xl">
+            <div className="flex h-full max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
                 {/* En-tête de la modal */}
-                <div className="flex items-center justify-between border-b px-6 py-4">
+                <div className="sticky top-0 z-20 flex items-center justify-between border-b bg-white px-6 py-4">
                     <h2 className="text-xl font-semibold text-gray-900">
                         Aperçu avant impression
                     </h2>
@@ -251,9 +251,9 @@ export default function PrintPreview({
                 </div>
 
                 {/* Corps - Colonnes */}
-                <div className="flex flex-1 overflow-hidden">
+                <div className="flex flex-1 min-h-0 overflow-hidden">
                     {/* Colonne gauche : Options */}
-                    <div className="w-80 border-r bg-gray-50 p-6 flex flex-col gap-6">
+                    <div className="flex w-80 flex-col gap-6 overflow-y-auto border-r bg-gray-50 p-6">
                         <div>
                             <label className="mb-2 block text-sm font-medium text-gray-700">
                                 Modèle d'impression
@@ -363,7 +363,7 @@ export default function PrintPreview({
                     </div>
 
                     {/* Colonne droite : Aperçu */}
-                    <div className="flex-1 bg-gray-200 p-8 overflow-y-auto flex items-start justify-center">
+                    <div className="flex flex-1 min-h-0 items-start justify-center overflow-y-auto bg-gray-200 p-8">
                         {loading ? (
                             <div className="flex items-center justify-center h-full">
                                 <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
