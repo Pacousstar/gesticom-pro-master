@@ -3,28 +3,41 @@ import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/db'
 import { createToken, getCookieName, getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
-import { logCreation, getIpAddress, getUserAgent } from '@/lib/audit'
+import { requirePermission } from '@/lib/require-role'
+import { logCreation, getIpAddress } from '@/lib/audit'
 import { z } from 'zod'
+import { strictPasswordSchema } from '@/lib/validations'
 
 const registerSchema = z.object({
   login: z.string().min(3).max(50).regex(/^[a-zA-Z0-9_-]+$/, 'Le login ne peut contenir que des lettres, chiffres, tirets et underscores'),
   nom: z.string().min(2).max(100),
   email: z.string().email().optional().or(z.literal('')),
-  motDePasse: z.string().min(8).max(100),
+  motDePasse: strictPasswordSchema,
   role: z.enum(['SUPER_ADMIN', 'ADMIN', 'COMPTABLE', 'GESTIONNAIRE', 'MAGASINIER', 'ASSISTANTE']),
   entiteId: z.number().int().positive(),
 })
 
 export async function POST(request: NextRequest) {
   try {
-    // Vérifier que l'utilisateur est autorisé
     const session = await getSession()
-    const authError = requireRole(session, [...ROLES_ADMIN])
+    if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+
+    const authError = requirePermission(session, 'users:create')
     if (authError) return authError
 
-    const body = await request.json().catch(() => ({}))
-    const parsed = registerSchema.safeParse(body)
+    if (session.role !== 'SUPER_ADMIN') {
+      if (session.role === 'ADMIN') {
+        const body = await request.json().catch(() => ({}))
+        if (body.entiteId && body.entiteId !== session.entiteId) {
+          return NextResponse.json({ error: 'Vous ne pouvez créer des utilisateurs que dans votre entité.' }, { status: 403 })
+        }
+      } else {
+        return NextResponse.json({ error: 'Droits insuffisants pour cette action.' }, { status: 403 })
+      }
+    }
+
+    const rawBody = await request.json().catch(() => ({}))
+    const parsed = registerSchema.safeParse(rawBody)
     
     if (!parsed.success) {
       const msg = parsed.error.issues[0]?.message ?? 'Données invalides.'
@@ -33,19 +46,24 @@ export async function POST(request: NextRequest) {
 
     const { login, nom, email, motDePasse, role, entiteId } = parsed.data
 
-    // Vérifier que l'entité existe
+    if (role === 'SUPER_ADMIN' && session.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Seul un Super Administrateur peut créer un Super Administrateur.' }, { status: 403 })
+    }
+
+    if (session.role === 'ADMIN' && entiteId !== session.entiteId) {
+      return NextResponse.json({ error: 'Vous ne pouvez créer des utilisateurs que dans votre entité.' }, { status: 403 })
+    }
+
     const entite = await prisma.entite.findUnique({ where: { id: entiteId } })
     if (!entite) {
       return NextResponse.json({ error: 'Entité introuvable.' }, { status: 400 })
     }
 
-    // Vérifier que le login n'existe pas déjà
     const existingLogin = await prisma.utilisateur.findUnique({ where: { login } })
     if (existingLogin) {
       return NextResponse.json({ error: 'Ce login est déjà utilisé.' }, { status: 400 })
     }
 
-    // Vérifier que l'email n'existe pas déjà (si fourni)
     if (email) {
       const existingEmail = await prisma.utilisateur.findUnique({ where: { email } })
       if (existingEmail) {
@@ -53,15 +71,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Vérifier que seul SUPER_ADMIN peut créer un SUPER_ADMIN
-    if (role === 'SUPER_ADMIN' && session?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Seul un Super Administrateur peut créer un Super Administrateur.' }, { status: 403 })
-    }
-
-    // Hasher le mot de passe
     const motDePasseHash = await bcrypt.hash(motDePasse, 10)
 
-    // Créer l'utilisateur
     const user = await prisma.utilisateur.create({
       data: {
         login,
@@ -83,10 +94,9 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Logger la création
     const ipAddress = getIpAddress(request)
     await logCreation(
-      session!,
+      session,
       'UTILISATEUR',
       user.id,
       `Utilisateur ${user.nom} (${user.login}) - Rôle: ${role}`,

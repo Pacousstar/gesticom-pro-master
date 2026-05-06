@@ -10,8 +10,38 @@ import { logConnexion, getIpAddress, getUserAgent } from '@/lib/audit'
 
 const IS_DEV = process.env.NODE_ENV === 'development'
 
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
+const MAX_ATTEMPTS = 5
+const WINDOW_MS = 5 * 60 * 1000
+
+function checkRateLimit(ip: string): { allowed: boolean; remaining: number; retryAfter?: number } {
+  const now = Date.now()
+  const record = rateLimitMap.get(ip)
+  
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(ip, { count: 1, resetTime: now + WINDOW_MS })
+    return { allowed: true, remaining: MAX_ATTEMPTS - 1 }
+  }
+  
+  if (record.count >= MAX_ATTEMPTS) {
+    const retryAfter = Math.ceil((record.resetTime - now) / 1000)
+    return { allowed: false, remaining: 0, retryAfter }
+  }
+  
+  record.count++
+  return { allowed: true, remaining: MAX_ATTEMPTS - record.count }
+}
+
 export async function POST(request: NextRequest) {
   try {
+    const ip = getIpAddress(request) || 'unknown'
+    const rateLimit = checkRateLimit(ip)
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: `Trop de tentatives. Réessayez dans ${rateLimit.retryAfter} secondes.` },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+      )
+    }
     const body = await request.json().catch(() => ({}))
     const parsed = loginSchema.safeParse(body)
     if (!parsed.success) {
@@ -22,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.utilisateur.findFirst({
       where: { login, actif: true },
-      select: { id: true, login: true, nom: true, role: true, motDePasse: true, entiteId: true, permissionsPersonnalisees: true },
+      select: { id: true, login: true, nom: true, role: true, motDePasse: true, entiteId: true, permissionsPersonnalisees: true, rolesSupplementaires: true, tokenVersion: true },
     })
 
     if (!user) {
@@ -39,18 +69,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Identifiants incorrects.' }, { status: 401 })
     }
 
-    // Parser les permissions personnalisées (stockées en JSON dans la BDD)
     let customPermissions: string[] | undefined
     if (user.permissionsPersonnalisees) {
       try {
-        const parsed = JSON.parse(user.permissionsPersonnalisees)
-        if (Array.isArray(parsed)) {
-          customPermissions = parsed as string[]
+        const parsedPerms = JSON.parse(user.permissionsPersonnalisees)
+        if (Array.isArray(parsedPerms)) {
+          customPermissions = parsedPerms as string[]
         }
-      } catch {
-        // Ignorer les permissions malformées
-      }
+      } catch {}
+    } else if (user.rolesSupplementaires) {
+      try {
+        const suppRoles = JSON.parse(user.rolesSupplementaires)
+        if (Array.isArray(suppRoles)) {
+          const { ROLE_PERMISSIONS } = await import('@/lib/roles-permissions')
+          const basePerms = ROLE_PERMISSIONS[user.role as keyof typeof ROLE_PERMISSIONS] || []
+          const suppPerms = (suppRoles as string[]).flatMap((r: string) => ROLE_PERMISSIONS[r as keyof typeof ROLE_PERMISSIONS] || [])
+          customPermissions = [...new Set([...basePerms, ...suppPerms])]
+        }
+      } catch {}
     }
+
+    await prisma.utilisateur.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+        loginCount: { increment: 1 },
+      },
+    })
 
     const token = await createToken({
       userId: user.id,
@@ -59,6 +104,7 @@ export async function POST(request: NextRequest) {
       role: user.role,
       entiteId: user.entiteId,
       permissions: customPermissions,
+      tokenVersion: user.tokenVersion,
     })
 
     const c = await cookies()
@@ -71,7 +117,6 @@ export async function POST(request: NextRequest) {
       path: '/',
     })
 
-    // Enregistrer la connexion dans l'audit
     const ipAddress = getIpAddress(request)
     const userAgent = getUserAgent(request)
     await logConnexion(
@@ -100,8 +145,6 @@ export async function POST(request: NextRequest) {
       msg = String(e)
     }
     msg = String(msg).split('\n')[0].slice(0, 320).trim() || '(aucun détail — ouvrez gesticom-error.log dans le dossier)'
-    const dbUrl = process.env.DATABASE_URL || 'file:C:/gesticom/gesticom.db'
-    const hint = `Base: ${dbUrl}. Erreur: ${msg}`
     try {
       const logPath = path.join(process.cwd(), 'gesticom-error.log')
       const logLine = e instanceof Error
@@ -110,10 +153,7 @@ export async function POST(request: NextRequest) {
       fs.appendFileSync(logPath, new Date().toISOString() + ' [login] ' + logLine + '\n', 'utf8')
     } catch (_) { /* ignore */ }
     return NextResponse.json(
-      {
-        error: 'Erreur serveur.',
-        hint,
-      },
+      { error: 'Erreur serveur.' },
       { status: 500 }
     )
   }
