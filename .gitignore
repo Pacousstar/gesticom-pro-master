@@ -46,5 +46,3 @@ yarn-error.log*
 .idea/
 .tsbuildinfo
 .next-env.d.ts
-.gemini/
-.cursor/
