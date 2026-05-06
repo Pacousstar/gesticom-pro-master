@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
+import { logModification, getIpAddress } from '@/lib/audit'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'magasins:view')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   const tous = request.nextUrl.searchParams.get('tous') === '1'
   const where: { actif?: boolean; entiteId?: number } = {}
@@ -14,7 +18,6 @@ export async function GET(request: NextRequest) {
     where.actif = true
   }
   
-  // Filtrer par entité de la session (sauf SUPER_ADMIN qui voit tout)
   if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
     where.entiteId = session.entiteId
   }
@@ -29,17 +32,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'magasins:create')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
-    // Vérifier que l'utilisateur existe
-    const user = await prisma.utilisateur.findUnique({
-      where: { id: session.userId },
-      select: { id: true },
-    })
-    if (!user) return NextResponse.json({ error: 'Utilisateur introuvable.' }, { status: 401 })
-
-    // Utiliser l'entité de la session
     const entiteId = await getEntiteId(session)
 
     const body = await request.json()
@@ -50,13 +47,16 @@ export async function POST(request: NextRequest) {
     if (!code) return NextResponse.json({ error: 'Code requis.' }, { status: 400 })
     if (!nom) return NextResponse.json({ error: 'Nom requis.' }, { status: 400 })
 
-    const existant = await prisma.magasin.findUnique({ where: { code } })
-    if (existant) return NextResponse.json({ error: `Le code "${code}" existe déjà.` }, { status: 400 })
+    const existant = await prisma.magasin.findFirst({ where: { code, entiteId } })
+    if (existant) return NextResponse.json({ error: `Le code "${code}" existe déjà dans votre entité.` }, { status: 400 })
 
     const magasin = await prisma.magasin.create({
         data: { code, nom, localisation: localisation || '-', entiteId: entiteId, actif: true },
       select: { id: true, code: true, nom: true, localisation: true, actif: true },
     })
+
+    await logModification(session, 'MAGASIN', magasin.id, `Création magasin: ${nom} (${code})`, {}, magasin, getIpAddress(request))
+
     return NextResponse.json(magasin)
   } catch (e) {
     console.error('POST /api/magasins:', e)

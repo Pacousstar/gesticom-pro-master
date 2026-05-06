@@ -1,25 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
+import { logSuppression, getIpAddress } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
 import { getBackupDir, BACKUP_PREFIX, BACKUP_EXT } from '@/lib/sauvegarde-db'
 
-/**
- * Vérifie que le nom de fichier est bien un nom de sauvegarde (pas de path traversal).
- */
 function isValidBackupName(name: string): boolean {
   if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) return false
   return name.startsWith(BACKUP_PREFIX) && name.endsWith(BACKUP_EXT)
 }
 
-/**
- * DELETE /api/sauvegarde/delete?name=gesticom-backup-2025-01-30.db — Supprime un fichier de sauvegarde.
- */
 export async function DELETE(request: NextRequest) {
   const session = await getSession()
-  const forbidden = requireRole(session, ROLES_ADMIN)
-  if (forbidden) return forbidden
+  const authError = requirePermission(session, 'parametres:backup')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
     const name = request.nextUrl.searchParams.get('name')
@@ -38,6 +34,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     fs.unlinkSync(backupPath)
+
+    await logSuppression(session!, 'SAUVEGARDE', 0, `Suppression sauvegarde: ${name}`, { name }, getIpAddress(request))
+
     return NextResponse.json({ success: true, message: `Sauvegarde ${name} supprimée avec succès.` })
   } catch (e) {
     console.error('DELETE /api/sauvegarde/delete:', e)

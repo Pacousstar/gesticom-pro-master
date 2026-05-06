@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 import { restoreSchema } from '@/lib/validations'
+import { logModification, getIpAddress } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
 import { getDatabaseFilePath, getBackupDir } from '@/lib/sauvegarde-db'
 
-/**
- * POST /api/sauvegarde/restore — Restaure la base à partir d'une sauvegarde.
- * Body: { name: "gesticom-backup-2025-01-30-120000.db" }
- * Attention : la base peut être verrouillée par l'application ; en cas d'échec, redémarrer l'app puis réessayer ou restaurer manuellement.
- */
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  const forbidden = requireRole(session, ROLES_ADMIN)
-  if (forbidden) return forbidden
+  const authError = requirePermission(session, 'parametres:backup')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
     const body = await request.json().catch(() => ({}))
@@ -57,6 +54,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    await logModification(session, 'SAUVEGARDE', 0, `Restauration sauvegarde: ${name}`, {}, { name }, getIpAddress(request))
 
     return NextResponse.json({
       success: true,

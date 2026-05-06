@@ -87,6 +87,15 @@ export type Permission =
   // Paramètres
   | 'parametres:view'
   | 'parametres:edit'
+  | 'parametres:backup'
+  | 'parametres:impression'
+  | 'parametres:import-export'
+
+  // Magasins
+  | 'magasins:view'
+  | 'magasins:create'
+  | 'magasins:edit'
+  | 'magasins:delete'
 
   // Sauvegardes
   | 'sauvegardes:view'
@@ -150,6 +159,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'rapports:view', 'rapports:ventes',
     'clients:view', 'clients:create', 'clients:edit',
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit',
+    // RB9: Permissions Banque pour ADMIN
+    'banque:view', 'banque:create',
   ],
 
   COMPTABLE: [
@@ -165,6 +176,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'comptabilite:view', 'comptabilite:rapports', 'comptabilite:export',
     'rapports:view', 'rapports:ventes',
     'clients:view', 'fournisseurs:view',
+    // RB9: Permissions Banque pour COMPTABLE
+    'banque:view',
   ],
 
   GESTIONNAIRE: [

@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
+import { logModification, getIpAddress } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
 import {
   getDatabaseFilePath,
   ensureBackupDir,
   backupFileName,
+  createBackup,
 } from '@/lib/sauvegarde-db'
 
 /**
@@ -14,8 +16,9 @@ import {
  */
 export async function POST() {
   const session = await getSession()
-  const forbidden = requireRole(session, ROLES_ADMIN)
-  if (forbidden) return forbidden
+  const authError = requirePermission(session, 'parametres:backup')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
     const dbPath = getDatabaseFilePath()

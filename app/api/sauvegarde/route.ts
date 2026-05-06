@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { listBackups } from '@/lib/sauvegarde-db'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { listBackups, createBackup } from '@/lib/sauvegarde-db'
+import { requirePermission } from '@/lib/require-role'
+import { logModification, getIpAddress } from '@/lib/audit'
 
-/**
- * GET /api/sauvegarde — Liste les sauvegardes (réservé aux rôles admin).
- */
 export async function GET() {
   const session = await getSession()
-  const forbidden = requireRole(session, ROLES_ADMIN)
-  if (forbidden) return forbidden
+  const authError = requirePermission(session, 'parametres:backup')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
     const backups = listBackups()
@@ -20,17 +19,15 @@ export async function GET() {
   }
 }
 
-/**
- * POST /api/sauvegarde — Crée une nouvelle sauvegarde immédiate.
- */
 export async function POST() {
   const session = await getSession()
-  const forbidden = requireRole(session, ROLES_ADMIN)
-  if (forbidden) return forbidden
+  const authError = requirePermission(session, 'parametres:backup')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
-    const { createBackup } = await import('@/lib/sauvegarde-db')
     const name = await createBackup()
+    await logModification(session, 'SAUVEGARDE', 0, `Création sauvegarde: ${name}`, {}, { name }, getIpAddress({} as any))
     return NextResponse.json({ success: true, name })
   } catch (e) {
     console.error('POST /api/sauvegarde:', e)

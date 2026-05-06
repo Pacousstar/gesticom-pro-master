@@ -4,6 +4,7 @@ import { ROLES_ADMIN } from '@/lib/require-role'
 import { parametresPatchSchema } from '@/lib/validations'
 import { prisma } from '@/lib/db'
 import { logModification, getIpAddress } from '@/lib/audit'
+import { encrypt, decrypt } from '@/lib/security'
 
 async function canAccessParametres(session: any) {
   if (!session) return false
@@ -30,7 +31,6 @@ export async function GET() {
 
   let p = await prisma.parametre.findFirst({ orderBy: { id: 'asc' } })
   if (!p) {
-    // Création automatique au premier appel si vide
     p = await prisma.parametre.create({
       data: {
         nomEntreprise: 'GestiCom Pro',
@@ -42,7 +42,11 @@ export async function GET() {
       }
     })
   }
-  return NextResponse.json(p)
+  return NextResponse.json({
+    ...p,
+    smtpPass: p.smtpPass ? decrypt(p.smtpPass) : '',
+    registreCommerce: p.registreCommerce ? decrypt(p.registreCommerce) : '',
+  })
 }
 
 export async function PATCH(request: NextRequest) {
@@ -71,6 +75,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 400 })
     }
     const data = parsed.data
+
+    if (data.logo && data.logo.startsWith('data:')) {
+      const base64Size = (data.logo.length * 0.75)
+      const maxSize = 500 * 1024
+      if (base64Size > maxSize) {
+        return NextResponse.json({ error: 'Logo trop volumineux (max 500Ko)' }, { status: 400 })
+      }
+    }
 
     let p = await prisma.parametre.findFirst({ orderBy: { id: 'asc' } })
     if (!p) {
@@ -115,12 +127,12 @@ export async function PATCH(request: NextRequest) {
       if (data.logo !== undefined) update.logo = data.logo || null
       if (data.piedDePage !== undefined) update.piedDePage = data.piedDePage || null
       if (data.numNCC !== undefined) update.numNCC = data.numNCC || null
-      if (data.registreCommerce !== undefined) update.registreCommerce = data.registreCommerce || null
+      if (data.registreCommerce !== undefined) update.registreCommerce = data.registreCommerce ? encrypt(data.registreCommerce) : null
 
       if (data.smtpHost !== undefined) update.smtpHost = data.smtpHost || null
       if (data.smtpPort !== undefined) update.smtpPort = data.smtpPort || null
       if (data.smtpUser !== undefined) update.smtpUser = data.smtpUser || null
-      if (data.smtpPass !== undefined) update.smtpPass = data.smtpPass || null
+      if (data.smtpPass !== undefined) update.smtpPass = data.smtpPass ? encrypt(data.smtpPass) : null
 
       if (data.backupAuto !== undefined) update.backupAuto = data.backupAuto
       if (data.backupFrequence !== undefined) update.backupFrequence = data.backupFrequence

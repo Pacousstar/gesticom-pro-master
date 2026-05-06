@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod'
+import { MODES_PAIEMENT, TYPES_CLIENT, TYPES_CHARGE, STATUTS_OPERATION } from './enums-commerce'
 
 const MAX_STRING = 500
 const MAX_TEXT = 2000
@@ -16,6 +17,16 @@ export const loginSchema = z.object({
   redirect: z.string().max(200).optional(),
 })
 
+const strictPasswordSchema = z
+  .string()
+  .min(8, 'Le mot de passe doit contenir au moins 8 caractères.')
+  .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule.')
+  .regex(/[a-z]/, 'Le mot de passe doit contenir au moins une minuscule.')
+  .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre.')
+  .regex(/[@$!%*?&]/, 'Le mot de passe doit contenir au moins un caractère spécial (@$!%*?&).')
+
+export { strictPasswordSchema }
+
 /** Restauration : nom de fichier de sauvegarde (sécurisé) */
 export const restoreSchema = z.object({
   name: z
@@ -26,7 +37,11 @@ export const restoreSchema = z.object({
       (n) => /^gesticom-backup-\d{4}-\d{2}-\d{2}-\d{6}\.db$/.test(n),
       'Nom de sauvegarde invalide.'
     ),
-})
+  confirmName: z.string().min(1, 'Confirmation requise.'),
+}).refine(
+  (data) => data.confirmName === data.name,
+  { message: 'Le nom de confirmation doit être identique au nom de la sauvegarde.', path: ['confirmName'] }
+)
 
 /** Paramètres entreprise (PATCH) — champs optionnels, tvaParDefaut peut être string ou number */
 export const parametresPatchSchema = z.object({
@@ -79,7 +94,7 @@ export const produitSchema = z.object({
 export const clientSchema = z.object({
   nom: z.string().min(1, 'Le nom est requis.').max(MAX_STRING, 'Le nom ne peut pas dépasser 500 caractères.').trim(),
   telephone: z.string().max(20, 'Le téléphone ne peut pas dépasser 20 caractères.').trim().nullable().optional(),
-  type: z.enum(['CASH', 'CREDIT'], { message: 'Le type doit être CASH ou CREDIT.' }),
+  type: z.enum(TYPES_CLIENT as unknown as [string, ...string[]], { message: 'Le type doit être CASH ou CREDIT.' }),
   plafondCredit: z.coerce.number().min(0, 'Le plafond de crédit doit être positif.').nullable().optional(),
   ncc: z.string().max(50, 'Le NCC ne peut pas dépasser 50 caractères.').trim().nullable().optional(),
   localisation: z.string().max(MAX_STRING).trim().nullable().optional(),
@@ -126,7 +141,7 @@ export const depenseSchema = z.object({
   libelle: z.string().min(1, 'Le libellé est requis.').max(MAX_STRING, 'Le libellé ne peut pas dépasser 500 caractères.').trim(),
   montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
   montantPaye: z.coerce.number().min(0, 'Le montant payé doit être positif.').optional(),
-  modePaiement: z.enum(['ESPECES', 'MOBILE_MONEY', 'CREDIT', 'VIREMENT', 'CHEQUE'], {
+  modePaiement: z.enum(MODES_PAIEMENT.concat(['CREDIT'] as const) as unknown as [string, ...string[]], {
     message: 'Mode de paiement invalide.',
   }),
   banqueId: z.coerce.number().int().positive().nullable().optional(),
@@ -143,7 +158,7 @@ export const venteSchema = z.object({
   montantTotal: z.coerce.number().min(0),
   remiseGlobale: z.coerce.number().min(0).optional().default(0),
   montantPaye: z.coerce.number().min(0).optional().default(0),
-  modePaiement: z.enum(['ESPECES', 'MOBILE_MONEY', 'CREDIT']),
+  modePaiement: z.enum(MODES_PAIEMENT as unknown as [string, ...string[]], { message: 'Mode de paiement invalide.' }),
   observation: z.string().max(MAX_TEXT).nullable().optional(),
   lignes: z.array(
     z.object({
@@ -160,12 +175,12 @@ export const venteSchema = z.object({
 export const chargeSchema = z.object({
   date: z.string().min(1, 'La date est requise.'),
   magasinId: z.coerce.number().int().positive('Le magasin est requis.').nullable().optional(),
-  type: z.enum(['FIXE', 'VARIABLE'], {
+  type: z.enum(TYPES_CHARGE as unknown as [string, ...string[]], {
     message: 'Le type doit être FIXE ou VARIABLE.',
   }),
   rubrique: z.string().min(1, 'La rubrique est requise.').max(100, 'La rubrique ne peut pas dépasser 100 caractères.').trim(),
   montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
-  modePaiement: z.enum(['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE'], {
+  modePaiement: z.enum(MODES_PAIEMENT.filter(m => m !== 'CREDIT') as unknown as [string, ...string[]], {
     message: 'Mode de paiement invalide.',
   }).default('ESPECES'),
   banqueId: z.coerce.number().int().positive().nullable().optional(),

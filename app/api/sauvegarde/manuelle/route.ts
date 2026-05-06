@@ -1,18 +1,15 @@
 import { NextResponse, NextRequest } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { createBackup, getBackupDir } from '@/lib/sauvegarde-db'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 import { logAction, getIpAddress } from '@/lib/audit'
 import path from 'path'
 
-/**
- * POST /api/sauvegarde/manuelle - Déclenche une sauvegarde physique immédiate sur le PC Client (Local).
- */
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requireRole(session, ROLES_ADMIN)
-  if (forbidden) return forbidden
+  const authError = requirePermission(session, 'parametres:backup')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
     const backupName = await createBackup()

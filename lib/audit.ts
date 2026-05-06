@@ -40,6 +40,7 @@ export type EntityType =
   | 'COMPTABILITE'
   | 'ECRITURE_COMPTABLE'
   | 'PLAN_COMPTE'
+  | 'PRINT_TEMPLATE'
   | 'JOURNAL'
   | 'TRANSFERT'
 

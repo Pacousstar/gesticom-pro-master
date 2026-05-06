@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 import { validateImportData, prepareExportData } from '@/lib/import-export'
+import { getEntiteId } from '@/lib/get-entite-id'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx-prototype-pollution-fixed')
 
@@ -11,10 +12,16 @@ const XLSX = require('xlsx-prototype-pollution-fixed')
  */
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  const authError = requireRole(session, [...ROLES_ADMIN])
+  const authError = requirePermission(session, 'parametres:import-export')
   if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
+    const entiteId = await getEntiteId(session!)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
     const entity = formData.get('entity') as string
@@ -52,17 +59,20 @@ export async function POST(request: NextRequest) {
       try {
         switch (entity) {
           case 'PRODUITS':
-            await prisma.produit.upsert({
-              where: { code: item.code },
-              update: item,
-              create: { ...item, actif: true },
-            })
+            {
+              const existing = await prisma.produit.findFirst({ where: { code: item.code, entiteId } })
+              if (existing) {
+                await prisma.produit.update({ where: { id: existing.id }, data: item })
+              } else {
+                await prisma.produit.create({ data: { ...item, actif: true, entiteId } })
+              }
+            }
             imported++
             break
 
-          case 'CLIENTS':
+          case 'CLIENTS': {
             const existingClient = await prisma.client.findFirst({
-              where: { nom: item.nom },
+              where: { nom: item.nom, entiteId },
             })
             if (existingClient) {
               await prisma.client.update({
@@ -71,15 +81,16 @@ export async function POST(request: NextRequest) {
               })
             } else {
               await prisma.client.create({
-                data: { ...item, actif: true },
+                data: { ...item, actif: true, entiteId },
               })
             }
             imported++
             break
+          }
 
-          case 'FOURNISSEURS':
+          case 'FOURNISSEURS': {
             const existingFournisseur = await prisma.fournisseur.findFirst({
-              where: { nom: item.nom },
+              where: { nom: item.nom, entiteId },
             })
             if (existingFournisseur) {
               await prisma.fournisseur.update({
@@ -88,11 +99,12 @@ export async function POST(request: NextRequest) {
               })
             } else {
               await prisma.fournisseur.create({
-                data: { ...item, actif: true },
+                data: { ...item, actif: true, entiteId },
               })
             }
             imported++
             break
+          }
 
           default:
             importErrors.push({ row: 0, error: `Type d'entité non supporté : ${entity}` })
@@ -124,9 +136,16 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'parametres:import-export')
+  if (authError) return authError
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
+    const entiteId = await getEntiteId(session!)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
+
     const entity = request.nextUrl.searchParams.get('entity')
     const format = request.nextUrl.searchParams.get('format') || 'EXCEL'
 
@@ -139,7 +158,7 @@ export async function GET(request: NextRequest) {
     switch (entity) {
       case 'PRODUITS':
         data = await prisma.produit.findMany({
-          where: { actif: true },
+          where: { actif: true, entiteId },
           select: {
             code: true,
             designation: true,
@@ -153,7 +172,7 @@ export async function GET(request: NextRequest) {
 
       case 'CLIENTS':
         data = await prisma.client.findMany({
-          where: { actif: true },
+          where: { actif: true, entiteId },
           select: {
             nom: true,
             telephone: true,
@@ -166,7 +185,7 @@ export async function GET(request: NextRequest) {
 
       case 'FOURNISSEURS':
         data = await prisma.fournisseur.findMany({
-          where: { actif: true },
+          where: { actif: true, entiteId },
           select: {
             nom: true,
             telephone: true,

@@ -29,6 +29,7 @@ export default function ParametresPage() {
   const [saving, setSaving] = useState(false)
   const [userRole, setUserRole] = useState('')
   const [userPermissions, setUserPermissions] = useState<string[]>([])
+  const [backendAccess, setBackendAccess] = useState<boolean | null>(null)
   const [err, setErr] = useState('')
 
   const [form, setForm] = useState({
@@ -85,11 +86,24 @@ export default function ParametresPage() {
         fetch('/api/parametres'),
         fetch('/api/auth/check')
       ])
-      const p = await pRes.json()
-      const a = await aRes.json()
-      
-      setUserRole(a.role)
-      setUserPermissions(a.permissions || [])
+
+      const p = await pRes.json().catch(() => null)
+      const a = await aRes.json().catch(() => ({}))
+
+      setUserRole(typeof a?.role === 'string' ? a.role : '')
+      setUserPermissions(Array.isArray(a?.permissions) ? a.permissions : [])
+      setBackendAccess(pRes.ok)
+
+      if (pRes.status === 403) {
+        setData(null)
+        return
+      }
+      if (!pRes.ok) {
+        setErr((p as any)?.error || 'Impossible de charger les paramètres.')
+        setData(null)
+        return
+      }
+
       setData(p)
       if (p) {
         setForm({
@@ -122,6 +136,8 @@ export default function ParametresPage() {
       }
     } catch (e) {
       console.error(e)
+      setErr('Erreur réseau lors du chargement des paramètres.')
+      setBackendAccess(false)
     } finally {
       setLoading(false)
     }
@@ -261,13 +277,24 @@ export default function ParametresPage() {
   }
 
   const handleRestore = async (name: string) => {
-    if (!confirm('Restaurer cette sauvegarde ? Les données actuelles seront remplacées.')) return
+    const confirmName = prompt(`Pour confirmer la restauration, veuillez taper le nom du fichier:\n\n${name}`)
+    if (confirmName !== name) {
+      showError('Nom de confirmation incorrect. La restauration a été annulée.')
+      return
+    }
     setRestoreLoading(name)
     try {
-      const res = await fetch(`/api/sauvegarde/restore?name=${encodeURIComponent(name)}`, { method: 'POST' })
+      const res = await fetch('/api/sauvegarde/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, confirmName }),
+      })
       if (res.ok) {
         alert('Restauration réussie ! Rechargement de la page...')
         window.location.reload()
+      } else {
+        const data = await res.json()
+        showError(data.error || 'Erreur lors de la restauration.')
       }
     } finally {
       setRestoreLoading(null)
@@ -293,7 +320,8 @@ export default function ParametresPage() {
   )
 
   const role = userRole?.toUpperCase() || ''
-  const canAccess = role === 'SUPER_ADMIN' || role === 'ADMIN' || userPermissions.includes('parametres:view')
+  const canAccessBySession = role === 'SUPER_ADMIN' || role === 'ADMIN' || userPermissions.includes('parametres:view')
+  const canAccess = backendAccess === true || canAccessBySession
 
   if (!canAccess) {
     return (
