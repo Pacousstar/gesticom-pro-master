@@ -1,6 +1,6 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "2.0.1"
+#define MyAppVersion "2.0.16"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "GestiComService.exe"
@@ -59,11 +59,25 @@ Source: "GestiComService.xml"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Moteur de Migration (Prisma CLI) indispensable pour l'auto-update (uniquement le vital)
 Source: "node_modules\prisma\build\index.js"; DestDir: "{app}\node_modules\prisma\build"; Flags: ignoreversion
+; IMPORTANT: Prisma CLI dépend du package "@prisma/engines" (JS) pour résoudre les binaires.
+; Sans ce dossier, le service plante au démarrage (MODULE_NOT_FOUND).
+Source: "node_modules\@prisma\engines\*"; DestDir: "{app}\node_modules\@prisma\engines"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "node_modules\@prisma\engines\query_engine-windows.dll.node"; DestDir: "{app}\node_modules\@prisma\engines"; Flags: ignoreversion
 Source: "node_modules\@prisma\engines\schema-engine-windows.exe"; DestDir: "{app}\node_modules\@prisma\engines"; Flags: ignoreversion
 
-; Configuration environnementale (.env déjà validé)
-Source: ".env"; DestDir: "{app}"; Flags: ignoreversion
+; @prisma/client runtime (indispensable pour maintenance-runner.js — le standalone Next.js le laisse vide)
+Source: "node_modules\@prisma\client\runtime\*"; DestDir: "{app}\node_modules\@prisma\client\runtime"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "node_modules\@prisma\client\generator-build\*"; DestDir: "{app}\node_modules\@prisma\client\generator-build"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "node_modules\@prisma\client\package.json"; DestDir: "{app}\node_modules\@prisma\client"; Flags: ignoreversion
+Source: "node_modules\@prisma\client\index.js"; DestDir: "{app}\node_modules\@prisma\client"; Flags: ignoreversion
+Source: "node_modules\@prisma\client\index.d.ts"; DestDir: "{app}\node_modules\@prisma\client"; Flags: ignoreversion
+Source: "node_modules\@prisma\client\default.js"; DestDir: "{app}\node_modules\@prisma\client"; Flags: ignoreversion
+Source: "node_modules\@prisma\client\default.d.ts"; DestDir: "{app}\node_modules\@prisma\client"; Flags: ignoreversion
+Source: "node_modules\@prisma\client\edge.js"; DestDir: "{app}\node_modules\@prisma\client"; Flags: ignoreversion
+Source: "node_modules\@prisma\client\edge.d.ts"; DestDir: "{app}\node_modules\@prisma\client"; Flags: ignoreversion
+
+; Configuration environnementale (.env) : ne jamais écraser en MAJ (préserve secrets/config prod)
+Source: ".env"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall
 
 ; Base de données initiale : On ne l'écrase JAMAIS si elle existe déjà (uninsneveruninstall)
 Source: "prisma\gesticom.db"; DestDir: "C:\gesticom"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall
@@ -80,6 +94,10 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "http://127.0.0.1:3001"; IconFilename: "{app}\public\gesticom.ico"; Tasks: desktopicon
 
 [Run]
+; Supprimer le verrou "rebuild-ecritures" pour relance automatique lors de chaque MAJ
+; (évite toute action manuelle côté client)
+Filename: "cmd"; Parameters: "/C if exist ""C:\gesticom\maintenance\rebuild-ecritures-*.done"" del /Q ""C:\gesticom\maintenance\rebuild-ecritures-*.done"""; Flags: runhidden; StatusMsg: "Préparation de la normalisation comptable..."
+
 ; Optimisation et Recalcul automatique de la base de données (MAJ)
 Filename: "{app}\node.exe"; Parameters: "{app}\scripts\maintenance-runner.js"; Flags: runhidden; StatusMsg: "Optimisation des données et calcul des soldes..."
 

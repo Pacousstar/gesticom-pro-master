@@ -45,5 +45,6 @@ yarn-error.log*
 .vscode/
 .idea/
 .tsbuildinfo
-next-env.d.ts
+.next-env.d.ts
 .gemini/
+.cursor/

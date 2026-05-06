@@ -7,11 +7,19 @@ const ADMIN_LOGIN = 'admin'
 const ADMIN_PASSWORD = 'Admin@123'
 
 async function main() {
+  // Important prod/update:
+  // - ne jamais écraser les utilisateurs existants
+  // - n'utiliser Admin@123 que pour un bootstrap initial
+  const totalUsers = await prisma.utilisateur.count()
   const existing = await prisma.utilisateur.findUnique({ where: { login: ADMIN_LOGIN } })
   const motDePasse = await bcrypt.hash(ADMIN_PASSWORD, 10)
   
   if (existing) {
     console.log('Admin existant. Passage du seed.')
+    return
+  }
+  if (totalUsers > 0) {
+    console.log('Des utilisateurs existent déjà. Aucun super admin bootstrap créé.')
     return
   }
 

@@ -35,15 +35,19 @@ model Entite {
 // UTILISATEURS & RÔLES
 model Utilisateur {
   id                        Int      @id @default(autoincrement())
-  login                     String   @unique // identifiant de connexion
+  login                     String   @unique
   nom                       String
   email                     String?  @unique
-  motDePasse                String // hash bcrypt
-  role                      String // "SUPER_ADMIN" | "ADMIN" | "COMPTABLE" | "GESTIONNAIRE" | "MAGASINIER" | "ASSISTANTE"
-  permissionsPersonnalisees String? // JSON array of permissions (overrides role permissions if set)
+  motDePasse                String
+  role                      String
+  permissionsPersonnalisees String?
+  rolesSupplementaires      String?
   entiteId                  Int
   entite                    Entite   @relation(fields: [entiteId], references: [id])
   actif                     Boolean  @default(true)
+  tokenVersion              Int      @default(0)
+  lastLoginAt               DateTime?
+  loginCount                Int      @default(0)
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
@@ -173,6 +177,7 @@ model Fournisseur {
   nom       String
   telephone String?
   email     String?
+  adresse   String?
   ncc       String? // Numéro de Compte Contribuable (SYSCOHADA)
   actif     Boolean  @default(true)
   createdAt DateTime @default(now())
