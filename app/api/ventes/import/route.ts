@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { requireRole } from '@/lib/require-role'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function POST(req: NextRequest) {
     try {
         const session = await getSession()
         if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+        const forbidden = requireRole(session, ['SUPER_ADMIN', 'ADMIN'])
+        if (forbidden) return forbidden
+        const entiteId = await getEntiteId(session)
+        if (!entiteId) return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
 
         const formData = await req.formData()
         const file = formData.get('file') as Blob
@@ -20,13 +26,13 @@ export async function POST(req: NextRequest) {
 
         if (data.length === 0) return NextResponse.json({ error: 'Le fichier est vide' }, { status: 400 })
 
-        const user = await prisma.utilisateur.findFirst({ 
-            where: { role: 'ADMIN' },
-            include: { entite: true }
+        const user = await prisma.utilisateur.findUnique({
+            where: { id: session.userId },
+            select: { id: true, entiteId: true }
         })
-        const magasin = await prisma.magasin.findFirst({ where: { actif: true } })
+        const magasin = await prisma.magasin.findFirst({ where: { actif: true, entiteId } })
         
-        if (!user || !magasin) return NextResponse.json({ error: 'Utilisateur ADMIN ou Magasin manquant' }, { status: 500 })
+        if (!user || !magasin) return NextResponse.json({ error: 'Utilisateur ou magasin actif introuvable pour cette entité.' }, { status: 500 })
 
         let created = 0
         let total = data.length
@@ -53,7 +59,7 @@ export async function POST(req: NextRequest) {
             // Trouver ou créer le client libre
             let clientId: number | null = null
             if (clientNom) {
-                const c = await prisma.client.findFirst({ where: { nom: clientNom } })
+                const c = await prisma.client.findFirst({ where: { nom: clientNom, entiteId } })
                 if (c) clientId = c.id
             }
 
@@ -67,7 +73,7 @@ export async function POST(req: NextRequest) {
                     clientId,
                     clientLibre: clientId ? null : clientNom || 'Client Divers',
                     utilisateurId: user.id,
-                    entiteId: user.entiteId,
+                    entiteId,
                     magasinId: magasin.id,
                     modePaiement: 'ESPECES',
                     observation: "Importé par Excel",

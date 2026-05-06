@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     let maxNum = 0
     for (const p of produitsCat) {
       const code = p.code.toUpperCase()
-      const match = code.match(/^([A-Za-z\-]*)(\d+)$/)
+      const match = code.match(/^([A-Za-z-]*)(\d+)$/)
       if (match) {
         const num = parseInt(match[2], 10)
         if (!Number.isNaN(num)) maxNum = Math.max(maxNum, num)

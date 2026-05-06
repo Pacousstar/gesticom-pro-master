@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
 
@@ -15,16 +16,23 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
+    const entiteId = await getEntiteId(session)
     const banqueId = request.nextUrl.searchParams.get('banqueId')?.trim()
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
     const type = request.nextUrl.searchParams.get('type')?.trim()
 
-    const where: {
-      banqueId?: number
-      date?: { gte: Date; lte: Date }
-      type?: string
-    } = {}
+    const where: any = {}
+
+    // RB3: Isolation Multi-Entité
+    if (session.role === 'SUPER_ADMIN') {
+      const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+      if (entiteIdFromParams) {
+        where.banque = { entiteId: Number(entiteIdFromParams) }
+      }
+    } else if (entiteId && entiteId > 0) {
+      where.banque = { entiteId }
+    }
 
     if (banqueId) {
       const bId = Number(banqueId)

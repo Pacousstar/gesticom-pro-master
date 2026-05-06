@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
+import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { logSuppression, getIpAddress } from '@/lib/audit'
 import { verifierCloture } from '@/lib/cloture'
+import { comptabiliserDepense } from '@/lib/comptabilisation'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
+import { enregistrerOperationBancaire } from '@/lib/banque'
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'depenses:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -46,7 +53,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'depenses:edit')
+  if (authError) return authError
 
   try {
     const id = Number((await params).id)
@@ -62,6 +71,9 @@ export async function PATCH(
     if (session.role !== 'SUPER_ADMIN' && oldDepense.entiteId !== entiteId) {
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
+
+    // RD4: Vérifier la clôture avant modification
+    await verifierCloture(oldDepense.date, session)
 
     const body = await request.json()
 
@@ -81,7 +93,6 @@ export async function PATCH(
 
     if (body.date) {
       const newDate = new Date(body.date)
-      // Fusion avec l'heure d'origine si format YYYY-MM-DD
       if (body.date.length <= 10) {
         newDate.setHours(oldDepense.date.getHours(), oldDepense.date.getMinutes(), oldDepense.date.getSeconds())
       }
@@ -93,11 +104,15 @@ export async function PATCH(
     if (body.categorie) updateData.categorie = String(body.categorie).trim()
     if (body.libelle) updateData.libelle = String(body.libelle).trim()
     if (body.montant != null) updateData.montant = Math.max(0, Number(body.montant))
+
+    // RD5: Normaliser le mode paiement
     if (body.modePaiement) {
-      if (['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE', 'CREDIT'].includes(String(body.modePaiement))) {
-        updateData.modePaiement = String(body.modePaiement)
+      const modeNormalise = String(body.modePaiement).toUpperCase().trim()
+      if (['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE', 'CREDIT'].includes(modeNormalise)) {
+        updateData.modePaiement = modeNormalise
       }
     }
+
     if (body.montantPaye != null) updateData.montantPaye = Math.max(0, Number(body.montantPaye))
     if (body.beneficiaire !== undefined) updateData.beneficiaire = body.beneficiaire ? String(body.beneficiaire).trim() : null
     if (body.pieceJustificative !== undefined) updateData.pieceJustificative = body.pieceJustificative ? String(body.pieceJustificative).trim() : null
@@ -108,6 +123,7 @@ export async function PATCH(
       if (!magasin) return NextResponse.json({ error: 'Magasin introuvable.' }, { status: 400 })
     }
 
+    // Calcul du statut paiement
     if (updateData.montantPaye != null || updateData.montant != null) {
       const current = await prisma.depense.findUnique({ where: { id }, select: { montant: true, montantPaye: true } })
       if (current) {
@@ -119,15 +135,118 @@ export async function PATCH(
       }
     }
 
-    const depense = await prisma.depense.update({
-      where: { id },
-      data: updateData,
-      include: {
-        magasin: { select: { code: true, nom: true } },
-        entite: { select: { code: true, nom: true } },
-        utilisateur: { select: { nom: true, login: true } },
-      },
-    })
+    // RD1 + RD2: Transaction pour mise à jour complète (comptabilité + trésorerie)
+    const depense = await prisma.$transaction(async (tx) => {
+      // Mise à jour de la dépense
+      const d = await tx.depense.update({
+        where: { id },
+        data: updateData,
+        include: {
+          magasin: { select: { id: true, code: true, nom: true } },
+          entite: { select: { code: true, nom: true } },
+          utilisateur: { select: { nom: true, login: true } },
+        },
+      })
+
+      // RD1: Re-comptabiliser si la dépense est payée
+      const shouldComptabiliser = d.statutPaiement === 'PAYE' || (d.montantPaye && d.montantPaye > 0)
+      if (shouldComptabiliser) {
+        const montantCompta = d.montantPaye && d.montantPaye > 0 ? d.montantPaye : d.montant
+
+        // Supprimer les anciennes écritures et re-créer
+        await deleteEcrituresByReference('DEPENSE', id, tx)
+        await comptabiliserDepense({
+          depenseId: d.id,
+          date: d.date,
+          montant: montantCompta,
+          categorie: d.categorie,
+          libelle: d.libelle,
+          modePaiement: d.modePaiement,
+          utilisateurId: session.userId,
+          magasinId: d.magasinId,
+          entiteId: d.entiteId,
+        }, tx)
+      }
+
+      // RD2: Re-synchroniser la trésorerie (caisse ou banque)
+      if (shouldComptabiliser && d.montantPaye && d.montantPaye > 0) {
+        // Nettoyer les anciens mouvements de trésorerie (par motif)
+        await tx.caisse.deleteMany({
+          where: {
+            entiteId: d.entiteId,
+            type: 'SORTIE',
+            OR: [
+              { motif: { contains: `Dépense #${id}` } },
+              { AND: [{ motif: { contains: d.libelle } }, { date: d.date }] }
+            ]
+          }
+        })
+
+        // Supprimer les anciennes opérations bancaires
+        const oldOpsBancaires = await tx.operationBancaire.findMany({
+          where: {
+            entiteId: d.entiteId,
+            OR: [
+              { libelle: { contains: `Dépense #${id}` } },
+              { AND: [{ libelle: { contains: d.libelle } }, { date: d.date }] }
+            ]
+          }
+        })
+        for (const op of oldOpsBancaires) {
+          await tx.banque.update({
+            where: { id: op.banqueId },
+            data: { soldeActuel: { increment: op.montant } }
+          })
+          await tx.operationBancaire.delete({ where: { id: op.id } })
+        }
+
+        // Créer les nouveaux mouvements de trésorerie
+        if (estModeEspeces(d.modePaiement)) {
+          // Espèces → caisse
+          let targetMagasinId = d.magasinId
+          if (!targetMagasinId) {
+            const firstMag = await tx.magasin.findFirst({
+              where: { entiteId: d.entiteId },
+              select: { id: true }
+            })
+            if (firstMag) targetMagasinId = firstMag.id
+          }
+          if (targetMagasinId) {
+            await enregistrerMouvementCaisse({
+              magasinId: targetMagasinId,
+              type: 'SORTIE',
+              motif: `Dépense #${d.id} : ${d.libelle}${d.beneficiaire ? ' (' + d.beneficiaire + ')' : ''}`,
+              montant: d.montantPaye,
+              utilisateurId: session.userId,
+              entiteId: d.entiteId,
+              date: d.date,
+            }, tx)
+          }
+        } else if (d.modePaiement !== 'CREDIT') {
+          // Banque (virement, mobile money, cheque)
+          if (d.banqueId) {
+            await enregistrerOperationBancaire({
+              banqueId: d.banqueId,
+              entiteId: d.entiteId,
+              date: d.date,
+              type: 'DEPENSE',
+              libelle: `Dépense #${d.id} : ${d.libelle}`,
+              montant: d.montantPaye,
+              utilisateurId: session.userId,
+              reference: d.pieceJustificative || `EXP-${d.id}`,
+              observation: d.observation
+            }, tx)
+          }
+        }
+      }
+
+      return d
+    }, { timeout: 20000 })
+
+    // Recalculer le solde de la caisse après modification
+    if (depense.magasinId) {
+      await recalculerSoldeCaisse(depense.magasinId)
+    }
 
     revalidatePath('/dashboard/depenses')
     revalidatePath('/api/depenses')
@@ -135,7 +254,7 @@ export async function PATCH(
     return NextResponse.json(depense)
   } catch (e) {
     console.error('PATCH /api/depenses/[id]:', e)
-    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Erreur serveur.' }, { status: 500 })
   }
 }
 
@@ -157,6 +276,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
     }
 
+    // RD3: Mettre à jour le solde de la caisse après suppression
+    let magasinIdCaisse: number | null = null
+
     await prisma.$transaction(async (tx) => {
       const entiteId = await getEntiteId(session)
       const d = await tx.depense.findUnique({ where: { id } })
@@ -170,28 +292,31 @@ export async function DELETE(
         throw new Error('Non autorisé : Cette dépense ne vous appartient pas.')
       }
 
+      // Stocker le magasinId pour le recalcul après transaction
+      magasinIdCaisse = d.magasinId
+
       // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('DEPENSE', id, tx)
 
-      // 2. Nettoyage Trésorerie : CAISSE (Recherche chirurgicale par Montant + Date + Motif)
+      // 2. Nettoyage Trésorerie : CAISSE
       await tx.caisse.deleteMany({
         where: {
           entiteId: d.entiteId,
           type: 'SORTIE',
           montant: d.montantPaye || d.montant,
           OR: [
-             { motif: { contains: `Dépense #${id}` } }, // Format sécurisé (Nouvelles dépenses)
+             { motif: { contains: `Dépense #${id}` } },
              { 
                AND: [
                  { motif: { contains: d.libelle } },
-                 { date: d.date } // Match temporel pour les anciennes dépenses
+                 { date: d.date }
                ]
              }
-          ]
+           ]
         }
       })
 
-      // 3. Nettoyage Trésorerie : BANQUE (Recherche chirurgicale par Montant + Date + Libellé)
+      // 3. Nettoyage Trésorerie : BANQUE
       const opsBancaires = await tx.operationBancaire.findMany({
         where: { 
           montant: d.montantPaye || d.montant,
@@ -205,21 +330,24 @@ export async function DELETE(
       })
 
       for (const op of opsBancaires) {
-        // MAJ du solde de la banque concernée (on rajoute le montant car c'était une sortie)
         await tx.banque.update({
           where: { id: op.banqueId },
           data: { soldeActuel: { increment: op.montant } }
         })
-        // Suppression de l'opération
         await tx.operationBancaire.delete({ where: { id: op.id } })
       }
 
       // 4. Supprimer la dépense
       await tx.depense.delete({ where: { id } })
 
-      // 5. LOG D'AUDIT (Correction : entiteId correct)
+      // 5. LOG D'AUDIT
       await logSuppression(session, 'DEPENSE', id, `SUPPRESSION RADICALE : Dépense "${d.libelle}" (${d.montant} F) annulée avec régul. trésorerie`, { id, libelle: d.libelle, montant: d.montant }, getIpAddress(_request))
     }, { timeout: 20000 })
+
+    // RD3: Recalculer le solde de la caisse après suppression
+    if (magasinIdCaisse) {
+      await recalculerSoldeCaisse(magasinIdCaisse)
+    }
 
     revalidatePath('/dashboard/depenses')
     revalidatePath('/api/depenses')

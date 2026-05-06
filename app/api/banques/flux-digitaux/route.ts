@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
+import { estTypeOperationBanqueEntree } from '@/lib/banque'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
+  const entiteId = await getEntiteId(session)
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
-  const mode = request.nextUrl.searchParams.get('mode')?.trim() // MOBILE_MONEY, VIREMENT, CHEQUE
+  const mode = request.nextUrl.searchParams.get('mode')?.trim()
 
   const whereDate: any = {}
   if (dateDebut && dateFin) {
@@ -18,13 +21,20 @@ export async function GET(request: NextRequest) {
 
   const modesFiltre = mode ? [mode] : ['MOBILE_MONEY', 'VIREMENT', 'CHEQUE']
 
+  // RB3: Isolation Multi-Entité
+  const whereEntite = session.role === 'SUPER_ADMIN' 
+    ? {} 
+    : { entiteId }
+
   try {
-    // 1. Règlements Ventes
+    // 1. Règlements Ventes (filtrés par entité)
     const regsVente = await prisma.reglementVente.findMany({
       where: {
         date: whereDate,
         modePaiement: { in: modesFiltre },
-        statut: 'VALIDE'
+        statut: { in: ['VALIDE', 'VALIDEE'] },
+        ...whereEntite,
+        vente: whereEntite
       },
       include: {
         vente: { select: { numero: true } },
@@ -32,12 +42,14 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 2. Règlements Achats
+    // 2. Règlements Achats (filtrés par entité)
     const regsAchat = await prisma.reglementAchat.findMany({
       where: {
         date: whereDate,
         modePaiement: { in: modesFiltre },
-        statut: 'VALIDE'
+        statut: { in: ['VALIDE', 'VALIDEE'] },
+        ...whereEntite,
+        achat: whereEntite
       },
       include: {
         achat: { select: { numero: true } },
@@ -45,21 +57,31 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 3. Dépenses (uniquement celles payées via ces modes)
+    // 3. Dépenses (filtrées par entité)
     const depenses = await prisma.depense.findMany({
       where: {
         date: whereDate,
         modePaiement: { in: modesFiltre },
-        montantPaye: { gt: 0 }
+        montantPaye: { gt: 0 },
+        ...whereEntite
       }
     })
 
-    // 4. Opérations Bancaires manuelles (Dépôts, Virement entrant, etc.)
-    // Note: Les opérations bancaires n'ont pas forcément un 'modePaiement' explicite MoMo/Cheque
-    // On les inclut car elles font partie du flux digital global.
+    // Types d'opérations bancaires manuelles
+    const TYPES_OPS_MANUEL_FLUX = new Set([
+      'DEPOT',
+      'RETRAIT',
+      'VIREMENT_ENTRANT',
+      'VIREMENT_SORTANT',
+      'FRAIS',
+      'INTERETS',
+    ])
+
+    // 4. Opérations Bancaires (filtrées par entité)
     const opsBancaires = await prisma.operationBancaire.findMany({
       where: {
-        date: whereDate
+        date: whereDate,
+        ...whereEntite
       },
       include: {
         banque: true
@@ -98,16 +120,19 @@ export async function GET(request: NextRequest) {
         mode: d.modePaiement,
         montant: d.montantPaye,
       })),
-      ...opsBancaires.map(o => ({
-        id: `OB-${o.id}`,
-        date: o.date,
-        type: o.type === 'DEPOT' || o.type.includes('ENTRANT') || o.type === 'INTERETS' ? 'ENTREE' : 'SORTIE',
-        source: 'BANQUE',
-        reference: o.reference || '—',
-        libelle: `${o.libelle} (${o.banque.nomBanque})`,
-        mode: 'BANQUE', // Mode global pour les op manuelles
-        montant: o.montant,
-      }))
+      ...opsBancaires.filter((o) =>
+        TYPES_OPS_MANUEL_FLUX.has(String(o.type || '').toUpperCase()),
+      )
+        .map((o) => ({
+          id: `OB-${o.id}`,
+          date: o.date,
+          type: estTypeOperationBanqueEntree(o.type) ? 'ENTREE' : 'SORTIE',
+          source: 'BANQUE',
+          reference: o.reference || '—',
+          libelle: `${o.libelle} (${o.banque.nomBanque})`,
+          mode: 'BANQUE',
+          montant: o.montant,
+        }))
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
     return NextResponse.json(flux)

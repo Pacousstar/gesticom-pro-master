@@ -6,6 +6,7 @@ import { logCreation, getIpAddress, getUserAgent } from '@/lib/audit'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { ensureActivated } from '@/lib/security'
+import { produitSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -162,13 +163,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const designation = String(body?.designation || '').trim()
-    const categorie = String(body?.categorie || 'DIVERS').trim() || 'DIVERS'
-    const prixAchat = body?.prixAchat != null ? Number(body.prixAchat) : null
-    const prixVente = body?.prixVente != null ? Number(body.prixVente) : null
+    
+    // Validation Zod
+    const validation = produitSchema.safeParse(body)
+    if (!validation.success) {
+      const errors = (validation.error as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ')
+      return NextResponse.json({ error: `Validation échouée: ${errors}` }, { status: 400 })
+    }
+
+    const { designation, categorie, prixAchat, prixVente, seuilMin } = validation.data
     const prixMinimum = body?.prixMinimum != null ? Number(body.prixMinimum) : 0
     const fournisseurId = body?.fournisseurId != null ? Number(body.fournisseurId) : null
-    const seuilMin = Math.max(0, Number(body?.seuilMin) || 5)
     
     let code = String(body?.code || '').trim().toUpperCase()
     

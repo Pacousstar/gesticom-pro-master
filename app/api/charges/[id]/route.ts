@@ -6,6 +6,10 @@ import { prisma } from '@/lib/db'
 import { verifierCloture } from '@/lib/cloture'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { logSuppression, getIpAddress } from '@/lib/audit'
+import { comptabiliserCharge } from '@/lib/comptabilisation'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
+import { enregistrerOperationBancaire } from '@/lib/banque'
 
 export async function GET(
   _request: NextRequest,
@@ -68,10 +72,12 @@ export async function PATCH(
       date?: Date
       magasinId?: number | null
       type?: string
-      rubrique?: string
       beneficiaire?: string | null
       montant?: number
       observation?: string | null
+      modePaiement?: string
+      banqueId?: number | null
+      rubrique?: string
     } = {}
 
     if (body.date) updateData.date = new Date(body.date)
@@ -91,16 +97,18 @@ export async function PATCH(
     if (body.rubrique != null) updateData.rubrique = String(body.rubrique).trim()
     if (body.montant != null) updateData.montant = Math.max(0, Number(body.montant))
     if (body.observation !== undefined) updateData.observation = body.observation ? String(body.observation).trim() : null
+    if (body.modePaiement !== undefined) updateData.modePaiement = String(body.modePaiement).toUpperCase()
+    if (body.banqueId !== undefined) updateData.banqueId = body.banqueId != null ? Number(body.banqueId) : null
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'Aucune donnée à mettre à jour.' }, { status: 400 })
     }
 
     const charge = await prisma.$transaction(async (tx) => {
-      // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
+      // VERROU DE CLÔTURE
       await verifierCloture(oldCharge.date, session, tx)
 
-      return await tx.charge.update({
+      const c = await tx.charge.update({
         where: { id },
         data: updateData,
         include: {
@@ -109,12 +117,95 @@ export async function PATCH(
           utilisateur: { select: { nom: true, login: true } },
         },
       })
-    })
+
+      // RC1: Re-comptabiliser après modification
+      await deleteEcrituresByReference('CHARGE', id, tx)
+      await comptabiliserCharge({
+        chargeId: c.id,
+        date: c.date,
+        montant: c.montant,
+        rubrique: c.rubrique,
+        libelle: c.observation,
+        utilisateurId: session.userId,
+        entiteId: c.entiteId,
+        magasinId: c.magasinId,
+        modePaiement: c.modePaiement,
+      }, tx)
+
+      // RC2: Re-synchroniser la trésorerie (caisse ou banque)
+      // Nettoyer les anciens mouvements
+      await tx.caisse.deleteMany({
+        where: {
+          entiteId: c.entiteId,
+          type: 'SORTIE',
+          OR: [
+            { motif: { contains: c.rubrique } },
+            { motif: { contains: c.beneficiaire ?? '___X___' } }
+          ]
+        }
+      })
+
+      const oldOpsBancaires = await tx.operationBancaire.findMany({
+        where: {
+          libelle: { contains: c.rubrique },
+          banque: { entiteId: c.entiteId }
+        }
+      })
+      for (const op of oldOpsBancaires) {
+        await tx.banque.update({
+          where: { id: op.banqueId },
+          data: { soldeActuel: { increment: op.montant } }
+        })
+        await tx.operationBancaire.delete({ where: { id: op.id } })
+      }
+
+      // Créer les nouveaux mouvements de trésorerie
+      if (estModeEspeces(c.modePaiement)) {
+        let targetMagasinId = c.magasinId
+        if (!targetMagasinId) {
+          const firstMag = await tx.magasin.findFirst({
+            where: { entiteId: c.entiteId },
+            select: { id: true }
+          })
+          if (firstMag) targetMagasinId = firstMag.id
+        }
+        if (targetMagasinId) {
+          await enregistrerMouvementCaisse({
+            magasinId: targetMagasinId,
+            type: 'SORTIE',
+            motif: `Charge : ${c.rubrique}${c.observation ? ' (' + c.observation + ')' : ''}`,
+            montant: c.montant,
+            utilisateurId: session.userId,
+            entiteId: c.entiteId,
+            date: c.date,
+          }, tx)
+        }
+      } else if (c.banqueId) {
+        await enregistrerOperationBancaire({
+          banqueId: c.banqueId,
+          entiteId: c.entiteId,
+          date: c.date,
+          type: 'CHARGE',
+          libelle: `Charge : ${c.rubrique}`,
+          montant: c.montant,
+          utilisateurId: session.userId,
+          reference: `CHG-${c.id}`,
+          observation: c.observation
+        }, tx)
+      }
+
+      return c
+    }, { timeout: 20000 })
+
+    // Recalculer le solde de la caisse après modification
+    if (charge.magasinId) {
+      await recalculerSoldeCaisse(charge.magasinId)
+    }
 
     return NextResponse.json(charge)
   } catch (e) {
     console.error('PATCH /api/charges/[id]:', e)
-    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Erreur serveur.' }, { status: 500 })
   }
 }
 
@@ -136,12 +227,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
     }
 
+    // RC3: Stocker le magasinId pour le recalcul après transaction
+    let magasinIdCaisse: number | null = null
+
     await prisma.$transaction(async (tx) => {
       const entiteId = await getEntiteId(session)
       const charge = await tx.charge.findUnique({ where: { id } })
       if (!charge) throw new Error('Charge introuvable.')
 
-      // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
+      // Stocker pour le recalcul
+      magasinIdCaisse = charge.magasinId
+
+      // VERROU DE CLÔTURE
       await verifierCloture(charge.date, session, tx)
 
       // Sécurité Multi-Entité
@@ -153,20 +250,18 @@ export async function DELETE(
       await deleteEcrituresByReference('CHARGE', id, tx)
 
       // 2. Nettoyage Trésorerie : CAISSE
-      // On cherche les sorties caisse dont le motif correspond au libellé/rubrique de la charge
       await tx.caisse.deleteMany({
         where: {
           entiteId: charge.entiteId,
           type: 'SORTIE',
           OR: [
             { motif: { contains: charge.rubrique } },
-            { motif: { contains: charge.beneficiaire ?? '___X___' } },
+            { motif: { contains: charge.beneficiaire ?? '___X___' } }
           ]
         }
       })
 
       // 3. Nettoyage Trésorerie : BANQUE
-      // On cherche les opérations bancaires liées à cette entité dont le libellé contient la rubrique
       const opsBancaires = await tx.operationBancaire.findMany({
         where: {
           libelle: { contains: charge.rubrique },
@@ -175,7 +270,6 @@ export async function DELETE(
       })
 
       for (const op of opsBancaires) {
-        // Rollback du solde bancaire (la charge était une sortie, on réincrémente)
         await tx.banque.update({
           where: { id: op.banqueId },
           data: { soldeActuel: { increment: op.montant } }
@@ -196,6 +290,11 @@ export async function DELETE(
         getIpAddress(_request)
       )
     }, { timeout: 20000 })
+
+    // RC3: Recalculer le solde de la caisse après suppression
+    if (magasinIdCaisse) {
+      await recalculerSoldeCaisse(magasinIdCaisse)
+    }
 
     revalidatePath('/dashboard/charges')
     revalidatePath('/api/charges')

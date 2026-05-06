@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
 
@@ -15,16 +16,25 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
+    const entiteId = await getEntiteId(session)
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
     const magasinIdParam = request.nextUrl.searchParams.get('magasinId')?.trim()
     const typeParam = request.nextUrl.searchParams.get('type')?.trim()
 
-    const where: {
-      date?: { gte: Date; lte: Date }
-      magasinId?: number
-      type?: string
-    } = {}
+    const where: any = {}
+
+    // RC3 : Filtrage par entité pour empêcher la fuite de données multi-entité
+    if (session.role === 'SUPER_ADMIN') {
+      const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+      if (entiteIdFromParams) {
+        where.magasin = { entiteId: Number(entiteIdFromParams) }
+      } else if (entiteId > 0) {
+        where.magasin = { entiteId }
+      }
+    } else if (entiteId > 0) {
+      where.magasin = { entiteId }
+    }
 
     if (dateDebut && dateFin) {
       where.date = {

@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       for (const ligne of transfert.lignes) {
         // Décrémenter Stock Origine
         const stockOrigine = await tx.stock.findUnique({
-          where: { produitId_magasinId: { produitId: ligne.produitId, magasinId: transfert.magasinOrigineId } }
+          where: { produitId_magasinId_entiteId: { produitId: ligne.produitId, magasinId: transfert.magasinOrigineId, entiteId: transfert.entiteId } }
         })
 
         if (!stockOrigine || stockOrigine.quantite < ligne.quantite) {
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 
         // Incrémenter Stock Destination
         let stockDest = await tx.stock.findUnique({
-          where: { produitId_magasinId: { produitId: ligne.produitId, magasinId: transfert.magasinDestId } }
+          where: { produitId_magasinId_entiteId: { produitId: ligne.produitId, magasinId: transfert.magasinDestId, entiteId: transfert.entiteId } }
         })
 
         if (!stockDest) {

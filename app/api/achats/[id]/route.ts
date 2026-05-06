@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
+import type { Session } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
 import { montantLigneTTC, htNetLigne, partFraisApprocheLigne, valeurAchatNetAvecFrais, nouveauPampApresAchatLigne } from '@/lib/calculs-commerciaux'
-import { estModeEspeces } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const session = await getSession() as Session
+  if (!session) return NextResponse.json({ error: "Non autorisé." }, { status: 401 })
+  const authError = requirePermission(session, 'achats:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -27,6 +32,7 @@ export async function GET(
       magasin: { select: { id: true, code: true, nom: true } },
       fournisseur: { select: { id: true, nom: true, telephone: true, email: true, localisation: true, ncc: true } },
       lignes: true,
+      reglements: true,
     },
   })
 
@@ -34,11 +40,8 @@ export async function GET(
     return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
   }
 
-  if (session.role !== 'SUPER_ADMIN') {
-    const entiteId = await getEntiteId(session)
-    if (achat.entiteId !== entiteId) {
-      return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
-    }
+  if (session!.role !== 'SUPER_ADMIN' && achat.entiteId !== session!.entiteId) {
+    return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
   }
 
   return NextResponse.json(achat)
@@ -53,7 +56,7 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
   // VERROU DE SÉCURITÉ : Seul le SUPER_ADMIN peut supprimer définitivement une trace d'achat.
-  if (session.role !== 'SUPER_ADMIN') {
+  if (session!.role !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Action interdite : Seul le Super Administrateur peut supprimer un achat définitivement pour garantir la traçabilité des stocks.' }, { status: 403 })
   }
 
@@ -144,7 +147,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'achats:edit')
+  if (authError) return authError
 
   const id = Number((await params).id)
   try {
@@ -157,6 +161,7 @@ export async function PATCH(
       const banqueId = body?.banqueId ? Number(body.banqueId) : null
       const now = new Date()
       let dateReglement = body?.date ? new Date(body.date) : now
+      if (isNaN(dateReglement.getTime())) dateReglement = now
       // Si la date vient d'un sélecteur (YYYY-MM-DD), on ajoute l'heure actuelle
       if (body?.date && String(body.date).length <= 10) {
         dateReglement.setHours(now.getHours(), now.getMinutes(), now.getSeconds())
@@ -172,11 +177,8 @@ export async function PATCH(
       })
 
       if (!achat) return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
-      if (session.role !== 'SUPER_ADMIN') {
-        const entiteId = await getEntiteId(session)
-        if (achat.entiteId !== entiteId) {
-          return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
-        }
+      if (session!.role !== 'SUPER_ADMIN' && achat.entiteId !== session!.entiteId) {
+        return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
       }
 
       const resteAPayer = Math.max(0, (achat.montantTotal || 0) - (achat.montantPaye || 0))
@@ -190,7 +192,7 @@ export async function PATCH(
       const nouveauStatut = nouveauMontantPaye >= achat.montantTotal ? 'PAYE' : 'PARTIEL'
 
       const { estModeBanque, enregistrerOperationBancaire } = await import('@/lib/banque')
-      const { estModeEspeces } = await import('@/lib/caisse')
+      const { estModeEspeces } = await import('@/lib/enums-commerce')
       const { comptabiliserReglementAchat } = await import('@/lib/comptabilisation')
 
       const updatedAchat = await prisma.$transaction(async (tx) => {
@@ -205,11 +207,11 @@ export async function PATCH(
         await tx.reglementAchat.create({
           data: {
             achatId: id,
-            fournisseurId: achat.fournisseurId!,
+            fournisseurId: achat.fournisseurId,
             entiteId: achat.entiteId,
             montant: montantReglement,
             modePaiement: modePaiement,
-            utilisateurId: session.userId,
+            utilisateurId: session!.userId,
             date: dateReglement,
             observation: `Paiement sur facture ${achat.numero}`
           }
@@ -217,17 +219,16 @@ export async function PATCH(
 
         // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque)
         if (estModeEspeces(modePaiement)) {
-          await tx.caisse.create({
-            data: {
-              magasinId: achat.magasinId,
-              entiteId: achat.entiteId,
-              utilisateurId: session.userId,
-              montant: montantReglement,
-              type: 'SORTIE',
-              motif: `Règlement Achat ${achat.numero}`,
-              date: dateReglement,
-            }
-          })
+          await enregistrerMouvementCaisse({
+            magasinId: achat.magasinId,
+            type: 'SORTIE',
+            motif: `Règlement Achat ${achat.numero}`,
+            montant: montantReglement,
+            utilisateurId: session!.userId,
+            entiteId: achat.entiteId,
+            date: dateReglement,
+          }, tx)
+          await recalculerSoldeCaisse(achat.magasinId, tx)
         } else if (estModeBanque(modePaiement)) {
           if (!banqueId || !Number.isFinite(banqueId)) {
             throw new Error('Banque requise pour les règlements non espèces.')
@@ -239,7 +240,7 @@ export async function PATCH(
             type: 'REGLEMENT_FOURNISSEUR',
             libelle: `Règlement Achat ${achat.numero}`,
             montant: montantReglement,
-            utilisateurId: session.userId,
+            utilisateurId: session!.userId,
             reference: achat.numero,
             observation: `Paiement via ${modePaiement}`,
           }, tx)
@@ -251,7 +252,7 @@ export async function PATCH(
           date: dateReglement,
           montant: montantReglement,
           modePaiement: modePaiement,
-          utilisateurId: session.userId,
+          utilisateurId: session!.userId,
           magasinId: achat.magasinId,
           entiteId: achat.entiteId,
         }, tx)
@@ -276,7 +277,7 @@ export async function PATCH(
 
         // VERROU COMPTABLE : Interdiction de modifier un achat de plus de 24h (Sauf Super_Admin)
         const diffHeures = (new Date().getTime() - new Date(oldAchat.date).getTime()) / (1000 * 3600)
-        if (diffHeures > 24 && session.role !== 'SUPER_ADMIN') {
+        if (diffHeures > 24 && session!.role !== 'SUPER_ADMIN') {
           throw new Error("Verrou Comptable : Cet achat date de plus de 24h. Modification interdite pour garantir l'intégrité du PAMP. Veuillez contacter le Super Administrateur.")
         }
 
@@ -327,6 +328,10 @@ export async function PATCH(
         const nouvellesLignes: any[] = []
         const currentMagasinId = Number(magasinId || oldAchat.magasinId)
 
+        const magasinExists = await tx.magasin.findUnique({ where: { id: currentMagasinId } })
+        if (!magasinExists) throw new Error('Magasin introuvable.')
+        if (magasinExists.entiteId !== oldAchat.entiteId) throw new Error('Accès au magasin refusé (Entité différente).')
+
         for (const l of lignes) {
           const p = await tx.produit.findUnique({ where: { id: Number(l.produitId) } })
           if (!p) throw new Error(`Produit ${l.produitId} introuvable`)
@@ -335,6 +340,9 @@ export async function PATCH(
           const pu = Math.max(0, Number(l.prixUnitaire))
           const tva = Math.max(0, Number(l.tva || 0))
           const rem = Math.max(0, Number(l.remise || 0))
+
+          if (q <= 0) continue
+          if (pu <= 0) throw new Error(`Prix unitaire invalide pour ${p.designation} : doit être supérieur à 0.`)
           
           const htNet = htNetLigne(q, pu, rem)
           const mntTTC = montantLigneTTC({
@@ -352,6 +360,7 @@ export async function PATCH(
             designation: p.designation,
             quantite: q,
             prixUnitaire: pu,
+            coutUnitaire: htNet / q,
             tva,
             remise: rem,
             montant: mntTTC,
@@ -405,30 +414,43 @@ export async function PATCH(
         })
 
         // 5. Appliquer nouveaux stocks (Entrée) + MAJ PAMP
-        // Calcul du prorata des frais d'approche par ligne (Sur base HT NETTE)
+        // Regrouper les lignes par produit pour calcul PAMP correct (stock pré-achat)
         const totalFrais = fApprocheTotal
-        
+        const lignesParProduit = new Map<number, { quantite: number; valeurAchatNet: number; prixUnitaireFallback: number }>()
         for (const l of nouvellesLignes) {
-          const product = await tx.produit.findUnique({ where: { id: l.produitId } })
-          const stockGlobalAvant = product?.stocks?.reduce((acc: number, s: any) => acc + s.quantite, 0) ?? 0
-          const pampActuel = product?.pamp || product?.prixAchat || 0
-          
-          const partFraisLigne = partFraisApprocheLigne(l.htNet, totalHTNet, totalFrais)
-          const valeurLigneAvecFrais = valeurAchatNetAvecFrais(l.htNet, partFraisLigne)
-          
-          const nouveauPamp = nouveauPampApresAchatLigne({
-            stockGlobalAvant,
-            pampActuel,
-            quantiteLigne: l.quantite,
-            valeurAchatNet: valeurLigneAvecFrais,
-            prixUnitaireFallback: l.prixUnitaire,
-          })
+          const partFrais = partFraisApprocheLigne(l.htNet, totalHTNet, totalFrais)
+          const valNet = valeurAchatNetAvecFrais(l.htNet, partFrais)
+          const existing = lignesParProduit.get(l.produitId)
+          if (existing) {
+            existing.quantite += l.quantite
+            existing.valeurAchatNet += valNet
+          } else {
+            lignesParProduit.set(l.produitId, { quantite: l.quantite, valeurAchatNet: valNet, prixUnitaireFallback: l.prixUnitaire })
+          }
+        }
 
-          await tx.produit.update({
-            where: { id: l.produitId },
-            data: { pamp: nouveauPamp }
-          })
+        for (const [produitId, groupe] of lignesParProduit) {
+          const product = await tx.produit.findUnique({ where: { id: produitId }, include: { stocks: true } })
+          if (product) {
+            const stockGlobalAvant = product.stocks.reduce((acc: number, s: any) => acc + s.quantite, 0)
+            const pampActuel = product.pamp || product.prixAchat || 0
 
+            const pampAjuste = nouveauPampApresAchatLigne({
+              stockGlobalAvant,
+              pampActuel,
+              quantiteLigne: groupe.quantite,
+              valeurAchatNet: groupe.valeurAchatNet,
+              prixUnitaireFallback: groupe.prixUnitaireFallback,
+            })
+
+            await tx.produit.update({
+              where: { id: produitId },
+              data: { pamp: pampAjuste }
+            })
+          }
+        }
+
+        for (const l of nouvellesLignes) {
           await tx.stock.updateMany({
             where: { produitId: l.produitId, magasinId: updated.magasinId },
             data: { quantite: { increment: l.quantite } }
@@ -440,7 +462,7 @@ export async function PATCH(
               produitId: l.produitId,
               magasinId: updated.magasinId,
               entiteId: updated.entiteId,
-              utilisateurId: session.userId,
+              utilisateurId: session!.userId,
               quantite: l.quantite,
               dateOperation: updated.date,
               observation: `Modif Achat ${updated.numero}`,
@@ -460,7 +482,7 @@ export async function PATCH(
                 entiteId: updated.entiteId,
                 montant: mntR,
                 modePaiement: r.mode,
-                utilisateurId: session.userId,
+                utilisateurId: session!.userId,
                 observation: `Modif Achat ${updated.numero}`,
                 date: updated.date,
               }
@@ -468,17 +490,16 @@ export async function PATCH(
             // Synchro physique trésorerie
             const modeR = String(r.mode).toUpperCase()
             if (estModeEspeces(modeR)) {
-              await tx.caisse.create({
-                data: {
-                  date: updated.date,
-                  magasinId: updated.magasinId,
-                  type: 'SORTIE',
-                  motif: `Règlement Achat ${updated.numero}`,
-                  montant: mntR,
-                  utilisateurId: session.userId,
-                  entiteId: updated.entiteId,
-                }
-              })
+              await enregistrerMouvementCaisse({
+                magasinId: updated.magasinId,
+                type: 'SORTIE',
+                motif: `Règlement Achat ${updated.numero}`,
+                montant: mntR,
+                utilisateurId: session!.userId,
+                entiteId: updated.entiteId,
+                date: updated.date,
+              }, tx)
+              await recalculerSoldeCaisse(updated.magasinId, tx)
             } else if (estModeBanque(modeR)) {
               const { enregistrerOperationBancaire } = await import('@/lib/banque')
               await enregistrerOperationBancaire({
@@ -488,7 +509,7 @@ export async function PATCH(
                 type: 'REGLEMENT_FOURNISSEUR',
                 libelle: `Règlement Achat ${updated.numero}`,
                 montant: mntR,
-                utilisateurId: session.userId,
+                utilisateurId: session!.userId,
                 reference: updated.numero,
               }, tx)
             }
@@ -505,7 +526,7 @@ export async function PATCH(
           fraisApproche: updated.fraisApproche,
           modePaiement: updated.modePaiement,
           fournisseurId: updated.fournisseurId,
-          utilisateurId: session.userId,
+          utilisateurId: session!.userId,
           magasinId: updated.magasinId,
           entiteId: updated.entiteId,
           reglements: regsData.map((r: any) => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
@@ -513,7 +534,7 @@ export async function PATCH(
         }, tx)
 
         // 8. LOG D'AUDIT
-        await logModification(session, 'ACHAT', updated.id, `Mise à jour complète de l'achat ${updated.numero}`, oldAchat, updated, getIpAddress(request))
+        await logModification(session!, 'ACHAT', updated.id, `Mise à jour complète de l'achat ${updated.numero}`, oldAchat, updated, getIpAddress(request))
 
         return updated
       }, { timeout: 30000 })

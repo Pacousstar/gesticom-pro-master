@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { clientSchema } from '@/lib/validations'
 
 // Utilisation directe du client Prisma pour éviter les erreurs de type complexes
 
@@ -145,11 +146,24 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const forbidden = requirePermission(session, 'clients:create')
   if (forbidden) return forbidden
 
   try {
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
     const body = await request.json()
+    
+    // Validation Zod
+    const validation = clientSchema.safeParse(body)
+    if (!validation.success) {
+      const errors = (validation.error as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ')
+      return NextResponse.json({ error: `Validation échouée: ${errors}` }, { status: 400 })
+    }
+    
     let code = body?.code != null ? String(body.code).trim() || null : null
     const nom = String(body?.nom || '').trim()
     const telephone = body?.telephone != null ? String(body.telephone).trim() || null : null
@@ -168,6 +182,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nom du client requis.' }, { status: 400 })
     }
 
+    // CL-03: Si type=CREDIT, alors plafonCredit est obligatoire
+    if (type === 'CREDIT' && (!plafondCredit || plafondCredit <= 0)) {
+      return NextResponse.json({ error: 'Le plafond de crédit est obligatoire pour un client CREDIT.' }, { status: 400 })
+    }
+
     // Génération automatique du code si non fourni
     if (!code) {
       const count = await prisma.client.count()
@@ -176,20 +195,20 @@ export async function POST(request: NextRequest) {
     }
 
     const c = await prisma.client.create({
-      data: { 
-        code, 
-        nom, 
-        telephone, 
-        email, 
-        adresse, 
-        localisation, 
-        type, 
-        plafondCredit, 
-        ncc, 
-        soldeInitial, 
-        avoirInitial, 
+      data: {
+        code,
+        nom,
+        telephone,
+        email,
+        adresse,
+        localisation,
+        type,
+        plafondCredit,
+        ncc,
+        soldeInitial,
+        avoirInitial,
         actif: true,
-        entiteId: session?.entiteId || 1
+        entiteId
       },
     })
 
@@ -198,8 +217,11 @@ export async function POST(request: NextRequest) {
     revalidatePath('/api/clients')
 
     return NextResponse.json(c)
-  } catch (e) {
+  } catch (e: any) {
     console.error('POST /api/clients:', e)
+    if (e?.code === 'P2002') {
+      return NextResponse.json({ error: 'Code client déjà utilisé. Réessayez.' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { fournisseurSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -113,11 +114,24 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const forbidden = requirePermission(session, 'fournisseurs:create')
   if (forbidden) return forbidden
 
   try {
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
     const body = await request.json()
+    
+    // Validation Zod
+    const validation = fournisseurSchema.safeParse(body)
+    if (!validation.success) {
+      const errors = (validation.error as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ')
+      return NextResponse.json({ error: `Validation échouée: ${errors}` }, { status: 400 })
+    }
+    
     let code = body?.code != null ? String(body.code).trim() || null : null
     const nom = String(body?.nom || '').trim()
     const telephone = body?.telephone != null ? String(body.telephone).trim() || null : null
@@ -153,7 +167,7 @@ export async function POST(request: NextRequest) {
         soldeInitial, 
         avoirInitial, 
         actif: true,
-        entiteId: session?.entiteId || 1
+        entiteId
       },
     })
     // Invalider le cache pour affichage immédiat
@@ -163,6 +177,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(f)
   } catch (e: any) {
     console.error('POST /api/fournisseurs:', e)
-    return NextResponse.json({ error: `Erreur serveur: ${e.message || 'Inconnue'}` }, { status: 500 })
+    if (e?.code === 'P2002') {
+      return NextResponse.json({ error: 'Code fournisseur déjà utilisé. Réessayez.' }, { status: 409 })
+    }
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

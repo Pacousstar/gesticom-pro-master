@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logAction } from '@/lib/audit'
+import { estTypeOperationBanqueEntree } from '@/lib/banque'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -46,7 +47,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const operations = await prisma.operationBancaire.findMany({ where: { banqueId } })
       let solde = Number(soldeInitial) || 0
       for (const op of operations) {
-        if (op.type === 'DEPOT' || op.type === 'VIREMENT_ENTRANT' || op.type === 'INTERETS') {
+        if (estTypeOperationBanqueEntree(op.type)) {
           solde += op.montant
         } else {
           solde -= op.montant

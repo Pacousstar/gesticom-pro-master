@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'stocks:entree')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -16,6 +19,15 @@ export async function PATCH(
   }
 
   try {
+    // Vérifier que le stock appartient à l'entité de l'utilisateur
+    const existing = await prisma.stock.findFirst({
+      where: { id, entiteId: session.entiteId },
+      select: { id: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Stock introuvable ou accès refusé.' }, { status: 404 })
+    }
+
     const body = await request.json()
     const quantite = body?.quantite
     const quantiteInitiale = body?.quantiteInitiale
@@ -46,7 +58,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'stocks:sortie')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -54,6 +68,15 @@ export async function DELETE(
   }
 
   try {
+    // Vérifier que le stock appartient à l'entité de l'utilisateur
+    const existing = await prisma.stock.findFirst({
+      where: { id, entiteId: session.entiteId },
+      select: { id: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Stock introuvable ou accès refusé.' }, { status: 404 })
+    }
+
     const s = await prisma.stock.delete({ where: { id } })
     
     // Invalider le cache

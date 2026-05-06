@@ -4,8 +4,10 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { comptabiliserReglementAchat } from '@/lib/comptabilisation'
-import { estModeEspeces } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { estModeBanque } from '@/lib/banque'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -29,7 +31,9 @@ export async function POST(request: NextRequest) {
         const now = new Date()
         const tempDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
         if (!isNaN(tempDate.getTime())) dateReglement = tempDate
-      } catch (e) {}
+      } catch (e) {
+        // Ignore date invalide: on conserve la date courante par défaut.
+      }
     }
 
     if (!montant || (!achatId && !fournisseurId)) {
@@ -38,6 +42,9 @@ export async function POST(request: NextRequest) {
 
     if (modePaiement === 'ESPECES' && !body.magasinId) {
       return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire pour un règlement en espèces.' }, { status: 400 })
+    }
+    if (estModeBanque(modePaiement) && !body.banqueId) {
+      return NextResponse.json({ error: 'Banque obligatoire pour un règlement non espèces.' }, { status: 400 })
     }
 
     const entiteId = await getEntiteId(session)
@@ -110,17 +117,16 @@ export async function POST(request: NextRequest) {
 
       // ✅ COMPTEUR CAISSE GLOBAL
       if (estModeEspeces(modePaiement)) {
-        await tx.caisse.create({
-          data: {
-            magasinId: Number(body.magasinId) || 1,
-            entiteId,
-            utilisateurId: session.userId,
-            montant,
-            type: 'SORTIE',
-            motif: `Règlement Achat : ${observation}`,
-            date: dateReglement
-          }
-        })
+        await enregistrerMouvementCaisse({
+          magasinId: Number(body.magasinId),
+          type: 'SORTIE',
+          motif: `Règlement Achat : ${observation}`,
+          montant,
+          utilisateurId: session.userId,
+          entiteId,
+          date: dateReglement,
+        }, tx)
+        await recalculerSoldeCaisse(Number(body.magasinId), tx)
       } else {
         // ✅ SYNCHRO BANQUE : Sortie de fonds
         const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
@@ -149,7 +155,7 @@ export async function POST(request: NextRequest) {
         modePaiement,
         entiteId,
         utilisateurId: session.userId,
-        magasinId: Number(body.magasinId) || 1
+        magasinId: body.magasinId ? Number(body.magasinId) : undefined
       }, tx)
 
       return reglement

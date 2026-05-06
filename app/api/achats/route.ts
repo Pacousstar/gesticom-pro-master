@@ -5,6 +5,9 @@ import { prisma } from '@/lib/db'
 import { comptabiliserAchat, comptabiliserReglementAchat } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { estModeBanque } from '@/lib/banque'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
 import {
   htNetLigne,
   montantLigneTTC,
@@ -12,6 +15,7 @@ import {
   nouveauPampApresAchatLigne,
   partFraisApprocheLigne,
   valeurAchatNetAvecFrais,
+  roundMoneyFCFA,
 } from '@/lib/calculs-commerciaux'
 
 export async function GET(request: NextRequest) {
@@ -56,6 +60,7 @@ export async function GET(request: NextRequest) {
     } else if (entiteId > 0) {
       where.entiteId = entiteId
     }
+    // Si entiteId = 0, SUPER_ADMIN voit toutes les entités (pas de filtre)
   } else if (entiteId > 0) {
     where.entiteId = entiteId
   }
@@ -87,7 +92,7 @@ export async function GET(request: NextRequest) {
     totals: {
       montantTotal: aggregates._sum.montantTotal || 0,
       montantPaye: aggregates._sum.montantPaye || 0,
-      resteAPayer: (aggregates._sum.montantTotal || 0) - (aggregates._sum.montantPaye || 0),
+      resteAPayer: Math.max(0, (aggregates._sum.montantTotal || 0) - (aggregates._sum.montantPaye || 0)),
     },
     pagination: {
       page,
@@ -148,8 +153,22 @@ export async function POST(request: NextRequest) {
     const now = new Date()
     let dateAchat = now
     if (dateStr) {
-      const [y, m, d] = dateStr.split('-').map(Number)
-      dateAchat = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
+      const parts = dateStr.split('-')
+      if (parts.length !== 3) {
+        return NextResponse.json({ error: 'Format de date invalide. Utilisez YYYY-MM-DD.' }, { status: 400 })
+      }
+      const [yStr, mStr, dStr] = parts
+      const y = Number(yStr)
+      const m = Number(mStr)
+      const d = Number(dStr)
+      if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) {
+        return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
+      }
+      const candidate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
+      if (candidate.getFullYear() !== y || candidate.getMonth() !== m - 1 || candidate.getDate() !== d) {
+        return NextResponse.json({ error: 'Date invalide (jour inexistant).' }, { status: 400 })
+      }
+      dateAchat = candidate
     }
     if (isNaN(dateAchat.getTime())) {
       return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
@@ -195,6 +214,10 @@ export async function POST(request: NextRequest) {
       const produit = await prisma.produit.findUnique({ where: { id: produitId } })
       if (!produit) continue
 
+      if (prixUnitaire <= 0) {
+        return NextResponse.json({ error: `Prix unitaire invalide pour ${produit.designation} : doit être supérieur à 0.` }, { status: 400 })
+      }
+
       const designation = produit.designation
       const htNet = htNetLigne(quantite, prixUnitaire, remise)
       const montantLigne = montantLigneTTC({
@@ -214,6 +237,7 @@ export async function POST(request: NextRequest) {
         remise,
         montant: montantLigne,
         htNet,
+        coutUnitaire: htNet / quantite,
       })
     }
 
@@ -221,17 +245,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Lignes invalides.' }, { status: 400 })
     }
 
-    const montantTotal = montantTotalAchatSommeLignes(lignesValides.map((l) => l.montant))
+    const montantTotalLignes = montantTotalAchatSommeLignes(lignesValides.map((l) => l.montant))
+    const montantTotal = roundMoneyFCFA(montantTotalLignes + fraisApproche)
 
     if (reglementsPayload.length === 0 && autoReglementComplet && montantPaye === 0) {
         montantPaye = montantTotal
         listReglements = [{ mode: modePaiementPrincipal, montant: montantPaye }]
     }
 
-    if (montantPaye > montantTotal + 0.01) {
+    if (montantPaye > montantTotal + 1) {
       return NextResponse.json({
         error: `Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse l'achat (${montantTotal.toLocaleString()} F).`
       }, { status: 400 })
+    }
+    const needsBanque = listReglements.some((r) => estModeBanque(r.mode))
+    if (needsBanque && !Number(body?.banqueId)) {
+      return NextResponse.json({ error: 'Banque requise pour les règlements non espèces.' }, { status: 400 })
     }
 
     
@@ -271,6 +300,7 @@ export async function POST(request: NextRequest) {
               designation: l.designation,
               quantite: l.quantite,
               prixUnitaire: l.prixUnitaire,
+              coutUnitaire: l.coutUnitaire || l.prixUnitaire,
               tva: l.tva,
               remise: l.remise,
               montant: l.montant,
@@ -285,39 +315,46 @@ export async function POST(request: NextRequest) {
       })
 
       // 2. Mise à jour des stocks et du PAMP
+      // Regrouper les lignes par produit pour calcul PAMP correct (stock pré-achat)
+      const lignesParProduit = new Map<number, { quantite: number; valeurAchatNet: number; prixUnitaireFallback: number }>()
       for (const l of lignesValides) {
-        // a. Calcul du PAMP
+        const existing = lignesParProduit.get(l.produitId)
+        if (existing) {
+          existing.quantite += l.quantite
+          existing.valeurAchatNet += l.valeurAchatNet
+        } else {
+          lignesParProduit.set(l.produitId, { quantite: l.quantite, valeurAchatNet: l.valeurAchatNet, prixUnitaireFallback: l.prixUnitaire })
+        }
+      }
+
+      for (const [produitId, groupe] of lignesParProduit) {
         const targetProduit = await tx.produit.findUnique({
-          where: { id: l.produitId },
+          where: { id: produitId },
           include: { stocks: true }
         })
 
         if (targetProduit) {
-          // --- CALCUL PAMP PRÉCISION SYCOHADA (Gère le stock négatif) ---
           const stockGlobalAvant = targetProduit.stocks.reduce((acc: number, s: any) => acc + s.quantite, 0)
           const pampActuel = targetProduit.pamp || targetProduit.prixAchat || 0
-          
-          const partFrais = partFraisApprocheLigne(l.htNet, montantFactureHT, fraisApproche)
-          const valeurAchatNet = valeurAchatNetAvecFrais(l.htNet, partFrais)
 
           const pampAjuste = nouveauPampApresAchatLigne({
             stockGlobalAvant,
             pampActuel,
-            quantiteLigne: l.quantite,
-            valeurAchatNet,
-            prixUnitaireFallback: l.prixUnitaire,
+            quantiteLigne: groupe.quantite,
+            valeurAchatNet: groupe.valeurAchatNet,
+            prixUnitaireFallback: groupe.prixUnitaireFallback,
           })
           
           await tx.produit.update({
-            where: { id: l.produitId },
+            where: { id: produitId },
             data: { pamp: pampAjuste }
           })
         }
+      }
 
-
-        // b. Gérer le stock par magasin
+      for (const l of lignesValides) {
         let st = await tx.stock.findUnique({
-          where: { produitId_magasinId: { produitId: l.produitId, magasinId } },
+          where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } },
         })
 
         if (!st) {
@@ -334,6 +371,7 @@ export async function POST(request: NextRequest) {
             entiteId: entiteId,
             utilisateurId: session.userId,
             quantite: l.quantite,
+            dateOperation: dateAchat,
             observation: `Achat ${num}`,
           },
         })
@@ -345,9 +383,13 @@ export async function POST(request: NextRequest) {
       }
 
       // 3. Règlement(s) automatique(s) - MULTI-PAIEMENT
+      let resteReglement = montantTotal
+      const reglementsEffectifs: { mode: string; montant: number }[] = []
       for (const reg of listReglements) {
-        const montantReg = Math.min(reg.montant, montantTotal)
+        const montantReg = Math.min(reg.montant, resteReglement)
         if (montantReg <= 0) continue
+        resteReglement -= montantReg
+        reglementsEffectifs.push({ mode: reg.mode, montant: montantReg })
 
         await tx.reglementAchat.create({
           data: {
@@ -362,7 +404,32 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        // 4. Mouvement de caisse : Désormais géré automatiquement par comptabiliserAchat
+        // 4. Synchronisation physique trésorerie (caisse / banque)
+        if (estModeEspeces(reg.mode)) {
+          await enregistrerMouvementCaisse({
+            magasinId,
+            type: 'SORTIE',
+            motif: `Règlement Achat ${num}`,
+            montant: montantReg,
+            utilisateurId: session.userId,
+            entiteId,
+            date: dateAchat,
+          }, tx)
+          await recalculerSoldeCaisse(magasinId, tx)
+        } else if (estModeBanque(reg.mode)) {
+          const { enregistrerOperationBancaire } = await import('@/lib/banque')
+          await enregistrerOperationBancaire({
+            banqueId: body?.banqueId ? Number(body.banqueId) : null,
+            entiteId,
+            date: dateAchat,
+            type: 'REGLEMENT_FOURNISSEUR',
+            libelle: `Règlement Achat ${num}`,
+            montant: montantReg,
+            utilisateurId: session.userId,
+            reference: num,
+            observation: `Paiement via ${reg.mode}`
+          }, tx)
+        }
       }
 
       // 6. Comptabilisation
@@ -372,12 +439,12 @@ export async function POST(request: NextRequest) {
         date: dateAchat,
         montantTotal,
         fraisApproche,
-        modePaiement: listReglements.length > 1 ? 'MULTI' : (listReglements[0]?.mode || modePaiementPrincipal),
+        modePaiement: reglementsEffectifs.length > 1 ? 'MULTI' : (reglementsEffectifs[0]?.mode || modePaiementPrincipal),
         fournisseurId,
         entiteId,
         utilisateurId: session.userId,
         magasinId,
-        reglements: listReglements,
+        reglements: reglementsEffectifs,
         lignes: lignesValides,
       }, tx)
 

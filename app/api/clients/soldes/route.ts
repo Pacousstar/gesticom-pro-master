@@ -59,19 +59,27 @@ export async function GET(request: NextRequest) {
       _sum: { montant: true },
     })
 
-    // Requêtes globales pour le solde final absolu
+    // CL-01: Requêtes globales respectent le filtre période si spécifié
+    const whereVenteGlobale: any = { entiteId, statut: { in: ['VALIDEE', 'VALIDE'] }, clientId: { not: null } }
+    const whereReglementGlobal: any = { entiteId, statut: { in: ['VALIDEE', 'VALIDE'] } }
+    if (dateDebut) {
+      whereVenteGlobale.date = { ...whereVenteGlobale.date, gte: new Date(dateDebut) }
+      whereReglementGlobal.date = { ...whereReglementGlobal.date, gte: new Date(dateDebut) }
+    }
+    if (dateFin) {
+      whereVenteGlobale.date = { ...whereVenteGlobale.date, lte: new Date(dateFin) }
+      whereReglementGlobal.date = { ...whereReglementGlobal.date, lte: new Date(dateFin) }
+    }
+
     const ventesGlobales = await prisma.vente.groupBy({
       by: ['clientId'],
-      where: { entiteId, statut: { in: ['VALIDEE', 'VALIDE'] }, clientId: { not: null } },
+      where: whereVenteGlobale,
       _sum: { montantTotal: true },
     })
 
     const reglementsGlobaux = await prisma.reglementVente.groupBy({
       by: ['clientId'],
-      where: {
-        entiteId,
-        statut: { in: ['VALIDEE', 'VALIDE'] },
-      },
+      where: whereReglementGlobal,
       _sum: { montant: true },
     })
 

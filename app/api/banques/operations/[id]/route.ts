@@ -3,8 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
-
-const TYPES_ENTREE = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS']
+import { verifierCloture } from '@/lib/cloture'
+import { estTypeOperationBanqueEntree } from '@/lib/banque'
 
 export async function GET(
   _request: NextRequest,
@@ -60,20 +60,27 @@ export async function DELETE(
     })
     if (!op) return NextResponse.json({ error: 'Opération bancaire introuvable.' }, { status: 404 })
 
-    await deleteEcrituresByReference('BANQUE', id)
+    // RB6: Vérifier la clôture comptable avant suppression
+    await verifierCloture(op.date, session)
 
-    const reverse = TYPES_ENTREE.includes(op.type)
-      ? -op.montant
-      : op.montant
-    await prisma.banque.update({
-      where: { id: op.banqueId },
-      data: { soldeActuel: { increment: reverse } },
+    // RB6: Encapsuler dans une transaction pour atomicité
+    await prisma.$transaction(async (tx) => {
+      await deleteEcrituresByReference('BANQUE', id, tx)
+
+      const isEntree = estTypeOperationBanqueEntree(op.type)
+      const reverse = isEntree ? -op.montant : op.montant
+
+      await tx.banque.update({
+        where: { id: op.banqueId },
+        data: { soldeActuel: { increment: reverse } },
+      })
+
+      await tx.operationBancaire.delete({ where: { id } })
     })
 
-    await prisma.operationBancaire.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/banques/operations/[id]:', e)
-    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Erreur serveur.' }, { status: 500 })
   }
 }

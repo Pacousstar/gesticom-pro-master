@@ -47,7 +47,8 @@ export async function GET(request: NextRequest) {
     // Achats de la période
     const achats = await prisma.achat.groupBy({
       by: ['fournisseurId'],
-      where: { ...whereAchat, statut: 'VALIDE' },
+      // Achat.statut est "VALIDEE" (schema) ; compat avec anciennes valeurs "VALIDE"
+      where: { ...whereAchat, statut: { in: ['VALIDE', 'VALIDEE'] } },
       _sum: { montantTotal: true, fraisApproche: true },
     })
 
@@ -58,19 +59,27 @@ export async function GET(request: NextRequest) {
       _sum: { montant: true },
     })
 
-    // Totaux globaux pour le solde actuel réel
+    // CL-01: Totaux globaux respectent le filtre période si spécifié
+    const whereAchatGlobal: any = { entiteId, fournisseurId: { not: null }, statut: { in: ['VALIDE', 'VALIDEE'] } }
+    const whereReglementGlobal: any = { entiteId, statut: { in: ['VALIDE', 'VALIDEE'] } }
+    if (dateDebut) {
+      whereAchatGlobal.date = { ...whereAchatGlobal.date, gte: new Date(dateDebut) }
+      whereReglementGlobal.date = { ...whereReglementGlobal.date, gte: new Date(dateDebut) }
+    }
+    if (dateFin) {
+      whereAchatGlobal.date = { ...whereAchatGlobal.date, lte: new Date(dateFin) }
+      whereReglementGlobal.date = { ...whereReglementGlobal.date, lte: new Date(dateFin) }
+    }
+
     const achatsGlobaux = await prisma.achat.groupBy({
       by: ['fournisseurId'],
-      where: { entiteId, fournisseurId: { not: null }, statut: 'VALIDE' },
+      where: whereAchatGlobal,
       _sum: { montantTotal: true, fraisApproche: true },
     })
 
     const reglementsGlobaux = await prisma.reglementAchat.groupBy({
       by: ['fournisseurId'],
-      where: {
-        entiteId,
-        statut: 'VALIDE',
-      },
+      where: { ...whereReglementGlobal, statut: { in: ['VALIDE', 'VALIDEE'] } },
       _sum: { montant: true },
     })
 
@@ -88,9 +97,9 @@ export async function GET(request: NextRequest) {
       // ✅ FORMULE UNIFIÉE : SoldeGlobal = Dettes(achats-paiements) + DetteDépart - AvoirDépart
       const soldeGlobal = (totalAchatsGlobal - totalPaiementsGlobal) + (f.soldeInitial || 0) - (f.avoirInitial || 0)
 
-      // Récupérer le numéro de la dernière facture d'achat
+      // R3: Récupérer le numéro de la dernière facture validée
       const derA = await prisma.achat.findFirst({
-        where: { fournisseurId: f.id, entiteId },
+        where: { fournisseurId: f.id, entiteId, statut: { in: ['VALIDEE', 'VALIDE'] } },
         orderBy: { date: 'desc' },
         select: { numero: true }
       })

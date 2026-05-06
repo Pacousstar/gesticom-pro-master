@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
+import { verifierCloture } from '@/lib/cloture'
+import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
 
 // Utilisation directe du client Prisma
 
@@ -9,15 +12,19 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'clients:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
     return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
   }
 
-  const c = await prisma.client.findUnique({ where: { id } })
-  if (!c) return NextResponse.json({ error: 'Client introuvable.' }, { status: 404 })
+  const c = await prisma.client.findFirst({
+    where: { id, entiteId: session!.entiteId },
+  })
+  if (!c) return NextResponse.json({ error: 'Client introuvable ou accès refusé.' }, { status: 404 })
   return NextResponse.json(c)
 }
 
@@ -26,7 +33,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'clients:edit')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -34,6 +42,14 @@ export async function PATCH(
   }
 
   try {
+    // Vérifier que le client appartient à l'entité
+    const existing = await prisma.client.findFirst({
+      where: { id, entiteId: session!.entiteId },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Client introuvable ou accès refusé.' }, { status: 404 })
+    }
+
     const body = await request.json()
     const code = body?.code !== undefined ? (String(body.code).trim() || null) : undefined
     const nom = body?.nom != null ? String(body.nom).trim() : undefined
@@ -51,6 +67,21 @@ export async function PATCH(
     const email = body?.email !== undefined ? (String(body.email).trim() || null) : undefined
     const actif = body?.actif !== undefined ? Boolean(body.actif) : undefined
 
+    // SEC-01: Vérification cloture si modification des soldes initiaux
+    const modifieSoldeInitial = body?.soldeInitial !== undefined && Number(body.soldeInitial) !== existing.soldeInitial
+    const modifieAvoirInitial = avoirInitial !== undefined && avoirInitial !== existing.avoirInitial
+    
+    if (modifieSoldeInitial || modifieAvoirInitial) {
+      // Vérifier cloture sur la date du jour (ou date de la dernière vente)
+      const lastVente = await prisma.vente.findFirst({
+        where: { clientId: id },
+        orderBy: { date: 'desc' },
+        select: { date: true }
+      })
+      const dateAVerifier = lastVente?.date || new Date()
+      await verifierCloture(dateAVerifier, session)
+    }
+
     const data: Record<string, unknown> = {}
     if (code !== undefined) data.code = code
     if (nom !== undefined) data.nom = nom
@@ -65,6 +96,9 @@ export async function PATCH(
     if (actif !== undefined) data.actif = actif
 
     const c = await prisma.client.update({ where: { id }, data: data as any })
+    
+    await logModification(session!, 'CLIENT', id, `Modification client ${c.nom} (${c.code || 'sans code'})`, existing, c, getIpAddress(request))
+    
     return NextResponse.json(c)
   } catch (e) {
     console.error('PATCH /api/clients/[id]:', e)
@@ -73,14 +107,14 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
   // Note: On accepte désormais les ADMIN pour la suppression à souhait
-  if (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN') {
+  if (session!.role !== 'SUPER_ADMIN' && session!.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Droits insuffisants pour supprimer un client.' }, { status: 403 })
   }
 
@@ -90,8 +124,27 @@ export async function DELETE(
   }
 
   try {
-    // Note: Le schéma Prisma gère le cascade pour les Ventes et Règlements.
+    // Vérifier si le client a des ventes ou règlements (Restrict au niveau DB)
+    const [ventes, reglements, existing] = await Promise.all([
+      prisma.vente.count({ where: { clientId: id } }),
+      prisma.reglementVente.count({ where: { clientId: id } }),
+      prisma.client.findFirst({ where: { id, entiteId: session!.entiteId } }),
+    ])
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Client introuvable ou accès refusé.' }, { status: 404 })
+    }
+
+    if (ventes > 0 || reglements > 0) {
+      return NextResponse.json({
+        error: `Suppression impossible : ce client a ${ventes} vente(s) et ${reglements} règlement(s) associé(s).`
+      }, { status: 409 })
+    }
+
     await prisma.client.delete({ where: { id } })
+    
+    await logSuppression(session!, 'CLIENT', id, `Suppression client ${existing.nom} (${existing.code || 'sans code'})`, existing, getIpAddress(request))
+    
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('DELETE /api/clients/[id]:', e)

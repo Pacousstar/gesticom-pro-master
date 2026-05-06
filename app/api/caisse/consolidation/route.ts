@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 
+const MODES_ESPECES = ['ESPECES', 'CASH', 'ESPECE']
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -23,22 +25,22 @@ export async function GET(request: NextRequest) {
   const whereEntite: any = entiteId ? { entiteId } : {}
   const whereMagasin: any = magasinIdParam ? { magasinId: Number(magasinIdParam) } : {}
 
-  // 1. Reglements Vente (Entrées)
+  // 1. Reglements Vente (Entrées) — RC5 : exclure ESPECE singulier aussi
   const reglementsVente = await prisma.reglementVente.findMany({
     where: {
       ...whereDate,
-      modePaiement: { notIn: ['ESPECES', 'CASH'] }, // On exclut les espèces ici pour éviter le double comptage
+      modePaiement: { notIn: MODES_ESPECES },
       statut: { in: ['VALIDE', 'VALIDEE'] },
       vente: { ...whereMagasin, ...whereEntite }
     },
     select: { montant: true, modePaiement: true }
   })
 
-  // 2. Reglements Achat (Sorties)
+  // 2. Reglements Achat (Sorties) — RC5 : exclure ESPECE singulier aussi
   const reglementsAchat = await prisma.reglementAchat.findMany({
     where: {
       ...whereDate,
-      modePaiement: { notIn: ['ESPECES', 'CASH'] },
+      modePaiement: { notIn: MODES_ESPECES },
       statut: { in: ['VALIDE', 'VALIDEE'] },
       achat: { ...whereMagasin, ...whereEntite }
     },
@@ -55,11 +57,11 @@ export async function GET(request: NextRequest) {
     select: { montant: true, type: true }
   })
 
-  // 4. Depenses (Sorties)
+  // 4. Depenses (Sorties) — RC5 : exclure ESPECE singulier aussi
   const depenses = await prisma.depense.findMany({
     where: {
       ...whereDate,
-      modePaiement: { notIn: ['ESPECES', 'CASH'] },
+      modePaiement: { notIn: MODES_ESPECES },
       ...whereMagasin,
       ...whereEntite,
     },
@@ -95,9 +97,9 @@ export async function GET(request: NextRequest) {
     const startOfPeriod = new Date(dateDebut + 'T00:00:00')
     const wherePast: any = { date: { lt: startOfPeriod } }
     
-    // Ventes passées (Exclu Espèces)
+    // Ventes passées (Exclu Espèces) — RC5
     const pastVentes = await prisma.reglementVente.findMany({
-      where: { ...wherePast, modePaiement: { notIn: ['ESPECES', 'CASH'] }, statut: { in: ['VALIDE', 'VALIDEE'] }, vente: { ...whereMagasin, ...whereEntite } },
+      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, statut: { in: ['VALIDE', 'VALIDEE'] }, vente: { ...whereMagasin, ...whereEntite } },
       select: { montant: true, modePaiement: true }
     })
     pastVentes.forEach(r => {
@@ -105,9 +107,9 @@ export async function GET(request: NextRequest) {
       if (ouvertures[mode] !== undefined) ouvertures[mode] += r.montant
     })
 
-    // Achats passés (Exclu Espèces)
+    // Achats passés (Exclu Espèces) — RC5
     const pastAchats = await prisma.reglementAchat.findMany({
-      where: { ...wherePast, modePaiement: { notIn: ['ESPECES', 'CASH'] }, statut: { in: ['VALIDE', 'VALIDEE'] }, achat: { ...whereMagasin, ...whereEntite } },
+      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, statut: { in: ['VALIDE', 'VALIDEE'] }, achat: { ...whereMagasin, ...whereEntite } },
       select: { montant: true, modePaiement: true }
     })
     pastAchats.forEach(r => {
@@ -125,20 +127,21 @@ export async function GET(request: NextRequest) {
       else ouvertures.ESPECES -= c.montant
     })
 
-    // Opérations Bancaires passées (Considérées par défaut comme VIREMENT sauf si MoMo précisé)
+    // Opérations Bancaires passées — exclure REGLEMENT_CLIENT/FOURNISSEUR (déjà comptés)
     const pastOpsBanque = await prisma.operationBancaire.findMany({
       where: { date: { lt: startOfPeriod }, banque: whereEntite },
       select: { montant: true, type: true }
     })
     pastOpsBanque.forEach(o => {
+      if (o.type === 'REGLEMENT_CLIENT' || o.type === 'REGLEMENT_FOURNISSEUR') return
       const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
       if (isEntree) ouvertures.VIREMENT += o.montant
       else ouvertures.VIREMENT -= o.montant
     })
 
-    // Dépenses passées (Exclu Espèces)
+    // Dépenses passées (Exclu Espèces) — RC5
     const pastDepenses = await prisma.depense.findMany({
-      where: { ...wherePast, modePaiement: { notIn: ['ESPECES', 'CASH'] }, ...whereMagasin, ...whereEntite },
+      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, ...whereMagasin, ...whereEntite },
       select: { montant: true, modePaiement: true }
     })
     pastDepenses.forEach(d => {
@@ -165,8 +168,9 @@ export async function GET(request: NextRequest) {
     else stats.ESPECES -= c.montant
   })
 
-  // Agrégation OP BANQUE (Période)
+  // Agrégation OP BANQUE (Période) — on exclut REGLEMENT_CLIENT/FOURNISSEUR déjà comptés
   opsBancaires.forEach(o => {
+    if (o.type === 'REGLEMENT_CLIENT' || o.type === 'REGLEMENT_FOURNISSEUR') return
     const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
     if (isEntree) stats.VIREMENT += o.montant
     else stats.VIREMENT -= o.montant
@@ -178,13 +182,14 @@ export async function GET(request: NextRequest) {
     if (stats[mode] !== undefined) stats[mode] -= d.montant
   })
 
-  // Récupération des crédits fournisseurs (qui avait été effacé par erreur)
+  // RC7 : Crédits fournisseurs — filtrer aussi les achats annulés
   const creditsFournisseurs = await prisma.achat.findMany({
     where: {
       ...whereDate,
       ...whereMagasin,
       ...whereEntite,
       statutPaiement: { in: ['CREDIT', 'PARTIEL'] },
+      statut: { in: ['VALIDE', 'VALIDEE'] },
     },
     select: { montantTotal: true, montantPaye: true }
   })
@@ -205,7 +210,7 @@ export async function GET(request: NextRequest) {
 
 function mapMode(mode: string): keyof typeof stats | string {
   const m = mode?.toUpperCase() || ''
-  if (m === 'ESPECES' || m === 'CASH') return 'ESPECES'
+  if (m === 'ESPECES' || m === 'CASH' || m === 'ESPECE') return 'ESPECES'
   if (m === 'MOBILE_MONEY' || m === 'MOMO' || m === 'ORANGE MONEY' || m === 'WAVE') return 'MOBILE_MONEY'
   if (m === 'VIREMENT' || m === 'BANQUE') return 'VIREMENT'
   if (m === 'CHEQUE') return 'CHEQUE'

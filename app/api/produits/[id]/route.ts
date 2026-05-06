@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 import { logModification, getIpAddress, getUserAgent } from '@/lib/audit'
 
 export async function PATCH(
@@ -9,7 +10,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'produits:edit')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -17,6 +20,14 @@ export async function PATCH(
   }
 
   try {
+    // Vérifier que le produit appartient à l'entité de l'utilisateur
+    const existing = await prisma.produit.findFirst({
+      where: { id, entiteId: session!.entiteId },
+      select: { id: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })
+    }
     const body = await _request.json().catch(() => ({}))
     const data: any = {}
     if (body?.designation !== undefined) {
@@ -51,7 +62,7 @@ export async function PATCH(
     // Logger la modification
     const ipAddress = getIpAddress(_request)
     await logModification(
-      session,
+      session!,
       'PRODUIT',
       p.id,
       `Modification du produit ${p.code} - ${p.designation}`,
@@ -77,7 +88,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'produits:delete')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -85,6 +97,14 @@ export async function DELETE(
   }
 
   try {
+    // Vérifier que le produit appartient à l'entité de l'utilisateur
+    const existing = await prisma.produit.findFirst({
+      where: { id, entiteId: session!.entiteId },
+      select: { id: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })
+    }
     // Hard Delete : Suppression réelle de la base
     // Note: Le schéma Prisma gère le cascade (onDelete: Cascade) pour les Stocks, Ventes, Achats, etc.
     const p = await prisma.produit.delete({
@@ -93,7 +113,7 @@ export async function DELETE(
 
     const ipAddress = getIpAddress(_request)
     await logModification(
-      session,
+      session!,
       'PRODUIT',
       id,
       `Suppression définitive du produit ${p.code} - ${p.designation}`,

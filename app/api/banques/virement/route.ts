@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
-import { enregistrerMouvementCaisse } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { revalidatePath } from 'next/cache'
 
 /**
@@ -41,17 +41,16 @@ export async function POST(request: NextRequest) {
           observation: motif
         }, tx)
       } else if (sourceIdType === 'CAISSE') {
-        await tx.caisse.create({
-          data: {
-            date: dateVirement,
-            magasinId: Number(sourceId),
-            entiteId,
-            type: 'SORTIE',
-            motif: `Virement Interne => ${destIdType === 'BANQUE' ? 'Banque ' + destId : 'Caisse ' + destId}`,
-            montant: montant + fraisMontant,
-            utilisateurId: session.userId,
-          }
-        })
+        await enregistrerMouvementCaisse({
+          magasinId: Number(sourceId),
+          type: 'SORTIE',
+          motif: `Virement Interne => ${destIdType === 'BANQUE' ? 'Banque ' + destId : 'Caisse ' + destId}`,
+          montant: montant + fraisMontant,
+          utilisateurId: session.userId,
+          entiteId,
+          date: dateVirement,
+        }, tx)
+        await recalculerSoldeCaisse(Number(sourceId), tx)
       }
 
       // 2. ENREGISTREMENT DES FRAIS (Si applicables)
@@ -85,17 +84,16 @@ export async function POST(request: NextRequest) {
           observation: motif
         }, tx)
       } else if (destIdType === 'CAISSE') {
-        await tx.caisse.create({
-          data: {
-            date: dateVirement,
-            magasinId: Number(destId),
-            entiteId,
-            type: 'ENTREE',
-            motif: `Virement Interne depuis ${sourceIdType === 'BANQUE' ? 'Banque ' + sourceId : 'Caisse ' + sourceId}`,
-            montant: montant,
-            utilisateurId: session.userId,
-          }
-        })
+        await enregistrerMouvementCaisse({
+          magasinId: Number(destId),
+          type: 'ENTREE',
+          motif: `Virement Interne depuis ${sourceIdType === 'BANQUE' ? 'Banque ' + sourceId : 'Caisse ' + sourceId}`,
+          montant: montant,
+          utilisateurId: session.userId,
+          entiteId,
+          date: dateVirement,
+        }, tx)
+        await recalculerSoldeCaisse(Number(destId), tx)
       }
 
       return { success: true }

@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'stocks:init')
+  if (authError) return authError
+
+  const entiteId = session.entiteId
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non définie.' }, { status: 400 })
+  }
 
   try {
     let body: { produitId?: number; magasinId?: number } = {}
@@ -18,8 +26,17 @@ export async function POST(request: NextRequest) {
     const oneOnly = Number.isInteger(produitId) && produitId! > 0 && Number.isInteger(magasinId) && magasinId! > 0
 
     if (oneOnly) {
+      // Vérifier que le magasin appartient à l'entité
+      const magasin = await prisma.magasin.findFirst({
+        where: { id: magasinId!, entiteId },
+        select: { id: true },
+      })
+      if (!magasin) {
+        return NextResponse.json({ error: 'Magasin introuvable ou accès refusé.' }, { status: 404 })
+      }
+
       const exist = await prisma.stock.findUnique({
-        where: { produitId_magasinId: { produitId: produitId!, magasinId: magasinId! } },
+        where: { produitId_magasinId_entiteId: { produitId: produitId!, magasinId: magasinId!, entiteId } },
       })
       if (exist) return NextResponse.json({ created: 0 })
       await prisma.stock.create({
@@ -28,19 +45,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ created: 1 })
     }
 
-    const [produits, magasins] = await Promise.all([
-      prisma.produit.findMany({ where: { actif: true }, select: { id: true } }),
-      prisma.magasin.findMany({ where: { actif: true }, select: { id: true } }),
+const [produits, magazines] = await Promise.all([
+      prisma.produit.findMany({ where: { actif: true, entiteId }, select: { id: true } }),
+      prisma.magasin.findMany({ where: { actif: true, entiteId }, select: { id: true } }),
     ])
 
     // RÈGLE MÉTIER : Un produit = UN SEUL magasin
     // Pour chaque produit, créer un stock uniquement s'il n'en a pas déjà un
     // Si le produit n'a pas de stock, utiliser le premier magasin disponible
     let created = 0
-    const premierMagasinId = magasins.length > 0 ? magasins[0].id : null
+    const premierMagasinId = magazines.length > 0 ? magazines[0].id : null
     
     if (!premierMagasinId) {
       return NextResponse.json({ error: 'Aucun magasin disponible.' }, { status: 400 })
+    }
+
+    for (const p of produits) {
+      // Vérifier si le produit a déjà un stock dans l'entité
+      const stockExistant = await prisma.stock.findFirst({
+        where: { produitId: p.id, entiteId }
+      })
+      
+      if (!stockExistant) {
+        // Le produit n'a pas de stock, créer un stock dans le premier magasin
+        await prisma.stock.create({
+          data: { produitId: p.id, magasinId: premierMagasinId, quantite: 0, quantiteInitiale: 0, entiteId },
+        })
+        created++
+      }
     }
 
     for (const p of produits) {

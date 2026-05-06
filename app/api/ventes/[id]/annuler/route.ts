@@ -34,6 +34,19 @@ export async function POST(
       return NextResponse.json({ error: 'Cette vente est déjà annulée.' }, { status: 400 })
     }
 
+    const body = await _request.json().catch(() => ({}))
+    const now = new Date()
+    let dateOperation = now
+    if (body?.date) {
+      const d = new Date(body.date)
+      if (!Number.isNaN(d.getTime())) {
+        dateOperation = d
+        if (String(body.date).length <= 10) {
+          dateOperation.setHours(now.getHours(), now.getMinutes(), now.getSeconds())
+        }
+      }
+    }
+
     return await prisma.$transaction(async (tx) => {
       // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
       await verifierCloture(v.date, session, tx)
@@ -66,7 +79,7 @@ export async function POST(
 
       // 3. Compenser les mouvements de trésorerie par un mouvement inverse
       if (v.montantPaye && v.montantPaye > 0) {
-        const { estModeEspeces } = await import('@/lib/caisse')
+        const { estModeEspeces } = await import('@/lib/enums-commerce')
         const { estModeBanque } = await import('@/lib/banque')
 
         if (estModeEspeces(v.modePaiement)) {
@@ -78,7 +91,7 @@ export async function POST(
             motif: `ANNULATION VENTE ${v.numero}`,
             montant: v.montantPaye,
             utilisateurId: session.userId,
-            date: new Date()
+            date: dateOperation
           }, tx)
         } else if (estModeBanque(v.modePaiement)) {
           // Compensation BANQUE : créer une opération inverse
@@ -107,7 +120,7 @@ export async function POST(
                   soldeApres,
                   utilisateurId: session.userId,
                   reference: `ANN-${v.numero}`,
-                  date: new Date(),
+                  date: dateOperation,
                   observation: `Annulation de la vente ${v.numero} - rollback automatique`
                 }
               })

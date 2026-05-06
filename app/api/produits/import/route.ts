@@ -96,12 +96,13 @@ export async function POST(req: NextRequest) {
                 const qte = Number(stockInitial) || 0
                 for (const m of magasins) {
                     await prisma.stock.upsert({
-                        where: {
-                            produitId_magasinId: {
-                                produitId,
-                                magasinId: m.id
-                            }
-                        },
+where: {
+                             produitId_magasinId_entiteId: {
+                                 produitId,
+                                 magasinId: m.id,
+                entiteId: session.entiteId
+                             }
+                         },
                         update: {
                             quantite: qte 
                         },

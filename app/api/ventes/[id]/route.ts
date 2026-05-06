@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference, deleteEcrituresByReferenceForIds } from '@/lib/delete-ecritures'
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
@@ -10,7 +11,8 @@ import {
   montantTotalVenteDocument,
   pointsFideliteDepuisEncaissement,
 } from '@/lib/calculs-commerciaux'
-import { estModeEspeces } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
 
 export async function GET(
@@ -18,7 +20,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: "Non autorisé." }, { status: 401 })
+  const authError = requirePermission(session, 'ventes:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -33,16 +37,14 @@ export async function GET(
       lignes: {
         include: { produit: { select: { id: true, code: true, designation: true } } },
       },
+      reglements: true,
     },
   })
 
   if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
 
-  if (session.role !== 'SUPER_ADMIN') {
-    const entiteId = await getEntiteId(session)
-    if (vente.entiteId !== entiteId) {
-      return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
-    }
+  if (session!.role !== 'SUPER_ADMIN' && vente.entiteId !== session!.entiteId) {
+    return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
   }
 
   return NextResponse.json(vente)
@@ -57,7 +59,7 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
   // VERROU DE SÉCURITÉ : Seul le SUPER_ADMIN peut supprimer définitivement une trace de vente.
-  if (session.role !== 'SUPER_ADMIN') {
+  if (session!.role !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Action interdite : Seul le Super Administrateur peut supprimer une vente définitivement pour garantir la traçabilité.' }, { status: 403 })
   }
 
@@ -159,7 +161,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'ventes:edit')
+  if (authError) return authError
 
   const id = Number((await params).id)
   try {
@@ -187,11 +190,8 @@ export async function PATCH(
       })
 
       if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
-      if (session.role !== 'SUPER_ADMIN') {
-        const entiteId = await getEntiteId(session)
-        if (vente.entiteId !== entiteId) {
-          return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
-        }
+      if (session!.role !== 'SUPER_ADMIN' && vente.entiteId !== session!.entiteId) {
+        return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
       }
 
       const resteAPayer = Math.max(0, (vente.montantTotal || 0) - (vente.montantPaye || 0))
@@ -225,7 +225,7 @@ export async function PATCH(
             entiteId: vente.entiteId,
             montant: montantReglementApplique,
             modePaiement,
-            utilisateurId: session.userId,
+            utilisateurId: session!.userId,
             date: dateReglement,
             observation: body?.observation || `Paiement sur facture ${vente.numero}`
           }
@@ -246,17 +246,16 @@ export async function PATCH(
 
         // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque) - avec le montant appliqué
         if (estModeEspeces(modePaiement)) {
-          await tx.caisse.create({
-            data: {
-              date: dateReglement,
-              magasinId: vente.magasinId,
-              type: 'ENTREE',
-              motif: `Règlement Vente ${vente.numero}`,
-              montant: montantReglementApplique,
-              utilisateurId: session.userId,
-              entiteId: vente.entiteId,
-            }
-          })
+          await enregistrerMouvementCaisse({
+            magasinId: vente.magasinId,
+            type: 'ENTREE',
+            motif: `Règlement Vente ${vente.numero}`,
+            montant: montantReglementApplique,
+            utilisateurId: session!.userId,
+            entiteId: vente.entiteId,
+            date: dateReglement,
+          }, tx)
+          await recalculerSoldeCaisse(vente.magasinId, tx)
         } else if (estModeBanque(modePaiement)) {
           if (!banqueId || !Number.isFinite(banqueId)) {
             throw new Error('Banque requise pour les règlements non espèces.')
@@ -269,7 +268,7 @@ export async function PATCH(
             type: 'REGLEMENT_CLIENT',
             libelle: `Règlement Vente ${vente.numero}`,
             montant: montantReglementApplique,
-            utilisateurId: session.userId,
+            utilisateurId: session!.userId,
             reference: vente.numero,
             observation: `Paiement via ${modePaiement}`,
           }, tx)
@@ -282,7 +281,7 @@ export async function PATCH(
           date: dateReglement,
           montant: montantReglementApplique,
           modePaiement,
-          utilisateurId: session.userId,
+          utilisateurId: session!.userId,
           entiteId: vente.entiteId,
           magasinId: vente.magasinId
         }, tx)
@@ -308,7 +307,7 @@ export async function PATCH(
 
         // VERROU COMPTABLE : Interdiction de modifier une vente de plus de 24h (Sauf Super_Admin)
         const diffHeures = (new Date().getTime() - new Date(oldVente.date).getTime()) / (1000 * 3600)
-        if (diffHeures > 24 && session.role !== 'SUPER_ADMIN') {
+        if (diffHeures > 24 && session!.role !== 'SUPER_ADMIN') {
           throw new Error("Verrou Comptable : Cette vente date de plus de 24h. Modification interdite pour garantir l'intégrité des calculs. Veuillez contacter le Super Administrateur ou procéder à une Annulation.")
         }
 
@@ -369,11 +368,17 @@ export async function PATCH(
         for (const l of lignes) {
           const p = await tx.produit.findUnique({ where: { id: Number(l.produitId) } })
           if (!p) throw new Error(`Produit ${l.produitId} introuvable`)
-          
+
           const q = Math.max(0, Number(l.quantite))
           const pu = Math.max(0, Number(l.prixUnitaire))
           const tva = Math.max(0, Number(l.tva || 0))
           const rem = Math.max(0, Number(l.remise || 0))
+
+          const prixMin = p.prixMinimum || 0
+          if (prixMin > 0 && pu < prixMin) {
+            throw new Error(`Action interdite : Le prix pour ${p.designation} (${pu.toLocaleString('fr-FR')} F) est inférieur au prix minimum de sécurité (${prixMin.toLocaleString('fr-FR')} F).`)
+          }
+
           const mnt = montantLigneTTC({
             quantite: q,
             prixUnitaire: pu,
@@ -456,7 +461,7 @@ export async function PATCH(
               produitId: l.produitId,
               magasinId: updated.magasinId,
               entiteId: updated.entiteId,
-              utilisateurId: session.userId,
+              utilisateurId: session!.userId,
               quantite: l.quantite,
               observation: `Modif Vente ${updated.numero}`,
             }
@@ -475,7 +480,7 @@ export async function PATCH(
                 entiteId: updated.entiteId,
                 montant: mntR,
                 modePaiement: r.mode,
-                utilisateurId: session.userId,
+                utilisateurId: session!.userId,
                 observation: `Modif Vente ${updated.numero}`,
                 date: updated.date,
               }
@@ -483,17 +488,16 @@ export async function PATCH(
             // Synchro physique trésorerie
             const modeR = String(r.mode).toUpperCase()
             if (estModeEspeces(modeR)) {
-              await tx.caisse.create({
-                data: {
-                  date: updated.date,
-                  magasinId: updated.magasinId,
-                  type: 'ENTREE',
-                  motif: `Règlement Vente ${updated.numero}`,
-                  montant: mntR,
-                  utilisateurId: session.userId,
-                  entiteId: updated.entiteId,
-                }
-              })
+              await enregistrerMouvementCaisse({
+                magasinId: updated.magasinId,
+                type: 'ENTREE',
+                motif: `Règlement Vente ${updated.numero}`,
+                montant: mntR,
+                utilisateurId: session!.userId,
+                entiteId: updated.entiteId,
+                date: updated.date,
+              }, tx)
+              await recalculerSoldeCaisse(updated.magasinId, tx)
             } else if (estModeBanque(modeR)) {
               const { enregistrerOperationBancaire } = await import('@/lib/banque')
               await enregistrerOperationBancaire({
@@ -503,7 +507,7 @@ export async function PATCH(
                 type: 'REGLEMENT_CLIENT',
                 libelle: `Règlement Vente ${updated.numero}`,
                 montant: mntR,
-                utilisateurId: session.userId,
+                utilisateurId: session!.userId,
                 reference: updated.numero,
               }, tx)
             }
@@ -520,7 +524,7 @@ export async function PATCH(
           modePaiement: updated.modePaiement,
           clientId: updated.clientId,
           entiteId: updated.entiteId,
-          utilisateurId: session.userId,
+          utilisateurId: session!.userId,
           magasinId: updated.magasinId,
           reglements: regsData.map((r: any) => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
           fraisApproche: updated.fraisApproche || 0,
@@ -528,7 +532,7 @@ export async function PATCH(
         }, tx)
 
         // 8. LOG D'AUDIT
-        await logModification(session, 'VENTE', updated.id, `Mise à jour complète de la facture ${updated.numero}`, oldVente, updated, getIpAddress(request))
+        await logModification(session!, 'VENTE', updated.id, `Mise à jour complète de la facture ${updated.numero}`, oldVente, updated, getIpAddress(request))
 
         return updated
       }, { timeout: 30000 })

@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 import { comptabiliserDepense } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { enregistrerMouvementCaisse, estModeEspeces } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
 import fs from 'fs'
 import path from 'path'
 
@@ -106,7 +108,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'depenses:create')
+  if (authError) return authError
 
   try {
     const body = await request.json()
@@ -229,19 +233,16 @@ export async function POST(request: NextRequest) {
             targetMagasinId = firstMag.id;
           }
 
-          // On évite le helper 'enregistrerMouvementCaisse' pour pouvoir utiliser 'tx' directement
-          // et garantir que l'erreur fait échouer la transaction.
-          await tx.caisse.create({
-            data: {
-              magasinId: targetMagasinId,
-              entiteId: entiteId || 1,
-              utilisateurId: session.userId,
-              montant: montantPaye,
-              type: 'SORTIE',
-              motif: `Dépense #${d.id} : ${libelle}${beneficiaire ? ' (' + beneficiaire + ')' : ''}`,
-              date
-            }
-          })
+          await enregistrerMouvementCaisse({
+            magasinId: targetMagasinId,
+            type: 'SORTIE',
+            motif: `Dépense #${d.id} : ${libelle}${beneficiaire ? ' (' + beneficiaire + ')' : ''}`,
+            montant: montantPaye,
+            utilisateurId: session.userId,
+            entiteId: entiteId || 1,
+            date,
+          }, tx)
+          await recalculerSoldeCaisse(targetMagasinId, tx)
         } else {
           // ✅ SYNCHRO BANQUE : Dépense par Chèque/Virement/MM
           const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')

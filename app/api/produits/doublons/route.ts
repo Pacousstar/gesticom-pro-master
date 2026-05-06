@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       for (const sd of stocksDoublon) {
         if (sd.quantite > 0) {
           await tx.stock.upsert({
-            where: { produitId_magasinId: { produitId: idPrincipal, magasinId: sd.magasinId } },
+            where: { produitId_magasinId_entiteId: { produitId: idPrincipal, magasinId: sd.magasinId, entiteId: sd.entiteId } },
             create: { produitId: idPrincipal, magasinId: sd.magasinId, quantite: sd.quantite, quantiteInitiale: 0 },
             update: { quantite: { increment: sd.quantite } }
           })

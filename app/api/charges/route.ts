@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { comptabiliserCharge } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { enregistrerMouvementCaisse } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -151,6 +151,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Ce magasin n\'appartient pas à votre entité.' }, { status: 403 })
       }
     }
+    const modePaiementRaw = modePaiement || 'ESPECES'
+    const { estModeEspeces } = await import('@/lib/enums-commerce')
+    const { estModeBanque } = await import('@/lib/banque')
+    if (estModeBanque(modePaiementRaw) && !banqueId) {
+      return NextResponse.json({ error: 'Banque requise pour ce mode de paiement.' }, { status: 400 })
+    }
 
     const charge = await prisma.$transaction(async (tx) => {
       // --- VERROU SÉMANTIQUE (Idempotence) ---
@@ -204,24 +210,31 @@ export async function POST(request: NextRequest) {
       }, tx)
 
       // ✅ SYNCHRO TRÉSORERIE (Caisse ou Banque)
-      const modePaiementRaw = modePaiement || 'ESPECES'
-      const { estModeEspeces } = await import('@/lib/caisse')
-
       if (estModeEspeces(modePaiementRaw)) {
-        await tx.caisse.create({
-          data: {
-            magasinId: magasinId || 1,
-            entiteId: entiteId || 1,
-            utilisateurId: session.userId,
-            montant: montant,
-            type: 'SORTIE',
-            motif: `Charge : ${rubrique}${observation ? ' (' + observation + ')' : ''}`,
-            date
+        let targetMagasinId = magasinId
+        if (!targetMagasinId) {
+          const firstMag = await tx.magasin.findFirst({
+            where: { entiteId },
+            select: { id: true }
+          })
+          if (!firstMag) {
+            throw new Error("Impossible d'enregistrer en caisse : aucun point de vente (magasin) n'est configuré pour cette entité.")
           }
-        })
+          targetMagasinId = firstMag.id
+        }
+        await enregistrerMouvementCaisse({
+          magasinId: targetMagasinId,
+          type: 'SORTIE',
+          motif: `Charge : ${rubrique}${observation ? ' (' + observation + ')' : ''}`,
+          montant: montant,
+          utilisateurId: session.userId,
+          entiteId: entiteId || 1,
+          date,
+        }, tx)
+        await recalculerSoldeCaisse(targetMagasinId, tx)
       } else {
         // ✅ SYNCHRO BANQUE : Charge par Chèque/Virement/MM
-        const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
+        const { enregistrerOperationBancaire } = await import('@/lib/banque')
         if (estModeBanque(modePaiementRaw)) {
           await enregistrerOperationBancaire({
             banqueId: banqueId,

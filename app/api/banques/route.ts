@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 import { logAction } from '@/lib/audit'
+import { estTypeOperationBanqueEntree } from '@/lib/banque'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:view')
+  if (authError) return authError
 
   try {
     const banques = await prisma.banque.findMany({
@@ -27,7 +31,7 @@ export async function GET(request: NextRequest) {
         })
         let solde = banque.soldeInitial
         for (const op of operations) {
-          if (op.type === 'DEPOT' || op.type === 'VIREMENT_ENTRANT' || op.type === 'INTERETS') {
+          if (estTypeOperationBanqueEntree(op.type)) {
             solde += op.montant
           } else {
             solde -= op.montant
@@ -46,7 +50,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:create')
+  if (authError) return authError
 
   try {
     const data = await request.json()

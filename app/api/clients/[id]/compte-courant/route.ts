@@ -21,15 +21,15 @@ export async function GET(
 
         if (!client) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 })
 
-        // 2. Récupérer les ventes validées
+        // CL-02: Récupérer les ventes validées (compat VALIDE/VALIDEE)
         const ventes = await prisma.vente.findMany({
-            where: { clientId: id, statut: 'VALIDEE' },
+            where: { clientId: id, statut: { in: ['VALIDEE', 'VALIDE'] } },
             select: { id: true, numero: true, date: true, montantTotal: true, observation: true }
         })
 
-        // 3. Récupérer tous les règlements (liés à une vente ou libres)
+        // CL-02: Récupérer tous les règlements (compat VALIDE/VALIDEE)
         const reglements = await prisma.reglementVente.findMany({
-            where: { clientId: id, statut: 'VALIDE' },
+            where: { clientId: id, statut: { in: ['VALIDEE', 'VALIDE'] } },
             select: { id: true, date: true, montant: true, modePaiement: true, observation: true, vente: { select: { numero: true } } }
         })
 

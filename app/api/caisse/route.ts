@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { comptabiliserCaisse } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -107,13 +108,29 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const date = body?.date ? new Date(body.date) : new Date()
+    const now = new Date()
+    let date = now
+    if (body?.date) {
+      const raw = String(body.date).trim()
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const [y, m, d] = raw.split('-').map(Number)
+        const tmp = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
+        if (!Number.isNaN(tmp.getTime())) date = tmp
+      } else {
+        const tmp = new Date(raw)
+        if (!Number.isNaN(tmp.getTime())) date = tmp
+      }
+    }
     const magasinId = Number(body?.magasinId)
     const type = ['ENTREE', 'SORTIE'].includes(String(body?.type || '').toUpperCase())
       ? String(body.type).toUpperCase()
       : 'ENTREE'
     const motif = String(body?.motif || '').trim()
     const montant = Math.max(0, Number(body?.montant) || 0)
+    const observation = body?.observation ? String(body.observation).trim() : null
+    const sousType = body?.sousType ? String(body.sousType).trim() : 'MANUEL'
+    const sousTypesValides = ['MANUEL', 'PRODUIT', 'APPROVISIONNEMENT', 'CHARGE', 'RETRAIT']
+    const sousTypeFinal = sousTypesValides.includes(sousType) ? sousType : 'MANUEL'
 
     if (!Number.isInteger(magasinId) || magasinId <= 0) {
       return NextResponse.json({ error: 'Magasin requis.' }, { status: 400 })
@@ -139,41 +156,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ce magasin n\'appartient pas à votre entité.' }, { status: 403 })
     }
 
-    const operation = await prisma.caisse.create({
-      data: {
-        date,
+    const result = await prisma.$transaction(async (tx) => {
+      // RC4 : Utiliser enregistrerMouvementCaisse au lieu de tx.caisse.create
+      // pour garantir le uppercase du motif et la cohérence
+      const operation = await enregistrerMouvementCaisse({
         magasinId,
-        type,
+        type: type as 'ENTREE' | 'SORTIE',
         motif,
         montant,
         utilisateurId: session.userId,
-      },
-      include: {
-        magasin: { select: { id: true, code: true, nom: true } },
-        utilisateur: { select: { nom: true, login: true } },
-      },
-    })
+        entiteId: magasin.entiteId,
+        date,
+        observation: observation ?? undefined,
+        sousType: sousTypeFinal,
+      }, tx)
 
-    // Comptabilisation automatique
-    try {
+      if (!operation) {
+        throw new Error('Erreur lors de la création de l\'opération caisse.')
+      }
+
+      // Comptabilisation automatique
       await comptabiliserCaisse({
         caisseId: operation.id,
         date,
         type: type as 'ENTREE' | 'SORTIE',
         montant,
-        motif,
+        motif: operation.motif,
         utilisateurId: session.userId,
         entiteId: magasin.entiteId,
+        sousType: sousTypeFinal,
+      }, tx)
+
+      // RC1 : Recalculer le solde caisse après chaque mouvement
+      await recalculerSoldeCaisse(magasinId, tx)
+
+      // Refetch avec includes pour la réponse
+      return await tx.caisse.findUnique({
+        where: { id: operation.id },
+        include: {
+          magasin: { select: { id: true, code: true, nom: true } },
+          utilisateur: { select: { nom: true, login: true } },
+        },
       })
-    } catch (comptaError) {
-      console.error('Erreur comptabilisation caisse:', comptaError)
-      // On continue même si la comptabilisation échoue
-    }
+    }, { timeout: 20000 })
 
     revalidatePath('/dashboard/caisse')
     revalidatePath('/api/caisse')
 
-    return NextResponse.json(operation)
+    return NextResponse.json(result)
   } catch (e) {
     console.error('POST /api/caisse:', e)
     return NextResponse.json(

@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const dateDebut = searchParams.get('dateDebut')
   const dateFin = searchParams.get('dateFin')
 
-  const where: any = {}
+  const where: any = { statut: { in: ['VALIDEE', 'VALIDE'] } }
 
   if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
     where.achat = { entiteId: session.entiteId } // Les ReglementAchat sont liés à un Achat qui a l'entité

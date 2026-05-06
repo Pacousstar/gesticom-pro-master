@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     let st = await prisma.stock.findUnique({
-      where: { produitId_magasinId: { produitId, magasinId } },
+      where: { produitId_magasinId_entiteId: { produitId, magasinId, entiteId } },
     })
     // Si le produit n'existe pas dans ce magasin, créer la ligne de stock
     if (!st) {

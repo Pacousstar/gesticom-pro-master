@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
       // Récupérer le point de stock
       let st = await tx.stock.findUnique({
-        where: { produitId_magasinId: { produitId, magasinId } }
+        where: { produitId_magasinId_entiteId: { produitId, magasinId, entiteId } }
       })
       if (!st) {
         st = await tx.stock.create({

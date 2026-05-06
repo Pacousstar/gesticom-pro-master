@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
+import { estModeBanque } from '@/lib/banque'
 
 export async function DELETE(
   _request: NextRequest,
@@ -11,7 +14,6 @@ export async function DELETE(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
-  // VERROU DE SÉCURITÉ : Interdiction de supprimer un encaissement (Seul SuperAdmin peut purger)
   if (session.role !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Action interdite : Les règlements validés ne peuvent être supprimés que par la Direction Générale (Super Administrateur).' }, { status: 403 })
   }
@@ -33,49 +35,69 @@ export async function DELETE(
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
 
+    if (reglement.statut === 'ANNULE') {
+      return NextResponse.json({ error: 'Ce règlement est déjà annulé et ne peut être supprimé.' }, { status: 400 })
+    }
+
     await prisma.$transaction(async (tx) => {
-      // 1. Supprimer les écritures comptables
-      await deleteEcrituresByReference('REGLEMENT_VENTE', id, tx)
+      await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
 
-      // 2. Supprimer les mouvements de caisse
-      // On cherche par l'observation qui contient généralement le numéro de règlement ou de vente
-      await tx.caisse.deleteMany({
-        where: {
-          OR: [
-            { motif: { contains: `Règlement ${id}` } },
-            { motif: { contains: reglement.vente?.numero || '---' } }
-          ]
+      if (estModeEspeces(reglement.modePaiement)) {
+        await tx.caisse.deleteMany({
+          where: {
+            OR: [
+              { motif: `Règlement Vente ${reglement.vente?.numero || ''}` },
+              { motif: { contains: `Règlement ${id}` } }
+            ]
+          }
+        })
+      } else if (estModeBanque(reglement.modePaiement)) {
+        const opsBancaires = await tx.operationBancaire.findMany({
+          where: { reference: reglement.vente?.numero || `REG-${id}` }
+        })
+        for (const op of opsBancaires) {
+          const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
+          await tx.banque.update({
+            where: { id: op.banqueId },
+            data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
+          })
         }
-      })
+        await tx.operationBancaire.deleteMany({
+          where: { reference: reglement.vente?.numero || `REG-${id}` }
+        })
+      }
 
-      // 3. Mettre à jour la vente si liée
       if (reglement.venteId) {
         const v = await tx.vente.findUnique({ where: { id: reglement.venteId } })
         if (v) {
-          const nouveauPaye = Math.max(0, (v.montantPaye || 0) - reglement.montant)
+          const ancienPaye = v.montantPaye || 0
+          const ancienStatut = v.statutPaiement
+          const nouveauPaye = Math.max(0, ancienPaye - reglement.montant)
+          const nouveauStatut = nouveauPaye >= v.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
           await tx.vente.update({
             where: { id: reglement.venteId },
             data: {
               montantPaye: nouveauPaye,
-              statutPaiement: nouveauPaye >= v.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
+              statutPaiement: nouveauStatut
             }
           })
+
+          if (v.clientId && ancienStatut !== 'PAYE') {
+            const pts = Math.floor(Math.max(0, reglement.montant) / 1000)
+            if (pts > 0) {
+              await tx.client.update({
+                where: { id: v.clientId },
+                data: { pointsFidelite: { decrement: pts } }
+              }).catch(() => {})
+            }
+          }
         }
       }
 
-      // 4. Mettre à jour la banque si nécessaire
-      if (['CHEQUE', 'VIREMENT', 'MOBILE_MONEY'].includes(reglement.modePaiement)) {
-        const banque = await tx.banque.findFirst({ where: { actif: true } })
-        if (banque) {
-          await tx.banque.update({
-            where: { id: banque.id },
-            data: { soldeActuel: { decrement: reglement.montant } }
-          })
-        }
-      }
-
-      // 5. Supprimer le règlement
-      await tx.reglementVente.delete({ where: { id } })
+      await tx.reglementVente.update({
+        where: { id },
+        data: { statut: 'ANNULE' }
+      })
     })
 
     return NextResponse.json({ success: true })
@@ -107,84 +129,129 @@ export async function PATCH(
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
 
-    // VERROU COMPTABLE : Modification interdite après 24h pour les rôles standards
+    if (old.statut === 'ANNULE') {
+      return NextResponse.json({ error: 'Ce règlement est annulé et ne peut être modifié.' }, { status: 400 })
+    }
+
     const diffHeures = (new Date().getTime() - new Date(old.date).getTime()) / (1000 * 3600)
     if (diffHeures > 24 && session.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Verrou Comptable : Ce règlement a été validé il y a plus de 24h. Modification interdite.' }, { status: 403 })
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Annuler l'ancien impact
-      await deleteEcrituresByReference('REGLEMENT_VENTE', id, tx)
-      await tx.caisse.deleteMany({
-        where: {
-          OR: [
-            { motif: { contains: `Règlement ${id}` } },
-            { motif: { contains: old.vente?.numero || '---' } }
-          ]
-        }
-      })
+      await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
 
-      // 2. Mettre à jour le règlement
+      if (estModeEspeces(old.modePaiement)) {
+        await tx.caisse.deleteMany({
+          where: {
+            OR: [
+              { motif: `Règlement Vente ${old.vente?.numero || ''}` },
+              { motif: { contains: `Règlement ${id}` } }
+            ]
+          }
+        })
+      } else if (estModeBanque(old.modePaiement)) {
+        const opsBancaires = await tx.operationBancaire.findMany({
+          where: { reference: old.vente?.numero || `REG-${id}` }
+        })
+        for (const op of opsBancaires) {
+          const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
+          await tx.banque.update({
+            where: { id: op.banqueId },
+            data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
+          })
+        }
+        await tx.operationBancaire.deleteMany({
+          where: { reference: old.vente?.numero || `REG-${id}` }
+        })
+      }
+
+      const montantFinal = montant != null ? Math.max(0, Number(montant)) : old.montant
+      const modeFinal = modePaiement || old.modePaiement
+      let dateFinal = old.date
+      if (date) {
+        const newDate = new Date(date)
+        if (date.length <= 10) {
+          newDate.setHours(old.date.getHours(), old.date.getMinutes(), old.date.getSeconds())
+        }
+        dateFinal = newDate
+      }
+
       const updated = await tx.reglementVente.update({
         where: { id },
         data: {
-          montant: montant != null ? Number(montant) : undefined,
-          modePaiement: modePaiement || undefined,
-          date: date ? new Date(date) : undefined,
-          observation: observation || undefined
+          montant: montantFinal,
+          modePaiement: modeFinal,
+          date: dateFinal,
+          observation: observation !== undefined ? (observation || null) : old.observation
         },
         include: { vente: true }
       })
 
-      // 3. Mettre à jour la vente si liée (Correction du montant payé)
       if (updated.venteId) {
         const v = await tx.vente.findUnique({ where: { id: updated.venteId } })
         if (v) {
-          // On recalcule le montant payé total pour cette vente
           const tousReglements = await tx.reglementVente.findMany({
             where: { venteId: v.id, statut: 'VALIDE' }
           })
           const totalPaye = tousReglements.reduce((acc, r) => acc + r.montant, 0)
-          if (totalPaye - v.montantTotal > 0.01) {
+          if (totalPaye - v.montantTotal > 1) {
             throw new Error(`Paiement invalide : le total des règlements (${totalPaye.toLocaleString()} F) dépasse le montant de la facture (${v.montantTotal.toLocaleString()} F).`)
           }
-          
+          const nouveauPaye = Math.min(v.montantTotal, totalPaye)
+          if (v.montantTotal - nouveauPaye > 0 && v.montantTotal - nouveauPaye <= 1) {
+            // Tolérance anti-1F
+          }
           await tx.vente.update({
             where: { id: v.id },
             data: {
-              montantPaye: totalPaye,
-              statutPaiement: totalPaye >= v.montantTotal ? 'PAYE' : totalPaye > 0 ? 'PARTIEL' : 'CREDIT'
+              montantPaye: nouveauPaye,
+              statutPaiement: nouveauPaye >= v.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
             }
           })
         }
       }
 
-      // 4. Mettre à jour la banque si nécessaire (différence)
-      if (['CHEQUE', 'VIREMENT', 'MOBILE_MONEY'].includes(updated.modePaiement)) {
-        const banque = await tx.banque.findFirst({ where: { actif: true } })
-        if (banque) {
-          const diff = (updated.montant - old.montant)
-          await tx.banque.update({
-            where: { id: banque.id },
-            data: { soldeActuel: { increment: diff } }
-          })
-        }
+      if (estModeEspeces(modeFinal)) {
+        await enregistrerMouvementCaisse({
+          magasinId: updated.vente?.magasinId || 1,
+          type: 'ENTREE',
+          motif: `Règlement Vente ${updated.vente?.numero || updated.id}`,
+          montant: montantFinal,
+          utilisateurId: session.userId,
+          entiteId: entiteId || 1,
+          date: dateFinal,
+        }, tx)
+        await recalculerSoldeCaisse(updated.vente?.magasinId || 1, tx)
+      } else if (estModeBanque(modeFinal)) {
+        const banqueId = body?.banqueId ? Number(body.banqueId) : null
+        const { enregistrerOperationBancaire } = await import('@/lib/banque')
+        await enregistrerOperationBancaire({
+          banqueId,
+          entiteId: entiteId || 1,
+          date: dateFinal,
+          type: 'REGLEMENT_CLIENT',
+          libelle: `Règlement Vente ${updated.vente?.numero || updated.id}`,
+          montant: montantFinal,
+          utilisateurId: session.userId,
+          reference: updated.vente?.numero || `REG-${updated.id}`,
+        }, tx)
       }
 
-      return updated
-    })
+      const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
+      await comptabiliserReglementVente({
+        venteId: updated.venteId ?? 0,
+        numeroVente: updated.vente?.numero || 'SANS_NUMERO',
+        date: dateFinal,
+        montant: montantFinal,
+        modePaiement: modeFinal,
+        utilisateurId: session.userId,
+        entiteId: entiteId || 1,
+        magasinId: updated.vente?.magasinId,
+        reglementId: updated.id,
+      }, tx)
 
-    // 5. Re-comptabiliser
-    const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
-    await comptabiliserReglementVente({
-      venteId: result.venteId ?? 0,
-      numeroVente: result.vente?.numero || 'SANS_NUMERO',
-      date: result.date,
-      montant: result.montant,
-      modePaiement: result.modePaiement,
-      utilisateurId: session.userId,
-      entiteId: result.entiteId ?? undefined
+      return updated
     })
 
     return NextResponse.json(result)

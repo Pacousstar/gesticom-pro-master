@@ -21,15 +21,15 @@ export async function GET(
 
         if (!fournisseur) return NextResponse.json({ error: 'Fournisseur introuvable' }, { status: 404 })
 
-        // 2. Récupérer les achats
+        // R1: Récupérer les achats validés (cohérent avec compte-courant clients)
         const achats = await prisma.achat.findMany({
-            where: { fournisseurId: id },
+            where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } },
             select: { id: true, numero: true, date: true, montantTotal: true, observation: true }
         })
 
-        // 3. Récupérer tous les règlements
+        // R1+R2: Récupérer les règlements validés (cohérent avec clients)
         const reglements = await prisma.reglementAchat.findMany({
-            where: { fournisseurId: id },
+            where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } },
             select: { id: true, date: true, montant: true, modePaiement: true, observation: true, achat: { select: { numero: true } } }
         })
 

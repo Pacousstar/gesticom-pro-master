@@ -7,7 +7,9 @@ import { logAction, getIpAddress, getUserAgent } from '@/lib/audit'
 import { comptabiliserVente, comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-import { estModeEspeces } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
+import { estModeBanque } from '@/lib/banque'
 import {
   montantLigneTTC,
   montantTotalVenteDocument,
@@ -42,6 +44,7 @@ export async function GET(request: NextRequest) {
     } else if (entiteId > 0) {
       where.entiteId = entiteId
     }
+    // Si entiteId = 0, SUPER_ADMIN voit toutes les entités (pas de filtre)
   } else if (entiteId > 0) {
     where.entiteId = entiteId
   }
@@ -60,6 +63,7 @@ export async function GET(request: NextRequest) {
         magasin: { select: { code: true, nom: true } },
         client: { select: { code: true, nom: true } },
         lignes: { include: { produit: { select: { code: true, designation: true } } } },
+        reglements: true,
       },
     }),
     prisma.vente.count({ where }),
@@ -77,7 +81,7 @@ export async function GET(request: NextRequest) {
     totals: {
       montantTotal: aggregates._sum.montantTotal || 0,
       montantPaye: aggregates._sum.montantPaye || 0,
-      resteAPayer: (aggregates._sum.montantTotal || 0) - (aggregates._sum.montantPaye || 0),
+      resteAPayer: Math.max(0, (aggregates._sum.montantTotal || 0) - (aggregates._sum.montantPaye || 0)),
     },
     pagination: {
       page,
@@ -139,8 +143,22 @@ export async function POST(request: NextRequest) {
     let dateVente = new Date()
     if (dateStr) {
       const now = new Date()
-      const [y, m, d] = dateStr.split('-').map(Number)
-      dateVente = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
+      const parts = dateStr.split('-')
+      if (parts.length !== 3) {
+        return NextResponse.json({ error: 'Format de date invalide. Utilisez YYYY-MM-DD.' }, { status: 400 })
+      }
+      const [yStr, mStr, dStr] = parts
+      const y = Number(yStr)
+      const m = Number(mStr)
+      const d = Number(dStr)
+      if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) {
+        return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
+      }
+      const candidate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
+      if (candidate.getFullYear() !== y || candidate.getMonth() !== m - 1 || candidate.getDate() !== d) {
+        return NextResponse.json({ error: 'Date invalide (jour inexistant).' }, { status: 400 })
+      }
+      dateVente = candidate
     }
     
     if (isNaN(dateVente.getTime())) {
@@ -218,14 +236,31 @@ export async function POST(request: NextRequest) {
         listReglements = [{ mode: modePaiementPrincipal, montant: montantPaye }]
     }
 
-    if (montantPaye > montantTotal + 0.01) {
+    // FCFA: tolérance "anti-1F" (arrondis / conversions UI) – clamp si écart minime
+    const diffPaiement = montantTotal - montantPaye
+    if (diffPaiement > 0 && diffPaiement <= 1 && montantPaye > 0) {
+      montantPaye = montantTotal
+      if (listReglements.length > 0) {
+        listReglements[listReglements.length - 1] = {
+          ...listReglements[listReglements.length - 1],
+          montant: (listReglements[listReglements.length - 1].montant || 0) + diffPaiement,
+        }
+      }
+    }
+
+    if (montantPaye > montantTotal + 1) {
       return NextResponse.json({
         error: `Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse la facture (${montantTotal.toLocaleString()} F).`
       }, { status: 400 })
     }
+
+    const needsBanque = listReglements.some((r) => estModeBanque(r.mode))
+    if (needsBanque && !Number(body?.banqueId)) {
+      return NextResponse.json({ error: 'Banque requise pour les règlements non espèces.' }, { status: 400 })
+    }
     
     const statutPaiement = montantPaye >= montantTotal ? 'PAYE' : montantPaye > 0 ? 'PARTIEL' : 'CREDIT'
-    const pointsGagnes = pointsFideliteDepuisEncaissement(montantTotal)
+    const pointsGagnes = pointsFideliteDepuisEncaissement(montantPaye)
 
     let needCreditAlerte = false
     let alerteType = 'INFO'
@@ -240,10 +275,10 @@ export async function POST(request: NextRequest) {
       if (client.type !== 'CREDIT') return NextResponse.json({ error: 'Le client doit être de type CREDIT.' }, { status: 400 })
       if (client.plafondCredit == null) return NextResponse.json({ error: 'Le client doit avoir un plafond de crédit.' }, { status: 400 })
       
-      const ventesClient = await prisma.vente.findMany({ where: { clientId, statut: 'VALIDEE' }})
+      const ventesClient = await prisma.vente.findMany({ where: { clientId, statut: 'VALIDEE', entiteId } })
       const detteFactures = ventesClient.reduce((s: number, v: any) => s + (v.montantTotal - (v.montantPaye ?? 0)), 0)
       const regsLibres = await prisma.reglementVente.aggregate({
-        where: { clientId, venteId: null },
+        where: { clientId, venteId: null, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] } },
         _sum: { montant: true }
       })
       const totalRegsLibres = regsLibres._sum?.montant || 0
@@ -284,9 +319,9 @@ export async function POST(request: NextRequest) {
       }
 
       for (const l of lignesValides) {
-        const st = await tx.stock.findUnique({ 
-          where: { produitId_magasinId: { produitId: l.produitId, magasinId } } 
-        })
+const st = await tx.stock.findUnique({ 
+           where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } } 
+         })
         if ((st?.quantite ?? 0) < l.quantite) {
           throw new Error(`Stock insuffisant pour ${l.designation} (${st?.quantite || 0} dispo, ${l.quantite} requis).`)
         }
@@ -328,8 +363,8 @@ export async function POST(request: NextRequest) {
       })
 
       for (const l of lignesValides) {
-        await tx.stock.update({
-          where: { produitId_magasinId: { produitId: l.produitId, magasinId } },
+await tx.stock.update({
+           where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } },
           data: { quantite: { decrement: l.quantite } },
         })
         await tx.mouvement.create({
@@ -346,9 +381,13 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      let resteReglement = montantTotal
+      const reglementsEffectifs: { mode: string; montant: number }[] = []
       for (const reg of listReglements) {
-        const montantReg = Math.min(reg.montant, montantTotal)
+        const montantReg = Math.min(reg.montant, resteReglement)
         if (montantReg <= 0) continue
+        resteReglement -= montantReg
+        reglementsEffectifs.push({ mode: reg.mode, montant: montantReg })
 
         const rv = await tx.reglementVente.create({
           data: {
@@ -365,19 +404,18 @@ export async function POST(request: NextRequest) {
 
         // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque)
         if (estModeEspeces(reg.mode)) {
-          await tx.caisse.create({
-            data: {
-              date: dateVente,
-              magasinId,
-              type: 'ENTREE',
-              motif: `Vente ${num}`,
-              montant: montantReg,
-              utilisateurId: session.userId,
-              entiteId
-            }
-          })
+          await enregistrerMouvementCaisse({
+            magasinId,
+            type: 'ENTREE',
+            motif: `Vente ${num}`,
+            montant: montantReg,
+            utilisateurId: session.userId,
+            entiteId,
+            date: dateVente,
+          }, tx)
+          await recalculerSoldeCaisse(magasinId, tx)
         } else {
-          const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
+          const { enregistrerOperationBancaire } = await import('@/lib/banque')
           if (estModeBanque(reg.mode)) {
             await enregistrerOperationBancaire({
               banqueId: body?.banqueId ? Number(body.banqueId) : null,
@@ -398,12 +436,12 @@ export async function POST(request: NextRequest) {
         numeroVente: num,
         date: dateVente,
         montantTotal,
-        modePaiement: listReglements.length > 1 ? 'MULTI' : (listReglements[0]?.mode || modePaiementPrincipal),
+        modePaiement: reglementsEffectifs.length > 1 ? 'MULTI' : (reglementsEffectifs[0]?.mode || modePaiementPrincipal),
         clientId,
         entiteId,
         utilisateurId: session.userId,
         magasinId,
-        reglements: listReglements, 
+        reglements: reglementsEffectifs,
         fraisApproche,
         lignes: lignesValides,
       }, tx)

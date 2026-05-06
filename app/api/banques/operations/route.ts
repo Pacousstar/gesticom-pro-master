@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { logAction } from '@/lib/audit'
 import { comptabiliserOperationBancaire } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { enregistrerOperationBancaire } from '@/lib/banque'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -49,11 +50,12 @@ export async function GET(request: NextRequest) {
       where.type = type
     }
 
+    // RB11: Utiliser le soldeActuel stocké au lieu du recalcul N+1
     const [operations, total] = await Promise.all([
       prisma.operationBancaire.findMany({
         where,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { date: 'desc' },
         include: {
           banque: { select: { id: true, numero: true, nomBanque: true, libelle: true, entiteId: true } },
           utilisateur: { select: { nom: true, login: true } },
@@ -95,6 +97,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Le montant doit être supérieur à 0.' }, { status: 400 })
     }
 
+    // RB10: Normaliser le type (uppercase)
+    const typeNormalise = String(type).toUpperCase().trim()
+
     // Vérifier que la banque existe
     const banque = await prisma.banque.findUnique({ where: { id: Number(banqueId) } })
     if (!banque) {
@@ -102,82 +107,60 @@ export async function POST(request: NextRequest) {
     }
 
     // Vérifier les permissions
-    if (session.role !== 'SUPER_ADMIN' && banque.entiteId !== session.entiteId) {
+    const entiteIdSession = await getEntiteId(session)
+    if (session.role !== 'SUPER_ADMIN' && banque.entiteId !== entiteIdSession) {
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
 
-    // Utiliser une transaction pour sécuriser la mise à jour du solde
+    // RB1 + RB4: Utiliser enregistrerOperationBancaire (service canonique) + comptabilité dans la même transaction
     const operation = await prisma.$transaction(async (tx) => {
-      // Re-vérifier le solde actuel de la banque (verrouillage implicite via transaction)
-      const b = await tx.banque.findUnique({ 
-        where: { id: Number(banqueId) },
-        select: { soldeActuel: true, entiteId: true, compteId: true }
-      })
-      if (!b) throw new Error('Banque introuvable.')
+      // Enregistrer l'opération bancaire via le service canonique
+      // Ce service gère: calcul du solde, mise à jour de banque.soldeActuel, création de l'OperationBancaire avec entiteId
+      const op = await enregistrerOperationBancaire({
+        banqueId: Number(banqueId),
+        entiteId: banque.entiteId,
+        date: new Date(date + 'T00:00:00'),
+        type: typeNormalise,
+        libelle: libelle.trim(),
+        montant: montantNum,
+        utilisateurId: session.userId,
+        reference: reference?.trim() || null,
+        beneficiaire: beneficiaire?.trim() || null,
+        observation: observation?.trim() || null,
+      }, tx)
 
-      const soldeAvant = b.soldeActuel
-      let soldeApres = soldeAvant
-
-      const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(type)
-      if (isEntree) {
-        soldeApres += montantNum
-      } else {
-        soldeApres -= montantNum
+      if (!op) {
+        throw new Error('Erreur lors de l\'enregistrement de l\'opération bancaire.')
       }
 
-      // 1. Créer l'opération
-      const op = await tx.operationBancaire.create({
-        data: {
-          banqueId: Number(banqueId),
-          date: new Date(date + 'T00:00:00'),
-          type,
-          libelle: libelle.trim(),
-          montant: montantNum,
-          soldeAvant,
-          soldeApres,
-          reference: reference?.trim() || null,
-          beneficiaire: beneficiaire?.trim() || null,
-          utilisateurId: session.userId,
-          observation: observation?.trim() || null,
-        },
-        include: {
-          banque: { select: { id: true, numero: true, nomBanque: true, libelle: true } },
-          utilisateur: { select: { nom: true, login: true } },
-        },
-      })
-
-      // 2. Mettre à jour le solde de la banque
-      await tx.banque.update({
-        where: { id: Number(banqueId) },
-        data: { soldeActuel: soldeApres },
-      })
-
-      return op
-    })
-
-    // Comptabiliser l'opération
-    try {
+      // Comptabiliser dans la même transaction
       await comptabiliserOperationBancaire({
-        operationId: operation.id,
+        operationId: op.id,
         banqueId: Number(banqueId),
         date: new Date(date + 'T00:00:00'),
-        type,
+        type: typeNormalise,
         montant: montantNum,
         libelle: libelle.trim(),
         compteId: banque.compteId,
         utilisateurId: session.userId,
         entiteId: banque.entiteId,
-      })
-    } catch (comptaError) {
-      console.error('Erreur comptabilisation opération bancaire:', comptaError)
-      // Ne pas bloquer l'opération si la comptabilisation échoue
-    }
+      }, tx)
 
-    await logAction(
+      // Récupérer l'opération avec les relations pour la réponse
+      return await tx.operationBancaire.findUnique({
+        where: { id: op.id },
+        include: {
+          banque: { select: { id: true, numero: true, nomBanque: true, libelle: true } },
+          utilisateur: { select: { nom: true, login: true } },
+        },
+      })
+    }, { timeout: 20000 })
+
+await logAction(
       session,
       'CREATION',
       'OPERATION_BANQUE',
-      `Opération bancaire: ${type} - ${libelle} - ${montantNum} FCFA`,
+      `Opération bancaire: ${typeNormalise} - ${libelle} - ${montantNum} FCA`,
       banque.entiteId
     )
 

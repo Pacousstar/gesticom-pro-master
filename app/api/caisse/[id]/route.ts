@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { requirePermission } from '@/lib/require-role'
 import { verifierCloture } from '@/lib/cloture'
+import { recalculerSoldeCaisse } from '@/lib/caisse'
 
 export async function GET(
   _request: NextRequest,
@@ -62,31 +63,52 @@ export async function DELETE(
     await verifierCloture(op.date, session)
 
     // P3-A : GARDE DE SÉCURITÉ — Vérifier si cette entrée caisse est liée à une vente ou un achat actif
-    // Si oui, bloquer : la suppression doit passer par la vente/achat pour garder la cohérence
+    // RC8 : Regex améliorée couvrant tous les motifs auto-générés
     if (op.motif) {
-      const numeroMatch = op.motif.match(/(?:Vente|Achat|Règlement Achat|Règlement|VENTE|ACHAT)\s+([\w-]+)/i)
-      if (numeroMatch) {
-        const numero = numeroMatch[1]
+      // Extraction des références vente (V-NNN) et achat (A-NNN)
+      const venteRef = op.motif.match(/\b(V-\d+)\b/i)
+      const achatRef = op.motif.match(/\b(A-\d+)\b/i)
+
+      if (venteRef) {
         const venteActive = await prisma.vente.findFirst({
-          where: { numero, statut: { not: 'ANNULEE' } },
+          where: { numero: venteRef[1], statut: { not: 'ANNULEE' } },
           select: { id: true, numero: true }
         })
-        const achatActif = !venteActive
-          ? await prisma.achat.findFirst({ where: { numero }, select: { id: true, numero: true } })
-          : null
-
-        if (venteActive || achatActif) {
-          const docType = venteActive ? 'vente' : 'achat'
-          const docNumero = (venteActive ?? achatActif)!.numero
+        if (venteActive) {
           return NextResponse.json({
-            error: `Suppression bloquée : cette opération caisse est liée à ${docType} ${docNumero} (document actif). Supprimez ou annulez ce document pour retirer automatiquement ce mouvement.`
+            error: `Suppression bloquée : cette opération caisse est liée à la vente ${venteActive.numero} (document actif). Supprimez ou annulez ce document pour retirer automatiquement ce mouvement.`
           }, { status: 409 })
         }
       }
+
+      if (achatRef) {
+        const achatActif = await prisma.achat.findFirst({
+          where: { numero: achatRef[1] },
+          select: { id: true, numero: true }
+        })
+        if (achatActif) {
+          return NextResponse.json({
+            error: `Suppression bloquée : cette opération caisse est liée à l'achat ${achatActif.numero} (document actif). Supprimez ou annulez ce document pour retirer automatiquement ce mouvement.`
+          }, { status: 409 })
+        }
+      }
+
+      // Vérification supplémentaire : motifs auto-générés sans référence explicite
+      const motifsAutoGenere = /^(VENTE|ACHAT|R[ÈE]GLEMENT|MODIF|FRAIS|ANNULATION|ENTR[EÉ]E|SORTIE|D[ÉE]PENSE|CHARGE|TRANSFERT|VIREMENT)/i
+      if (motifsAutoGenere.test(op.motif.trim()) && !venteRef && !achatRef) {
+        return NextResponse.json({
+          error: 'Suppression bloquée : cette opération a été générée automatiquement. Utilisez la fonction appropriée pour la retirer.'
+        }, { status: 409 })
+      }
     }
+
+    const magasinId = op.magasinId
 
     await deleteEcrituresByReference('CAISSE', id)
     await prisma.caisse.delete({ where: { id } })
+
+    // RC2 : Recalculer le solde caisse après suppression
+    await recalculerSoldeCaisse(magasinId)
 
     // P3-C : Invalider le cache pour affichage immédiat
     const { revalidatePath } = await import('next/cache')

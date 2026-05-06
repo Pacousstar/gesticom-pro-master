@@ -4,9 +4,11 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { comptabiliserReglementVente } from '@/lib/comptabilisation'
-import { estModeEspeces } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
+import { estModeBanque } from '@/lib/banque'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -43,6 +45,9 @@ export async function POST(request: NextRequest) {
 
     if (modePaiement === 'ESPECES' && !body.magasinId) {
       return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire pour un règlement en espèces.' }, { status: 400 })
+    }
+    if (estModeBanque(modePaiement) && !body.banqueId) {
+      return NextResponse.json({ error: 'Banque obligatoire pour un règlement non espèces.' }, { status: 400 })
     }
 
     const entiteId = await getEntiteId(session)
@@ -87,7 +92,7 @@ export async function POST(request: NextRequest) {
 
       if (venteId && v) {
         const resteAPayer = Math.max(0, (v.montantTotal || 0) - (v.montantPaye || 0))
-        if (montant - resteAPayer > 0.01) {
+        if (montant - resteAPayer > 1) {
           throw new Error(`Paiement invalide: le montant (${montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
         }
       }
@@ -106,8 +111,11 @@ export async function POST(request: NextRequest) {
       })
 
       if (venteId && v) {
-        const nouveauMontantPaye = Math.min(v.montantTotal, (v.montantPaye || 0) + montant)
-        const nouveauStatutPaiement = nouveauMontantPaye >= v.montantTotal - 0.01 ? 'PAYE' : 'PARTIEL'
+        let nouveauMontantPaye = Math.min(v.montantTotal, (v.montantPaye || 0) + montant)
+        if (v.montantTotal - nouveauMontantPaye > 0 && v.montantTotal - nouveauMontantPaye <= 1) {
+          nouveauMontantPaye = v.montantTotal
+        }
+        const nouveauStatutPaiement = nouveauMontantPaye >= v.montantTotal ? 'PAYE' : 'PARTIEL'
         await tx.vente.update({
           where: { id: venteId },
           data: { montantPaye: nouveauMontantPaye, statutPaiement: nouveauStatutPaiement }
@@ -124,17 +132,16 @@ export async function POST(request: NextRequest) {
 
       // ✅ COMPTEUR CAISSE GLOBAL
       if (estModeEspeces(modePaiement)) {
-        await tx.caisse.create({
-          data: {
-            magasinId: Number(body.magasinId) || 1,
-            entiteId,
-            utilisateurId: session.userId,
-            montant,
-            type: 'ENTREE',
-            motif: `Règlement : ${observation}${v?.numeroBon ? ' (BON: ' + v.numeroBon + ')' : ''}`,
-            date: dateReglement
-          }
-        })
+        await enregistrerMouvementCaisse({
+          magasinId: Number(body.magasinId),
+          type: 'ENTREE',
+          motif: `Règlement : ${observation}${v?.numeroBon ? ' (BON: ' + v.numeroBon + ')' : ''}`,
+          montant,
+          utilisateurId: session.userId,
+          entiteId,
+          date: dateReglement,
+        }, tx)
+        await recalculerSoldeCaisse(Number(body.magasinId), tx)
       } else {
         // ✅ SYNCHRO BANQUE : Mobile Money, Virement, Chèque
         const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
@@ -163,7 +170,7 @@ export async function POST(request: NextRequest) {
         modePaiement,
         entiteId,
         utilisateurId: session.userId,
-        magasinId: Number(body.magasinId) || 1
+        magasinId: body.magasinId ? Number(body.magasinId) : undefined
       }, tx)
 
       return reglement
