@@ -9,10 +9,9 @@ import { fournisseurSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
-import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 type Fournisseur = {
   id: number
@@ -242,10 +241,14 @@ export default function FournisseursPage() {
     setLoadingHistory(true)
     try {
       const res = await fetch(`/api/rapports/achats/fournisseurs/${f.id}/history`)
+      const data = await res.json()
       if (res.ok) {
-        setHistoryData(await res.json())
+        setHistoryData(Array.isArray(data) ? data : [])
+      } else {
+        setHistoryData([])
       }
     } catch (e) {
+      setHistoryData([])
       showError('Erreur chargement historique.')
     } finally {
       setLoadingHistory(false)
@@ -280,10 +283,6 @@ export default function FournisseursPage() {
           <p className="mt-1 text-white/90 font-medium italic">Gestion des fiches tiers et suivi des engagements d'approvisionnement</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ImportExcelButton 
-            endpoint="/api/fournisseurs/import" 
-            onSuccess={() => fetchList()}
-          />
           <button
             onClick={() => {
               const params = new URLSearchParams()
@@ -294,6 +293,15 @@ export default function FournisseursPage() {
           >
             <FileSpreadsheet className="h-5 w-5" />
             EXPORTER EXCEL
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="no-print flex items-center gap-2 rounded-xl bg-white/10 px-6 py-3 text-sm font-black text-white hover:bg-white/20 border border-white/20 uppercase tracking-widest"
+            title="Imprimer la liste des fournisseurs (selon filtres)"
+          >
+            <Printer className="h-4 w-4" />
+            Imprimer
           </button>
           <button
             onClick={() => openForm()}
@@ -362,23 +370,18 @@ export default function FournisseursPage() {
             />
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handlePrintAll}
-            disabled={isPrinting}
-            className="flex items-center gap-2 rounded-xl border-2 border-slate-700 bg-slate-800 px-6 py-2.5 text-xs font-black text-slate-400 hover:text-white hover:border-slate-500 transition-all shadow-md active:scale-95"
-            title="Imprimer le répertoire"
-          >
-            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Printer className="h-4 w-4" />}
-            IMPRIMER RÉPERTOIRE
-          </button>
-        </div>
+        <div className="flex gap-2" />
       </div>
 
       <div className="hidden print:block">
-        {chunkArray(allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
-          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+        {(() => {
+          const dataToPrint = allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list
+          const chunks = paginateForPrint(dataToPrint)
+          const offsetBefore = (pageIndex: number) =>
+            chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
+
+          return chunks.map((chunk, index, allChunks) => (
+            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="Répertoire des Fournisseurs"
               subtitle={q ? `Filtre: "${q}"` : "Liste Globale"}
@@ -428,8 +431,9 @@ export default function FournisseursPage() {
                 )}
               </table>
             </ListPrintWrapper>
-          </div>
-        ))}
+            </div>
+          ))
+        })()}
       </div>
 
       {form && (
@@ -643,18 +647,36 @@ export default function FournisseursPage() {
       </div>
 
       {selectedHistory && (
-        <div className="fixed inset-y-0 right-0 w-full max-w-xl bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
-          <div className="p-6 border-b flex items-center justify-between bg-orange-600 text-white">
+        <div className="fixed inset-y-0 right-0 z-[140] flex h-screen max-h-screen min-h-0 w-full max-w-xl flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300">
+          <div className="flex-shrink-0 p-6 border-b flex items-center justify-between bg-orange-600 text-white print:hidden">
             <div>
               <h2 className="text-xl font-bold">{selectedHistory.nom}</h2>
               <p className="text-orange-100 text-xs">Historique des achats</p>
             </div>
-            <button onClick={() => setSelectedHistory(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-              <X className="h-6 w-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-bold hover:bg-white/30"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimer
+              </button>
+              <button onClick={() => setSelectedHistory(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6" id="printable-fournisseur-history">
+            <style dangerouslySetInnerHTML={{ __html: `
+              @media print {
+                body * { visibility: hidden; }
+                #printable-fournisseur-history, #printable-fournisseur-history * { visibility: visible; }
+                #printable-fournisseur-history { position: absolute; left: 0; top: 0; width: 100%; }
+                .no-print { display: none !important; }
+              }
+            ` }} />
             {loadingHistory ? (
               <div className="flex flex-col items-center justify-center h-64 gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
@@ -702,7 +724,7 @@ export default function FournisseursPage() {
                            title="Imprimer facture A4 premium"
                            onClick={async () => {
                              let entreprise: any = {}
-                             try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch (_) {}
+                            try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch (_) { /* ignore erreur paramètres impression */ }
                              const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles } = await import('@/lib/print-templates')
                              const lignesHTML = generateLignesHTML((h.lignes || []).map((l: any) => ({ designation: l.produit?.designation || l.designation, quantite: l.quantite, prixUnitaire: l.prixUnitaire, montant: l.montant })))
                              const template = getDefaultA4Template('ACHAT')

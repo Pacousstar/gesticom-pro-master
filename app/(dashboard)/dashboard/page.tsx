@@ -188,8 +188,12 @@ export default function DashboardPage() {
                 </div>
                 <button 
                   onClick={async () => {
-                    await fetch(`/api/notifications/marquer-lues`, { method: 'POST', body: JSON.stringify({ id: alerte.id }) })
-                    mutate()
+                    try {
+                      await fetch(`/api/notifications/marquer-lues`, { method: 'POST', body: JSON.stringify({ id: alerte.id }) })
+                      mutate()
+                    } catch {
+                      /* silently ignore mark-as-read failures */
+                    }
                   }}
                   className="text-[9px] font-black uppercase tracking-widest py-1.5 px-3 bg-white/50 border border-current rounded-lg hover:bg-white transition-all"
                 >

@@ -4,28 +4,23 @@ import { useState, useEffect } from 'react'
 import { 
   Search, 
   Loader2, 
-  Download, 
   Filter, 
   ShoppingBag, 
-  Calendar, 
   Tag, 
-  CreditCard, 
   Warehouse, 
-  TrendingUp, 
-  ArrowUp, 
-  Printer, 
-  FileSpreadsheet,
   CheckCircle2,
   Clock,
   Pencil,
   Trash2,
-  ChevronRight
+  ShieldAlert,
+  Printer,
+  FileSpreadsheet
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ModificationAchatModal from '@/components/dashboard/achats/ModificationAchatModal'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 interface AchatListe {
   id: number
@@ -48,11 +43,12 @@ export default function TousLesAchatsPage() {
   const [endDate, setEndDate] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const { error: showError } = useToast()
+  const { success: showSuccess, error: showError } = useToast()
   const [printType, setPrintType] = useState<'GLOBAL' | 'DETAIL' | null>(null)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [userRole, setUserRole] = useState('')
 
   useEffect(() => {
     const now = new Date()
@@ -67,6 +63,7 @@ export default function TousLesAchatsPage() {
     setEndDate(end)
     fetchData(start, end)
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => { })
+    fetch('/api/auth/check').then(r => r.ok ? r.json() : ({} as any)).then((d: any) => { if (d?.role) setUserRole(d.role) }).catch(() => { })
   }, [])
 
   const fetchData = async (start: string, end: string) => {
@@ -92,7 +89,7 @@ export default function TousLesAchatsPage() {
     try {
       const res = await fetch(`/api/achats/${id}`, { method: 'DELETE' })
       if (res.ok) {
-        showError('Achat supprimé avec succès.') 
+        showSuccess('Achat supprimé avec succès.') 
         fetchData(startDate, endDate)
       } else {
         const d = await res.json()
@@ -123,6 +120,10 @@ export default function TousLesAchatsPage() {
     a.fournisseur.toLowerCase().includes(search.toLowerCase()) ||
     (a as any).produits?.toLowerCase().includes(search.toLowerCase())
   )
+
+  useEffect(() => {
+    setPage(1)
+  }, [search])
 
   // Statistiques
   const caMonth = data.reduce((acc, a) => acc + a.montantTotal, 0)
@@ -176,7 +177,7 @@ export default function TousLesAchatsPage() {
 
       {/* IMPRESSION : JOURNAL GLOBAL */}
       <div className={printType === 'GLOBAL' ? 'hidden print:block' : 'hidden'}>
-        {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+        {paginateForPrint(filteredData).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="Journal Global des Achats"
@@ -209,7 +210,7 @@ export default function TousLesAchatsPage() {
                       </td>
                       <td className="border border-gray-300 px-3 py-2 text-center text-[12px] uppercase font-bold">
                         {a.modePaiement}<br/>
-                        <span className={a.statutPaiement === 'PAYE' ? 'text-emerald-600' : 'text-rose-600'}>{a.statutPaiement}</span>
+                        <span className={a.statutPaiement === 'PAYE' ? 'text-emerald-600' : a.statutPaiement === 'PARTIEL' ? 'text-amber-600' : 'text-rose-600'}>{a.statutPaiement}</span>
                       </td>
                       <td className="border border-gray-300 px-3 py-2 text-right font-bold">
                         {a.montantTotal.toLocaleString()} F
@@ -254,7 +255,7 @@ export default function TousLesAchatsPage() {
 
       {/* IMPRESSION : JOURNAL DÉTAILLÉ */}
       <div className={printType === 'DETAIL' ? 'hidden print:block' : 'hidden'}>
-        {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+        {paginateForPrint(filteredData).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="Journal Détaillé des Achats"
@@ -289,7 +290,7 @@ export default function TousLesAchatsPage() {
                       </td>
                       <td className="border border-gray-300 px-2 py-1 text-center font-bold">
                         {a.modePaiement}<br/>
-                        <span className={a.statutPaiement === 'PAYE' ? 'text-emerald-600' : 'text-rose-600'}>{a.statutPaiement}</span>
+                        <span className={a.statutPaiement === 'PAYE' ? 'text-emerald-600' : a.statutPaiement === 'PARTIEL' ? 'text-amber-600' : 'text-rose-600'}>{a.statutPaiement}</span>
                       </td>
                       <td className="border border-gray-300 px-2 py-1 text-right font-black text-[14px]">
                         {a.montantTotal.toLocaleString()} F
@@ -320,7 +321,7 @@ export default function TousLesAchatsPage() {
           {[
             { label: "VOLUME ACHATS", val: formatFcfa(caMonth), sub: `${nbAchatsMonth} factures f.`, icon: ShoppingBag, color: "bg-blue-600" },
             { label: "TOTAL PAYÉ", val: formatFcfa(decaisseMonth), sub: "Règlements fournisseurs", icon: CheckCircle2, color: "bg-emerald-600" },
-            { label: "RESTE À PAYER", val: formatFcfa(resteAPayer), sub: "Dettes en suspens", icon: CreditCard, color: "bg-rose-600" },
+            { label: "RESTE À PAYER", val: formatFcfa(resteAPayer), sub: "Dettes en suspens", icon: Clock, color: "bg-rose-600" },
             { label: "NB OPÉRATIONS", val: String(nbAchatsMonth), sub: "Volume de la période", icon: Tag, color: "bg-indigo-700" },
           ].map((c, i) => (
             <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group`}>
@@ -434,7 +435,7 @@ export default function TousLesAchatsPage() {
                           <span className="bg-gray-100 px-3 py-1 rounded-lg text-[9px] font-black text-gray-600 uppercase tracking-widest">
                              {a.modePaiement}
                           </span>
-                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${a.statutPaiement === 'PAYE' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${a.statutPaiement === 'PAYE' ? 'bg-emerald-100 text-emerald-600' : a.statutPaiement === 'PARTIEL' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-600'}`}>
                              {a.statutPaiement}
                           </span>
                        </div>
@@ -452,21 +453,23 @@ export default function TousLesAchatsPage() {
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setEditingAchatId(a.id)}
-                          className="rounded-xl border border-gray-200 bg-white p-2.5 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                          title="Modifier"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleSupprimer(a.id, a.numero)}
-                          disabled={supprimant === a.id}
-                          className="rounded-xl border border-gray-200 bg-white p-2.5 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
-                          title="Supprimer"
-                        >
-                          {supprimant === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                        </button>
+<button
+                           onClick={() => setEditingAchatId(a.id)}
+                           className="rounded-xl border border-gray-200 bg-white p-2.5 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                           title="Modifier"
+                         >
+                           <Pencil className="h-4 w-4" />
+                         </button>
+                         {userRole === 'SUPER_ADMIN' && (
+                         <button
+                           onClick={() => handleSupprimer(a.id, a.numero)}
+                           disabled={supprimant === a.id}
+                           className="rounded-xl border border-gray-200 bg-white p-2.5 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
+                           title="Supprimer"
+                         >
+                           {supprimant === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                         </button>
+                         )}
                       </div>
                     </td>
                   </tr>

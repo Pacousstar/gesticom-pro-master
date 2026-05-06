@@ -9,10 +9,9 @@ import { clientSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
-import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 type Client = {
   id: number
@@ -271,10 +270,14 @@ export default function ClientsPage() {
     setLoadingHistory(true)
     try {
       const res = await fetch(`/api/rapports/ventes/clients/${c.id}/history`)
+      const data = await res.json()
       if (res.ok) {
-        setHistoryData(await res.json())
+        setHistoryData(Array.isArray(data) ? data : [])
+      } else {
+        setHistoryData([])
       }
     } catch (e) {
+      setHistoryData([])
       showError('Erreur chargement historique client.')
     } finally {
       setLoadingHistory(false)
@@ -315,7 +318,10 @@ export default function ClientsPage() {
       const res = await fetch(`/api/rapports/finances/etat-paiements?type=VENTE&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31`)
       if (res.ok) {
         const allInvoices = await res.json()
-        const clientInvoices = allInvoices.filter((inv: any) => inv.tier === c.nom || (inv.client?.nom === c.nom))
+        const clientInvoices = allInvoices.filter((inv: any) => {
+        const tierName = inv.tier || (inv.client?.nom) || (typeof inv.client === 'string' ? inv.client : null)
+        return tierName === c.nom
+      })
         if (clientInvoices.length === 0) {
             showError("Aucune facture impayée trouvée pour ce client.")
             return
@@ -337,10 +343,6 @@ export default function ClientsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ImportExcelButton 
-            endpoint="/api/clients/import" 
-            onSuccess={() => fetchList()}
-          />
           <button
             onClick={() => {
               const params = new URLSearchParams()
@@ -353,6 +355,15 @@ export default function ClientsPage() {
           >
             <Download className="h-4 w-4" />
             Exporter Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20"
+            title="Imprimer la liste des clients (selon filtres)"
+          >
+            <Printer className="h-4 w-4" />
+            Imprimer
           </button>
           <button
             onClick={() => openForm()}
@@ -397,26 +408,6 @@ export default function ClientsPage() {
           />
         </div>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => handlePrintAll('PORTEFEUILLE')}
-            disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-emerald-600 bg-emerald-50 px-3 py-2 text-[10px] font-black text-emerald-800 hover:bg-emerald-100 shadow-md active:scale-95 disabled:opacity-50 h-[42px] uppercase"
-            title="Imprimer le portefeuille financier"
-          >
-            {isPrinting && printType === 'PORTEFEUILLE' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            PORTEFEUILLE
-          </button>
-          <button
-            type="button"
-            onClick={() => handlePrintAll('REPERTOIRE')}
-            disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-blue-600 bg-blue-50 px-3 py-2 text-[10px] font-black text-blue-800 hover:bg-blue-100 shadow-md active:scale-95 disabled:opacity-50 h-[42px] uppercase"
-            title="Imprimer le répertoire des contacts"
-          >
-            {isPrinting && printType === 'REPERTOIRE' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
-            RÉPERTOIRE
-          </button>
           {(dateDebut || dateFin) && (
             <button 
               onClick={() => { setDateDebut(''); setDateFin(''); }}
@@ -426,13 +417,6 @@ export default function ClientsPage() {
             </button>
           )}
         </div>
-      </div>
-
-      {/* Titre Impression (Invisible à l'écran) */}
-      <div className="hidden print:block mb-8 border-b-2 border-gray-900 pb-4 text-center">
-        <h1 className="text-2xl font-black uppercase tracking-widest">Liste du Portefeuille Clients</h1>
-        <p className="text-sm font-bold mt-2">Filtre : {q || 'Tous les clients'}</p>
-        <p className="text-xs mt-1 italic text-gray-400 font-medium tracking-tight">Document généré par Gesticom le {new Date().toLocaleString()}</p>
       </div>
 
       {form && (
@@ -555,7 +539,7 @@ export default function ClientsPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="no-print overflow-hidden rounded-xl border border-gray-200 bg-white">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
@@ -675,9 +659,9 @@ export default function ClientsPage() {
       </div>
 
       {selectedHistory && (
-        <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="fixed inset-y-0 right-0 z-[140] flex h-screen max-h-screen min-h-0 w-full max-w-2xl flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300">
           {/* Header avec Dégradé Professionnel */}
-          <div className="p-6 border-b flex items-center justify-between bg-gradient-to-r from-blue-700 to-blue-900 text-white print:hidden">
+          <div className="flex-shrink-0 p-6 border-b flex items-center justify-between bg-gradient-to-r from-blue-700 to-blue-900 text-white print:hidden">
             <div>
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Clock className="h-5 w-5" />
@@ -699,7 +683,7 @@ export default function ClientsPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6" id="printable-history">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6" id="printable-history">
             {/* Style d'impression caché à l'écran */}
             <style dangerouslySetInnerHTML={{ __html: `
               @media print {
@@ -832,8 +816,14 @@ export default function ClientsPage() {
         />
       )}
       <div className="hidden print:block">
-        {chunkArray(allClientsForPrint.length > 0 ? allClientsForPrint : list, 25).map((chunk, index, allChunks) => (
-          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+        {(() => {
+          const dataToPrint = allClientsForPrint.length > 0 ? allClientsForPrint : list
+          const chunks = paginateForPrint(dataToPrint, { firstPageSize: 18, otherPagesSize: 23 })
+          const offsetBefore = (pageIndex: number) =>
+            chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
+
+          return chunks.map((chunk, index, allChunks) => (
+            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title={printType === 'PORTEFEUILLE' ? "Portefeuille des Clients" : "Répertoire des Clients"}
               subtitle={q ? `Filtre: "${q}"` : "Portefeuille Global"}
@@ -869,7 +859,7 @@ export default function ClientsPage() {
                   {chunk.map((c, idx) => (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="border border-gray-300 px-2 py-2 text-center font-bold">
-                        {index * 25 + idx + 1}
+                        {offsetBefore(index) + idx + 1}
                       </td>
                       {printType === 'PORTEFEUILLE' ? (
                         <>
@@ -928,8 +918,9 @@ export default function ClientsPage() {
                 )}
               </table>
             </ListPrintWrapper>
-          </div>
-        ))}
+            </div>
+          ))
+        })()}
       </div>
 
     </div>

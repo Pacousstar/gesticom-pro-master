@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/useToast'
 import { journalSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Journal = {
   id: number
@@ -361,7 +361,7 @@ export default function JournauxPage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
             <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4">
-                {chunkArray(journaux, ITEMS_PER_PRINT_PAGE).map((chunk: any[], index: number, allChunks: any[][]) => (
+                {paginateForPrint(journaux).map((chunk: any[], index: number, allChunks: any[][]) => (
                   <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                     <ListPrintWrapper
                       title="RÉPERTOIRE DES JOURNAUX"
@@ -409,7 +409,7 @@ export default function JournauxPage() {
 
       {/* Rendu masqué pour l'impression système direct */}
       <div className="hidden print:block absolute inset-0 bg-white">
-        {chunkArray(journaux, ITEMS_PER_PRINT_PAGE).map((chunk: any[], index: number, allChunks: any[][]) => (
+        {paginateForPrint(journaux).map((chunk: any[], index: number, allChunks: any[][]) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="RÉPERTOIRE DES JOURNAUX"

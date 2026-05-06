@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 export default function ProduitHistoriquePage() {
   const { id } = useParams()
@@ -28,12 +29,7 @@ export default function ProduitHistoriquePage() {
   const [data, setData] = useState<any>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
-  const ITEMS_PER_PRINT_PAGE = 18
-  const chunkArray = (arr: any[], size: number) => {
-    const chunks = []
-    for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size))
-    return chunks
-  }
+  // P2: impression standardisée (1ère page plus courte, puis 23 lignes/page)
 
   useEffect(() => {
     fetchData()
@@ -219,7 +215,7 @@ export default function ProduitHistoriquePage() {
 
       {/* Rendu Système (Impression Native) */}
       <div className="hidden print:block absolute inset-0 bg-white">
-        {chunkArray(data.allMoves, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+        {paginateForPrint(data.allMoves, { firstPageSize: 18, otherPagesSize: 23 }).map((chunk, index, allChunks) => (
             <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                 <ListPrintWrapper
                     title="Audit Historique Produit"
@@ -318,7 +314,7 @@ export default function ProduitHistoriquePage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
               <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
-                  {chunkArray(data.allMoves, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                  {paginateForPrint(data.allMoves, { firstPageSize: 18, otherPagesSize: 23 }).map((chunk, index, allChunks) => (
                       <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0 shadow-sm">
                           <ListPrintWrapper
                               title="AUDIT HISTORIQUE PRODUIT"

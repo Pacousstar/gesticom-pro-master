@@ -6,7 +6,7 @@ import { Search, Loader2, Download, Filter, Wallet, FileText, ShoppingBag, Print
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { paginateArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface SoldeFournisseur {
   id: number
@@ -280,8 +280,11 @@ export default function SoldesFournisseursPage() {
       {/* ZONE D'IMPRESSION (Optimisée Landscape) */}
       <div className="hidden print:block bg-white w-full">
         {filteredData.length > 0 ? (
-          paginateArray(filteredData, 15, 23).map((chunk, index, allChunks) => (
-            <div key={index} className="page-break">
+          (() => {
+            const chunks = paginateForPrint(filteredData, { firstPageSize: 15, otherPagesSize: 23 })
+            const offsetBefore = (pageIndex: number) => chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
+            return chunks.map((chunk, index, allChunks) => (
+              <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
               <ListPrintWrapper
                 title="ÉTAT SYNTHÉTIQUE DES SOLDES FOURNISSEURS"
                 subtitle={`Point Financier au ${new Date().toLocaleDateString('fr-FR')}`}
@@ -306,7 +309,7 @@ export default function SoldesFournisseursPage() {
                     {chunk.map((f, idx) => (
                       <tr key={idx} className="border-b border-black">
                         <td className="border border-black px-2 py-2 text-center font-bold">
-                          {(index === 0 ? 0 : 15 + (index - 1) * 23) + idx + 1}
+                          {offsetBefore(index) + idx + 1}
                         </td>
                         <td className="border border-black px-3 py-2">
                           <div className="font-black uppercase text-[13px]">{f.nom}</div>
@@ -347,8 +350,9 @@ export default function SoldesFournisseursPage() {
                   )}
                 </table>
               </ListPrintWrapper>
-            </div>
-          ))
+              </div>
+            ))
+          })()
         ) : (
           <div className="p-20 text-center font-black uppercase italic text-gray-400">
             Aucune donnée de solde disponible pour l'impression.

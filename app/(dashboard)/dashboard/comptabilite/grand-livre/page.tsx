@@ -5,7 +5,7 @@ import { BookOpen, Loader2, Filter, Download, FileSpreadsheet, Search, Printer }
 import ComptabiliteNav from '../ComptabiliteNav'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type GrandLivreEntry = {
   compte: { numero: string; libelle: string; type: string }
@@ -309,7 +309,7 @@ export default function GrandLivrePage() {
             <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4">
                 {(() => {
                   return data.map((entry, compteIndex) => {
-                    const ecrituresChunks = chunkArray(entry.ecritures, 18);
+                    const ecrituresChunks = paginateForPrint(entry.ecritures, { firstPageSize: 14, otherPagesSize: 18 })
                     
                     return ecrituresChunks.map((chunk: any[], chunkIndex: number, allChunks: any[][]) => (
                       <div key={`${compteIndex}-${chunkIndex}`} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
@@ -374,7 +374,7 @@ export default function GrandLivrePage() {
       {/* Rendu masqué pour l'impression système direct */}
       <div className="hidden print:block absolute inset-0 bg-white">
         {data.map((entry, compteIndex) => {
-            const ecrituresChunks = chunkArray(entry.ecritures, 18);
+            const ecrituresChunks = paginateForPrint(entry.ecritures, { firstPageSize: 14, otherPagesSize: 18 })
             return ecrituresChunks.map((chunk: any[], chunkIndex: number, allChunks: any[][]) => (
               <div key={`${compteIndex}-${chunkIndex}`} className={chunkIndex < allChunks.length - 1 || compteIndex < data.length - 1 ? 'page-break' : ''}>
                 <ListPrintWrapper

@@ -8,6 +8,7 @@ import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
+import { estTypeOperationBanqueEntree } from '@/lib/banque'
 
 type Banque = {
   id: number
@@ -102,6 +103,7 @@ export default function BanquePage() {
 
   const [fluxDigitaux, setFluxDigitaux] = useState<any[]>([])
   const [loadingFlux, setLoadingFlux] = useState(false)
+  const [modeDetail, setModeDetail] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => {})
@@ -370,10 +372,10 @@ export default function BanquePage() {
 
   // Calculer les statistiques des opérations
   const totalDepots = operations
-    .filter((o) => o.type === 'DEPOT' || o.type === 'VIREMENT_ENTRANT' || o.type === 'INTERETS')
+    .filter((o) => estTypeOperationBanqueEntree(o.type))
     .reduce((s, o) => s + o.montant, 0)
   const totalRetraits = operations
-    .filter((o) => o.type === 'RETRAIT' || o.type === 'VIREMENT_SORTANT' || o.type === 'FRAIS')
+    .filter((o) => !estTypeOperationBanqueEntree(o.type))
     .reduce((s, o) => s + o.montant, 0)
   const soldeOperations = totalDepots - totalRetraits
   const soldeTotalBanques = banques.reduce((s, b) => s + b.soldeActuel, 0)
@@ -395,7 +397,7 @@ export default function BanquePage() {
           { label: 'Virements Bancaires', key: 'VIREMENT', color: 'from-blue-600 to-indigo-700', icon: '🏦' },
           { label: 'Chèques à Encaisser', key: 'CHEQUE', color: 'from-purple-600 to-pink-700', icon: '📜' },
         ].map((s) => (
-          <div key={s.key} className={`rounded-xl bg-gradient-to-br ${s.color} p-4 shadow-md transition-all hover:scale-105`}>
+          <div key={s.key} className={`rounded-xl bg-gradient-to-br ${s.color} p-4 shadow-md transition-all hover:scale-105 relative`}>
             <div className="flex justify-between items-center text-white/90">
               <span className="text-[10px] font-bold uppercase tracking-widest">{s.label}</span>
               <span className="text-xl">{s.icon}</span>
@@ -404,6 +406,33 @@ export default function BanquePage() {
               {statsConsolidationLoading ? '...' : `${getSoldeMode(s.key).toLocaleString('fr-FR')} F`}
             </p>
             <p className="text-[10px] text-white/70 italic mt-1">Solde cumulé (Ventes - Achats - Dépenses)</p>
+            <button
+              onClick={() => setModeDetail(modeDetail === s.key ? null : s.key)}
+              className="mt-2 text-[10px] text-white/80 underline hover:text-white"
+            >
+              {modeDetail === s.key ? 'Masquer le détail' : 'Voir le détail'}
+            </button>
+            {modeDetail === s.key && (
+              <div className="mt-3 p-3 bg-white/10 rounded-lg text-[10px] space-y-1">
+                {(() => {
+                  const modeFlux = fluxDigitaux.filter(f => f.mode === s.key || (s.key === 'VIREMENT' && f.mode === 'BANQUE'))
+                  const entrees = modeFlux.filter(f => f.type === 'ENTREE').reduce((s, f) => s + f.montant, 0)
+                  const sorties = modeFlux.filter(f => f.type === 'SORTIE').reduce((s, f) => s + f.montant, 0)
+                  return (
+                    <>
+                      <div className="flex justify-between"><span className="text-white/70">Entrées:</span><span className="text-green-300 font-bold">+{entrees.toLocaleString('fr-FR')} F</span></div>
+                      <div className="flex justify-between"><span className="text-white/70">Sorties:</span><span className="text-red-300 font-bold">-{sorties.toLocaleString('fr-FR')} F</span></div>
+                      <div className="flex justify-between border-t border-white/20 pt-1 mt-1">
+                        <span className="text-white font-bold">Solde net:</span>
+                        <span className={`font-bold ${(entrees - sorties) >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                          {(entrees - sorties).toLocaleString('fr-FR')} F
+                        </span>
+                      </div>
+                    </>
+                  )
+                })()}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -561,6 +590,7 @@ export default function BanquePage() {
                     const data = await res.json()
                     setAllOperationsForPrint(data.operations || [])
                     setIsPreviewOpen(true)
+                    setTimeout(() => window.print(), 50)
                   }
                } catch (e) {
                   console.error(e)
@@ -573,7 +603,7 @@ export default function BanquePage() {
             className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 h-[42px] disabled:opacity-50 transition-all"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Aperçu Impression
+            Imprimer
           </button>
         </div>
       </div>
@@ -591,7 +621,7 @@ export default function BanquePage() {
           <p className="mt-1 text-2xl font-bold text-white">
             {totalDepots.toLocaleString('fr-FR')} FCFA
           </p>
-          <p className="mt-1 text-xs text-white/80">Dépôts + virements entrants + intérêts</p>
+          <p className="mt-1 text-xs text-white/80">Entrées de trésorerie (dépôts, virements entrants, encaissements clients via banque, ventes au compte banque…)</p>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-red-500 to-rose-600 p-6 shadow-lg transition-all hover:shadow-xl hover:scale-105">
           <p className="text-sm font-medium text-white/90">
@@ -877,7 +907,7 @@ export default function BanquePage() {
                       return (
                         <>
                           {paginated.map((op) => {
-                            const isEntree = op.type === 'DEPOT' || op.type === 'VIREMENT_ENTRANT' || op.type === 'INTERETS'
+                            const isEntree = estTypeOperationBanqueEntree(op.type)
                             return (
                           <tr key={op.id} className="hover:bg-gray-50">
                             <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">

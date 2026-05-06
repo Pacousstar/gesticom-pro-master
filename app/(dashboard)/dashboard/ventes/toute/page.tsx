@@ -19,13 +19,14 @@ import {
   Clock,
   Pencil,
   Trash2,
-  ChevronRight
+  ChevronRight,
+  ShieldAlert
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ModificationVenteModal from '@/components/dashboard/ventes/ModificationVenteModal'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface VenteListe {
   id: number
@@ -48,7 +49,7 @@ export default function ToutesLesVentesPage() {
   const [endDate, setEndDate] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const { error: showError } = useToast()
+  const { success: showSuccess, error: showError } = useToast()
   const [statutPaiement, setStatutPaiement] = useState('')
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isPrintingData, setIsPrintingData] = useState(false)
@@ -57,8 +58,13 @@ export default function ToutesLesVentesPage() {
   const [editingVenteId, setEditingVenteId] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [userRole, setUserRole] = useState<string>('')
   
   const ITEMS_PER_PAGE_REPORT = 18
+
+  useEffect(() => {
+    fetch('/api/auth/check').then(r => r.ok && r.json()).then(d => d && setUserRole(d.role)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const now = new Date()
@@ -98,8 +104,7 @@ export default function ToutesLesVentesPage() {
     try {
       const res = await fetch(`/api/ventes/${id}`, { method: 'DELETE' })
       if (res.ok) {
-        showError('Vente supprimée avec succès.') // Toast success masquerade as error for simplicity of existing hook? No, I'll check toast hook.
-        // Actually the existing page uses error: showError from useToast().
+        showSuccess('Vente supprimée avec succès.')
         fetchData(startDate, endDate)
       } else {
         const d = await res.json()
@@ -136,8 +141,13 @@ export default function ToutesLesVentesPage() {
 
     v.numero.toLowerCase().includes(search.toLowerCase()) || 
     v.client.toLowerCase().includes(search.toLowerCase()) ||
-    v.produits.toLowerCase().includes(search.toLowerCase())
+    v.produits.toLowerCase().includes(search.toLowerCase()) ||
+    (statutPaiement && v.statutPaiement !== statutPaiement ? false : true)
   )
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, statutPaiement])
 
   // Statistiques
   const now = new Date().toISOString().split('T')[0]
@@ -227,7 +237,7 @@ export default function ToutesLesVentesPage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
             <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
-               {chunkArray(allVentesForPrint, ITEMS_PER_PAGE_REPORT).map((chunk, index, allChunks) => (
+               {paginateForPrint(allVentesForPrint, { firstPageSize: 18, otherPagesSize: ITEMS_PER_PAGE_REPORT }).map((chunk, index, allChunks) => (
                 <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
                    <ListPrintWrapper
                     title={printType === 'GLOBAL' ? "Journal Global des Ventes" : "Journal Détaillé des Ventes"}
@@ -338,7 +348,9 @@ export default function ToutesLesVentesPage() {
 
       {/* ZONE D'IMPRESSION SYSTÈME (HIDDEN SCREEN) */}
       <div className="hidden print:block absolute inset-0 bg-white">
-          {chunkArray(allVentesForPrint, ITEMS_PER_PAGE_REPORT).map((chunk, index, allChunks) => (
+          {(() => {
+            const chunks = paginateForPrint(allVentesForPrint, { firstPageSize: 18, otherPagesSize: ITEMS_PER_PAGE_REPORT })
+            return chunks.map((chunk, index, allChunks) => (
             <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                <ListPrintWrapper
                 title={printType === 'GLOBAL' ? "Journal Global des Ventes" : "Journal Détaillé des Ventes"}
@@ -441,7 +453,8 @@ export default function ToutesLesVentesPage() {
                     )}
               </ListPrintWrapper>
             </div>
-          ))}
+          ))
+        })()}
       </div>
 
       {/* COMPTEURS DE PERFORMANCE (Analyse de Compteur) */}
@@ -449,10 +462,10 @@ export default function ToutesLesVentesPage() {
         <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6">Analyse de Compteur : 1 / 4</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: "C.A AUJOURD'HUI", val: formatFcfa(caDay), sub: `${nbSalesDay} ventes`, icon: TrendingUp, color: "bg-emerald-500" },
-            { label: "C.A DU MOIS", val: formatFcfa(caMonth), sub: `${nbSalesMonth} ventes`, icon: ShoppingCart, color: "bg-orange-600" },
+            { label: "C.A PÉRIODE", val: formatFcfa(caMonth), sub: `${nbSalesMonth} ventes sur la période`, icon: ShoppingCart, color: "bg-orange-600" },
             { label: "TOTAL ENCAISSÉ", val: formatFcfa(encaisseMonth), sub: "Règlements reçus", icon: CheckCircle2, color: "bg-blue-600" },
-            { label: "NOMBRE DE VENTES", val: String(nbSalesMonth), sub: "Volume du mois", icon: Tag, color: "bg-indigo-600" },
+            { label: "RESTE À RECOUVRER", val: formatFcfa(caMonth - encaisseMonth), sub: "Impayés", icon: Clock, color: "bg-rose-600" },
+            { label: "NOMBRE DE VENTES", val: String(nbSalesMonth), sub: "Volume de la période", icon: Tag, color: "bg-indigo-600" },
           ].map((c, i) => (
             <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group`}>
                <div className="relative z-10 text-white flex flex-col justify-between h-full">
@@ -504,6 +517,18 @@ export default function ToutesLesVentesPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-2xl border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
           />
+        </div>
+        <div>
+          <select
+            value={statutPaiement}
+            onChange={(e) => setStatutPaiement(e.target.value)}
+            className="rounded-2xl border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
+          >
+            <option value="">Tous les statuts</option>
+            <option value="PAYE">Payé</option>
+            <option value="PARTIEL">Partiel</option>
+            <option value="CREDIT">Crédit</option>
+          </select>
         </div>
       </div>
 
@@ -565,7 +590,7 @@ export default function ToutesLesVentesPage() {
                           <span className="bg-gray-100 px-3 py-1 rounded-lg text-[9px] font-black text-gray-600 uppercase tracking-widest">
                              {v.modePaiement}
                           </span>
-                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${v.statutPaiement === 'PAYE' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${v.statutPaiement === 'PAYE' ? 'bg-emerald-100 text-emerald-600' : v.statutPaiement === 'PARTIEL' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-600'}`}>
                              {v.statutPaiement}
                           </span>
                        </div>
@@ -590,14 +615,16 @@ export default function ToutesLesVentesPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleSupprimer(v.id, v.numero)}
-                            disabled={supprimant === v.id}
-                            className="rounded-xl border border-gray-200 bg-white p-2.5 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
-                            title="Supprimer"
-                          >
-                            {supprimant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </button>
+{(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                           <button
+                             onClick={() => handleSupprimer(v.id, v.numero)}
+                             disabled={supprimant === v.id}
+                             className="rounded-xl border border-gray-200 bg-white p-2.5 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
+                             title="Supprimer"
+                           >
+                             {supprimant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                           </button>
+                         )}
                         </div>
                       </td>
                   </tr>

@@ -8,7 +8,7 @@ import { MESSAGES } from '@/lib/messages'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 type Magasin = { id: number; code: string; nom: string }
 type OperationCaisse = {
@@ -95,6 +95,7 @@ export default function CaissePage() {
         setOperations(res.data || [])
         setTotalEntries(res.total || 0)
         setTotalPages(Math.ceil((res.total || 0) / itemsPerPage))
+        // Utiliser les stats de la page pour la cohérence visuelle, mais garder les stats globales si pas de filtre
         setStatsPeriod(res.stats || { totalEntrees: 0, totalSorties: 0, solde: 0 })
       })
       .finally(() => setLoading(false))
@@ -235,6 +236,7 @@ export default function CaissePage() {
                   const data = await res.json()
                   setAllOperationsForPrint(data.data || [])
                   setIsPreviewOpen(true)
+                  setTimeout(() => window.print(), 50)
                 }
               } catch (e) {
                 console.error(e)
@@ -247,7 +249,7 @@ export default function CaissePage() {
             className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Aperçu Impression
+            Imprimer
           </button>
           <button
             type="button"
@@ -671,7 +673,7 @@ export default function CaissePage() {
             <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
                {(() => {
                   const dataToPrint = allOperationsForPrint.length > 0 ? allOperationsForPrint : operations;
-                  const chunks = chunkArray(dataToPrint, ITEMS_PER_PRINT_PAGE);
+                  const chunks = paginateForPrint(dataToPrint);
                   
                   return chunks.map((chunk, index, allChunks) => (
                     <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
@@ -741,7 +743,7 @@ export default function CaissePage() {
 
       {/* Rendu Système (Impression Native) */}
       <div className="hidden print:block absolute inset-0 bg-white">
-        {chunkArray(allOperationsForPrint.length > 0 ? allOperationsForPrint : operations, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+        {paginateForPrint(allOperationsForPrint.length > 0 ? allOperationsForPrint : operations).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="JOURNAL DE CAISSE"

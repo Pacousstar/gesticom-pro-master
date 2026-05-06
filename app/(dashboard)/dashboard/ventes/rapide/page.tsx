@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, AlertTriangle, Loader2 } from 'lucide-react'
+import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, Loader2, Building2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
+import { estModeBanque } from '@/lib/banque'
 
 type Produit = { 
   id: number; 
@@ -21,15 +22,18 @@ export default function VenteRapidePage() {
   const [produits, setProduits] = useState<Produit[]>([])
   const [magasins, setMagasins] = useState<any[]>([])
   const [clients, setClients] = useState<any[]>([])
+  const [banques, setBanques] = useState<any[]>([])
   const [magasinId, setMagasinId] = useState('')
   const [clientId, setClientId] = useState('')
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<Ligne[]>([])
   const [showPayment, setShowPayment] = useState(false)
   const [modePaiement, setModePaiement] = useState('ESPECES')
+  const [banqueId, setBanqueId] = useState('')
   const [remise, setRemise] = useState('0')
   const [montantPaye, setMontantPaye] = useState('')
   const [numeroBon, setNumeroBon] = useState('')
+  const [observation, setObservation] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedCategorie, setSelectedCategorie] = useState<string>('TOUS')
@@ -37,20 +41,22 @@ export default function VenteRapidePage() {
   const { success: showSuccess, error: showError } = useToast()
   
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const paymentButtonRef = useRef<HTMLButtonElement>(null)
 
   // Chargement initial
   useEffect(() => {
     Promise.all([
       fetch('/api/produits?complet=1').then(r => r.ok ? r.json() : []),
       fetch('/api/magasins').then(r => r.ok ? r.json() : []),
-      fetch('/api/clients').then(r => r.ok ? r.json() : [])
-    ]).then(([p, m, c]) => {
+      fetch('/api/clients').then(r => r.ok ? r.json() : []),
+      fetch('/api/banques').then(r => r.ok ? r.json() : [])
+    ]).then(([p, m, c, b]) => {
       const pList = Array.isArray(p) ? p : []
       setProduits(pList)
       setMagasins(Array.isArray(m) ? m : [])
       const clientData = c.data && Array.isArray(c.data) ? c.data : (Array.isArray(c) ? c : [])
       setClients(clientData)
+      const banqueData = b.data && Array.isArray(b.data) ? b.data : (Array.isArray(b) ? b : [])
+      setBanques(banqueData.filter((banque: any) => banque.actif !== false))
       
       // Extraction des catégories uniques
       const cats = Array.from(new Set(pList.map((prod: any) => prod.categorie).filter(Boolean))) as string[]
@@ -92,8 +98,8 @@ export default function VenteRapidePage() {
   }, [cart, showPayment])
 
   const totalBrut = cart.reduce((acc, l) => acc + l.montant, 0)
-  const remiseVal = Number(remise) || 0
-  const total = Math.max(0, totalBrut - remiseVal)
+  const remiseVal = Math.max(0, Math.min(Number(remise) || 0, totalBrut))
+  const total = totalBrut - remiseVal
 
   const handleSearch = (val: string) => {
     setSearch(val)
@@ -113,20 +119,6 @@ export default function VenteRapidePage() {
       }
     }
   }
-
-  // Auto-search for short codes with debounce (optional but safer)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (search.length >= 3) {
-        const p = produits.find(p => p.code.toLowerCase() === search.toLowerCase() || (p as any).codeBarres === search)
-        if (p) {
-          addToCart(p)
-          setSearch('')
-        }
-      }
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [search])
 
   const addToCart = (p: any) => {
     // Vérification du stock (Point 2)
@@ -159,17 +151,32 @@ export default function VenteRapidePage() {
   }
 
   const updateQty = (id: number, delta: number) => {
+    const p = produits.find(produit => produit.id === id) as any
+    const st = p?.stocks?.find((s: any) => s.magasinId === Number(magasinId))
+    const qteDispo = st?.quantite || 0
+    const existing = cart.find(l => l.produitId === id)
+    const newQte = (existing?.quantite || 0) + delta
+    
+    if (delta > 0 && newQte > qteDispo) {
+      showError(`⚠️ Stock insuffisant. Disponible: ${qteDispo}`)
+      return
+    }
+    
+    if (newQte < 1) {
+      removeItem(id)
+      return
+    }
+    
+    // Vérification prix minimum (PVM) lors de l'augmentation
     if (delta > 0) {
-      const p = produits.find(produit => produit.id === id) as any
-      const st = p?.stocks?.find((s: any) => s.magasinId === Number(magasinId))
-      const qteDispo = st?.quantite || 0
-      const existing = cart.find(l => l.produitId === id)
-      if (existing && existing.quantite + delta > qteDispo) {
-        showError(`⚠️ Stock insuffisant. Disponible: ${qteDispo}`)
+      const pMin = (p as any).prixMinimum || 0
+      if (pMin > 0 && (p.prixVente || p.prixAchat || 0) < pMin) {
+        showError(`🚨 PRIX INSUFFISANT : Le prix de vente minimum est de ${pMin.toLocaleString('fr-FR')} F`)
         return
       }
     }
-    setCart(prev => prev.map(l => l.produitId === id ? { ...l, quantite: Math.max(1, l.quantite + delta), montant: Math.max(1, l.quantite + delta) * l.prixUnitaire } : l))
+    
+    setCart(prev => prev.map(l => l.produitId === id ? { ...l, quantite: newQte, montant: newQte * l.prixUnitaire } : l))
   }
 
   const removeItem = (id: number) => {
@@ -178,25 +185,37 @@ export default function VenteRapidePage() {
 
   const handleValidate = async () => {
     if (!magasinId || cart.length === 0) return
+    
+    if (estModeBanque(modePaiement) && !banqueId) {
+      showError('Veuillez sélectionner une banque pour ce mode de règlement.')
+      return
+    }
+
     setSubmitting(true)
     try {
+      const payload: any = {
+        magasinId: Number(magasinId),
+        clientId: clientId ? Number(clientId) : null,
+        modePaiement,
+        montantPaye: modePaiement === 'CREDIT' ? (montantPaye !== '' ? Number(montantPaye) : 0) : Number(montantPaye) || total,
+        remiseGlobale: remiseVal,
+        numeroBon: numeroBon || null,
+        observation: observation || null,
+        estVenteRapide: true,
+        lignes: cart.map(l => ({
+          produitId: l.produitId,
+          quantite: l.quantite,
+          prixUnitaire: l.prixUnitaire
+        }))
+      }
+      if (estModeBanque(modePaiement) && banqueId) {
+        payload.banqueId = Number(banqueId)
+      }
+
       const res = await fetch('/api/ventes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          magasinId: Number(magasinId),
-          clientId: clientId ? Number(clientId) : null,
-          modePaiement,
-          montantPaye: modePaiement === 'CREDIT' ? (montantPaye !== '' ? Number(montantPaye) : 0) : Number(montantPaye) || total,
-          remiseGlobale: remiseVal,
-          numeroBon: numeroBon || null,
-          estVenteRapide: true,
-          lignes: cart.map(l => ({
-            produitId: l.produitId,
-            quantite: l.quantite,
-            prixUnitaire: l.prixUnitaire
-          }))
-        })
+        body: JSON.stringify(payload)
       })
 
       if (res.ok) {
@@ -207,6 +226,9 @@ export default function VenteRapidePage() {
         setRemise('0')
         setMontantPaye('')
         setNumeroBon('')
+        setObservation('')
+        setBanqueId('')
+        setModePaiement('ESPECES')
       } else {
         const d = await res.json()
         showError(formatApiError(d.error))
@@ -366,6 +388,7 @@ export default function VenteRapidePage() {
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Remise Globale (F)</label>
                         <input 
                             type="number"
+                            min="0"
                             value={remise}
                             onChange={e => setRemise(e.target.value)}
                             className="w-full rounded-xl bg-slate-900 border-2 border-slate-700 p-3 text-lg font-black text-orange-400 focus:border-orange-500 outline-none transition-all"
@@ -454,13 +477,28 @@ export default function VenteRapidePage() {
                             {['ESPECES', 'MOBILE_MONEY', 'CHEQUE', 'VIREMENT', 'CREDIT'].map(m => (
                                 <button 
                                     key={m}
-                                    onClick={() => setModePaiement(m)}
+                                    onClick={() => { setModePaiement(m); if (!estModeBanque(m)) setBanqueId(''); }}
                                     className={`rounded-2xl border-2 py-4 px-2 text-sm font-black transition-all ${modePaiement === m ? 'bg-orange-600 border-orange-400 shadow-lg shadow-orange-900/40 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}
                                 >
                                     {m.replace('_', ' ')}
                                 </button>
                             ))}
                         </div>
+                        {estModeBanque(modePaiement) && (
+                            <div className="mt-3">
+                                <label className="block text-xs font-black text-slate-400 uppercase mb-1 tracking-widest"><Building2 className="inline h-3 w-3 mr-1" />Compte bancaire</label>
+                                <select
+                                    value={banqueId}
+                                    onChange={e => setBanqueId(e.target.value)}
+                                    className="w-full rounded-2xl bg-slate-800 border-2 border-orange-500/50 p-3 text-sm font-bold text-white focus:border-orange-500 outline-none transition-all"
+                                >
+                                    <option value="">Sélectionner une banque...</option>
+                                    {banques.map(b => (
+                                        <option key={b.id} value={b.id}>{b.nomBanque} — {b.libelle}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-6">
@@ -483,6 +521,7 @@ export default function VenteRapidePage() {
                                 <label className="block text-sm font-black text-slate-400 uppercase mb-2 tracking-widest">Montant Encaissé (F)</label>
                                 <input 
                                     type="number"
+                                    min="0"
                                     autoFocus
                                     value={montantPaye}
                                     onChange={e => setMontantPaye(e.target.value)}
@@ -499,13 +538,23 @@ export default function VenteRapidePage() {
                                 </div>
                             </div>
                             <div className="pt-4">
-                                <label className="block text-[10px] font-black text-orange-500 uppercase mb-2 tracking-widest text-center leading-none">Informations complémentaires</label>
+                                <label className="block text-[10px] font-black text-orange-500 uppercase mb-2 tracking-widest text-center leading-none">N° de Bon</label>
                                 <input 
                                     type="text"
                                     value={numeroBon}
                                     onChange={e => setNumeroBon(e.target.value)}
-                                    placeholder="N° de BON ou Observation..."
+                                    placeholder="Numéro de bon..."
                                     className="w-full rounded-2xl bg-slate-800 border-2 border-slate-700 p-4 text-lg font-bold text-white focus:border-orange-500 outline-none transition-all placeholder:text-slate-700"
+                                />
+                            </div>
+                            <div className="pt-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest text-center leading-none">Observation</label>
+                                <input 
+                                    type="text"
+                                    value={observation}
+                                    onChange={e => setObservation(e.target.value)}
+                                    placeholder="Notes..."
+                                    className="w-full rounded-2xl bg-slate-800 border-2 border-slate-700 p-3 text-sm font-bold text-white focus:border-orange-500 outline-none transition-all placeholder:text-slate-700"
                                 />
                             </div>
                         </div>
@@ -514,7 +563,7 @@ export default function VenteRapidePage() {
 
                   <button 
                     onClick={handleValidate}
-                    disabled={submitting || (modePaiement === 'CREDIT' && !clientId)}
+                    disabled={submitting || (modePaiement === 'CREDIT' && !clientId) || (estModeBanque(modePaiement) && !banqueId)}
                     className="w-full flex items-center justify-center gap-4 rounded-[30px] bg-emerald-600 py-8 text-4xl font-black shadow-2xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale"
                   >
                       {submitting ? <Loader2 className="h-12 w-12 animate-spin" /> : (

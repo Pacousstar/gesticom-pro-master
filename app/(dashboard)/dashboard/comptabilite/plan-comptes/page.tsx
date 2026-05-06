@@ -6,7 +6,7 @@ import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ComptabiliteNav from '../ComptabiliteNav'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type PlanCompte = {
   id: number
@@ -402,7 +402,7 @@ export default function PlanComptesPage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
             <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-[14px]">
-                {chunkArray(comptes, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                {paginateForPrint(comptes).map((chunk, index, allChunks) => (
                   <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                     <ListPrintWrapper
                       title="PLAN DE COMPTES SYSCOHADA"
@@ -452,7 +452,7 @@ export default function PlanComptesPage() {
 
       {/* Rendu masqué pour l'impression système direct */}
       <div className="hidden print:block absolute inset-0 bg-white">
-        {chunkArray(comptes, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+        {paginateForPrint(comptes).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="PLAN DE COMPTES SYSCOHADA"

@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/useToast'
 import { ecritureSchema } from '@/lib/validations'
 import { validateForm, formatApiError, ErrorMessages } from '@/lib/validation-helpers'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 import Pagination from '@/components/ui/Pagination'
 
 type Ecriture = {
@@ -142,13 +142,15 @@ export default function EcrituresPage() {
 
   const openForm = (e?: Ecriture) => {
     if (e) {
+      const journal = journaux.find(j => j.code === e.journal.code)
+      const compte = comptes.find(c => c.numero === e.compte.numero)
       setEditing(e)
       setFormData({
         date: e.date.split('T')[0],
-        journalId: String(e.journal.code),
+        journalId: journal ? String(journal.id) : String(e.journal.code),
         piece: e.piece || '',
         libelle: e.libelle,
-        compteId: String(e.compte.numero),
+        compteId: compte ? String(compte.id) : String(e.compte.numero),
         debit: String(e.debit),
         credit: String(e.credit),
         reference: e.reference || '',
@@ -166,9 +168,9 @@ export default function EcrituresPage() {
     e.preventDefault()
     setErr('')
     
-    // Trouver le journal et le compte par code/numéro
-    const journal = journaux.find(j => j.code === formData.journalId || String(j.id) === formData.journalId)
-    const compte = comptes.find(c => c.numero === formData.compteId || String(c.id) === formData.compteId)
+    // Trouver le journal et le compte par ID ou code
+    const journal = journaux.find(j => String(j.id) === formData.journalId || j.code === formData.journalId)
+    const compte = comptes.find(c => String(c.id) === formData.compteId || c.numero === formData.compteId)
 
     if (!journal || !compte) {
       const errorMsg = !journal ? 'Journal invalide. Veuillez sélectionner un journal valide.' : 'Compte invalide. Veuillez sélectionner un compte valide.'
@@ -685,7 +687,7 @@ export default function EcrituresPage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
             <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4">
-                {chunkArray(ecritures, 18).map((chunk, index, allChunks) => (
+                {paginateForPrint(ecritures, { firstPageSize: 18, otherPagesSize: 18 }).map((chunk, index, allChunks) => (
                   <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                     <ListPrintWrapper
                       title="Livre-Journal Général"
@@ -751,7 +753,7 @@ export default function EcrituresPage() {
 
       {/* Rendu masqué pour l'impression système direct */}
       <div className="hidden print:block absolute inset-0 bg-white shadow-none">
-        {chunkArray(ecritures, 18).map((chunk, index, allChunks) => (
+        {paginateForPrint(ecritures, { firstPageSize: 18, otherPagesSize: 18 }).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="Livre-Journal Général"

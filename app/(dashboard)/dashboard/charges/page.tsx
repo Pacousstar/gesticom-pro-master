@@ -9,7 +9,7 @@ import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 type Charge = {
   id: number
@@ -608,7 +608,7 @@ export default function ChargesPage() {
           </div>
           <div className="flex-1 overflow-auto p-8">
             <div className="mx-auto max-w-[210mm] bg-white p-2 shadow-2xl">
-               {chunkArray(allChargesForPrint, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+               {paginateForPrint(allChargesForPrint).map((chunk, index, allChunks) => (
                 <div key={index} className={index < allChunks.length - 1 ? 'page-break mb-8 border-b-2 border-dashed border-gray-100 pb-8' : ''}>
                   <ListPrintWrapper
                     title="ÉTAT DES CHARGES D'EXPLOITATION"
@@ -662,7 +662,7 @@ export default function ChargesPage() {
 
       {/* Zone cachée pour l'impression système (Browser Print) */}
       <div className="hidden print:block fixed inset-0 z-0 bg-white p-0 m-0">
-          {chunkArray(allChargesForPrint, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+          {paginateForPrint(allChargesForPrint).map((chunk, index, allChunks) => (
             <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
               <ListPrintWrapper
                 title="ÉTAT DES CHARGES D'EXPLOITATION"
@@ -712,8 +712,8 @@ export default function ChargesPage() {
       </div>
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
+          <div className="max-h-[95vh] w-full max-w-md overflow-hidden rounded-xl bg-white shadow-xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-6 py-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 {editing ? 'Modifier la charge' : 'Nouvelle charge'}
               </h2>
@@ -721,7 +721,8 @@ export default function ChargesPage() {
                 <X className="h-5 w-5 text-gray-500" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="overflow-y-auto px-6 py-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
               {err && <p className="text-sm text-red-600">{err}</p>}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
@@ -832,6 +833,7 @@ export default function ChargesPage() {
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}

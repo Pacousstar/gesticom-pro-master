@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 type Archive = {
   id: number
@@ -34,15 +34,21 @@ export default function ArchivesVentesPage() {
 
   useEffect(() => {
     fetchArchives()
-  }, [])
+  }, [filterDateDebut, filterDateFin, filterMontantMin])
 
   const fetchArchives = async () => {
+    setLoading(true)
     try {
       const res = await fetch('/api/archives/ventes')
-      const data = await res.json()
-      setArchives(Array.isArray(data) ? data : [])
+      if (res.ok) {
+        const data = await res.json()
+        setArchives(Array.isArray(data) ? data : [])
+      } else {
+        setArchives([])
+      }
     } catch (e) {
       console.error(e)
+      setArchives([])
     } finally {
       setLoading(false)
     }
@@ -279,7 +285,7 @@ export default function ArchivesVentesPage() {
       )}
       {/* Rendu Système (Impression Native) */}
       <div className="hidden print:block absolute inset-0 bg-white shadow-2xl">
-        {chunkArray(filteredArchives, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+        {paginateForPrint(filteredArchives).map((chunk, index, allChunks) => (
             <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                 <ListPrintWrapper
                     title="Journal des Archives Ventes"
@@ -364,7 +370,7 @@ export default function ArchivesVentesPage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
               <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-12 text-slate-900 not-italic tracking-normal">
-                {chunkArray(filteredArchives, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                {paginateForPrint(filteredArchives).map((chunk, index, allChunks) => (
                   <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-12 pb-12 last:border-0 last:mb-0 last:pb-0 shadow-sm">
                     <ListPrintWrapper
                       title="JOURNAL DES ARCHIVES DÉTAILLÉ"

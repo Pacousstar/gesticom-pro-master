@@ -138,7 +138,7 @@ export default function ClientRelevesPage() {
             className="flex items-center gap-2 rounded-lg border-2 border-blue-500 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-50 no-print shadow-xl transition-all"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Aperçu Relevé
+            Imprimer
           </button>
         </div>
       </div>

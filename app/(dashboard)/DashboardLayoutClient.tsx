@@ -74,6 +74,7 @@ const navigation = [
       { name: 'Soldes Clients', href: '/dashboard/clients/soldes', icon: FileText, permission: 'clients:view', key: 'soldesClients' },
       { name: 'Paiements Clients', href: '/dashboard/clients/paiements', icon: Wallet, permission: 'clients:view', key: 'paiementsClients' },
       { name: 'Fournisseurs', href: '/dashboard/fournisseurs', icon: Truck, permission: 'fournisseurs:view', key: 'fournisseurs' },
+      { name: 'Relevés de comptes', href: '/dashboard/fournisseurs/releves', icon: FileText, permission: 'fournisseurs:view', key: 'relevesFournisseurs' },
       { name: 'Soldes Fournisseurs', href: '/dashboard/fournisseurs/soldes', icon: FileText, permission: 'fournisseurs:view', key: 'soldesFournisseurs' },
       { name: 'Paiements Fournisseurs', href: '/dashboard/fournisseurs/paiements', icon: Wallet, permission: 'fournisseurs:view', key: 'paiementsFournisseurs' },
     ]
@@ -87,6 +88,7 @@ const navigation = [
       { name: 'Charges', href: '/dashboard/charges', icon: TrendingUp, permission: 'charges:view', key: 'charges' },
       { name: 'Écritures Comptables', href: '/dashboard/comptabilite/ecritures', icon: Calculator, permission: 'comptabilite:view', key: 'ecritures' },
       { name: 'Bilan (Actif/Passif)', href: '/dashboard/comptabilite/bilan', icon: FileBarChart, permission: 'comptabilite:view', key: 'bilan' },
+      { name: 'Soldes Tous Tiers', href: '/dashboard/rapports-finances/soldes-tiers', icon: FileText, permission: 'rapports:view', key: 'soldesTiers' },
     ]
   },
   {
@@ -607,7 +609,7 @@ export default function DashboardLayoutClient({
                       <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-tighter">Serveur Local OK</span>
                     </div>
                     <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">
-                      v2.0.1 PRO
+                      v{process.env.NEXT_PUBLIC_APP_VERSION || '—'} PRO
                     </div>
                   </div>
                 </div>

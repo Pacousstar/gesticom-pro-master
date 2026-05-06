@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import RapportsNav from '../RapportsNav'
 import { Filter, UserCheck, Loader2, X, Calendar, FileText, ChevronRight, PieChart, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 import { useToast } from '@/hooks/useToast'
 
 interface ClientData {
@@ -273,7 +273,7 @@ export default function ParClientPage() {
             </div>
 
             <div className="hidden print:block absolute inset-0 bg-white">
-                {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                {paginateForPrint(data).map((chunk, index, allChunks) => (
                     <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                         <ListPrintWrapper
                             title="Fidélité & Rentabilité Clients"
@@ -357,7 +357,7 @@ export default function ParClientPage() {
 
                 <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
                     <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
-                        {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                        {paginateForPrint(data).map((chunk, index, allChunks) => (
                             <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                                 <ListPrintWrapper
                                     title="FIDÉLITÉ & RENTABILITÉ CLIENTS"

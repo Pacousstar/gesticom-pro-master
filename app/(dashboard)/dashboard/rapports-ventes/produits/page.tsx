@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import RapportsNav from '../RapportsNav'
 import { Filter, Package, Loader2, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 interface ProduitData {
     produitId: number
@@ -209,7 +209,7 @@ export default function ParProduitPage() {
             </div>
 
             <div className="hidden print:block absolute inset-0 bg-white">
-                {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                {paginateForPrint(data).map((chunk, index, allChunks) => (
                     <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                         <ListPrintWrapper
                             title="Rentabilité & Performance Produits"
@@ -292,7 +292,7 @@ export default function ParProduitPage() {
 
                 <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
                     <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-12 text-slate-900 not-italic tracking-normal">
-                        {chunkArray(data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                        {paginateForPrint(data).map((chunk, index, allChunks) => (
                             <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-12 pb-12 last:border-0 last:mb-0 last:pb-0">
                                 <ListPrintWrapper
                                     title="RAPPORT DE RENTABILITÉ DÉTAILLÉ"

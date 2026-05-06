@@ -6,7 +6,7 @@ import { Search, Loader2, Download, Filter, Wallet, FileText, Landmark, Printer 
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { paginateArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface SoldeClient {
   id: number
@@ -40,8 +40,10 @@ export default function SoldesClientsPage() {
 
   useEffect(() => {
     const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(now.getDate() - 30)
+    const start = thirtyDaysAgo.toISOString().split('T')[0]
+    const end = now.toISOString().split('T')[0]
     setStartDate(start)
     setEndDate(end)
     fetchData(start, end)
@@ -106,8 +108,11 @@ export default function SoldesClientsPage() {
       {/* ZONE D'IMPRESSION (Masquée à l'écran, optimisée pour éviter la page blanche) */}
       <div className="hidden print:block bg-white w-full">
         {filteredData.length > 0 ? (
-          paginateArray(filteredData, 15, 23).map((chunk, index, allChunks) => (
-            <div key={index} className="page-break">
+          (() => {
+            const chunks = paginateForPrint(filteredData, { firstPageSize: 15, otherPagesSize: 23 })
+            const offsetBefore = (pageIndex: number) => chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
+            return chunks.map((chunk, index, allChunks) => (
+              <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
               <ListPrintWrapper
                 title="ÉTAT SYNTHÉTIQUE DES SOLDES CLIENTS"
                 subtitle={`Point Financier Global au ${new Date().toLocaleDateString('fr-FR')}`}
@@ -131,7 +136,7 @@ export default function SoldesClientsPage() {
                     {chunk.map((c, idx) => (
                       <tr key={idx} className="border-b border-black">
                         <td className="border border-black px-2 py-2 text-center font-bold">
-                          {(index === 0 ? 0 : 15 + (index - 1) * 23) + idx + 1}
+                          {offsetBefore(index) + idx + 1}
                         </td>
                         <td className="border border-black px-3 py-2">
                           <div className="font-black uppercase text-[13px]">{c.nom}</div>
@@ -166,8 +171,9 @@ export default function SoldesClientsPage() {
                   )}
                 </table>
               </ListPrintWrapper>
-            </div>
-          ))
+              </div>
+            ))
+          })()
         ) : (
           <div className="p-20 text-center font-black uppercase italic text-gray-400">
             Aucune donnée de solde disponible pour l'impression.
@@ -188,26 +194,12 @@ export default function SoldesClientsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button 
-            onClick={() => {
-              const params = new URLSearchParams()
-              if (startDate) params.set('dateDebut', startDate)
-              if (endDate) params.set('dateFin', endDate)
-              if (search) params.set('q', search)
-              window.location.href = `/api/clients/soldes/export-excel?${params.toString()}`
-            }}
-            disabled={loading || filteredData.length === 0}
-            className="group flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white hover:bg-emerald-700 shadow-lg shadow-emerald-900/20 transition-all active:scale-95 disabled:opacity-50"
-          >
-            <Download className="h-5 w-5" />
-            EXPORTER EXCEL
-          </button>
-          <button 
             onClick={handleDirectPrint}
             disabled={loading || filteredData.length === 0 || isPrinting}
             className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-white hover:bg-orange-700 shadow-lg shadow-orange-900/20 transition-all active:scale-95 disabled:opacity-50"
           >
             {isPrinting ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : <Printer className="h-5 w-5" />} 
-            IMPRIMER L'ÉTAT
+            Imprimer
           </button>
         </div>
       </div>

@@ -131,7 +131,11 @@ type RapportCategorie = {
 export default function RapportsPage() {
   const [activeTab, setActiveTab] = useState('logistique')
   const [loading, setLoading] = useState(true)
-  const [dateDebut, setDateDebut] = useState('2025-01-01')
+  const [dateDebut, setDateDebut] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 30)
+    return d.toISOString().split('T')[0]
+  })
   const [dateFin, setDateFin] = useState(() => new Date().toISOString().split('T')[0])
   const [userRole, setUserRole] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Loader2, Search, Filter, Download, Calendar, User, Activity, FileSpreadsheet, FileText, X, ChevronDown, ChevronUp, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 type AuditLog = {
   id: number
@@ -193,7 +193,7 @@ export default function AuditPage() {
             PDF
           </button>
                 <div className="hidden print:block absolute inset-0 bg-white">
-                    {chunkArray(logs, ITEMS_PER_PRINT_PAGE).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
+                    {paginateForPrint(logs).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
                         <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                             <ListPrintWrapper
                                 title="Journal d'Audit Transféré"
@@ -275,7 +275,7 @@ export default function AuditPage() {
 
                     <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
                         <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
-                            {chunkArray(logs, ITEMS_PER_PRINT_PAGE).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
+                            {paginateForPrint(logs).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
                                 <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                                     <ListPrintWrapper
                                         title="JOURNAL D'AUDIT SYSTÈME"

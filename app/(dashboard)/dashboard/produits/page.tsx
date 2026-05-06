@@ -11,7 +11,7 @@ import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { paginateArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Produit = {
   id: number
@@ -463,13 +463,6 @@ export default function ProduitsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ImportExcelButton
-            endpoint="/api/produits/import"
-            onSuccess={() => {
-              fetchList()
-              window.dispatchEvent(new CustomEvent('produit-created'))
-            }}
-          />
           <button
             onClick={handleExportExcel}
             className="flex items-center gap-2 rounded-lg border-2 border-green-500 bg-green-50 px-4 py-2 text-sm font-medium text-green-800 hover:bg-green-100"
@@ -484,7 +477,7 @@ export default function ProduitsPage() {
             className="flex items-center gap-2 rounded-xl border-2 border-orange-600 bg-orange-50 px-6 py-3 text-sm font-black text-orange-900 hover:bg-orange-100 disabled:opacity-50 transition-all shadow-xl active:scale-95 no-print"
           >
             {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-            IMPRIMER
+            Imprimer
           </button>
           <button
             onClick={() => {
@@ -516,8 +509,14 @@ export default function ProduitsPage() {
 
       {/* Rendu masqué pour l'impression système direct */}
       <div className="hidden print:block bg-white w-full">
-        {paginateArray(allProductsForPrint.length > 0 ? allProductsForPrint : list, 15, 23).map((chunk, index, allChunks) => (
-          <div key={index} className="page-break">
+        {(() => {
+          const dataToPrint = allProductsForPrint.length > 0 ? allProductsForPrint : list
+          const chunks = paginateForPrint(dataToPrint, { firstPageSize: 15, otherPagesSize: 23 })
+          const offsetBefore = (pageIndex: number) =>
+            chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
+
+          return chunks.map((chunk, index, allChunks) => (
+            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="CATALOGUE GÉNÉRAL DES PRODUITS"
               subtitle={q ? `Recherche : "${q}"` : "Inventaire complet du catalogue"}
@@ -553,7 +552,7 @@ export default function ProduitsPage() {
                     return (
                       <tr key={idx} className="border border-black font-medium">
                         <td className="border border-black px-1 py-2 text-center font-bold">
-                          {index * ITEMS_PER_PRINT_PAGE + idx + 1}
+                          {offsetBefore(index) + idx + 1}
                         </td>
                         <td className="border border-black px-1 py-2 font-mono text-[11px] font-bold">{p.code}</td>
                         <td className="border border-black px-2 py-2 uppercase font-black text-[13px] leading-tight">{p.designation}</td>
@@ -591,8 +590,9 @@ export default function ProduitsPage() {
                 )}
               </table>
             </ListPrintWrapper>
-          </div>
-        ))}
+            </div>
+          ))
+        })()}
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 no-print items-end bg-white/10 p-3 rounded-xl border border-white/20">

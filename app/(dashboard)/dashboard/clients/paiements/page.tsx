@@ -98,7 +98,7 @@ export default function PaiementsClientsPage() {
           className="flex items-center gap-2 rounded-xl border-2 border-orange-500 bg-orange-50 px-6 py-3 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50"
         >
           {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />} 
-          IMPRIMER LE JOURNAL
+          Imprimer
         </button>
       </div>
 

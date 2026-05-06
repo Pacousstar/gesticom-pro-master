@@ -160,7 +160,28 @@ export default function MouvementsStockPage() {
             IMPRIMER LA LISTE
           </button>
           <button 
-            onClick={() => {}}
+            onClick={() => {
+              const csv = [
+                ['Date', 'Produit', 'Code', 'Magasin', 'Type', 'Quantité', 'Utilisateur', 'Observation'].join(';'),
+                ...filteredData.map(m => [
+                  m.dateOperation ? new Date(m.dateOperation).toLocaleDateString('fr-FR') : '',
+                  m.produit,
+                  m.code || '',
+                  m.magasin,
+                  m.type,
+                  m.quantite,
+                  m.utilisateur,
+                  m.observation || ''
+                ].join(';'))
+              ].join('\n')
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+              const url = window.URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `mouvements_stock_${startDate}_${endDate}.csv`
+              a.click()
+              window.URL.revokeObjectURL(url)
+            }}
             className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
           >
             <Download className="h-4 w-4" /> Excel

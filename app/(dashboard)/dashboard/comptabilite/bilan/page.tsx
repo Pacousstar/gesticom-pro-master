@@ -30,6 +30,12 @@ type BilanItem = {
 
 type BilanData = {
     annee: number
+    entiteId?: number
+    debug?: {
+        totalEcritures: number
+        debutAnnee: string
+        finAnnee: string
+    }
     bilan: {
         actif: {
             immobilise: BilanItem[]
@@ -105,6 +111,23 @@ export default function BilanPage() {
             </div>
 
             <ComptabiliteNav />
+
+            {/* DEBUG TEMPORAIRE */}
+            <div className="bg-gray-800 p-4 rounded-lg text-xs font-mono text-green-400 mb-4">
+                <div>isLoading: {String(isLoading)}</div>
+                <div>data exists: {String(!!data)}</div>
+                <div>data.bilan exists: {!!data?.bilan}</div>
+                <div>error: {error ? String(error) : 'none'}</div>
+                {data && (
+                    <>
+                        <hr className="my-2 border-gray-600"/>
+                        <div>annee: {data.annee}</div>
+                        <div>ecritures: {data.debug?.totalEcritures}</div>
+                        <div>actif.total: {data.bilan?.actif?.total}</div>
+                        <div>passif.total: {data.bilan?.passif?.total}</div>
+                    </>
+                )}
+            </div>
 
             {isLoading ? (
                 <div className="flex h-64 items-center justify-center bg-white/5 rounded-3xl backdrop-blur-sm border border-white/10">

@@ -32,9 +32,10 @@ function RegisterForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [authorized, setAuthorized] = useState<boolean | null>(null)
+const [authorized, setAuthorized] = useState<boolean | null>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string>('')
+  const [currentUserEntiteId, setCurrentUserEntiteId] = useState<number>(0)
 
-  // Vérifier l'autorisation
   useEffect(() => {
     async function checkAuth() {
       try {
@@ -42,14 +43,21 @@ function RegisterForm() {
         if (res.ok) {
           const data = await res.json()
           if (data.role === 'SUPER_ADMIN' || data.role === 'ADMIN') {
+            setCurrentUserRole(data.role)
+            setCurrentUserEntiteId(data.entiteId)
             setAuthorized(true)
-            // Charger les entités
             const entitesRes = await fetch('/api/entites')
             if (entitesRes.ok) {
               const entitesData = await entitesRes.json()
-              setEntites(entitesData)
-              if (entitesData.length > 0) {
-                setEntiteId(entitesData[0].id)
+              if (data.role !== 'SUPER_ADMIN') {
+                const filtered = entitesData.filter((e: { id: number }) => e.id === data.entiteId)
+                setEntites(filtered)
+                setEntiteId(data.entiteId)
+              } else {
+                setEntites(entitesData)
+                if (entitesData.length > 0) {
+                  setEntiteId(entitesData[0].id)
+                }
               }
             }
           } else {
@@ -254,7 +262,7 @@ function RegisterForm() {
                   required
                   className="w-full rounded-lg border border-gray-300 pl-10 pr-4 py-3 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none appearance-none bg-white"
                 >
-                  {ROLES.map((r) => (
+                  {ROLES.filter(r => currentUserRole === 'SUPER_ADMIN' || r.value !== 'SUPER_ADMIN').map((r) => (
                     <option key={r.value} value={r.value}>
                       {r.label}
                     </option>
@@ -276,7 +284,8 @@ function RegisterForm() {
                   value={entiteId}
                   onChange={(e) => setEntiteId(Number(e.target.value))}
                   required
-                  className="w-full rounded-lg border border-gray-300 pl-10 pr-4 py-3 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none appearance-none bg-white"
+                  disabled={currentUserRole !== 'SUPER_ADMIN'}
+                  className="w-full rounded-lg border border-gray-300 pl-10 pr-4 py-3 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none appearance-none bg-white disabled:bg-gray-50 disabled:cursor-not-allowed"
                 >
                   <option value={0}>Sélectionner une entité</option>
                   {entites.map((e) => (

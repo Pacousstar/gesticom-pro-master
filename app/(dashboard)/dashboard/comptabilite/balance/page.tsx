@@ -6,7 +6,7 @@ import { Scale, Loader2, Filter, FileSpreadsheet, Download, Search, Printer } fr
 import ComptabiliteNav from '../ComptabiliteNav'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type BalanceEntry = {
   compte: { id: number; numero: string; libelle: string; classe: string; type: string }
@@ -385,7 +385,7 @@ export default function BalancePage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
             <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4">
-                {chunkArray(data.balance, 18).map((chunk, index, allChunks) => (
+                {paginateForPrint(data.balance, { firstPageSize: 18, otherPagesSize: 18 }).map((chunk, index, allChunks) => (
                   <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                     <ListPrintWrapper
                       title="BALANCE DES COMPTES RÉVISÉE"
@@ -449,7 +449,7 @@ export default function BalancePage() {
 
       {/* Rendu masqué pour l'impression système direct */}
       <div className="hidden print:block absolute inset-0 bg-white shadow-2xl">
-        {data && chunkArray(data.balance, 18).map((chunk, index, allChunks) => (
+        {data && paginateForPrint(data.balance, { firstPageSize: 18, otherPagesSize: 18 }).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="BALANCE DES COMPTES RÉVISÉE"

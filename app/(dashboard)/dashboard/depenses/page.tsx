@@ -535,8 +535,8 @@ export default function DepensesPage() {
       {/* Formulaire */}
       {form && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="max-h-[95vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-6 py-4">
               <h2 className="text-xl font-bold text-gray-900">
                 {editing ? 'Modifier la dépense' : 'Nouvelle dépense'}
               </h2>
@@ -544,10 +544,11 @@ export default function DepensesPage() {
                 <X className="h-6 w-6" />
               </button>
             </div>
-            {err && (
-              <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-3 text-sm whitespace-pre-line">{err}</div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="overflow-y-auto px-6 py-4">
+              {err && (
+                <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-3 text-sm whitespace-pre-line">{err}</div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
@@ -707,6 +708,7 @@ export default function DepensesPage() {
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}

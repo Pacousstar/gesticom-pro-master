@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react'
 import {
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X,
-  Search, Scan, Camera, Edit2, Pencil, Trash, CreditCard, Wallet, UserPlus,
-  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent
+  Search, Edit2, Pencil, Wallet, AlertTriangle, Calculator, FileText,
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -12,11 +11,15 @@ import { MESSAGES } from '@/lib/messages'
 import { fournisseurSchema } from '@/lib/validations'
 import { validateForm } from '@/lib/validation-helpers'
 import Pagination from '@/components/ui/Pagination'
-import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import PrintPreview from '@/components/print/PrintPreview'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
+import {
+  montantLigneTTC,
+  montantTvaImpliciteLigne,
+  montantTotalAchatSommeLignes,
+} from '@/lib/calculs-commerciaux'
 
 type Magasin = { id: number; code: string; nom: string }
 type Fournisseur = { id: number; nom: string; code?: string | null }
@@ -79,6 +82,7 @@ export default function AchatsPage() {
     modePaiement: 'ESPECES',
     montantPaye: '',
     reglements: [{ mode: 'ESPECES', montant: '' }] as { mode: string; montant: string }[], // Multi-Paiement
+    banqueId: '',
     numeroCamion: '',
     fraisApproche: '',
     observation: '',
@@ -108,18 +112,85 @@ export default function AchatsPage() {
   const [userRole, setUserRole] = useState<string>('')
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
-  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES' })
+  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
   const [submitting, setSubmitting] = useState(false)
   const [savingReglement, setSavingReglement] = useState(false)
   const [formFournisseurSearch, setFormFournisseurSearch] = useState('')
   const [showFournisseurList, setShowFournisseurList] = useState(false)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [banques, setBanques] = useState<any[]>([])
+  const [showCreateBanque, setShowCreateBanque] = useState(false)
+  const [creatingBanque, setCreatingBanque] = useState(false)
+  const [newBanque, setNewBanque] = useState({
+    numero: '',
+    nomBanque: '',
+    libelle: '',
+    soldeInitial: '0',
+    compteId: '',
+  })
 
   useEffect(() => {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => { })
+    fetch('/api/banques')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setBanques(Array.isArray(d?.data) ? d.data : []))
+      .catch(() => setBanques([]))
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => { })
   }, [])
+
+  const refreshBanques = async () => {
+    try {
+      const r = await fetch('/api/banques', { cache: 'no-store' as any })
+      const d = r.ok ? await r.json() : null
+      setBanques(Array.isArray(d?.data) ? d.data : [])
+      return Array.isArray(d?.data) ? d.data : []
+    } catch {
+      setBanques([])
+      return []
+    }
+  }
+
+  const createBanqueInline = async (target: 'FORM' | 'REGLEMENT') => {
+    const numero = (newBanque.numero || '').trim()
+    const nomBanque = (newBanque.nomBanque || '').trim()
+    const libelle = (newBanque.libelle || '').trim()
+    if (!numero || !nomBanque || !libelle) {
+      showError('Veuillez renseigner Numéro, Banque et Libellé.')
+      return
+    }
+    setCreatingBanque(true)
+    try {
+      const res = await fetch('/api/banques', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numero,
+          nomBanque,
+          libelle,
+          soldeInitial: Number(newBanque.soldeInitial) || 0,
+          compteId: newBanque.compteId || undefined,
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        showError(d?.error || 'Erreur lors de la création du compte bancaire.')
+        return
+      }
+      await refreshBanques()
+      if (d?.id) {
+        if (target === 'FORM') setFormData((f) => ({ ...f, banqueId: String(d.id) }))
+        if (target === 'REGLEMENT') setReglementData((prev) => ({ ...prev, banqueId: String(d.id) }))
+      }
+      setNewBanque({ numero: '', nomBanque: '', libelle: '', soldeInitial: '0', compteId: '' })
+      setShowCreateBanque(false)
+      showSuccess('Compte bancaire créé et sélectionné.')
+    } catch (e) {
+      showError('Erreur réseau lors de la création du compte bancaire.')
+    } finally {
+      setCreatingBanque(false)
+    }
+  }
 
   const refetchProduits = () => {
     fetch('/api/produits?complet=1')
@@ -209,7 +280,6 @@ export default function AchatsPage() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchAchats(undefined, undefined, page)
   }
 
   const addLigne = () => {
@@ -220,9 +290,13 @@ export default function AchatsPage() {
     const qte = Number(ajoutProduit.quantite) || 0
     if (qte <= 0) return
 
+    const pu = Number(ajoutProduit.prixUnitaire)
+    if (!pu || pu <= 0) { showError('Le prix unitaire doit être supérieur à 0.'); return }
+
     let remiseVal = Number(ajoutProduit.remise) || 0
     if (ajoutProduit.remiseType === 'POURCENT' && remiseVal > 0) {
-      remiseVal = (Number(ajoutProduit.prixUnitaire) * qte) * (remiseVal / 100)
+      const ht = Number(ajoutProduit.prixUnitaire) * qte
+      remiseVal = ht * (remiseVal / 100)
     }
 
     const nouvelleLigne: Ligne = {
@@ -320,11 +394,20 @@ export default function AchatsPage() {
       const r = val.remise || 0
       const ht = q * pu
       const htNet = ht - r
-      const tvaMontant = htNet * (t / 100)
-      const montantLigne = Math.round(htNet + tvaMontant) // Arrondi par ligne comme au backend
+      const montantLigne = montantLigneTTC({
+        quantite: q,
+        prixUnitaire: pu,
+        remiseLigne: r,
+        tvaPourcent: t,
+      })
       
       acc.totalHT += ht
-      acc.totalTVA += tvaMontant
+      acc.totalTVA += montantTvaImpliciteLigne({
+        quantite: q,
+        prixUnitaire: pu,
+        remiseLigne: r,
+        tvaPourcent: t,
+      })
       acc.totalRemise += r
       acc.totalHTNet += htNet
       acc.totalAchatTTC += montantLigne
@@ -332,7 +415,8 @@ export default function AchatsPage() {
     },
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalHTNet: 0, totalAchatTTC: 0 }
   )
-  const total = totalAchatTTC
+  const total = montantTotalAchatSommeLignes([totalAchatTTC])
+  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
 
   // Récupérer le templateId par défaut pour ACHAT
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
@@ -363,11 +447,14 @@ export default function AchatsPage() {
       const r = Number(l.remise) || 0
       const t = Number(l.tvaPerc) || Number(l.tva) || 0
       const ht = q * pu
-      const htNet = ht - r
-      const tva = htNet * (t / 100)
       acc.ht += ht
       acc.remise += r
-      acc.tva += tva
+      acc.tva += montantTvaImpliciteLigne({
+        quantite: q,
+        prixUnitaire: pu,
+        remiseLigne: r,
+        tvaPourcent: t,
+      })
       return acc
     }, { ht: 0, remise: 0, tva: 0 })
 
@@ -397,7 +484,7 @@ export default function AchatsPage() {
       TOTAL_HT: `${totalCalc.ht.toLocaleString('fr-FR')} FCFA`,
       TOTAL_REMISE: totalCalc.remise > 0 ? `${totalCalc.remise.toLocaleString('fr-FR')} FCFA` : undefined,
       TOTAL_HT_NET: `${(totalCalc.ht - totalCalc.remise).toLocaleString('fr-FR')} FCFA`,
-      TOTAL_TVA: totalCalc.tva > 0 ? `${Math.round(totalCalc.tva).toLocaleString('fr-FR')} FCFA` : undefined,
+      TOTAL_TVA: totalCalc.tva > 0 ? `${totalCalc.tva.toLocaleString('fr-FR')} FCFA` : undefined,
       TOTAL: `${Number(d.montantTotal).toLocaleString('fr-FR')} FCFA`,
       MONTANT_PAYE: d.montantPaye ? `${Number(d.montantPaye).toLocaleString('fr-FR')} FCFA` : undefined,
       RESTE: d.statutPaiement !== 'PAYE' ? `${(Number(d.montantTotal) - (Number(d.montantPaye) || 0)).toLocaleString('fr-FR')} FCFA` : undefined,
@@ -417,8 +504,9 @@ export default function AchatsPage() {
     setSubmitting(true)
     setErr('')
     const magasinId = Number(formData.magasinId)
-    if (!magasinId) { setErr('Choisissez un magasin.'); return }
-    if (!formData.lignes.length) { setErr('Ajoutez au moins une ligne.'); return }
+    if (!magasinId) { setErr('Choisissez un magasin.'); setSubmitting(false); return }
+    if (!formData.lignes.length) { setErr('Ajoutez au moins une ligne.'); setSubmitting(false); return }
+    if (needsBanque && !formData.banqueId) { setErr('Sélectionnez une banque pour les règlements non espèces.'); setSubmitting(false); return }
 
     const requestData = {
       date: formData.date || undefined,
@@ -427,6 +515,7 @@ export default function AchatsPage() {
       fournisseurLibre: formData.fournisseurLibre.trim() || null,
       modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
       reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+      banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
       fraisApproche: Number(formData.fraisApproche) || 0,
       numeroCamion: formData.numeroCamion.trim() || null,
       observation: formData.observation.trim() || null,
@@ -504,6 +593,7 @@ export default function AchatsPage() {
       modePaiement: 'ESPECES',
       montantPaye: '',
       reglements: [{ mode: 'ESPECES', montant: '' }],
+      banqueId: '',
       numeroCamion: '',
       fraisApproche: '',
       observation: '',
@@ -552,13 +642,17 @@ export default function AchatsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           montant,
-          modePaiement: reglementData.modePaiement
+          modePaiement: reglementData.modePaiement,
+          banqueId: ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(reglementData.modePaiement).toUpperCase()) && reglementData.banqueId
+            ? Number(reglementData.banqueId)
+            : undefined,
+          date: reglementData.date,
         }),
       })
       if (res.ok) {
         showSuccess('Règlement enregistré avec succès.')
         setShowReglement(null)
-        setReglementData({ montant: '', modePaiement: 'ESPECES' })
+        setReglementData({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
         fetchAchats()
         if (detailAchat?.id === showReglement.id) {
           handleVoirDetail(showReglement.id)
@@ -585,13 +679,17 @@ export default function AchatsPage() {
           <p className="mt-1 text-white/90 font-medium italic">Approvisionnements, factures fournisseurs et entrées en stock</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ImportExcelButton 
-            endpoint="/api/achats/import" 
-            onSuccess={() => fetchAchats()}
-            label="Importer Achats"
-          />
           <button
-            onClick={() => setForm(true)}
+            type="button"
+            onClick={() => window.print()}
+            className="no-print flex items-center gap-2 rounded-xl bg-white/10 px-5 py-3 text-sm font-black text-white hover:bg-white/20 border border-white/20 uppercase tracking-widest"
+            title="Imprimer l'historique des achats (selon filtres)"
+          >
+            <Printer className="h-4 w-4" />
+            Imprimer
+          </button>
+          <button
+            onClick={() => { setEditingAchatId(null); setFormData({ date: new Date().toLocaleDateString('en-CA'), magasinId: '', fournisseurId: '', fournisseurLibre: '', modePaiement: 'ESPECES', montantPaye: '', reglements: [{ mode: 'ESPECES', montant: '' }], banqueId: '', numeroCamion: '', fraisApproche: '', observation: '', lignes: [] }); setForm(true) }}
             className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-3 text-sm font-bold text-white hover:bg-orange-700 shadow-lg shadow-orange-900/20 transition-all hover:scale-105"
             title="Nouvel achat (Ctrl+N)"
           >
@@ -711,7 +809,7 @@ export default function AchatsPage() {
 
       {form && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">Nouvel achat</h2>
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">{editingAchatId ? 'Modifier l\'achat' : 'Nouvel achat'}</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
@@ -842,6 +940,94 @@ export default function AchatsPage() {
                   <option value="CREDIT">Crédit</option>
                 </select>
               </div>
+
+              {needsBanque && (
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Compte bancaire <span className="text-red-600">*</span>
+                  </label>
+                  <div className="mt-1 flex gap-2">
+                    <select
+                      value={formData.banqueId}
+                      onChange={(e) => setFormData((f) => ({ ...f, banqueId: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
+                    >
+                      <option value="">— Sélectionner un compte —</option>
+                      {banques.map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          {b.numero} — {b.nomBanque || b.nom || 'Banque'} ({b.libelle})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateBanque(true)}
+                      className="whitespace-nowrap rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700 hover:bg-gray-50"
+                      title="Créer un compte bancaire"
+                    >
+                      + Créer un compte bancaire
+                    </button>
+                  </div>
+                  {showCreateBanque && (
+                    <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-sm font-bold text-orange-900">Créer un compte bancaire</p>
+                        <button type="button" onClick={() => setShowCreateBanque(false)} className="rounded p-1 hover:bg-orange-100">
+                          <X className="h-4 w-4 text-orange-900" />
+                        </button>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700">Numéro *</label>
+                          <input
+                            value={newBanque.numero}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, numero: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2"
+                            placeholder="Ex: UBA-001"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700">Banque *</label>
+                          <input
+                            value={newBanque.nomBanque}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, nomBanque: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2"
+                            placeholder="Ex: UBA"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-gray-700">Libellé *</label>
+                          <input
+                            value={newBanque.libelle}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, libelle: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2"
+                            placeholder="Ex: Compte courant"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700">Solde initial</label>
+                          <input
+                            type="number"
+                            value={newBanque.soldeInitial}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, soldeInitial: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2"
+                          />
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => createBanqueInline('FORM')}
+                            disabled={creatingBanque}
+                            className="flex-1 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-60"
+                          >
+                            {creatingBanque ? 'Création…' : 'Créer et sélectionner'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-blue-700 font-bold italic uppercase text-[11px]">N° de Camion (Fournisseur)</label>
                 <input
@@ -934,6 +1120,7 @@ export default function AchatsPage() {
                       </label>
                       <input
                         type="number"
+                        min="0"
                         placeholder="Ex: 25000"
                         value={formData.fraisApproche}
                         onChange={(e) => setFormData((f) => ({ ...f, fraisApproche: e.target.value }))}
@@ -1106,7 +1293,20 @@ export default function AchatsPage() {
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-orange-600 ml-1 font-bold">Total TTC</label>
                   <div className="w-28 rounded border border-orange-100 bg-orange-50 px-2 py-2 text-sm font-bold text-orange-800">
-                    {Math.round((Number(ajoutProduit.quantite || 0) * Number(ajoutProduit.prixUnitaire || 0) - (ajoutProduit.remiseType === 'MONTANT' ? Number(ajoutProduit.remise || 0) : (Number(ajoutProduit.quantite || 0) * Number(ajoutProduit.prixUnitaire || 0)) * (Number(ajoutProduit.remise || 0) / 100))) * (1 + Number(ajoutProduit.tvaPerc || 0) / 100)).toLocaleString('fr-FR')} F
+                    {(() => {
+                      const q = Number(ajoutProduit.quantite || 0)
+                      const pu = Number(ajoutProduit.prixUnitaire || 0)
+                      const r = Number(ajoutProduit.remise || 0)
+                      const t = Number(ajoutProduit.tvaPerc || 0)
+                      const ht = q * pu
+                      const rv = ajoutProduit.remiseType === 'MONTANT' ? r : ht * (r / 100)
+                      return montantLigneTTC({
+                        quantite: q,
+                        prixUnitaire: pu,
+                        remiseLigne: rv,
+                        tvaPourcent: t,
+                      }).toLocaleString('fr-FR')
+                    })()} F
                   </div>
                 </div>
                 <button type="button" onClick={addLigne} className="rounded-lg bg-orange-500 px-4 py-2 mt-auto text-sm font-bold text-white hover:bg-orange-600 transition-all shadow-sm">
@@ -1130,9 +1330,12 @@ export default function AchatsPage() {
                   <tbody>
                     {formData.lignes.map((l, i) => {
                       const ht = l.quantite * l.prixUnitaire
-                      const htNet = ht - (l.remise || 0)
-                      const tva = htNet * ((l.tvaPerc || 0) / 100)
-                      const ttc = htNet + tva
+                      const ttc = montantLigneTTC({
+                        quantite: l.quantite,
+                        prixUnitaire: l.prixUnitaire,
+                        remiseLigne: Number(l.remise) || 0,
+                        tvaPourcent: l.tvaPerc || 0,
+                      })
                       return (
                         <tr key={i} className="border-b border-gray-100">
                           <td className="py-2">{l.designation}</td>
@@ -1141,7 +1344,7 @@ export default function AchatsPage() {
                           <td className="text-right">{ht.toLocaleString('fr-FR')} F</td>
                           <td className="text-right text-red-600">-{l.remise.toLocaleString('fr-FR')} F</td>
                           <td className="text-right">{l.tvaPerc}%</td>
-                          <td className="text-right font-bold text-emerald-700">{Math.round(ttc).toLocaleString('fr-FR')} F</td>
+                          <td className="text-right font-bold text-emerald-700">{ttc.toLocaleString('fr-FR')} F</td>
                           <td className="w-16">
                             <div className="flex items-center gap-1 justify-end">
                               <button type="button" onClick={() => editLigne(i)} className="rounded p-1 text-blue-600 hover:bg-blue-100"><Pencil className="h-3.5 w-3.5" /></button>
@@ -1176,7 +1379,7 @@ export default function AchatsPage() {
               <div className="mt-4 flex flex-col items-end text-sm gap-2 pt-3">
                 <p className="text-xl font-black text-white bg-gradient-to-r from-emerald-600 to-emerald-800 px-6 py-3 rounded-xl shadow-xl flex justify-between gap-8 ring-4 ring-emerald-500/20">
                   <span className="uppercase tracking-widest text-xs opacity-80 flex items-center">Total Net à Payer</span> 
-                  <span>{total.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
+                  <span>{(total + (Number(formData.fraisApproche) || 0)).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
                 </p>
                 <p className="mt-1 text-[10px] text-gray-500 italic">Les quantités seront ajoutées au stock du magasin sélectionné après validation.</p>
               </div>
@@ -1273,7 +1476,7 @@ export default function AchatsPage() {
                         >
                           {loadingDetail === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                         </button>
-                        {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+{userRole === 'SUPER_ADMIN' && (
                           <button
                             onClick={async () => {
                             if (!confirm(`Supprimer définitivement l'achat ${a.numero} ? Toutes les données liées (lignes, écritures, règlements) seront supprimées. Cette action est irréversible.`)) return
@@ -1365,6 +1568,7 @@ export default function AchatsPage() {
                         modePaiement: detailAchat.modePaiement,
                         montantPaye: detailAchat.montantPaye ? String(detailAchat.montantPaye) : '',
                         reglements: (detailAchat as any).reglements?.map((r: any) => ({ mode: r.mode, montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: '' }],
+                        banqueId: '',
                         numeroCamion: detailAchat.numeroCamion || '',
                         fraisApproche: String((detailAchat as any).fraisApproche || '0'),
                         observation: detailAchat.observation || '',
@@ -1571,6 +1775,101 @@ export default function AchatsPage() {
                   <option value="CHEQUE">Chèque</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Date du règlement</label>
+                <input
+                  type="date"
+                  value={reglementData.date}
+                  onChange={(e) => setReglementData(prev => ({ ...prev, date: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              {['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(reglementData.modePaiement).toUpperCase()) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Compte bancaire <span className="text-red-600">*</span>
+                  </label>
+                  <div className="mt-1 flex gap-2">
+                    <select
+                      required
+                      value={reglementData.banqueId}
+                      onChange={(e) => setReglementData(prev => ({ ...prev, banqueId: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
+                    >
+                      <option value="">— Sélectionner un compte —</option>
+                      {banques.map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          {b.numero} — {b.nomBanque || b.nom || 'Banque'} ({b.libelle})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateBanque(true)}
+                      className="whitespace-nowrap rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700 hover:bg-gray-50"
+                    >
+                      + Créer
+                    </button>
+                  </div>
+
+                  {showCreateBanque && (
+                    <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-sm font-bold text-orange-900">Créer un compte bancaire</p>
+                        <button type="button" onClick={() => setShowCreateBanque(false)} className="rounded p-1 hover:bg-orange-100">
+                          <X className="h-4 w-4 text-orange-900" />
+                        </button>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700">Numéro *</label>
+                          <input
+                            value={newBanque.numero}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, numero: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700">Banque *</label>
+                          <input
+                            value={newBanque.nomBanque}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, nomBanque: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-gray-700">Libellé *</label>
+                          <input
+                            value={newBanque.libelle}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, libelle: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700">Solde initial</label>
+                          <input
+                            type="number"
+                            value={newBanque.soldeInitial}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, soldeInitial: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2"
+                          />
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => createBanqueInline('REGLEMENT')}
+                            disabled={creatingBanque}
+                            className="flex-1 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-60"
+                          >
+                            {creatingBanque ? 'Création…' : 'Créer et sélectionner'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex gap-2 pt-2">
                 <button
                   type="submit"

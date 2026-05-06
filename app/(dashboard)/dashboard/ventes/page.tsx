@@ -15,7 +15,6 @@ import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
-import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import {
@@ -39,7 +38,7 @@ type Produit = {
   prixMinimum?: number | null;
   stocks: Array<{ magasinId: number; quantite: number }>; prixAchat?: number | null 
 }
-type Ligne = { produitId: number; designation: string; code?: string; quantite: number; prixUnitaire: number; tvaPerc?: number; remise?: number }
+type Ligne = { produitId: number; designation: string; code?: string; quantite: number; prixUnitaire: number; tvaPerc?: number; remise?: number; remiseType?: 'MONTANT' | 'POURCENT' }
 
 export default function VentesPage() {
   const searchParams = useSearchParams()
@@ -98,6 +97,7 @@ export default function VentesPage() {
     modePaiement: 'ESPECES',
     montantPaye: '',
     reglements: [{ mode: 'ESPECES', montant: '' }] as { mode: string; montant: string }[], // Support Multi-Paiement
+    banqueId: '',
     remiseGlobale: '',
     observation: '',
     numeroBon: '',
@@ -146,7 +146,7 @@ export default function VentesPage() {
   const [ajoutStockQuantite, setAjoutStockQuantite] = useState('')
   const [ajoutStockSaving, setAjoutStockSaving] = useState(false)
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
-  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', date: new Date().toISOString().split('T')[0] })
+  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
   const [savingReglement, setSavingReglement] = useState(false)
 
   // Récupérer le templateId par défaut pour VENTE
@@ -159,6 +159,16 @@ export default function VentesPage() {
   const [showClientList, setShowClientList] = useState(false)
   const [editingVenteId, setEditingVenteId] = useState<number | null>(null)
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [banques, setBanques] = useState<any[]>([])
+  const [showCreateBanque, setShowCreateBanque] = useState(false)
+  const [creatingBanque, setCreatingBanque] = useState(false)
+  const [newBanque, setNewBanque] = useState({
+    numero: '',
+    nomBanque: '',
+    libelle: '',
+    soldeInitial: '0',
+    compteId: '',
+  })
 
   const addReglement = () => {
     setFormData(f => ({
@@ -183,6 +193,7 @@ export default function VentesPage() {
   }
 
   const totalPayeReglements = formData.reglements.reduce((sum, r) => sum + (Number(r.montant) || 0), 0)
+  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
 
   useEffect(() => {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { 
@@ -191,8 +202,67 @@ export default function VentesPage() {
         setEntreprise(d)
       }
     }).catch(() => { })
+    fetch('/api/banques')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setBanques(Array.isArray(d?.data) ? d.data : []))
+      .catch(() => setBanques([]))
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => { })
   }, [])
+
+  const refreshBanques = async () => {
+    try {
+      const r = await fetch('/api/banques', { cache: 'no-store' as any })
+      const d = r.ok ? await r.json() : null
+      setBanques(Array.isArray(d?.data) ? d.data : [])
+      return Array.isArray(d?.data) ? d.data : []
+    } catch {
+      setBanques([])
+      return []
+    }
+  }
+
+  const createBanqueInline = async (target: 'FORM' | 'REGLEMENT') => {
+    const numero = (newBanque.numero || '').trim()
+    const nomBanque = (newBanque.nomBanque || '').trim()
+    const libelle = (newBanque.libelle || '').trim()
+    if (!numero || !nomBanque || !libelle) {
+      showError('Veuillez renseigner Numéro, Banque et Libellé.')
+      return
+    }
+    setCreatingBanque(true)
+    try {
+      const res = await fetch('/api/banques', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numero,
+          nomBanque,
+          libelle,
+          soldeInitial: Number(newBanque.soldeInitial) || 0,
+          compteId: newBanque.compteId || undefined,
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        showError(d?.error || 'Erreur lors de la création du compte bancaire.')
+        return
+      }
+
+      // Rafraîchir la liste + auto-sélection
+      await refreshBanques()
+      if (d?.id) {
+        if (target === 'FORM') setFormData((f) => ({ ...f, banqueId: String(d.id) }))
+        if (target === 'REGLEMENT') setReglementData((prev) => ({ ...prev, banqueId: String(d.id) }))
+      }
+      setNewBanque({ numero: '', nomBanque: '', libelle: '', soldeInitial: '0', compteId: '' })
+      setShowCreateBanque(false)
+      showSuccess('Compte bancaire créé et sélectionné.')
+    } catch (e) {
+      showError('Erreur réseau lors de la création du compte bancaire.')
+    } finally {
+      setCreatingBanque(false)
+    }
+  }
 
   useEffect(() => {
     fetch('/api/print-templates?type=VENTE&actif=true')
@@ -436,9 +506,10 @@ export default function VentesPage() {
     const tvaVal = ajoutProduit.tvaPerc !== '' ? Number(ajoutProduit.tvaPerc) : tvaParDefaut
     let remiseVal = Number(ajoutProduit.remise) || 0
     
-    // Calcul de la remise si type pourcentage
+    // Calcul de la remise si type pourcentage (sur HT net)
     if (ajoutProduit.remiseType === 'POURCENT' && remiseVal > 0) {
-      remiseVal = (Number(ajoutProduit.prixUnitaire) * qte) * (remiseVal / 100)
+      const ht = Number(ajoutProduit.prixUnitaire) * qte
+      remiseVal = ht * (remiseVal / 100)
     }
 
     const nouvelleLigne: Ligne = {
@@ -448,7 +519,8 @@ export default function VentesPage() {
       quantite: qte,
       prixUnitaire: Number(ajoutProduit.prixUnitaire),
       tvaPerc: tvaVal,
-      remise: remiseVal
+      remise: remiseVal,
+      remiseType: ajoutProduit.remiseType || 'MONTANT',
     }
     setFormData((f) => ({ ...f, lignes: [...f.lignes, nouvelleLigne] }))
     setAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', recherche: '', tvaPerc: '', remise: '', remiseType: 'MONTANT' })
@@ -462,7 +534,7 @@ export default function VentesPage() {
       prixUnitaire: String(l.prixUnitaire),
       tvaPerc: String(l.tvaPerc || '0'),
       remise: String(l.remise || '0'),
-      remiseType: 'MONTANT',
+      remiseType: l.remiseType || (l.remise && l.remise < 100 ? 'POURCENT' : 'MONTANT'),
       recherche: l.designation
     })
     setFormData((f) => ({ ...f, lignes: f.lignes.filter((_, j) => j !== i) }))
@@ -524,6 +596,7 @@ export default function VentesPage() {
     setErr('')
     setSubmitting(true)
 
+    const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
     const requestData = {
       date: formData.date || undefined,
       magasinId,
@@ -532,6 +605,7 @@ export default function VentesPage() {
       numeroBon: formData.numeroBon.trim() || null,
       modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
       reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+      banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
       remiseGlobale: Number(formData.remiseGlobale) || 0,
       observation: formData.observation.trim() || null,
       lignes: lignes.map((l) => ({
@@ -566,6 +640,7 @@ export default function VentesPage() {
           modePaiement: 'ESPECES',
           montantPaye: '',
           reglements: [{ mode: 'ESPECES', montant: '' }],
+          banqueId: '',
           remiseGlobale: '',
           observation: '',
           numeroBon: '',
@@ -575,7 +650,6 @@ export default function VentesPage() {
         setCurrentPage(1)
         showSuccess(MESSAGES.VENTE_ENREGISTREE)
         fetchVentes(undefined, undefined, 1)
-        setTimeout(() => fetchVentes(undefined, undefined, 1), 500)
       } else {
         if (data.error?.includes('Client introuvable')) {
           setCreateClientAfter(() => () => doEnregistrerVente(lignes))
@@ -630,6 +704,18 @@ export default function VentesPage() {
       setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
       return
     }
+    const needsBanqueValidation = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
+    if (needsBanqueValidation && !formData.banqueId) {
+      setErr('Sélectionnez un compte bancaire pour les règlements non espèces.')
+      return
+    }
+    const hasCreditMode = formData.reglements.some((r) => String(r.mode).toUpperCase() === 'CREDIT')
+    const totalPaye = formData.reglements.reduce((sum, r) => sum + (Number(r.montant) || 0), 0)
+    if (!hasCreditMode && totalPaye < total && totalPaye > 0) {
+      const missing = total - totalPaye
+      setErr(`Le montant saisi (${totalPaye.toLocaleString('fr-FR')} F) est inférieur au total (${total.toLocaleString('fr-FR')} F). Il manque ${missing.toLocaleString('fr-FR')} F. Ajoutez un règlement en mode "Crédit" ou complétez le montant.`)
+      return
+    }
     if (editingVenteId) {
        await doModifierVente(formData.lignes)
     } else {
@@ -642,6 +728,7 @@ export default function VentesPage() {
     setErr('')
     try {
       const magasinId = Number(formData.magasinId)
+      const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
       const res = await fetch(`/api/ventes/${editingVenteId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -653,10 +740,10 @@ export default function VentesPage() {
           clientLibre: formData.clientLibre.trim() || null,
           modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
           reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
-          montantPaye: formData.montantPaye !== '' ? Number(formData.montantPaye) : (formData.modePaiement === 'CREDIT' ? 0 : undefined),
-          remiseGlobale: (formData as any).remiseGlobale !== '' ? Number((formData as any).remiseGlobale) : 0,
-          observation: ((formData as any).observation || '').trim() || null,
-          numeroBon: ((formData as any).numeroBon || '').trim() || null,
+          banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
+          remiseGlobale: formData.remiseGlobale !== '' ? Number(formData.remiseGlobale) : 0,
+          observation: (formData.observation || '').trim() || null,
+          numeroBon: (formData.numeroBon || '').trim() || null,
           lignes: lignes.map((l) => ({
             produitId: l.produitId,
             quantite: l.quantite,
@@ -704,8 +791,8 @@ export default function VentesPage() {
 
     // Blocage Prix Minimum (PVM)
     const pMin = (p as any).prixMinimum || 0
-    if (pMin > 0 && pu <= pMin) {
-      showError(`⚠️ augmenter le prix de vente svp ! (Prix de revient minimum: ${pMin.toLocaleString('fr-FR')} F)`)
+    if (pMin > 0 && pu < pMin) {
+      showError(`🔔 PRIX INSUFFISANT : Le prix de vente minimum autorisé pour ${p.designation} est de ${pMin.toLocaleString('fr-FR')} FCFA. Veuillez augmenter le prix !`)
       return
     }
 
@@ -880,6 +967,9 @@ export default function VentesPage() {
         body: JSON.stringify({
           montant,
           modePaiement: reglementData.modePaiement,
+          banqueId: ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(reglementData.modePaiement).toUpperCase()) && reglementData.banqueId
+            ? Number(reglementData.banqueId)
+            : undefined,
           date: reglementData.date || new Date().toISOString().split('T')[0]
         }),
       })
@@ -887,7 +977,7 @@ export default function VentesPage() {
       if (res.ok) {
         showSuccess('Règlement enregistré avec succès.')
         setShowReglement(null)
-        setReglementData({ montant: '', modePaiement: 'ESPECES', date: new Date().toISOString().split('T')[0] })
+        setReglementData({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
         
         // Rafraîchir les données immédiatement
         fetchVentes()
@@ -940,11 +1030,15 @@ export default function VentesPage() {
           Nouvelle vente
           <span className="hidden sm:inline text-xs opacity-75 ml-1">(Ctrl+N)</span>
         </button>
-        <ImportExcelButton 
-          endpoint="/api/ventes/import" 
-          onSuccess={() => fetchVentes()}
-          label="Importer Ventes"
-        />
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20"
+          title="Imprimer la liste des ventes (selon filtres)"
+        >
+          <Printer className="h-4 w-4" />
+          Imprimer
+        </button>
         <a
           href="/dashboard/ventes/rapide"
           className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 shadow-md transition-all"
@@ -1546,6 +1640,7 @@ export default function VentesPage() {
                           <input
                             type="number"
                             min="0"
+                            step="1"
                             value={r.montant}
                             onChange={(e) => updateReglement(i, 'montant', e.target.value)}
                             placeholder={i === 0 ? String(total) : '0'}
@@ -1586,6 +1681,114 @@ export default function VentesPage() {
                   <div className="mt-2 p-2 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold flex items-center gap-2 animate-pulse">
                     <AlertTriangle className="h-3 w-3" /> 
                     ATTENTION : IL RESTE {(total - totalPayeReglements).toLocaleString('fr-FR')} F À PAYER !
+                  </div>
+                )}
+
+                {needsBanque && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-white p-3">
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Compte bancaire à utiliser</label>
+                    <select
+                      required
+                      value={formData.banqueId}
+                      onChange={(e) => setFormData((f) => ({ ...f, banqueId: e.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                    >
+                      <option value="">Sélectionner une banque...</option>
+                      {banques.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.nomBanque} — {b.libelle} ({b.numero})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[10px] text-gray-400">
+                      Obligatoire pour Mobile Money, Virement et Chèque.
+                    </p>
+
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateBanque((v) => !v)}
+                        className="text-[10px] font-black uppercase text-orange-700 hover:underline"
+                      >
+                        + Créer un compte bancaire
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => refreshBanques()}
+                        className="text-[10px] font-bold text-gray-500 hover:underline"
+                      >
+                        Rafraîchir
+                      </button>
+                    </div>
+
+                    {showCreateBanque && (
+                      <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50/40 p-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Numéro *</label>
+                            <input
+                              value={newBanque.numero}
+                              onChange={(e) => setNewBanque((s) => ({ ...s, numero: e.target.value }))}
+                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                              placeholder="Ex: 000123..."
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Banque *</label>
+                            <input
+                              value={newBanque.nomBanque}
+                              onChange={(e) => setNewBanque((s) => ({ ...s, nomBanque: e.target.value }))}
+                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                              placeholder="Ex: ECOBANK"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Libellé *</label>
+                            <input
+                              value={newBanque.libelle}
+                              onChange={(e) => setNewBanque((s) => ({ ...s, libelle: e.target.value }))}
+                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                              placeholder="Ex: Compte courant / Mobile Money"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Solde initial</label>
+                            <input
+                              type="number"
+                              value={newBanque.soldeInitial}
+                              onChange={(e) => setNewBanque((s) => ({ ...s, soldeInitial: e.target.value }))}
+                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Compte comptable (optionnel)</label>
+                            <input
+                              value={newBanque.compteId}
+                              onChange={(e) => setNewBanque((s) => ({ ...s, compteId: e.target.value }))}
+                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                              placeholder="512 / 521 / id..."
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            disabled={creatingBanque}
+                            onClick={() => createBanqueInline('FORM')}
+                            className="flex-1 rounded-lg bg-orange-600 px-4 py-2 text-white font-black hover:bg-orange-700 disabled:opacity-60"
+                          >
+                            {creatingBanque ? 'Création...' : 'Créer et sélectionner'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowCreateBanque(false)}
+                            className="rounded-lg border-2 border-gray-300 bg-white px-4 py-2 font-bold text-gray-700 hover:bg-gray-50"
+                          >
+                            Fermer
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1893,7 +2096,7 @@ export default function VentesPage() {
                         <div className="flex items-center gap-1">
                           {v.statutPaiement !== 'PAYE' && v.statut !== 'ANNULEE' && (
                             <button
-                              onClick={() => setShowReglement({ id: v.id, numero: v.numero, reste: Number(v.montantTotal) - (Number(v.montantPaye) || 0) })}
+                              onClick={() => setShowReglement({ id: v.id, numero: v.numero, reste: resteAPayer })}
                               className="rounded p-1.5 text-orange-600 hover:bg-orange-100"
                               title="Enregistrer un règlement"
                             >
@@ -1911,6 +2114,7 @@ export default function VentesPage() {
                                   clientLibre: (v as any).clientLibre || '',
                                   modePaiement: v.modePaiement || 'ESPECES',
                                   montantPaye: String(v.montantPaye || ''),
+                                  banqueId: '',
                                   // @ts-ignore
                                   remiseGlobale: String((v as any).remiseGlobale || ''),
                                   // @ts-ignore
@@ -1922,7 +2126,7 @@ export default function VentesPage() {
                                     designation: l.designation,
                                     quantite: l.quantite,
                                     prixUnitaire: l.prixUnitaire,
-                                    tvaPerc: l.tvaPerc || 0,
+                                    tvaPerc: Number(l.tvaPerc ?? l.tva ?? 0) || 0,
                                     remise: l.remise || 0,
                                   })),
                                   // @ts-ignore
@@ -2023,6 +2227,7 @@ export default function VentesPage() {
                         clientLibre: detailVente.clientLibre || '',
                         modePaiement: detailVente.modePaiement || 'ESPECES',
                         montantPaye: String(detailVente.montantPaye || ''),
+                        banqueId: '',
                         remiseGlobale: String(detailVente.remiseGlobale || ''),
                         observation: detailVente.observation || '',
                         numeroBon: detailVente.numeroBon || '',
@@ -2031,7 +2236,7 @@ export default function VentesPage() {
                           designation: l.designation,
                           quantite: l.quantite,
                           prixUnitaire: l.prixUnitaire,
-                          tvaPerc: l.tvaPerc || 0,
+                          tvaPerc: Number(l.tvaPerc ?? l.tva ?? 0) || 0,
                           remise: l.remise || 0,
                         })),
                         // @ts-ignore
@@ -2096,7 +2301,7 @@ export default function VentesPage() {
                   <thead><tr className="border-b bg-gray-50 text-left text-gray-800"><th className="px-4 py-2">Désignation</th><th className="px-4 py-2 text-right">Qté</th><th className="px-4 py-2 text-right">P.U.</th><th className="px-4 py-2 text-right">Remise</th><th className="px-4 py-2 text-right">TVA</th><th className="px-4 py-2 text-right">Total</th></tr></thead>
                   <tbody className="divide-y divide-gray-100">
                     {detailVente.lignes.map((l, i) => (
-                      <tr key={i}><td className="px-4 py-2 text-gray-900">{l.designation}</td><td className="px-4 py-2 text-right text-gray-900">{l.quantite}</td><td className="px-4 py-2 text-right text-gray-900">{(l.prixUnitaire).toLocaleString('fr-FR')} F</td><td className="px-4 py-2 text-right text-red-600">{(l.remise ? `-${l.remise}` : '0')} F</td><td className="px-4 py-2 text-right text-gray-900">{l.tvaPerc || 0}%</td><td className="px-4 py-2 text-right font-medium text-emerald-700">{(l.montant).toLocaleString('fr-FR')} F</td></tr>
+                      <tr key={i}><td className="px-4 py-2 text-gray-900">{l.designation}</td><td className="px-4 py-2 text-right text-gray-900">{l.quantite}</td><td className="px-4 py-2 text-right text-gray-900">{(l.prixUnitaire).toLocaleString('fr-FR')} F</td><td className="px-4 py-2 text-right text-red-600">{(l.remise ? `-${l.remise}` : '0')} F</td><td className="px-4 py-2 text-right text-gray-900">{Number((l as any).tvaPerc ?? (l as any).tva ?? 0) || 0}%</td><td className="px-4 py-2 text-right font-medium text-emerald-700">{(l.montant).toLocaleString('fr-FR')} F</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -2344,6 +2549,8 @@ export default function VentesPage() {
                 <input
                   type="number"
                   required
+                  min="1"
+                  step="1"
                   max={showReglement.reste}
                   value={reglementData.montant}
                   onChange={(e) => setReglementData(prev => ({ ...prev, montant: e.target.value }))}
@@ -2364,6 +2571,106 @@ export default function VentesPage() {
                   <option value="CHEQUE">Chèque</option>
                 </select>
               </div>
+              {['MOBILE_MONEY', 'VIREMENT', 'CHEQUE'].includes(String(reglementData.modePaiement).toUpperCase()) && (
+                <div className="rounded-lg border border-orange-100 bg-orange-50/30 p-3">
+                  <label className="block text-sm font-medium text-gray-700">Compte bancaire *</label>
+                  <select
+                    required
+                    value={reglementData.banqueId}
+                    onChange={(e) => setReglementData(prev => ({ ...prev, banqueId: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
+                  >
+                    <option value="">Sélectionner une banque...</option>
+                    {banques.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.nomBanque} — {b.libelle} ({b.numero})
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateBanque((v) => !v)}
+                      className="text-xs font-bold text-orange-700 hover:underline"
+                    >
+                      + Créer un compte
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => refreshBanques()}
+                      className="text-xs font-bold text-gray-500 hover:underline"
+                    >
+                      Rafraîchir
+                    </button>
+                  </div>
+
+                  {showCreateBanque && (
+                    <div className="mt-3 rounded-lg border border-orange-200 bg-white p-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Numéro *</label>
+                          <input
+                            value={newBanque.numero}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, numero: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Banque *</label>
+                          <input
+                            value={newBanque.nomBanque}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, nomBanque: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Libellé *</label>
+                          <input
+                            value={newBanque.libelle}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, libelle: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Solde initial</label>
+                          <input
+                            type="number"
+                            value={newBanque.soldeInitial}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, soldeInitial: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Compte comptable (optionnel)</label>
+                          <input
+                            value={newBanque.compteId}
+                            onChange={(e) => setNewBanque((s) => ({ ...s, compteId: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          disabled={creatingBanque}
+                          onClick={() => createBanqueInline('REGLEMENT')}
+                          className="flex-1 rounded-lg bg-orange-600 px-4 py-2 text-white font-black hover:bg-orange-700 disabled:opacity-60"
+                        >
+                          {creatingBanque ? 'Création...' : 'Créer et sélectionner'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateBanque(false)}
+                          className="rounded-lg border-2 border-gray-300 bg-white px-4 py-2 font-bold text-gray-700 hover:bg-gray-50"
+                        >
+                          Fermer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date du règlement (si différente)</label>
                 <input

@@ -19,7 +19,7 @@ export default function RentabilitePage() {
 
   useEffect(() => {
     fetchRentabilite()
-  }, [])
+  }, [dateDebut, dateFin])
 
   const fetchRentabilite = async () => {
     setLoading(true)
@@ -34,8 +34,8 @@ export default function RentabilitePage() {
   }
 
   const filteredData = data.filter(item => 
-    item.designation.toLowerCase().includes(recherche.toLowerCase()) ||
-    item.code.toLowerCase().includes(recherche.toLowerCase())
+    (item.designation || '').toLowerCase().includes(recherche.toLowerCase()) ||
+    (item.code || '').toLowerCase().includes(recherche.toLowerCase())
   )
 
   const stats = filteredData.reduce((acc, item) => {

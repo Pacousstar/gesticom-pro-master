@@ -5,7 +5,7 @@ import { Filter, DollarSign, Loader2, Calendar, FileText, ArrowUpCircle, ArrowDo
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(val).replace('XOF', 'FCFA')
@@ -57,20 +57,22 @@ export default function RapportFinancesPage() {
         fetchData(type, startDate, endDate, filter)
     }
 
-    const handlePrintAll = async () => {
-        setIsPrinting(true)
-        try {
-            const res = await fetch(`/api/rapports/finances/etat-paiements?type=${type}&dateDebut=${startDate}&dateFin=${endDate}&filter=${filter}&limit=10000`)
-            if (res.ok) {
-                setAllDataForPrint(await res.json())
-                setIsPreviewOpen(true)
-            }
-        } catch (e) {
-            console.error(e)
-            showError('Erreur lors de la préparation de l\'impression.')
-        } finally {
-            setIsPrinting(false)
-        }
+    const handleExportExcel = () => {
+        const params = new URLSearchParams()
+        params.set('type', type)
+        if (startDate) params.set('dateDebut', startDate)
+        if (endDate) params.set('dateFin', endDate)
+        if (filter) params.set('filter', filter)
+        window.open(`/api/rapports/finances/etat-paiements/export-excel?${params.toString()}`, '_blank')
+    }
+
+    const handleExportPdf = () => {
+        const params = new URLSearchParams()
+        params.set('type', type)
+        if (startDate) params.set('dateDebut', startDate)
+        if (endDate) params.set('dateFin', endDate)
+        if (filter) params.set('filter', filter)
+        window.open(`/api/rapports/finances/etat-paiements/export-pdf?${params.toString()}`, '_blank')
     }
 
     const totalMontant = data.reduce((acc, curr) => acc + curr.montantTotal, 0)
@@ -96,12 +98,18 @@ export default function RapportFinancesPage() {
 
                 <div className="flex gap-2">
                     <button 
-                        onClick={handlePrintAll}
-                        disabled={isPrinting}
-                        className="bg-slate-800 text-white px-6 py-2 rounded-xl text-sm font-black hover:bg-slate-900 flex items-center gap-3 transition-all active:scale-95 shadow-lg border-2 border-slate-700 disabled:opacity-50"
+                        onClick={handleExportExcel}
+                        className="bg-emerald-600 text-white px-6 py-2 rounded-xl text-sm font-black hover:bg-emerald-700 flex items-center gap-3 transition-all active:scale-95 shadow-lg border-2 border-emerald-500"
                     >
-                        {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-                        IMPRIMER ÉTAT
+                        <Download className="h-5 w-5" />
+                        Exports Excel
+                    </button>
+                    <button 
+                        onClick={handleExportPdf}
+                        className="bg-red-600 text-white px-6 py-2 rounded-xl text-sm font-black hover:bg-red-700 flex items-center gap-3 transition-all active:scale-95 shadow-lg border-2 border-red-500"
+                    >
+                        <Download className="h-5 w-5" />
+                        PDF
                     </button>
                     <div className="bg-white/10 p-1 rounded-lg flex border border-white/20">
                         <button 
@@ -265,7 +273,7 @@ export default function RapportFinancesPage() {
 
             {/* Rendu Système (Impression Native) */}
             <div className="hidden print:block absolute inset-0 bg-white shadow-2xl">
-                {chunkArray(allDataForPrint.length > 0 ? allDataForPrint : data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                {paginateForPrint(allDataForPrint.length > 0 ? allDataForPrint : data).map((chunk, index, allChunks) => (
                     <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                         <ListPrintWrapper
                             title={type === 'VENTE' ? "État des Créances Clients" : "État des Dettes Fournisseurs"}
@@ -357,7 +365,7 @@ export default function RapportFinancesPage() {
 
                     <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
                         <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-12 text-slate-900 not-italic tracking-normal">
-                            {chunkArray(allDataForPrint.length > 0 ? allDataForPrint : data, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                            {paginateForPrint(allDataForPrint.length > 0 ? allDataForPrint : data).map((chunk, index, allChunks) => (
                                 <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-12 pb-12 last:border-0 last:mb-0 last:pb-0 shadow-sm">
                                     <ListPrintWrapper
                                         title={type === 'VENTE' ? "ÉTAT DÉTAILLÉ DES CRÉANCES" : "ÉTAT DÉTAILLÉ DES DETTES"}

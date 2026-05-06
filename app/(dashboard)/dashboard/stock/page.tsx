@@ -8,7 +8,7 @@ import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import Pagination from '@/components/ui/Pagination'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 type Magasin = { id: number; code: string; nom: string }
 type Produit = { id: number; code: string; designation: string; prixAchat?: number | null }
 type StockRow = {
@@ -180,7 +180,6 @@ export default function StockPage() {
         }
         transfersMap.get(key).lignes.push({
           produitId: r.produitId,
-          designation: r.designation,
           quantite: r.quantite
         })
       })
@@ -799,7 +798,7 @@ export default function StockPage() {
           className="flex items-center gap-2 rounded-xl border-2 border-slate-700 bg-slate-800 px-6 py-3 text-sm font-black text-white hover:bg-slate-900 shadow-xl transition-all active:scale-95 disabled:opacity-50 uppercase tracking-widest"
         >
           {isPrinting ? <Loader2 className="h-5 w-5 animate-spin mx-auto text-orange-500" /> : <Printer className="h-5 w-5" />}
-          IMPRIMER
+          Imprimer
         </button>
 
         {isPrinting && (
@@ -1769,7 +1768,9 @@ export default function StockPage() {
       <div className="hidden print:block absolute inset-0 bg-white">
           {(() => {
                 const dataToPrint = allStocksForPrint.length > 0 ? allStocksForPrint : list;
-                const chunks = chunkArray(dataToPrint, ITEMS_PER_PRINT_PAGE);
+                const chunks = paginateForPrint(dataToPrint);
+                const offsetBefore = (pageIndex: number) =>
+                  chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
                 
                 return chunks.map((chunk, index, allChunks) => (
                   <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
@@ -1798,7 +1799,7 @@ export default function StockPage() {
                             return (
                               <tr key={idx} className="border border-black">
                                 <td className="border border-black px-1 py-2 text-center font-bold">
-                                  {index * ITEMS_PER_PRINT_PAGE + idx + 1}
+                                  {offsetBefore(index) + idx + 1}
                                 </td>
                                 <td className="border border-black px-2 py-2">
                                   <div className="font-black uppercase text-[13px]">{s.produit.designation}</div>

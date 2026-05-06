@@ -5,7 +5,7 @@ import { Search, Loader2, Download, Filter, ShoppingCart, User, Calendar, Tag, C
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 interface VenteListe {
   id: number
@@ -241,7 +241,7 @@ export default function ListeVentesPage() {
       )}
       {/* Zone d'impression professionnelle standardisée */}
       <div className="hidden print:block absolute inset-0 bg-white">
-        {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: VenteListe[], index: number, allChunks: VenteListe[][]) => (
+        {paginateForPrint(filteredData).map((chunk: VenteListe[], index: number, allChunks: VenteListe[][]) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="Journal des Ventes"
@@ -339,7 +339,7 @@ export default function ListeVentesPage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
               <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-4 text-slate-900 not-italic tracking-normal">
-                  {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: VenteListe[], index: number, allChunks: VenteListe[][]) => (
+                  {paginateForPrint(filteredData).map((chunk: VenteListe[], index: number, allChunks: VenteListe[][]) => (
                       <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-8 pb-8 last:border-0 last:mb-0 last:pb-0">
                           <ListPrintWrapper
                               title="JOURNAL DES VENTES"

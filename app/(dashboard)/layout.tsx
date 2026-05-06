@@ -4,22 +4,31 @@ import { prisma } from '@/lib/db'
 import { ROLE_PERMISSIONS, type Permission } from '@/lib/roles-permissions'
 import DashboardLayoutClient from './DashboardLayoutClient'
 
-// Toutes les pages du dashboard utilisent la session (cookies) : rendu dynamique uniquement.
 export const dynamic = 'force-dynamic'
 
-function getEffectivePermissions(role: string, permissionsPersonnalisees: string | null): Permission[] {
+function getEffectivePermissions(role: string, permissionsPersonnalisees: string | null, rolesSupplementaires: string | null): Permission[] {
   if (permissionsPersonnalisees) {
     try {
       const parsed = JSON.parse(permissionsPersonnalisees)
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed as Permission[]
       }
-    } catch {
-      // Si on n'arrive pas à parser, on fallback sur le rôle
-    }
+    } catch {}
   }
-  // Fallback aux permissions du rôle par défaut
-  return (ROLE_PERMISSIONS as Record<string, Permission[]>)[role] ?? []
+
+  const basePerms = (ROLE_PERMISSIONS as Record<string, Permission[]>)[role] ?? []
+
+  if (rolesSupplementaires) {
+    try {
+      const parsed = JSON.parse(rolesSupplementaires)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const suppPerms = (parsed as string[]).flatMap((r) => (ROLE_PERMISSIONS as Record<string, Permission[]>)[r] ?? [])
+        return [...new Set([...basePerms, ...suppPerms])]
+      }
+    } catch {}
+  }
+
+  return basePerms
 }
 
 export default async function DashboardLayout({
@@ -33,9 +42,14 @@ export default async function DashboardLayout({
 
     const userRow = await prisma.utilisateur.findUnique({
       where: { id: session.userId },
-      select: { permissionsPersonnalisees: true },
+      select: { permissionsPersonnalisees: true, rolesSupplementaires: true, actif: true },
     })
-    const permissions = getEffectivePermissions(session.role, userRow?.permissionsPersonnalisees ?? null)
+
+    if (!userRow || !userRow.actif) {
+      redirect('/login?error=deactivated')
+    }
+
+    const permissions = getEffectivePermissions(session.role, userRow?.permissionsPersonnalisees ?? null, userRow?.rolesSupplementaires ?? null)
 
     return (
       <DashboardLayoutClient

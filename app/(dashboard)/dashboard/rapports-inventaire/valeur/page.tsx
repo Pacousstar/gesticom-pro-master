@@ -5,6 +5,7 @@ import { Search, Loader2, Download, Coins, Package, Warehouse, Calendar, ArrowRi
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface ProduitValo {
   id: number
@@ -31,15 +32,7 @@ export default function ValeurStockPage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [entreprise, setEntreprise] = useState<any>(null)
 
-  const ITEMS_PER_PRINT_PAGE = 25
-
-  function chunkArray<T>(array: T[], size: number): T[][] {
-    const result = []
-    for (let i = 0; i < array.length; i += size) {
-      result.push(array.slice(i, i + size))
-    }
-    return result
-  }
+  // P2: impression standardisée (1ère page plus courte, puis 23 lignes/page)
 
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0]
@@ -141,8 +134,11 @@ export default function ValeurStockPage() {
 
       {/* ZONE D'IMPRESSION (Masquée à l'écran) */}
       <div className="hidden print:block absolute inset-0 bg-white">
-        {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: ProduitValo[], index: number, allChunks: ProduitValo[][]) => (
-          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+        {(() => {
+          const chunks = paginateForPrint(filteredData)
+          const offsetBefore = (pageIndex: number) => chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
+          return chunks.map((chunk: ProduitValo[], index: number, allChunks: ProduitValo[][]) => (
+            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="RAPPORT DE VALORISATION DES STOCKS"
               subtitle={`Dépôt : ${selectedMagasin === 'TOUT' ? 'Global' : magasins.find(m => m.id === Number(selectedMagasin))?.nom || 'Inconnu'} | Date d'inventaire : ${new Date(dateFin).toLocaleDateString('fr-FR')}`}
@@ -166,7 +162,7 @@ export default function ValeurStockPage() {
                   {chunk.map((p: ProduitValo, idx: number) => (
                     <tr key={idx} className="border-b border-black">
                       <td className="border border-black px-2 py-2 text-center font-bold">
-                        {index * ITEMS_PER_PRINT_PAGE + idx + 1}
+                        {offsetBefore(index) + idx + 1}
                       </td>
                       <td className="border border-black px-2 py-2 font-mono text-[11px] font-bold">
                         {p.code || '—'}
@@ -205,8 +201,9 @@ export default function ValeurStockPage() {
                 )}
               </table>
             </ListPrintWrapper>
-          </div>
-        ))}
+            </div>
+          ))
+        })()}
       </div>
 
       {/* VUE ÉCRAN (Masquée à l'impression) */}

@@ -5,7 +5,7 @@ import { Search, Loader2, Calendar, User, CreditCard, Hash, Coins, Download, Fil
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 interface PaiementFournisseur {
   id: number
@@ -74,6 +74,7 @@ export default function PaiementsFournisseursPage() {
     setIsPrintingData(true)
     try {
       setIsPreviewOpen(true)
+      setTimeout(() => window.print(), 50)
     } catch (e) {
       console.error(e)
     } finally {
@@ -128,7 +129,7 @@ export default function PaiementsFournisseursPage() {
             className="flex items-center gap-2 rounded-xl border-2 border-orange-500 bg-orange-600 px-6 py-3 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 disabled:opacity-50 uppercase tracking-widest"
           >
             {isPrintingData ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />} 
-            Aperçu Journal
+            Imprimer
           </button>
         </div>
       </div>
@@ -292,7 +293,7 @@ export default function PaiementsFournisseursPage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
             <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
-               {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: PaiementFournisseur[], index: number, allChunks: PaiementFournisseur[][]) => (
+               {paginateForPrint(filteredData).map((chunk: PaiementFournisseur[], index: number, allChunks: PaiementFournisseur[][]) => (
                     <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
                        <ListPrintWrapper
                         title="Journal des Paiements Fournisseurs"
@@ -349,7 +350,7 @@ export default function PaiementsFournisseursPage() {
 
       {/* Rendu Système (Impression Native) */}
       <div className="hidden print:block absolute inset-0 bg-white">
-          {chunkArray(filteredData, ITEMS_PER_PRINT_PAGE).map((chunk: PaiementFournisseur[], index: number, allChunks: PaiementFournisseur[][]) => (
+          {paginateForPrint(filteredData).map((chunk: PaiementFournisseur[], index: number, allChunks: PaiementFournisseur[][]) => (
                   <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                     <ListPrintWrapper
                       title="Journal des Paiements Fournisseurs"

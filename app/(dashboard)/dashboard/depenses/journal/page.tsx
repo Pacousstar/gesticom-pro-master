@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Printer, Loader2, ArrowLeft, Filter, Search, X } from 'lucide-react'
 import Link from 'next/link'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE } from '@/lib/print-helpers'
+import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
 type Depense = {
   id: number
@@ -197,7 +197,7 @@ export default function DepenseJournalPage() {
 
       {/* VUE IMPRESSION (Masquée à l'écran) */}
       <div className="hidden print:block absolute inset-0 bg-white text-black">
-        {chunkArray(depenses, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+        {paginateForPrint(depenses).map((chunk, index, allChunks) => (
           <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
             <ListPrintWrapper
               title="Journal des Dépenses"
@@ -284,7 +284,7 @@ export default function DepenseJournalPage() {
 
           <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
               <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen p-12 text-slate-900 not-italic tracking-normal">
-                {chunkArray(depenses, ITEMS_PER_PRINT_PAGE).map((chunk, index, allChunks) => (
+                {paginateForPrint(depenses).map((chunk, index, allChunks) => (
                   <div key={index} className="page-break-after border-b-2 border-dashed border-gray-100 mb-12 pb-12 last:border-0 last:mb-0 last:pb-0 shadow-sm">
                     <ListPrintWrapper
                       title="JOURNAL DÉTAILLÉ DES DÉPENSES"
