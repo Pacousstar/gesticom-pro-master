@@ -1,32 +1,30 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { readFile } from 'fs/promises'
-import { resolveDataFilePath } from '@/lib/resolveDataFile'
+import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
-/** 
- * Total produits (actifs) et produits avec au moins un stock >0.
- * IMPORTANT: Un produit est affiché uniquement dans son point de vente.
- * Le total doit correspondre au nombre de lignes dans le fichier Excel (3290).
- */
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requirePermission(session, 'produits:view')
+  if (forbidden) return forbidden
+
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
 
   try {
-    // Compter tous les produits actifs (même les doublons de désignation)
-    // Chaque produit est unique par son code et est dans un seul point de vente
-    const total = await prisma.produit.count({ where: { actif: true } })
-    
-    // Produits avec au moins un stock > 0 (groupés par produitId pour éviter les doublons)
-    const enStockRows = await prisma.stock.groupBy({
-      by: ['produitId'],
-      where: { quantite: { gt: 0 } },
-    })
+    const [total, enStockRows] = await Promise.all([
+      prisma.produit.count({ where: { actif: true, entiteId } }),
+      prisma.stock.groupBy({
+        by: ['produitId'],
+        where: { quantite: { gt: 0 }, entiteId },
+      }),
+    ])
 
-    const enStock = enStockRows.length
-
-    return NextResponse.json({ total, enStock })
+    return NextResponse.json({ total, enStock: enStockRows.length })
   } catch (e) {
     console.error('GET /api/produits/stats:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

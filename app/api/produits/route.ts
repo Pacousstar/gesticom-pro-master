@@ -2,129 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { logCreation, getIpAddress, getUserAgent } from '@/lib/audit'
+import { logCreation, getIpAddress } from '@/lib/audit'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-import { ensureActivated } from '@/lib/security'
 import { produitSchema } from '@/lib/validations'
 
-export async function GET(request: NextRequest) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'produits:view')
-  if (forbidden) return forbidden
+const MAX_LIMIT = 1000
+const CODE_PADDING = 3
 
-  const complet = request.nextUrl.searchParams.get('complet') === '1'
+async function generateProductCode(categorie: string, entiteId: number): Promise<string> {
+  const prefix = (categorie.slice(0, 4).toUpperCase().replace(/\s/g, '') || 'PROD').replace(/[^A-Z0-9-]/g, '')
 
-  const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
-  const entiteId = await getEntiteId(session)
-  const where: any = complet ? {} : { actif: true } // En mode complet (rapports), on inclut tout pour vérifier le stock résiduel
-
-  // Filtrage par entité (support SUPER_ADMIN)
-  if (session.role === 'SUPER_ADMIN') {
-    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
-    if (entiteIdFromParams) {
-      where.entiteId = Number(entiteIdFromParams)
-    } else if (entiteId > 0) {
-      where.entiteId = entiteId
-    }
-  } else if (entiteId > 0) {
-    where.entiteId = entiteId
-  }
-
-  if (q) {
-    where.OR = [
-      { code: { contains: q } },
-      { designation: { contains: q } },
-      { categorie: { contains: q } },
-    ]
-  }
-
-  // Mode complet : retourner tous les produits sans pagination (utilisé dans les sélecteurs)
-  if (complet) {
-    const produits = await prisma.produit.findMany({
-      where,
-      orderBy: [{ categorie: 'asc' }, { code: 'asc' }],
-      select: {
-        id: true,
-        code: true,
-        designation: true,
-        categorie: true,
-        prixVente: true,
-        prixAchat: true,
-        prixMinimum: true,
-        seuilMin: true,
-        codeBarres: true,
-        stocks: {
-          select: { magasinId: true, quantite: true }
-        }
-      }
-    })
-
-    const data = produits.map(p => ({
-      ...p,
-      stockConsolide: p.stocks.reduce((sum, s) => sum + s.quantite, 0)
-    }))
-
-    // Filtre insensible à la casse manuel si la requête Prisma est complexe
-    const filtered = q
-      ? data.filter(
-        (p) =>
-          p.code.toLowerCase().includes(q) ||
-          p.designation.toLowerCase().includes(q) ||
-          p.categorie.toLowerCase().includes(q)
-      )
-      : data
-
-    const res = NextResponse.json(filtered)
-    res.headers.set('Cache-Control', 'no-store, max-age=0')
-    return res
-  }
-
-  // Mode paginé (utilisé dans la liste des produits)
-  const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
-  const limit = Math.min(50000, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
-  const skip = (page - 1) * limit
-
-  const [produits, total] = await Promise.all([
-    prisma.produit.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: [{ categorie: 'asc' }, { code: 'asc' }],
-      include: {
-        stocks: {
-          select: { magasinId: true, quantite: true }
-        }
-      }
-    }),
-    prisma.produit.count({ where }),
-  ])
-
-  const data = produits.map(p => ({
-    ...p,
-    stockConsolide: p.stocks.reduce((sum, s) => sum + s.quantite, 0)
-  }))
-
-  const res = NextResponse.json({
-    data,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  })
-  res.headers.set('Cache-Control', 'no-store, max-age=0')
-  return res
-}
-
-async function generateProductCode(categorie: string): Promise<string> {
-  const prefix = categorie.slice(0, 4).toUpperCase().replace(/\s/g, '') || 'PROD'
-  
-  // Trouver le dernier produit avec ce préfixe ou cette catégorie
   const lastProd = await prisma.produit.findFirst({
-    where: { 
+    where: {
+      entiteId,
       OR: [
         { code: { startsWith: prefix + '-' } },
         { categorie: categorie }
@@ -142,17 +33,118 @@ async function generateProductCode(categorie: string): Promise<string> {
     }
   }
 
-  // Vérifier l'unicité et itérer si besoin
-  let code = `${prefix}-${String(nextNum).padStart(4, '0')}`
+  let code = `${prefix}-${String(nextNum).padStart(CODE_PADDING, '0')}`
   let exists = await prisma.produit.findUnique({ where: { code } })
-  
+
   while (exists) {
     nextNum++
-    code = `${prefix}-${String(nextNum).padStart(4, '0')}`
+    code = `${prefix}-${String(nextNum).padStart(CODE_PADDING, '0')}`
     exists = await prisma.produit.findUnique({ where: { code } })
   }
 
   return code
+}
+
+export async function GET(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requirePermission(session, 'produits:view')
+  if (forbidden) return forbidden
+
+  const entiteId = await getEntiteId(session)
+  const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
+  const complet = request.nextUrl.searchParams.get('complet') === '1'
+
+  const whereEntite: any = {}
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      whereEntite.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId > 0) {
+      whereEntite.entiteId = entiteId
+    }
+  } else if (entiteId > 0) {
+    whereEntite.entiteId = entiteId
+  } else {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
+
+  const baseWhere = complet ? { ...whereEntite } : { ...whereEntite, actif: true }
+
+  if (complet) {
+    const produits = await prisma.produit.findMany({
+      where: baseWhere,
+      orderBy: [{ categorie: 'asc' }, { code: 'asc' }],
+      include: {
+        stocks: {
+          select: { magasinId: true, quantite: true }
+        }
+      }
+    })
+
+    const data = produits.map(p => ({
+      ...p,
+      stockConsolide: p.stocks.reduce((sum, s) => sum + s.quantite, 0)
+    }))
+
+    const filtered = q
+      ? data.filter(
+        (p) =>
+          p.code.toLowerCase().includes(q) ||
+          p.designation.toLowerCase().includes(q) ||
+          p.categorie.toLowerCase().includes(q)
+      )
+      : data
+
+    const res = NextResponse.json(filtered)
+    res.headers.set('Cache-Control', 'no-store, max-age=0')
+    return res
+  }
+
+  const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
+  const limit = Math.min(MAX_LIMIT, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
+  const skip = (page - 1) * limit
+
+  const [produits, total] = await Promise.all([
+    prisma.produit.findMany({
+      where: baseWhere,
+      skip,
+      take: limit,
+      orderBy: [{ categorie: 'asc' }, { code: 'asc' }],
+      include: {
+        stocks: {
+          select: { id: true, magasinId: true, quantite: true }
+        }
+      }
+    }),
+    prisma.produit.count({ where: baseWhere }),
+  ])
+
+  const data = produits.map(p => ({
+    ...p,
+    stockConsolide: p.stocks.reduce((sum, s) => sum + s.quantite, 0)
+  }))
+
+  const filtered = q
+    ? data.filter(
+      (p) =>
+        p.code.toLowerCase().includes(q) ||
+        p.designation.toLowerCase().includes(q) ||
+        p.categorie.toLowerCase().includes(q)
+    )
+    : data
+
+  const res = NextResponse.json({
+    data: filtered,
+    pagination: {
+      page,
+      limit,
+      total: filtered.length,
+      totalPages: Math.ceil(filtered.length / limit),
+    },
+  })
+  res.headers.set('Cache-Control', 'no-store, max-age=0')
+  return res
 }
 
 export async function POST(request: NextRequest) {
@@ -163,38 +155,44 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    
-    // Validation Zod
+
     const validation = produitSchema.safeParse(body)
     if (!validation.success) {
       const errors = (validation.error as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ')
       return NextResponse.json({ error: `Validation échouée: ${errors}` }, { status: 400 })
     }
 
-    const { designation, categorie, prixAchat, prixVente, seuilMin } = validation.data
+    const { designation, categorie, prixAchat, prixVente, seuilMin, codeBarres } = validation.data
     const prixMinimum = body?.prixMinimum != null ? Number(body.prixMinimum) : 0
     const fournisseurId = body?.fournisseurId != null ? Number(body.fournisseurId) : null
-    
+
     let code = String(body?.code || '').trim().toUpperCase()
-    
-    // Si le code est vide, on le génère automatiquement
-    if (!code) {
-      code = await generateProductCode(categorie)
+
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+      return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
     }
 
     if (!designation) {
       return NextResponse.json({ error: 'La désignation est requise.' }, { status: 400 })
     }
 
-    const existing = await prisma.produit.findUnique({ where: { code } })
+    if (!code) {
+      code = await generateProductCode(categorie, entiteId)
+    }
+
+    const existing = await prisma.produit.findFirst({ where: { code, entiteId } })
     if (existing) {
-      if (!existing.actif) {
-        // ... (conserver la logique de réactivation si besoin, mais ici si on veut de l'auto, maybe simple generating new)
+      return NextResponse.json({ error: `Le code produit "${code}" existe déjà dans votre entité.` }, { status: 409 })
+    }
+
+    if (codeBarres) {
+      const existingBarcode = await prisma.produit.findFirst({
+        where: { codeBarres, entiteId }
+      })
+      if (existingBarcode) {
+        return NextResponse.json({ error: `Le code-barres "${codeBarres}" est déjà utilisé par le produit "${existingBarcode.designation}".` }, { status: 409 })
       }
-      
-      // Si le code existe déjà et que l'utilisateur n'a pas forcé le code, on en génère un nouveau
-      // car le message d'erreur bloque l'utilisateur.
-      code = await generateProductCode(categorie)
     }
 
     const magasinIdRaw = body?.magasinId != null ? Number(body.magasinId) : null
@@ -204,30 +202,28 @@ export async function POST(request: NextRequest) {
 
     const quantiteInitiale = Math.max(0, Number(body?.quantiteInitiale) || 0)
 
-    const magasin = await prisma.magasin.findUnique({ where: { id: magasinIdRaw } })
+    const magasin = await prisma.magasin.findFirst({
+      where: { id: magasinIdRaw, entiteId }
+    })
     if (!magasin) {
-      return NextResponse.json({ error: 'Point de vente introuvable.' }, { status: 404 })
-    }
-
-    const entiteId = await getEntiteId(session)
-    if (session.role !== 'SUPER_ADMIN' && magasin.entiteId !== entiteId) {
-      return NextResponse.json({ error: 'Ce magasin n\'appartient pas à votre entité.' }, { status: 403 })
+      return NextResponse.json({ error: 'Point de vente introuvable ou n\'appartient pas à votre entité.' }, { status: 404 })
     }
 
     const result = await prisma.$transaction(async (tx) => {
       const p = await tx.produit.create({
-        data: { 
-          code, 
-          designation, 
-          categorie, 
-          prixAchat, 
-          prixVente, 
+        data: {
+          code,
+          designation,
+          categorie,
+          prixAchat,
+          prixVente,
           prixMinimum,
-          pamp: prixAchat, 
-          fournisseurId, 
-          seuilMin, 
+          pamp: prixAchat,
+          fournisseurId,
+          seuilMin,
           actif: true,
-          entiteId: entiteId
+          entiteId,
+          codeBarres: codeBarres || null,
         },
       })
 
@@ -236,7 +232,6 @@ export async function POST(request: NextRequest) {
       })
 
       if (quantiteInitiale > 0) {
-        // Enregistrer le mouvement initial
         const mvt = await tx.mouvement.create({
           data: {
             type: 'ENTREE',
@@ -250,7 +245,6 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        // Comptabiliser en Journal OD
         const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
         await comptabiliserMouvementStock({
           produitId: p.id,
@@ -270,29 +264,30 @@ export async function POST(request: NextRequest) {
 
     const ipAddress = getIpAddress(request)
     await logCreation(
-        session,
-        'PRODUIT',
-        result.id,
-        `Produit ${result.code} - ${result.designation}`,
-        {
-          code: result.code,
-          designation: result.designation,
-          categorie: result.categorie,
-          magasinId: magasinIdRaw,
-          quantiteInitiale,
-        },
-        ipAddress
-      )
+      session,
+      'PRODUIT',
+      result.id,
+      `Produit ${result.code} - ${result.designation}`,
+      {
+        code: result.code,
+        designation: result.designation,
+        categorie: result.categorie,
+        magasinId: magasinIdRaw,
+        quantiteInitiale,
+        codeBarres: codeBarres || null,
+      },
+      ipAddress
+    )
 
-      revalidatePath('/dashboard/produits')
-      revalidatePath('/dashboard/stock')
-      revalidatePath('/api/produits')
-      revalidatePath('/api/produits/stats')
-      revalidatePath('/api/produits/categories')
+    revalidatePath('/dashboard/produits')
+    revalidatePath('/dashboard/stock')
+    revalidatePath('/api/produits')
+    revalidatePath('/api/produits/stats')
+    revalidatePath('/api/produits/categories')
 
-      return NextResponse.json(result)
-    } catch (e) {
-      console.error('POST /api/produits:', e)
-      return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
-    }
+    return NextResponse.json(result)
+  } catch (e) {
+    console.error('POST /api/produits:', e)
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
+}

@@ -116,6 +116,13 @@ export type Permission =
   | 'fournisseurs:edit'
   | 'fournisseurs:delete'
 
+  // Commandes fournisseurs
+  | 'commandes:view'
+  | 'commandes:create'
+  | 'commandes:edit'
+  | 'commandes:delete'
+  | 'commandes:receptionner'
+
 /**
  * Définition des permissions par rôle
  */
@@ -139,6 +146,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'rapports:view', 'rapports:ventes',
     'clients:view', 'clients:create', 'clients:edit', 'clients:delete',
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit', 'fournisseurs:delete',
+    'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:delete', 'commandes:receptionner',
   ],
 
   ADMIN: [
@@ -159,6 +167,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'rapports:view', 'rapports:ventes',
     'clients:view', 'clients:create', 'clients:edit',
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit',
+    'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:receptionner',
     // RB9: Permissions Banque pour ADMIN
     'banque:view', 'banque:create',
   ],
@@ -176,6 +185,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'comptabilite:view', 'comptabilite:rapports', 'comptabilite:export',
     'rapports:view', 'rapports:ventes',
     'clients:view', 'fournisseurs:view',
+    'commandes:view',
     // RB9: Permissions Banque pour COMPTABLE
     'banque:view',
   ],
@@ -193,6 +203,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'rapports:view',
     'clients:view', 'clients:create', 'clients:edit',
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit',
+    'commandes:view', 'commandes:create', 'commandes:edit',
   ],
 
   MAGASINIER: [
@@ -204,6 +215,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'achats:view',
     'clients:view',
     'fournisseurs:view',
+    'commandes:view',
   ],
 
   ASSISTANTE: [

@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
-/**
- * GET: Détecte les doublons par désignation ou par code
- */
 export async function GET(req: NextRequest) {
-  try {
-    const session = await getSession()
-    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requirePermission(session, 'produits:view')
+  if (forbidden) return forbidden
 
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
+
+  try {
     const products = await prisma.produit.findMany({
-      where: { actif: true },
+      where: { actif: true, entiteId },
       include: { stocks: true }
     })
 
@@ -38,7 +44,6 @@ export async function GET(req: NextRequest) {
 
     seenCodes.forEach((list, code) => {
       if (list.length > 1) {
-        // Éviter les doublons déjà identifiés par désignation
         const exists = duplicates.find((d: any) => d.type === 'DESIGNATION' && d.products.some((p: any) => p.code.toLowerCase().trim() === code))
         if (!exists) {
           duplicates.push({ type: 'CODE', value: code, products: list })
@@ -53,41 +58,68 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/**
- * POST: Fusionne un doublon vers un produit principal
- * On archive le doublon et on transfère son stock au principal
- */
 export async function POST(req: NextRequest) {
-  try {
-    const session = await getSession()
-    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requirePermission(session, 'produits:edit')
+  if (forbidden) return forbidden
 
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
+
+  try {
     const { idPrincipal, idDoublon } = await req.json()
 
     if (!idPrincipal || !idDoublon) {
       return NextResponse.json({ error: 'IDs manquants' }, { status: 400 })
     }
 
-    const res = await prisma.$transaction(async (tx) => {
-      // 1. Récupérer les stocks du doublon
-      const stocksDoublon = await tx.stock.findMany({ where: { produitId: idDoublon } })
+    const principal = await prisma.produit.findFirst({
+      where: { id: idPrincipal, entiteId }
+    })
+    if (!principal) {
+      return NextResponse.json({ error: 'Produit principal introuvable ou non accessible.' }, { status: 404 })
+    }
+    const doublon = await prisma.produit.findFirst({
+      where: { id: idDoublon, entiteId }
+    })
+    if (!doublon) {
+      return NextResponse.json({ error: 'Doublon introuvable ou non accessible.' }, { status: 404 })
+    }
 
-      // 2. Transférer vers le principal
+    const res = await prisma.$transaction(async (tx) => {
+      const stocksDoublon = await tx.stock.findMany({ where: { produitId: idDoublon, entiteId } })
+
       for (const sd of stocksDoublon) {
         if (sd.quantite > 0) {
           await tx.stock.upsert({
-            where: { produitId_magasinId_entiteId: { produitId: idPrincipal, magasinId: sd.magasinId, entiteId: sd.entiteId } },
-            create: { produitId: idPrincipal, magasinId: sd.magasinId, quantite: sd.quantite, quantiteInitiale: 0 },
-            update: { quantite: { increment: sd.quantite } }
+            where: {
+              produitId_magasinId_entiteId: {
+                produitId: idPrincipal,
+                magasinId: sd.magasinId,
+                entiteId
+              }
+            },
+            create: {
+              produitId: idPrincipal,
+              magasinId: sd.magasinId,
+              quantite: sd.quantite,
+              quantiteInitiale: 0,
+              entiteId
+            },
+            update: {
+              quantite: { increment: sd.quantite }
+            }
           })
-          
-          // Créer un mouvement de transfert pour la traçabilité
+
           await tx.mouvement.create({
             data: {
               type: 'ENTREE',
               produitId: idPrincipal,
               magasinId: sd.magasinId,
-              entiteId: session.entiteId!,
+              entiteId,
               utilisateurId: session.userId,
               quantite: sd.quantite,
               observation: `Fusion doublon (Produit ID ${idDoublon})`
@@ -96,10 +128,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 3. Archiver le doublon pour ne pas perdre l'historique mais le sortir de la vue active
       await tx.produit.update({
         where: { id: idDoublon },
-        data: { actif: false, code: `OLD_${Date.now()}_${idDoublon}` } // Changer le code pour libérer le doublon
+        data: {
+          actif: false,
+          code: `OLD_${Date.now()}_${idDoublon}`
+        }
       })
 
       return { success: true }

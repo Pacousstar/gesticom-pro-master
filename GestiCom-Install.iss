@@ -1,6 +1,6 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "2.0.16"
+#define MyAppVersion "2.0.18"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "GestiComService.exe"

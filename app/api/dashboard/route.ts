@@ -43,7 +43,11 @@ export async function GET() {
 
     // Utiliser l'entité de la session
     const entiteId = await getEntiteId(session)
-    const entiteCondition = entiteId ? { entiteId } : {}
+    if (!entiteId || entiteId <= 0) {
+      console.warn('[dashboard] Aucune entité valide trouvée, accès restreint')
+      return NextResponse.json({ error: 'Aucune entité associée à cet utilisateur' }, { status: 403 })
+    }
+    const entiteCondition = { entiteId }
 
     // Début des dates pour SQL
     const isoAuj = debAuj.toISOString()
@@ -125,9 +129,10 @@ export async function GET() {
         take: 5
       }).catch(catchEmpty('venteLigne.groupBy')),
       // 8 - Valeur du Stock (Agrégation SQL Native)
+      // Formule: Si pamp > 0, utiliser pamp. Sinon utiliser prixAchat (ou 0)
       prisma.$queryRaw<any[]>`
         SELECT 
-          SUM(s.quantite * COALESCE(p.pamp, p."prixAchat", 0)) as total_achat,
+          SUM(s.quantite * CASE WHEN p.pamp > 0 THEN p.pamp ELSE COALESCE(p."prixAchat", 0) END) as total_achat,
           SUM(s.quantite * COALESCE(p."prixVente", 0)) as total_vente,
           SUM(CASE WHEN s.quantite <= 0 THEN 1 ELSE 0 END) as nb_ruptures,
           SUM(CASE WHEN s.quantite > 0 THEN 1 ELSE 0 END) as nb_en_stock
@@ -149,15 +154,15 @@ export async function GET() {
         _sum: { debit: true, credit: true }
       }).catch(() => ({ _sum: { debit: 0, credit: 0 } })),
 
-      // 11 - Dettes Fournisseurs (Achats non soldés)
+      // 11 - Dettes Fournisseurs (Achats non soldés - exclure ANNULEE)
       prisma.achat.aggregate({
-        where: { statut: { not: 'ANNULE' }, ...entiteCondition as any },
+        where: { statut: { not: 'ANNULEE' }, ...entiteCondition as any },
         _sum: { montantTotal: true, montantPaye: true, fraisApproche: true }
       }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0, fraisApproche: 0 } })),
 
-      // 12 - Créances Clients (Ventes non soldées)
+      // 12 - Créances Clients (Ventes non soldées - exclure ANNULEE et BROUILLON)
       prisma.vente.aggregate({
-        where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
+        where: { statut: { in: ['VALIDE', 'VALIDEE'] }, NOT: { statut: 'ANNULEE' }, ...entiteCondition as any },
         _sum: { montantTotal: true, montantPaye: true }
       }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0 } })),
 
@@ -208,10 +213,16 @@ export async function GET() {
       [], // 15
     ]
 
-    const result = await Promise.race([
+const result = await Promise.race([
       queries,
       timeoutPromise(DASHBOARD_TIMEOUT_MS, timeoutFallback),
     ]) as any[]
+
+    const timedOut = result === timeoutFallback
+    if (timedOut) {
+      console.warn('[dashboard] Timeout après', DASHBOARD_TIMEOUT_MS, 'ms. Données partielles retournées.')
+      console.warn('[dashboard] Requêtes potentiellement encore en cours en background.')
+    }
 
     const [
       salesRaw,
@@ -224,18 +235,13 @@ export async function GET() {
       topProduitsRaw,
       stockRaw,
       depensesAgg,
-      soldeCompte, // Sum global (Option 10) - On garde pour rétro-compatibilité
+      soldeCompte,
       dettesAgg,
       creancesAgg,
-      detailTresorerieRaw, // GroupBy (Option 13)
+      detailTresorerieRaw,
       systemAlertesRaw,
       tendancesRaw,
     ] = result
-
-    const timedOut = result === timeoutFallback
-    if (timedOut) {
-      console.warn('[dashboard] Timeout après', DASHBOARD_TIMEOUT_MS, 'ms. Base verrouillée.')
-    }
 
     // Extraction des données Sales
     const s = salesRaw[0] || {}
@@ -253,7 +259,9 @@ export async function GET() {
     const valeurStockVente = toNum(st.total_vente)
     const nbRuptures = toNum(st.nb_ruptures)
     const stocksAvecQte = toNum(st.nb_en_stock)
-    const tauxRupture = totalProduitsCatalogue > 0 ? Math.round((nbRuptures / totalProduitsCatalogue) * 100) : 0
+    // Taux de rupture = produits en rupture / produits ayant des entrées de stock (rupture + en stock)
+    const totalStocks = nbRuptures + stocksAvecQte
+    const tauxRupture = totalStocks > 0 ? Math.round((nbRuptures / totalStocks) * 100) : 0
 
     // Extraction Trésorerie/Dettes/Créances
     let tresorerieCaisse = 0
@@ -273,13 +281,13 @@ export async function GET() {
     
     // Soldes de trésorerie consolidés depuis les mouvements, pour éviter les dérives
     // liées au champ magasin.soldeCaisse historique.
-    // FILTRAGE PAR DATE : Caisse = mouvements créés aujourd'hui (createdAt), pas date comptable
+    // FILTRAGE PAR DATE : Caisse = opérations du jour (date), pas date de création (createdAt)
     // Banque = solde actuel (toutes dates)
     const [soldesPhysiques] = await Promise.all([
       prisma.$transaction([
         prisma.banque.aggregate({ where: entiteCondition, _sum: { soldeActuel: true } }),
-        prisma.caisse.aggregate({ where: { createdAt: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'ENTREE' }, _sum: { montant: true } }),
-        prisma.caisse.aggregate({ where: { createdAt: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'SORTIE' }, _sum: { montant: true } })
+        prisma.caisse.aggregate({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'ENTREE' }, _sum: { montant: true } }),
+        prisma.caisse.aggregate({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'SORTIE' }, _sum: { montant: true } })
       ])
     ])
 
@@ -358,6 +366,7 @@ export async function GET() {
       })),
       recentSales: (recentSalesRaw as any[]).map((s: any) => ({
         id: s.id,
+        numero: s.numero || '',
         client: s.client?.nom || s.clientLibre || 'Client Inconnu',
         montant: s.montantTotal || 0,
         time: new Date(s.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),

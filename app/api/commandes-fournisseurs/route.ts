@@ -8,49 +8,91 @@ import { requirePermission } from '@/lib/require-role'
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'achats:view') // On réutilise les perms achats pour l'instant
-  if (forbidden) return forbidden
 
-  const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
-  const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
-  const skip = (page - 1) * limit
+  const forbidden = requirePermission(session, 'commandes:view')
+  if (forbidden) return NextResponse.json({ error: 'Droits insuffisants pour cette action.' }, { status: 403 })
 
-  const where: any = {}
-  if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-    where.entiteId = session.entiteId
+  const searchParams = request.nextUrl.searchParams
+  const page = Math.max(1, Number(searchParams.get('page')) || 1)
+  const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || 20))
+  const search = searchParams.get('search')?.trim() || ''
+  const statut = searchParams.get('statut')
+  const exportAll = searchParams.get('export') === 'all'
+
+  const skip = exportAll ? 0 : (page - 1) * limit
+
+  const entiteId = await getEntiteId(session)
+  const where: any = { entiteId }
+
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    }
+  }
+
+  // Filtre par statut
+  if (statut && statut !== 'TOUT') {
+    where.statut = statut
+  }
+
+  // Recherche texte
+  if (search) {
+    where.OR = [
+      { numero: { contains: search, mode: 'insensitive' } },
+      { fournisseur: { nom: { contains: search, mode: 'insensitive' } } },
+      { fournisseurLibre: { contains: search, mode: 'insensitive' } }
+    ]
   }
 
   const [commandes, total] = await Promise.all([
     prisma.commandeFournisseur.findMany({
       where,
       skip,
-      take: limit,
+      take: exportAll ? undefined : limit,
       orderBy: { date: 'desc' },
       include: {
-        fournisseur: { select: { nom: true, code: true } },
-        magasin: { select: { nom: true } },
+        fournisseur: { select: { nom: true, code: true, telephone: true } },
+        magasin: { select: { nom: true, code: true } },
         lignes: true
       },
     }),
-    prisma.commandeFournisseur.count({ where })
+    exportAll ? Promise.resolve(0) : prisma.commandeFournisseur.count({ where })
   ])
 
-  return NextResponse.json({
-    data: commandes,
-    pagination: {
+  // Calcul des totaux pour export
+  let totalMontant = 0
+  if (exportAll) {
+    const allCommandes = await prisma.commandeFournisseur.findMany({
+      where,
+      select: { montantTotal: true }
+    })
+    totalMontant = allCommandes.reduce((acc, c) => acc + (c.montantTotal || 0), 0)
+  }
+
+  const response: any = { data: commandes }
+  
+  if (!exportAll) {
+    response.pagination = {
       page,
       limit,
       total,
       totalPages: Math.ceil(total / limit),
-    },
-  })
+    }
+  }
+  
+  if (exportAll) {
+    response.totals = { montantTotal: totalMontant }
+  }
+
+  return NextResponse.json(response)
 }
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'achats:create')
-  if (forbidden) return forbidden
+  const forbidden = requirePermission(session, 'commandes:create')
+  if (forbidden) return NextResponse.json({ error: 'Droits insuffisants pour cette action.' }, { status: 403 })
 
   try {
     const body = await request.json()

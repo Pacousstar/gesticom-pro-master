@@ -80,7 +80,18 @@ export const parametresPatchSchema = z.object({
   dateCloture: z.string().nullable().optional(),
 })
 
-/** Produit : code, désignation, catégorie, prix */
+/** Valide et normalise un code-barres EAN-13 */
+function validateEan13(code: string | null | undefined): string | null {
+  if (!code) return null
+  const cleaned = code.trim().replace(/\s/g, '')
+  if (cleaned.length === 0) return null
+  if (!/^\d{8,14}$/.test(cleaned)) {
+    throw new Error('Le code-barres doit contenir uniquement des chiffres (8 à 14 caractères : EAN-8, EAN-13, UPC-A).')
+  }
+  return cleaned
+}
+
+/** Produit : code, désignation, catégorie, prix, code-barres */
 export const produitSchema = z.object({
   code: z.string().min(1, 'Le code est requis.').max(50, 'Le code ne peut pas dépasser 50 caractères.').trim(),
   designation: z.string().min(1, 'La désignation est requise.').max(MAX_STRING, 'La désignation ne peut pas dépasser 500 caractères.').trim(),
@@ -88,6 +99,7 @@ export const produitSchema = z.object({
   prixAchat: z.coerce.number().min(0, 'Le prix d\'achat doit être positif.').nullable().optional(),
   prixVente: z.coerce.number().min(0, 'Le prix de vente doit être positif.').nullable().optional(),
   seuilMin: z.coerce.number().int().min(0, 'Le seuil minimum doit être positif.').default(5),
+  codeBarres: z.string().max(14).optional().nullable().transform(val => validateEan13(val)),
 })
 
 /** Client : nom, téléphone, type, plafond crédit */

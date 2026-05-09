@@ -104,7 +104,7 @@ model Magasin {
 model Produit {
   id              Int                        @id @default(autoincrement())
   code            String                     @unique
-  codeBarres      String?
+  codeBarres      String?                     @unique
   designation     String
   categorie       String
   unite           String                     @default("unite")

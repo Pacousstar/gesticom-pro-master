@@ -30,6 +30,23 @@ import SuggestionsAchat from '@/components/dashboard/SuggestionsAchat'
 
 
 
+type CreditAlert = {
+  id: string
+  type: 'CRITICAL' | 'WARNING'
+  categorie: 'CREDIT'
+  message: string
+  date: string
+}
+
+type SystemAlerte = {
+  id: number
+  date: Date
+  type: string
+  categorie: string
+  message: string
+  lu: boolean
+}
+
 type DashboardData = {
   transactionsJour: number
   transactionsHier: number
@@ -46,7 +63,7 @@ type DashboardData = {
   topProduits: Array<{ name: string; ca: number; qte: number }>
   repartition: Array<{ name: string; percent: number }>
   lowStock: Array<{ name: string; stock: number; min: number; category: string }>
-  recentSales: Array<{ id: string; client: string; montant: number; time: string }>
+  recentSales: Array<{ id: string; numero: string; client: string; montant: number; time: string }>
   totalDepensesCount: number
   totalDepensesAmount: number
   tresorerieReelle: number
@@ -55,8 +72,8 @@ type DashboardData = {
   totalDettes: number
   totalCreances: number
   monthlyTrends: Array<{ month: string; current: number; previous: number }>
-  systemAlertes?: any[]
-  creditAlerts?: any[]
+  systemAlertes?: SystemAlerte[]
+  creditAlerts?: CreditAlert[]
   _timeout?: boolean
 }
 
@@ -120,6 +137,7 @@ export default function DashboardPage() {
   const recentSales = data?.recentSales ?? []
   const activityItems = recentSales.map((s) => ({
     id: s.id,
+    numero: s.numero || '',
     type: 'vente' as const,
     label: s.client,
     montant: s.montant,

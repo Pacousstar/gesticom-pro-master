@@ -62,7 +62,7 @@ const navigation = [
       { name: 'Produits', href: '/dashboard/produits', icon: Package, permission: 'produits:view', key: 'produits' },
       { name: 'Mouvements de Stock', href: '/dashboard/rapports-inventaire/mouvements', icon: ArrowRightLeft, permission: 'stocks:view', key: 'stocks' },
       { name: 'Valeur de Stock', href: '/dashboard/rapports-inventaire/valeur', icon: TrendingUp, permission: 'stocks:view', key: 'stocks' },
-      { name: 'Bons de Commande', href: '/dashboard/commandes-fournisseurs', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'achats:view', key: 'commandes' },
+      { name: 'Bons de Commande', href: '/dashboard/commandes-fournisseurs', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'commandes:view', key: 'commandes' },
       { name: 'Stocks', href: '/dashboard/stock', icon: Warehouse, permission: 'stocks:view', key: 'stocks' },
     ]
   },

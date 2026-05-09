@@ -4,10 +4,11 @@ import { prisma } from '@/lib/db'
 import { readFile } from 'fs/promises'
 import { processImportRows, type ImportRow } from '@/lib/importProduits'
 import { resolveDataFilePath } from '@/lib/resolveDataFile'
+import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 const CSV_FILE = 'GestiCom_Produits_Master.csv'
 
-/** Parse une ligne CSV simple (virgules). Si Designation contient des virgules, on reconstitue. */
 function parseCsvLine(line: string): string[] {
   const parts: string[] = []
   let i = 0
@@ -37,7 +38,6 @@ function parseCsvLine(line: string): string[] {
   return parts
 }
 
-/** Colonnes attendues : ID, Code, Designation, Categorie, Prix_Achat, Prix_Vente, Stock_Initial, Seuil_Min. Si Designation contient des virgules, les colonnes 2..n-5 sont fusionnées. */
 function csvRowsToImportRows(lines: string[]): ImportRow[] {
   const rows: ImportRow[] = []
   for (let i = 1; i < lines.length; i++) {
@@ -67,6 +67,13 @@ function csvRowsToImportRows(lines: string[]): ImportRow[] {
 export async function POST() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requirePermission(session, 'produits:create')
+  if (forbidden) return forbidden
+
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
 
   try {
     const filePath = await resolveDataFilePath(CSV_FILE)
@@ -87,15 +94,21 @@ export async function POST() {
       return NextResponse.json({ error: 'Aucune ligne valide (Code, Désignation requis).' }, { status: 400 })
     }
 
-    const magasinList = await prisma.magasin.findMany({
-      where: { actif: true },
+    const defaultMagasin = await prisma.magasin.findFirst({
+      where: { actif: true, entiteId },
+      orderBy: { code: 'asc' },
       select: { id: true, code: true },
     })
-    const magasinByCode = new Map(magasinList.map((m) => [m.code.trim().toUpperCase(), m.id]))
 
-    const { created, updated, stocksCreated } = await processImportRows(data, magasinByCode, prisma)
+    if (!defaultMagasin) {
+      return NextResponse.json({ error: 'Aucun point de vente disponible.' }, { status: 400 })
+    }
 
-    return NextResponse.json({ created, updated, total: data.length, stocksCreated })
+    const magasinByCode = new Map([[defaultMagasin.code.trim().toUpperCase(), defaultMagasin.id]])
+
+    const { created, updated } = await processImportRows(data, magasinByCode, prisma, entiteId)
+
+    return NextResponse.json({ created, updated, total: data.length })
   } catch (e) {
     console.error('POST /api/produits/import-csv:', e)
     const err = e as NodeJS.ErrnoException

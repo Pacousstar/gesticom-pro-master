@@ -5,7 +5,7 @@ import {
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X,
   Search, Scan, Camera, Edit2, Pencil, Trash, CreditCard, Wallet, UserPlus,
   AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent,
-  CheckCircle2, ArrowRightLeft, Truck
+  CheckCircle2, ArrowRightLeft, Truck, Download
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -52,6 +52,8 @@ export default function CommandesFournisseursPage() {
   const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
+  const [search, setSearch] = useState('')
+  const [selectedStatut, setSelectedStatut] = useState('TOUT')
   
   const [detailCommande, setDetailCommande] = useState<any | null>(null)
   const [loadingDetail, setLoadingDetail] = useState<number | null>(null)
@@ -211,16 +213,29 @@ export default function CommandesFournisseursPage() {
     }
   }
 
-  const fetchCommandes = (page?: number) => {
+  const fetchCommandes = (page: number = 1, searchTerm: string = '', statut: string = 'TOUT') => {
     setLoading(true)
-    const p = page ?? currentPage
-    fetch(`/api/commandes-fournisseurs?page=${p}&limit=20`)
+    let url = `/api/commandes-fournisseurs?page=${page}&limit=20`
+    if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`
+    if (statut !== 'TOUT') url += `&statut=${statut}`
+    
+    fetch(url)
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((res) => {
         setCommandes(res.data)
         setPagination(res.pagination)
       })
       .finally(() => setLoading(false))
+  }
+
+  const handleFilter = () => {
+    setCurrentPage(1)
+    fetchCommandes(1, search, selectedStatut)
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+    fetchCommandes(newPage, search, selectedStatut)
   }
 
   const addLigne = () => {
@@ -552,6 +567,79 @@ export default function CommandesFournisseursPage() {
         </div>
       )}
 
+      {/* Filtres */}
+      <div className="flex flex-wrap gap-4 items-end bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/20">
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-[10px] font-black text-white/70 uppercase mb-1">Rechercher</label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
+            <input
+              type="text"
+              placeholder="Numéro, fournisseur..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleFilter() }}
+              className="w-full rounded-lg border border-white/20 bg-white/10 px-10 py-2 text-sm text-white placeholder-white/50 focus:border-orange-400 focus:outline-none"
+            />
+          </div>
+        </div>
+        <div className="min-w-[150px]">
+          <label className="block text-[10px] font-black text-white/70 uppercase mb-1">Statut</label>
+          <select
+            value={selectedStatut}
+            onChange={(e) => { setSelectedStatut(e.target.value); setCurrentPage(1); fetchCommandes(1, search, e.target.value) }}
+            className="w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-orange-400 focus:outline-none"
+          >
+            <option value="TOUT" className="text-gray-900">Tous</option>
+            <option value="BROUILLON" className="text-gray-900">Brouillon</option>
+            <option value="RECUE" className="text-gray-900">Réceptionnée</option>
+            <option value="ANNULE" className="text-gray-900">Annulée</option>
+          </select>
+        </div>
+        <button 
+          onClick={handleFilter}
+          className="bg-orange-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-orange-600"
+        >
+          Filtrer
+        </button>
+        <button 
+          onClick={async () => {
+            try {
+              let url = `/api/commandes-fournisseurs?export=all`
+              if (search) url += `&search=${encodeURIComponent(search)}`
+              if (selectedStatut !== 'TOUT') url += `&statut=${selectedStatut}`
+              
+              const res = await fetch(url)
+              if (res.ok) {
+                const d = await res.json()
+                const csv = [
+                  ['Numéro', 'Date', 'Fournisseur', 'Montant', 'Statut'].join(';'),
+                  ...d.data.map((c: any) => [
+                    c.numero,
+                    new Date(c.date).toLocaleDateString('fr-FR'),
+                    c.fournisseur?.nom || c.fournisseurLibre || '',
+                    c.montantTotal,
+                    c.statut
+                  ].join(';'))
+                ].join('\n')
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                const blobUrl = window.URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = blobUrl
+                a.download = `bons_commande_${new Date().toISOString().split('T')[0]}.csv`
+                a.click()
+                window.URL.revokeObjectURL(blobUrl)
+              }
+            } catch (err) {
+              showError('Erreur export')
+            }
+          }}
+          className="flex items-center gap-2 border border-white/20 bg-white/10 text-white px-4 py-2 rounded-lg font-medium hover:bg-white/20"
+        >
+          <Download className="h-4 w-4" /> Export
+        </button>
+      </div>
+
       <div className="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl overflow-hidden">
         {loading ? (
           <div className="flex h-64 items-center justify-center">
@@ -621,6 +709,15 @@ export default function CommandesFournisseursPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {pagination && pagination.totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={pagination.limit}
+            onPageChange={handlePageChange}
+          />
         )}
       </div>
 

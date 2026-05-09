@@ -4,17 +4,21 @@ import { prisma } from '@/lib/db'
 import { readFile } from 'fs/promises'
 import { processImportRows, type ImportRow } from '@/lib/importProduits'
 import { resolveDataFilePath } from '@/lib/resolveDataFile'
+import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 const JSON_FILE = 'GestiCom_Produits_Master.json'
 
-/**
- * En un seul appel : importe le catalogue depuis GestiCom_Produits_Master.json
- * (data/) puis initialise toutes les lignes Stock
- * (produit × magasin) à 0. À utiliser lorsque la base est vide ou réinitialisée.
- */
 export async function POST() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requirePermission(session, 'produits:create')
+  if (forbidden) return forbidden
+
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
 
   try {
     const filePath = await resolveDataFilePath(JSON_FILE)
@@ -31,38 +35,41 @@ export async function POST() {
       return NextResponse.json({ error: 'Format JSON invalide (tableau attendu).' }, { status: 400 })
     }
 
-    const magasinList = await prisma.magasin.findMany({
-      where: { actif: true },
+    const defaultMagasin = await prisma.magasin.findFirst({
+      where: { actif: true, entiteId },
+      orderBy: { code: 'asc' },
       select: { id: true, code: true },
     })
-    const magasinByCode = new Map(magasinList.map((m) => [m.code.trim().toUpperCase(), m.id]))
 
-    const importResult = await processImportRows(data, magasinByCode, prisma)
-
-    const [produits, magasins] = await Promise.all([
-      prisma.produit.findMany({ where: { actif: true }, select: { id: true } }),
-      prisma.magasin.findMany({ where: { actif: true }, select: { id: true } }),
-    ])
-
-    // RÈGLE MÉTIER : Un produit = UN SEUL magasin
-    // Pour chaque produit, créer un stock uniquement s'il n'en a pas déjà un
-    let stockCreated = 0
-    const premierMagasinId = magasins.length > 0 ? magasins[0].id : null
-    
-    if (!premierMagasinId) {
-      return NextResponse.json({ error: 'Aucun magasin disponible.' }, { status: 400 })
+    if (!defaultMagasin) {
+      return NextResponse.json({ error: 'Aucun point de vente disponible dans votre entité.' }, { status: 400 })
     }
 
+    const magasinByCode = new Map([[defaultMagasin.code.trim().toUpperCase(), defaultMagasin.id]])
+
+    const importResult = await processImportRows(data, magasinByCode, prisma, entiteId)
+
+    const produits = await prisma.produit.findMany({
+      where: { actif: true, entiteId },
+      select: { id: true },
+    })
+
+    let stockCreated = 0
+
     for (const p of produits) {
-      // Vérifier si le produit a déjà un stock (peu importe le magasin)
       const stockExistant = await prisma.stock.findFirst({
-        where: { produitId: p.id }
+        where: { produitId: p.id, entiteId }
       })
-      
+
       if (!stockExistant) {
-        // Le produit n'a pas de stock, créer un stock dans le premier magasin
         await prisma.stock.create({
-          data: { produitId: p.id, magasinId: premierMagasinId, quantite: 0, quantiteInitiale: 0 },
+          data: {
+            produitId: p.id,
+            magasinId: defaultMagasin.id,
+            quantite: 0,
+            quantiteInitiale: 0,
+            entiteId,
+          },
         })
         stockCreated++
       }

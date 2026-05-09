@@ -5,6 +5,7 @@ import { ShoppingCart, ShoppingBag, Clock } from 'lucide-react'
 
 type ActivityItem = {
     id: string
+    numero: string
     type: 'vente' | 'achat'
     label: string // client ou fournisseur
     montant: number
@@ -89,7 +90,7 @@ export default function RecentActivity({
                                 {item.label}
                             </p>
                             <p className="text-xs text-gray-400">
-                                {item.id} · {formatTime(item.time)}
+                                {item.numero || item.id} · {formatTime(item.time)}
                             </p>
                         </div>
                         <div className="text-right flex-shrink-0">

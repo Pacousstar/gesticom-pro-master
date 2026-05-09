@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function GET(req: NextRequest) {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+    const entiteId = await getEntiteId(session)
+    if (!entiteId || entiteId <= 0) {
+      console.warn('[predictions] Aucune entité valide trouvée')
+      return NextResponse.json({ error: 'Aucune entité associée à cet utilisateur' }, { status: 403 })
+    }
+    const entiteCondition = { entiteId }
 
     const startTime = Date.now();
     console.log('[API] GET /api/predictions/rupture - Début');
@@ -12,7 +20,7 @@ export async function GET(req: NextRequest) {
         const thirtyDaysAgo = new Date()
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-        // 1. Obtenir les ventes des 30 derniers jours par produit
+        // 1. Obtenir les ventes des 30 derniers jours par produit (filtré par entité)
         const ventesGroups = await prisma.venteLigne.groupBy({
             by: ['produitId'],
             _sum: {
@@ -24,6 +32,7 @@ export async function GET(req: NextRequest) {
                         gte: thirtyDaysAgo,
                     },
                     statut: 'VALIDEE',
+                    ...entiteCondition,
                 },
             },
         })
@@ -31,17 +40,20 @@ export async function GET(req: NextRequest) {
         const produitIdsAvecVentes = ventesGroups.map(v => v.produitId)
 
         // 2. Récupérer uniquement les produits qui ont eu des ventes OU qui sont en stock
-        // Cela réduit drastiquement la charge pour les gros catalogues
+        // Cela réduit drastiquement la charge pour les gros catalogues (filtré par entité)
         const produits = await prisma.produit.findMany({
             where: {
                 actif: true,
+                entiteId: entiteId || undefined,
                 OR: [
                     { id: { in: produitIdsAvecVentes } },
-                    { stocks: { some: { quantite: { gt: 0 } } } }
+                    { stocks: { some: { quantite: { gt: 0 }, ...entiteCondition } } }
                 ]
             },
             include: {
-                stocks: true,
+                stocks: {
+                    where: entiteCondition
+                },
             }
         })
 

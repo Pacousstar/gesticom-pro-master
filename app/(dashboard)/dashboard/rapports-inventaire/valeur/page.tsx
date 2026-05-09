@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Loader2, Download, Coins, Package, Warehouse, Calendar, ArrowRight, Printer } from 'lucide-react'
+import { Search, Loader2, Download, Coins, Package, Warehouse, Calendar, ArrowRight, Printer, ArrowDown } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
@@ -18,6 +18,18 @@ interface ProduitValo {
   valeurTotal: number
 }
 
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
+interface TotalsInfo {
+  valeurTotal: number
+  totalQuantite: number
+}
+
 export default function ValeurStockPage() {
   const [data, setData] = useState<ProduitValo[]>([])
   const [magasins, setMagasins] = useState<any[]>([])
@@ -27,6 +39,8 @@ export default function ValeurStockPage() {
   const [selectedCategorie, setSelectedCategorie] = useState('TOUTE')
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null)
+  const [totals, setTotals] = useState<TotalsInfo | null>(null)
   const itemsPerPage = 20
   const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
@@ -38,9 +52,8 @@ export default function ValeurStockPage() {
     const today = new Date().toISOString().split('T')[0]
     setDateFin(today)
     loadMagasins()
-    fetchData(today, 'TOUT')
+    fetchData(today, 'TOUT', 1, '')
     
-    // Charger les paramètres de l'entreprise
     fetch('/api/parametres')
       .then(r => r.ok && r.json())
       .then(d => { if (d) setEntreprise(d) })
@@ -56,15 +69,19 @@ export default function ValeurStockPage() {
     }
   }
 
-  const fetchData = async (date: string, mag: string) => {
+  const fetchData = async (date: string, mag: string, page: number = 1, searchTerm: string = '') => {
     setLoading(true)
     try {
-      let url = `/api/rapports/inventaire/valeur?dateFin=${date}`
+      let url = `/api/rapports/inventaire/valeur?dateFin=${date}&page=${page}&limit=${itemsPerPage}&includeTotals=true`
       if (mag !== 'TOUT') url += `&magasinId=${mag}`
+      if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`
       
       const res = await fetch(url)
       if (res.ok) {
-        setData(await res.json())
+        const d = await res.json()
+        setData(d.data || [])
+        setPagination(d.pagination || null)
+        setTotals(d.totals || null)
       } else {
         showError('Impossible de charger la valorisation.')
       }
@@ -79,24 +96,27 @@ export default function ValeurStockPage() {
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1)
-    fetchData(dateFin, selectedMagasin)
+    setSearch('')
+    fetchData(dateFin, selectedMagasin, 1, '')
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+    fetchData(dateFin, selectedMagasin, newPage, search)
   }
 
   const filteredData = data.filter(p => {
-    const matchesSearch = p.designation.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch = !search || p.designation.toLowerCase().includes(search.toLowerCase()) || 
                           (p.code && p.code.toLowerCase().includes(search.toLowerCase()))
     const matchesCategorie = selectedCategorie === 'TOUTE' || p.categorie === selectedCategorie
     return matchesSearch && matchesCategorie
   })
 
-  // Extraire les catégories uniques pour le filtre
+  // Extraire les catégories uniques pour le filtre (depuis toutes les données serveur)
   const categories = Array.from(new Set(data.map(p => p.categorie))).sort()
 
-  const totalValeur = filteredData.reduce((acc, p) => acc + p.valeurTotal, 0)
-  const totalQuantite = filteredData.reduce((acc, p) => acc + p.quantite, 0)
-
-  const paginatedData = Array.isArray(filteredData) ? filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) : []
-  const totalPages = Math.ceil((Array.isArray(filteredData) ? filteredData.length : 0) / itemsPerPage)
+  const totalValeur = totals?.valeurTotal ?? filteredData.reduce((acc, p) => acc + p.valeurTotal, 0)
+  const totalQuantite = totals?.totalQuantite ?? filteredData.reduce((acc, p) => acc + p.quantite, 0)
 
   return (
     <div className="space-y-6">
@@ -113,6 +133,55 @@ export default function ValeurStockPage() {
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
             IMPRIMER LA LISTE
+          </button>
+          <button 
+            onClick={async () => {
+              try {
+                let url = `/api/rapports/inventaire/valeur?dateFin=${dateFin}&export=all&includeTotals=true`
+                if (selectedMagasin !== 'TOUT') url += `&magasinId=${selectedMagasin}`
+                if (search) url += `&search=${encodeURIComponent(search)}`
+                
+                const res = await fetch(url)
+                if (res.ok) {
+                  const d = await res.json()
+                  const allData = d.data || []
+                  
+                  const csv = [
+                    ['Code', 'Désignation', 'Catégorie', 'Unité', 'Quantité', 'PAMP', 'Valeur Totale'].join(';'),
+                    ...allData.map((p: ProduitValo) => [
+                      p.code || '',
+                      p.designation,
+                      p.categorie,
+                      p.unite,
+                      p.quantite,
+                      p.pamp,
+                      p.valeurTotal
+                    ].join(';'))
+                  ].join('\n')
+                  
+                  const totalRow = [
+                    '', '', '', '',
+                    d.totals?.totalQuantite || 0,
+                    '',
+                    d.totals?.valeurTotal || 0
+                  ].join(';')
+                  
+                  const blob = new Blob([csv + '\n' + totalRow], { type: 'text/csv;charset=utf-8;' })
+                  const blobUrl = window.URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = blobUrl
+                  a.download = `valeur_stock_${dateFin}.csv`
+                  a.click()
+                  window.URL.revokeObjectURL(blobUrl)
+                }
+              } catch (err) {
+                console.error('Export error:', err)
+                showError('Erreur lors de l\'export.')
+              }
+            }}
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
+          >
+            <Download className="h-4 w-4" /> Excel
           </button>
         </div>
       </div>
@@ -260,7 +329,13 @@ export default function ValeurStockPage() {
                 type="text"
                 placeholder="Rechercher un produit..."
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setCurrentPage(1)
+                    fetchData(dateFin, selectedMagasin, 1, search)
+                  }
+                }}
                 className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 focus:border-emerald-500 shadow-sm focus:outline-none"
               />
             </div>
@@ -301,7 +376,7 @@ export default function ValeurStockPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
-                  {paginatedData.map((p) => (
+                  {data.map((p) => (
                     <tr key={p.id} className="hover:bg-emerald-50/30 transition-colors group">
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-gray-400 group-hover:text-emerald-600">
                         {p.code || '—'}
@@ -334,13 +409,13 @@ export default function ValeurStockPage() {
               </table>
             </div>
           )}
-          {totalPages > 1 && (
+          {pagination && pagination.totalPages > 1 && (
             <Pagination
               currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={filteredData.length}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
               itemsPerPage={itemsPerPage}
-              onPageChange={setCurrentPage}
+              onPageChange={handlePageChange}
             />
           )}
         </div>

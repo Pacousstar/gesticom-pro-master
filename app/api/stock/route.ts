@@ -37,9 +37,22 @@ export async function GET(request: NextRequest) {
   }
 
   const complet = request.nextUrl.searchParams.get('complet') === '1'
+  const search = request.nextUrl.searchParams.get('search')?.trim() || ''
+  const categorie = request.nextUrl.searchParams.get('categorie')
   const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
-  const limit = Math.min(50000, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
+  const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
   const skip = (page - 1) * limit
+  const exportAll = request.nextUrl.searchParams.get('export') === 'all'
+
+  // Recherche et filtre catégorie pour les produits
+  const searchConditions = search ? {
+    OR: [
+      { designation: { contains: search, mode: 'insensitive' } },
+      { code: { contains: search, mode: 'insensitive' } }
+    ]
+  } : {}
+
+  const categorieCondition = categorie && categorie !== 'TOUT' ? { categorie } : {}
 
   if (complet) {
     // Mode complet : retourner tous les produits (pagination côté client)
@@ -54,7 +67,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Magasin invalide' }, { status: 400 })
       }
 
-      const whereProduit: any = { entiteId: where.entiteId } // Filtrer par entité (inclut archivés avec stock)
+      const whereProduit: any = { entiteId: where.entiteId, ...searchConditions, ...categorieCondition } // Filtrer par entité (inclut archivés avec stock)
       const [tousProduits, stocksExistants, total] = await Promise.all([
         prisma.produit.findMany({
           where: whereProduit,
@@ -172,31 +185,63 @@ export async function GET(request: NextRequest) {
   }
 
   // Cas sans complet: retourner les stocks avec pagination
+  // Ajouter filtre produit
+  if (search || categorieCondition.categorie) {
+    where.produit = { ...searchConditions, ...categorieCondition }
+  }
+
   const [stocks, total] = await Promise.all([
     prisma.stock.findMany({
-      where: where,
+      where,
       include: {
         produit: { select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, prixVente: true, prixMinimum: true } },
         magasin: { select: { id: true, code: true, nom: true } },
       },
-      orderBy: [{ magasin: { code: 'asc' } }, { produit: { code: 'asc' } }],
-      skip,
-      take: limit,
+      orderBy: [{ produit: { designation: 'asc' } }],
+      skip: exportAll ? 0 : skip,
+      take: exportAll ? undefined : limit,
     }),
-    prisma.stock.count({
-      where: where,
-    }),
+    exportAll ? Promise.resolve(0) : prisma.stock.count({ where }),
   ])
 
-  return NextResponse.json({
+  // Calcul des totaux pour export
+  let totalQuantite = 0
+  let totalValeur = 0
+  if (exportAll || request.nextUrl.searchParams.get('includeTotals') === 'true') {
+    const allStocks = await prisma.stock.findMany({
+      where,
+      include: {
+        produit: { select: { pamp: true, prixAchat: true } }
+      }
+    })
+    allStocks.forEach((s: any) => {
+      totalQuantite += s.quantite || 0
+      // Formule: Si pamp > 0, utiliser pamp. Sinon utiliser prixAchat (ou 0)
+      const prix = (s.produit?.pamp && s.produit.pamp > 0) ? s.produit.pamp : (s.produit?.prixAchat || 0)
+      totalValeur += (s.quantite || 0) * prix
+    })
+  }
+
+  const response: any = {
     data: stocks,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  }, {
+    ...(exportAll ? {} : {
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    })
+  }
+
+  if (exportAll || request.nextUrl.searchParams.get('includeTotals') === 'true') {
+    response.totals = {
+      totalQuantite: Math.round(totalQuantite),
+      totalValeur: Math.round(totalValeur)
+    }
+  }
+
+  return NextResponse.json(response, {
     headers: {
       'Cache-Control': 'no-store, max-age=0',
     },

@@ -2,20 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
+  const forbidden = requirePermission(session, 'stocks:view')
+  if (forbidden) return NextResponse.json({ error: 'Droits insuffisants pour cette action.' }, { status: 403 })
+
   const searchParams = request.nextUrl.searchParams
   const dateFin = searchParams.get('dateFin') || new Date().toISOString().split('T')[0]
   const magasinId = searchParams.get('magasinId')
+  const search = searchParams.get('search')?.trim() || ''
+  const page = Math.max(1, Number(searchParams.get('page')) || 1)
+  const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || 20))
+  const exportAll = searchParams.get('export') === 'all'
+  const includeTotals = searchParams.get('includeTotals') === 'true'
 
   try {
     const entiteId = await getEntiteId(session)
     const where: any = {}
 
-    // Filtrage par entité (support SUPER_ADMIN)
     if (session.role === 'SUPER_ADMIN') {
       const entiteIdFromParams = searchParams.get('entiteId')?.trim()
       if (entiteIdFromParams) {
@@ -36,19 +44,37 @@ export async function GET(request: NextRequest) {
       if (!Number.isNaN(n)) parsedMagasinId = n
     }
 
-    // 1. Récupérer les produits actifs
-    const produits = await prisma.produit.findMany({
-      where: { actif: true, entiteId },
-      select: {
-        id: true,
-        designation: true,
-        code: true,
-        categorie: true,
-        unite: true,
-        pamp: true,
-        prixAchat: true,
-      }
-    })
+    // Construction du filtre produit
+    const produitWhere: any = { actif: true, entiteId }
+    if (search) {
+      produitWhere.OR = [
+        { designation: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } }
+      ]
+    }
+
+    // Pour export, pas de limite
+    const skip = exportAll ? 0 : (page - 1) * limit
+
+    // 1. Récupérer les produits actifs avec pagination
+    const [produits, totalProduits] = await Promise.all([
+      prisma.produit.findMany({
+        where: produitWhere,
+        select: {
+          id: true,
+          designation: true,
+          code: true,
+          categorie: true,
+          unite: true,
+          pamp: true,
+          prixAchat: true,
+        },
+        orderBy: { designation: 'asc' },
+        skip,
+        take: exportAll ? undefined : limit
+      }),
+      exportAll ? Promise.resolve(0) : prisma.produit.count({ where: produitWhere })
+    ])
 
     // 2. Récupérer les stocks actuels
     const stocks = await prisma.stock.findMany({
@@ -90,17 +116,27 @@ export async function GET(request: NextRequest) {
     })
 
     // Ajustement inverse pour remonter dans le temps
+    // Les transferts sont stockés comme ENTREE (destination) ou SORTIE (origine) avec referenceTransfertId
     mouvementsPost.forEach((m: any) => {
-      if (m.type === 'ENTREE' || m.type === 'TRANSFERT_IN' || (m.type === 'AJUSTEMENT' && m.quantite > 0)) {
+      // Pour les mouvements postérieurs à la date:
+      // - ENTREE augmente le stock → Pour revenir en arrière, on soustrait
+      // - SORTIE diminue le stock → Pour revenir en arrière, on ajoute
+      // Les transferts sont déjà inclus dans ces types (pas de TRANSFERT_IN/TRANSFERT_OUT dans le modèle)
+      if (m.type === 'ENTREE') {
         stockMap[m.produitId] = (stockMap[m.produitId] || 0) - m.quantite
-      } else if (m.type === 'SORTIE' || m.type === 'TRANSFERT_OUT' || (m.type === 'AJUSTEMENT' && m.quantite < 0)) {
+      } else if (m.type === 'SORTIE') {
+        stockMap[m.produitId] = (stockMap[m.produitId] || 0) + m.quantite
+      } else if (m.type === 'AJUSTEMENT' && m.quantite > 0) {
+        stockMap[m.produitId] = (stockMap[m.produitId] || 0) - m.quantite
+      } else if (m.type === 'AJUSTEMENT' && m.quantite < 0) {
         stockMap[m.produitId] = (stockMap[m.produitId] || 0) + Math.abs(m.quantite)
       }
     })
 
     const data = produits.map((p: any) => {
       const qte = stockMap[p.id] || 0
-      const prixValo = p.pamp || p.prixAchat || 0
+      // Formule: Si pamp > 0, utiliser pamp. Sinon utiliser prixAchat (ou 0)
+      const prixValo = (p.pamp && p.pamp > 0) ? p.pamp : (p.prixAchat || 0)
       return {
         id: p.id,
         code: p.code,
@@ -113,7 +149,41 @@ export async function GET(request: NextRequest) {
       }
     }).filter(d => d.quantite !== 0)
 
-    return NextResponse.json(data)
+    // Calcul des totaux
+    let totalValeur = 0
+    let totalQuantite = 0
+    if (includeTotals || exportAll) {
+      const allProduits = await prisma.produit.findMany({
+        where: { actif: true, entiteId },
+        select: { id: true, pamp: true, prixAchat: true }
+      })
+      allProduits.forEach((p: any) => {
+        const qte = stockMap[p.id] || 0
+        const prixValo = (p.pamp && p.pamp > 0) ? p.pamp : (p.prixAchat || 0)
+        totalQuantite += qte
+        totalValeur += qte * prixValo
+      })
+    }
+
+    const response: any = { data }
+    
+    if (!exportAll) {
+      response.pagination = {
+        page,
+        limit,
+        total: totalProduits,
+        totalPages: Math.ceil(totalProduits / limit)
+      }
+    }
+    
+    if (includeTotals || exportAll) {
+      response.totals = {
+        valeurTotal: Math.round(totalValeur),
+        totalQuantite: Math.round(totalQuantite)
+      }
+    }
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error('GET /api/rapports/inventaire/valeur:', error)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

@@ -73,6 +73,8 @@ export default function StockPage() {
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('TOUT')
+  const [searchInput, setSearchInput] = useState('')
   const [showCreateProduit, setShowCreateProduit] = useState(false)
   const [deletingStock, setDeletingStock] = useState<StockRow | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -242,20 +244,22 @@ export default function StockPage() {
     return () => window.removeEventListener('produit-created', handleProduitCreated)
   }, [])
 
-  const fetchList = async (page?: number) => {
+  const fetchList = async (page: number = 1, search: string = '', category: string = 'TOUT') => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
         complet: '1',
-        page: String(page ?? currentPage),
+        page: String(page),
         limit: '20',
+        includeTotals: 'true'
       })
       if (magasinId) params.set('magasinId', magasinId)
+      if (search) params.set('search', search)
+      if (category && category !== 'TOUT') params.set('categorie', category)
 
       const res = await fetch('/api/stock?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        // Mode complet : retourne directement un tableau
         if (Array.isArray(response)) {
           setList(response)
           setPagination(null)
@@ -285,10 +289,12 @@ export default function StockPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm])
+    setSearchTerm(searchInput)
+    fetchList(1, searchInput, selectedCategory)
+  }, [selectedCategory])
 
   useEffect(() => {
-    fetchList()
+    fetchList(currentPage, searchTerm, selectedCategory)
   }, [currentPage])
 
   const handlePrintAll = async () => {
@@ -726,9 +732,16 @@ export default function StockPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="search"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Rechercher par magasin, code, designation..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setSearchTerm(searchInput)
+                setCurrentPage(1)
+                fetchList(1, searchInput, selectedCategory)
+              }
+            }}
+            placeholder="Rechercher par code, designation..."
             className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
           />
         </div>
@@ -742,6 +755,19 @@ export default function StockPage() {
             <option value="">Tous</option>
             {magasins.map((m) => (
               <option key={m.id} value={m.id}>{m.code} - {m.nom}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-700">Catégorie</span>
+          <select
+            value={selectedCategory}
+            onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); fetchList(1, searchTerm, e.target.value); }}
+            className="rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
+          >
+            <option value="TOUT">Toutes</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </label>
@@ -781,10 +807,45 @@ export default function StockPage() {
           Assistant de Transfert
         </button>
         <button 
-          onClick={() => {
-            const params = new URLSearchParams()
-            if (magasinId) params.set('magasinId', magasinId)
-            window.location.href = `/api/stock/export-excel?${params.toString()}`
+          onClick={async () => {
+            try {
+              const params = new URLSearchParams({
+                export: 'all',
+                includeTotals: 'true',
+                complet: '1'
+              })
+              if (magasinId) params.set('magasinId', magasinId)
+              if (searchTerm) params.set('search', searchTerm)
+              if (selectedCategory && selectedCategory !== 'TOUT') params.set('categorie', selectedCategory)
+              
+              const res = await fetch('/api/stock?' + params.toString())
+              if (res.ok) {
+                const d = await res.json()
+                const csv = [
+                  ['Code', 'Désignation', 'Catégorie', 'Magasin', 'Quantité', 'PAMP', 'Valeur'].join(';'),
+                  ...(d.data || []).map((s: any) => [
+                    s.produit?.code || '',
+                    s.produit?.designation || '',
+                    s.produit?.categorie || '',
+                    s.magasin?.nom || '',
+                    s.quantite || 0,
+                    s.produit?.pamp || s.produit?.prixAchat || 0,
+                    (s.quantite || 0) * (s.produit?.pamp || s.produit?.prixAchat || 0)
+                  ].join(';'))
+                ].join('\n')
+                
+                const totalRow = ['', '', '', '', d.totals?.totalQuantite || 0, '', d.totals?.totalValeur || 0].join(';')
+                const blob = new Blob([csv + '\n' + totalRow], { type: 'text/csv;charset=utf-8;' })
+                const blobUrl = window.URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = blobUrl
+                a.download = `stock_${new Date().toISOString().split('T')[0]}.csv`
+                a.click()
+                window.URL.revokeObjectURL(blobUrl)
+              }
+            } catch (err) {
+              showError('Erreur export')
+            }
           }}
           disabled={loading || list.length === 0}
           className="flex items-center gap-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 px-6 py-3 text-sm font-black text-emerald-800 hover:bg-emerald-100 shadow-lg transition-all active:scale-95 disabled:opacity-50 uppercase tracking-widest no-print"

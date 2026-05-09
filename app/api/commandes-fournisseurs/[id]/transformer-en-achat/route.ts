@@ -12,8 +12,9 @@ export async function POST(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'achats:create')
-  if (forbidden) return forbidden
+
+  const forbidden = requirePermission(session, 'commandes:receptionner')
+  if (forbidden) return NextResponse.json({ error: 'Droits insuffisants pour cette action.' }, { status: 403 })
 
   const { id: idStr } = await params
   const id = Number(idStr)

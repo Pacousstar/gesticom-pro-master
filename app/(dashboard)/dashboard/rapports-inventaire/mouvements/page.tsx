@@ -11,6 +11,7 @@ interface Mouvement {
   date: string
   dateOperation: string
   type: string
+  typeRaw: string
   produit: string
   code: string | null
   unite: string
@@ -18,6 +19,21 @@ interface Mouvement {
   quantite: number
   utilisateur: string
   observation: string | null
+  referenceTransfertId: number | null
+  transfertNumero: string | null
+}
+
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
+interface TotalsInfo {
+  entrees: number
+  sorties: number
+  net: number
 }
 
 export default function MouvementsStockPage() {
@@ -32,15 +48,16 @@ export default function MouvementsStockPage() {
   const [selectedType, setSelectedType] = useState('TOUT')
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null)
+  const [totals, setTotals] = useState<TotalsInfo | null>(null)
   const itemsPerPage = 20
   const [selectedMouvement, setSelectedMouvement] = useState<Mouvement | null>(null)
   const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
   const [entreprise, setEntreprise] = useState<any>(null)
 
-  useEffect(() => {
+useEffect(() => {
     const now = new Date()
-    // Par défaut, derniers 30 jours (au lieu du mois calendaire pour éviter le vide le 1er du mois)
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(now.getDate() - 30)
     
@@ -50,7 +67,7 @@ export default function MouvementsStockPage() {
     setEndDate(end)
     
     loadFilters()
-    fetchData(start, end, 'TOUT', 'TOUT', 'TOUT')
+    fetchData(start, end, 'TOUT', 'TOUT', 'TOUT', 1)
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => { })
   }, [])
 
@@ -73,18 +90,21 @@ export default function MouvementsStockPage() {
     }
   }
 
-  const fetchData = async (start: string, end: string, prod: string, mag: string, type: string) => {
+  const fetchData = async (start: string, end: string, prod: string, mag: string, type: string, page: number = 1, searchTerm: string = '') => {
     setLoading(true)
     try {
-      let url = `/api/rapports/inventaire/mouvements?dateDebut=${start}&dateFin=${end}`
+      let url = `/api/rapports/inventaire/mouvements?dateDebut=${start}&dateFin=${end}&page=${page}&limit=${itemsPerPage}&includeTotals=true`
       if (prod !== 'TOUT') url += `&produitId=${prod}`
       if (mag !== 'TOUT') url += `&magasinId=${mag}`
       if (type !== 'TOUT') url += `&type=${type}`
+      if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`
       
       const res = await fetch(url)
       if (res.ok) {
         const d = await res.json()
-        setData(Array.isArray(d) ? d : [])
+        setData(Array.isArray(d.data) ? d.data : [])
+        setPagination(d.pagination || null)
+        setTotals(d.totals || null)
       } else {
         showError('Impossible de charger les mouvements.')
       }
@@ -99,45 +119,52 @@ export default function MouvementsStockPage() {
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1)
-    fetchData(startDate, endDate, selectedProduct, selectedMagasin, selectedType)
+    setSearch('')
+    fetchData(startDate, endDate, selectedProduct, selectedMagasin, selectedType, 1, '')
   }
 
-  const filteredData = Array.isArray(data) ? data.filter(m => {
-    if (!m) return false;
-    const prodName = (m.produit || '').toLowerCase();
-    const prodCode = (m.code || '').toLowerCase();
-    const searchLow = search.toLowerCase();
-    return prodName.includes(searchLow) || prodCode.includes(searchLow);
-  }) : []
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+    fetchData(startDate, endDate, selectedProduct, selectedMagasin, selectedType, newPage, search)
+  }
 
-  const totalEntrees = filteredData
-    .filter(m => m && m.type === 'ENTREE')
-    .reduce((acc, m) => acc + (Number(m.quantite) || 0), 0)
-    
-  const totalSorties = filteredData
-    .filter(m => m && m.type === 'SORTIE')
-    .reduce((acc, m) => acc + (Number(m.quantite) || 0), 0)
-    
+  const filteredData = Array.isArray(data) ? data : []
+
+  const totalEntrees = totals?.entrees ?? 0
+  const totalSorties = totals?.sorties ?? 0
   const netFlux = totalEntrees - totalSorties
 
-  const paginatedData = Array.isArray(filteredData) ? filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) : []
-  const totalPages = Math.ceil((Array.isArray(filteredData) ? filteredData.length : 0) / itemsPerPage)
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
+  const getTypeIcon = (mouvement: Mouvement) => {
+    if (mouvement.referenceTransfertId) {
+      return <RefreshCcw className="h-4 w-4 text-blue-500" />
+    }
+    switch (mouvement.typeRaw || mouvement.type) {
       case 'ENTREE': return <ArrowDownLeft className="h-4 w-4 text-emerald-500" />
       case 'SORTIE': return <ArrowUpRight className="h-4 w-4 text-red-500" />
-      case 'TRANSFERT': return <RefreshCcw className="h-4 w-4 text-blue-500" />
       case 'AJUSTEMENT': return <AlertTriangle className="h-4 w-4 text-amber-500" />
       default: return <Package className="h-4 w-4 text-gray-500" />
     }
   }
 
-  const getTypeStyle = (type: string) => {
-    switch (type) {
+  const getTypeLabel = (mouvement: Mouvement) => {
+    if (mouvement.referenceTransfertId && mouvement.transfertNumero) {
+      return `TRANSFERT ${mouvement.transfertNumero}`
+    }
+    switch (mouvement.typeRaw || mouvement.type) {
+      case 'ENTREE': return 'ENTREE'
+      case 'SORTIE': return 'SORTIE'
+      case 'AJUSTEMENT': return 'AJUSTEMENT'
+      default: return 'INCONNU'
+    }
+  }
+
+  const getTypeStyle = (mouvement: Mouvement) => {
+    if (mouvement.referenceTransfertId) {
+      return 'bg-blue-50 text-blue-700 border-blue-100'
+    }
+    switch (mouvement.typeRaw || mouvement.type) {
       case 'ENTREE': return 'bg-emerald-50 text-emerald-700 border-emerald-100'
       case 'SORTIE': return 'bg-red-50 text-red-700 border-red-100'
-      case 'TRANSFERT': return 'bg-blue-50 text-blue-700 border-blue-100'
       case 'AJUSTEMENT': return 'bg-amber-50 text-amber-700 border-amber-100'
       default: return 'bg-gray-50 text-gray-700 border-gray-100'
     }
@@ -160,27 +187,44 @@ export default function MouvementsStockPage() {
             IMPRIMER LA LISTE
           </button>
           <button 
-            onClick={() => {
-              const csv = [
-                ['Date', 'Produit', 'Code', 'Magasin', 'Type', 'Quantité', 'Utilisateur', 'Observation'].join(';'),
-                ...filteredData.map(m => [
-                  m.dateOperation ? new Date(m.dateOperation).toLocaleDateString('fr-FR') : '',
-                  m.produit,
-                  m.code || '',
-                  m.magasin,
-                  m.type,
-                  m.quantite,
-                  m.utilisateur,
-                  m.observation || ''
-                ].join(';'))
-              ].join('\n')
-              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-              const url = window.URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `mouvements_stock_${startDate}_${endDate}.csv`
-              a.click()
-              window.URL.revokeObjectURL(url)
+            onClick={async () => {
+              try {
+                let url = `/api/rapports/inventaire/mouvements?dateDebut=${startDate}&dateFin=${endDate}&export=all&includeTotals=true`
+                if (selectedProduct !== 'TOUT') url += `&produitId=${selectedProduct}`
+                if (selectedMagasin !== 'TOUT') url += `&magasinId=${selectedMagasin}`
+                if (selectedType !== 'TOUT') url += `&type=${selectedType}`
+                if (search) url += `&search=${encodeURIComponent(search)}`
+                
+                const res = await fetch(url)
+                if (res.ok) {
+                  const d = await res.json()
+                  const allData = d.data || []
+                  
+                  const csv = [
+                    ['Date', 'Produit', 'Code', 'Magasin', 'Type', 'Quantité', 'Utilisateur', 'Observation'].join(';'),
+                    ...allData.map((m: Mouvement) => [
+                      m.dateOperation ? new Date(m.dateOperation).toLocaleDateString('fr-FR') : '',
+                      m.produit,
+                      m.code || '',
+                      m.magasin,
+                      getTypeLabel(m),
+                      m.quantite,
+                      m.utilisateur,
+                      m.observation || ''
+                    ].join(';'))
+                  ].join('\n')
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                  const blobUrl = window.URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = blobUrl
+                  a.download = `mouvements_stock_${startDate}_${endDate}.csv`
+                  a.click()
+                  window.URL.revokeObjectURL(blobUrl)
+                }
+              } catch (err) {
+                console.error('Export error:', err)
+                showError('Erreur lors de l\'export.')
+              }
             }}
             className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
           >
@@ -337,6 +381,7 @@ export default function MouvementsStockPage() {
               <option value="AJUSTEMENT">Ajustements</option>
             </select>
           </div>
+          <input type="hidden" name="includeTransferts" value="true" />
           <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md font-bold hover:bg-blue-700 flex items-center gap-2 transition-all">
             <Filter className="h-4 w-4" /> Filtrer
           </button>
@@ -349,7 +394,13 @@ export default function MouvementsStockPage() {
           type="text"
           placeholder="Rechercher par désignation ou code..."
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              setCurrentPage(1)
+              fetchData(startDate, endDate, selectedProduct, selectedMagasin, selectedType, 1, search)
+            }
+          }}
           className="w-full rounded-lg border border-gray-200 py-3 pl-10 pr-4 focus:border-blue-500 focus:outline-none shadow-sm"
         />
       </div>
@@ -377,7 +428,7 @@ export default function MouvementsStockPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
-                {paginatedData.map((m) => (
+                {data.map((m) => (
                   <tr key={m.id} className="hover:bg-gray-50 transition-colors group">
                     <td className="whitespace-nowrap px-6 py-4 text-[10px] text-gray-400 italic font-medium">
                       {m.date ? new Date(m.date).toLocaleString('fr-FR') : 'Date inconnue'}
@@ -393,16 +444,16 @@ export default function MouvementsStockPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${getTypeStyle(m.type || '')}`}>
-                        {getTypeIcon(m.type || '')}
-                        {m.type || 'INCONNU'}
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${getTypeStyle(m)}`}>
+                        {getTypeIcon(m)}
+                        {getTypeLabel(m)}
                       </span>
                     </td>
                     <td 
                       onClick={() => setSelectedMouvement(m)}
-                      className={`whitespace-nowrap px-6 py-4 text-right text-sm font-black cursor-pointer hover:underline decoration-2 underline-offset-4 ${m.type === 'SORTIE' ? 'text-red-600' : 'text-emerald-600'}`}
+                      className={`whitespace-nowrap px-6 py-4 text-right text-sm font-black cursor-pointer hover:underline decoration-2 underline-offset-4 ${m.referenceTransfertId ? 'text-blue-600' : (m.typeRaw === 'SORTIE' || m.type === 'SORTIE') ? 'text-red-600' : 'text-emerald-600'}`}
                     >
-                      {m.type === 'SORTIE' ? '-' : '+'}{(m.quantite || 0).toLocaleString()} {m.unite || 'u'}
+                      {m.referenceTransfertId ? '↔' : (m.typeRaw === 'SORTIE' || m.type === 'SORTIE') ? '-' : '+'}{(m.quantite || 0).toLocaleString()} {m.unite || 'u'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       <div className="flex items-center gap-2">
@@ -415,13 +466,13 @@ export default function MouvementsStockPage() {
             </table>
           </div>
         )}
-        {totalPages > 1 && (
+        {pagination && pagination.totalPages > 1 && (
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filteredData.length}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
             itemsPerPage={itemsPerPage}
-            onPageChange={setCurrentPage}
+            onPageChange={handlePageChange}
           />
         )}
       </div>
@@ -431,19 +482,22 @@ export default function MouvementsStockPage() {
         const refMatch = obs.match(/(Vente|Achat|Transfert|Ajustement|Inventaire)\s+([A-Z0-9]+)/i)
         const docType = refMatch ? refMatch[1] : null
         const docRef = refMatch ? refMatch[2] : null
+        const isTransfert = selectedMouvement.referenceTransfertId !== null
+        const typeLabel = getTypeLabel(selectedMouvement)
+        const isSortie = selectedMouvement.typeRaw === 'SORTIE' || selectedMouvement.type === 'SORTIE'
 
         return (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden border border-white/20 transform animate-in zoom-in-95 duration-300">
-                <div className={`p-8 text-white flex items-center justify-between ${selectedMouvement.type === 'SORTIE' ? 'bg-gradient-to-r from-red-600 to-rose-500' : 'bg-gradient-to-r from-emerald-600 to-teal-500'}`}>
+                <div className={`p-8 text-white flex items-center justify-between ${isTransfert ? 'bg-gradient-to-r from-blue-600 to-indigo-500' : isSortie ? 'bg-gradient-to-r from-red-600 to-rose-500' : 'bg-gradient-to-r from-emerald-600 to-teal-500'}`}>
                   <div className="flex items-center gap-4">
                     <div className="h-14 w-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md shadow-inner">
-                      {getTypeIcon(selectedMouvement.type)}
+                      {getTypeIcon(selectedMouvement)}
                     </div>
                     <div>
                       <h2 className="text-2xl font-black uppercase italic tracking-tighter">Détail du Flux</h2>
                       <p className="text-white/80 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                        <Package className="h-3 w-3" /> {selectedMouvement.type} DE STOCK
+                        <Package className="h-3 w-3" /> {typeLabel}
                       </p>
                     </div>
                   </div>
@@ -467,14 +521,19 @@ export default function MouvementsStockPage() {
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded uppercase tracking-wider border border-gray-200">
                           Unité: {selectedMouvement.unite}
                         </span>
+                        {isTransfert && selectedMouvement.transfertNumero && (
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-bold rounded uppercase tracking-wider border border-blue-200">
+                            Transfert: {selectedMouvement.transfertNumero}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Impact Stock</p>
-                      <p className={`text-4xl font-black tabular-nums transition-all ${selectedMouvement.type === 'SORTIE' ? 'text-red-600' : 'text-emerald-600'}`}>
-                        {selectedMouvement.type === 'SORTIE' ? '-' : '+'}{selectedMouvement.quantite.toLocaleString()}
+                      <p className={`text-4xl font-black tabular-nums transition-all ${isTransfert ? 'text-blue-600' : isSortie ? 'text-red-600' : 'text-emerald-600'}`}>
+                        {isTransfert ? '↔' : isSortie ? '-' : '+'}{selectedMouvement.quantite.toLocaleString()}
                       </p>
-                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Unités sorties</p>
+                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{isTransfert ? 'Transfert' : isSortie ? 'Unités sorties' : 'Unités entrées'}</p>
                     </div>
                   </div>
 

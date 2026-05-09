@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
-import { logModification, getIpAddress, getUserAgent } from '@/lib/audit'
+import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
 
 export async function PATCH(
   _request: NextRequest,
@@ -20,34 +20,64 @@ export async function PATCH(
   }
 
   try {
-    // Vérifier que le produit appartient à l'entité de l'utilisateur
     const existing = await prisma.produit.findFirst({
-      where: { id, entiteId: session!.entiteId },
-      select: { id: true },
+      where: { id, entiteId: session.entiteId },
+      select: {
+        id: true, code: true, designation: true, categorie: true,
+        prixAchat: true, prixVente: true, prixMinimum: true, seuilMin: true,
+        fournisseurId: true, actif: true, pamp: true
+      },
     })
     if (!existing) {
       return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })
     }
+    if (!existing.actif) {
+      return NextResponse.json({ error: 'Ce produit est archivé. Veuillez le restaurer d\'abord.' }, { status: 400 })
+    }
+
     const body = await _request.json().catch(() => ({}))
     const data: any = {}
+    const oldData: Record<string, any> = {}
+
     if (body?.designation !== undefined) {
-      data.designation = String(body.designation).trim()
+      const val = String(body.designation).trim()
+      if (val !== existing.designation) {
+        oldData.designation = existing.designation
+        data.designation = val
+      }
     }
     if (body?.fournisseurId !== undefined) {
-      data.fournisseurId = body.fournisseurId ? Number(body.fournisseurId) : null
+      const val = body.fournisseurId ? Number(body.fournisseurId) : null
+      if (val !== existing.fournisseurId) {
+        oldData.fournisseurId = existing.fournisseurId
+        data.fournisseurId = val
+      }
     }
     if (body?.prixAchat !== undefined) {
       const v = body.prixAchat
-      data.prixAchat = v === null || v === '' ? null : Math.max(0, Number(v))
-      data.pamp = data.prixAchat // Force PAMP update for stock valuation
+      const val = v === null || v === '' ? null : Math.max(0, Number(v))
+      if (val !== existing.prixAchat) {
+        oldData.prixAchat = existing.prixAchat
+        data.prixAchat = val
+        // Ne plus écraser le PAMP sur modification manuelle du prix d'achat
+        // Le PAMP est calculé via les mouvements de stock (entrées avec prix)
+      }
     }
     if (body?.prixVente !== undefined) {
       const v = body.prixVente
-      data.prixVente = v === null || v === '' ? null : Math.max(0, Number(v))
+      const val = v === null || v === '' ? null : Math.max(0, Number(v))
+      if (val !== existing.prixVente) {
+        oldData.prixVente = existing.prixVente
+        data.prixVente = val
+      }
     }
     if (body?.prixMinimum !== undefined) {
       const v = body.prixMinimum
-      data.prixMinimum = v === null || v === '' ? 0 : Math.max(0, Number(v))
+      const val = v === null || v === '' ? 0 : Math.max(0, Number(v))
+      if (val !== existing.prixMinimum) {
+        oldData.prixMinimum = existing.prixMinimum
+        data.prixMinimum = val
+      }
     }
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: 'Aucune donnée à mettre à jour.' }, { status: 400 })
@@ -56,17 +86,20 @@ export async function PATCH(
     const p = await prisma.produit.update({
       where: { id },
       data,
-      select: { id: true, code: true, designation: true, categorie: true, prixAchat: true, prixVente: true, prixMinimum: true, seuilMin: true },
+      select: {
+        id: true, code: true, designation: true, categorie: true,
+        prixAchat: true, prixVente: true, prixMinimum: true, seuilMin: true,
+        fournisseurId: true, actif: true, pamp: true, entiteId: true
+      },
     })
 
-    // Logger la modification
     const ipAddress = getIpAddress(_request)
     await logModification(
       session!,
       'PRODUIT',
-      p.id,
+      p.entiteId,
       `Modification du produit ${p.code} - ${p.designation}`,
-      {},
+      oldData,
       data,
       ipAddress
     )
@@ -97,39 +130,103 @@ export async function DELETE(
   }
 
   try {
-    // Vérifier que le produit appartient à l'entité de l'utilisateur
     const existing = await prisma.produit.findFirst({
       where: { id, entiteId: session!.entiteId },
-      select: { id: true },
     })
     if (!existing) {
       return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })
     }
-    // Hard Delete : Suppression réelle de la base
-    // Note: Le schéma Prisma gère le cascade (onDelete: Cascade) pour les Stocks, Ventes, Achats, etc.
-    const p = await prisma.produit.delete({
+
+    // Soft-delete : archiver au lieu de supprimer
+    const p = await prisma.produit.update({
       where: { id },
+      data: { actif: false },
     })
 
     const ipAddress = getIpAddress(_request)
-    await logModification(
+    await logSuppression(
       session!,
       'PRODUIT',
-      id,
-      `Suppression définitive du produit ${p.code} - ${p.designation}`,
-      { code: p.code },
-      { status: 'DELETED' },
+      p.entiteId,
+      `Archivage du produit ${p.code} - ${p.designation}`,
+      {
+        id: p.id,
+        code: p.code,
+        designation: p.designation,
+        categorie: p.categorie,
+        prixAchat: p.prixAchat,
+        prixVente: p.prixVente,
+        prixMinimum: p.prixMinimum,
+        pamp: p.pamp,
+        seuilMin: p.seuilMin,
+        actif: p.actif,
+        entiteId: p.entiteId,
+        createdAt: p.createdAt?.toISOString(),
+      },
       ipAddress
     )
 
     revalidatePath('/dashboard/produits')
     revalidatePath('/api/produits')
+    revalidatePath('/api/produits/stats')
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, softDeleted: true })
   } catch (e: unknown) {
     const err = e as { code?: string }
     if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })
     console.error('DELETE /api/produits/[id]:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  const authError = requirePermission(session, 'produits:create')
+  if (authError) return authError
+
+  const id = Number((await params).id)
+  const body = await request.json().catch(() => ({}))
+
+  if (body?.action === 'restore') {
+    try {
+      const existing = await prisma.produit.findFirst({
+        where: { id, entiteId: session!.entiteId },
+      })
+      if (!existing) {
+        return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })
+      }
+
+      const p = await prisma.produit.update({
+        where: { id },
+        data: { actif: true },
+      })
+
+      const ipAddress = getIpAddress(request)
+      await logModification(
+        session!,
+        'PRODUIT',
+        existing.entiteId,
+        `Restauration du produit ${p.code} - ${p.designation}`,
+        { actif: false },
+        { actif: true },
+        ipAddress
+      )
+
+      revalidatePath('/dashboard/produits')
+      revalidatePath('/api/produits')
+
+      return NextResponse.json({ success: true, restored: true })
+    } catch (e: unknown) {
+      const err = e as { code?: string }
+      if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })
+      console.error('POST /api/produits/[id] restore:', e)
+      return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+    }
+  }
+
+  return NextResponse.json({ error: 'Action non reconnue.' }, { status: 400 })
 }

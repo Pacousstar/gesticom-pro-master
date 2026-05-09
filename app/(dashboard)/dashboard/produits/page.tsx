@@ -2,16 +2,21 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Search, Plus, Upload, Download, Loader2, Pencil, Trash2, AlertTriangle, FileSpreadsheet, X, Printer, History } from 'lucide-react'
+import { Search, Plus, Upload, Download, Loader2, Pencil, Trash2, AlertTriangle, X, Printer, RotateCcw } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { produitSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import Pagination from '@/components/ui/Pagination'
-import ImportExcelButton from '@/components/dashboard/ImportExcelButton'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
+
+type StockInfo = {
+  id: number
+  magasinId: number
+  quantite: number
+}
 
 type Produit = {
   id: number
@@ -27,10 +32,11 @@ type Produit = {
   seuilMin: number
   fournisseurId: number | null
   stockConsolide?: number
+  stocks: StockInfo[]
   createdAt: string
 }
 
-type Stats = { total: number; enStock: number; totalConsolide: number | null }
+type Stats = { total: number; enStock: number }
 type Magasin = { id: number; code: string; nom: string }
 
 export default function ProduitsPage() {
@@ -49,8 +55,10 @@ export default function ProduitsPage() {
   const [editData, setEditData] = useState({ designation: '', prixAchat: '', prixVente: '', prixMinimum: '', fournisseurId: '' })
   const [err, setErr] = useState('')
   const [savingPrix, setSavingPrix] = useState(false)
+  const [savingForm, setSavingForm] = useState(false)
   const [deleting, setDeleting] = useState<Produit | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [restoring, setRestoring] = useState<number | null>(null)
   const [params, setParams] = useState<any>(null)
   const [allProductsForPrint, setAllProductsForPrint] = useState<Produit[]>([])
   const [isPrinting, setIsPrinting] = useState(false)
@@ -58,6 +66,7 @@ export default function ProduitsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE_REPORT = 25
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
   const [formData, setFormData] = useState({
     code: '',
     codeBarres: '',
@@ -79,21 +88,18 @@ export default function ProduitsPage() {
   const fetchList = async (page?: number) => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
+      const p = new URLSearchParams({
         page: String(page ?? currentPage),
         limit: '20',
       })
-      if (q) params.set('q', q)
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
-      const res = await fetch(`/api/produits?${params.toString()}`)
+      if (q) p.set('q', q)
+      const res = await fetch(`/api/produits?${p.toString()}`)
       if (res.ok) {
         const response = await res.json()
         if (response.data) {
           setList(response.data)
           setPagination(response.pagination)
         } else {
-          // Compatibilité avec l'ancien format
           setList(Array.isArray(response) ? response : [])
           setPagination(null)
         }
@@ -116,59 +122,11 @@ export default function ProduitsPage() {
   useEffect(() => {
     setCurrentPage(1)
     fetchList(1)
-  }, [q, dateDebut, dateFin])
+  }, [q])
 
   useEffect(() => {
     fetchList()
   }, [currentPage])
-
-  const handleDirectPrint = async () => {
-    setIsPrinting(true)
-    try {
-      const p = new URLSearchParams()
-      if (q) p.set('q', q)
-      if (dateDebut) p.set('dateDebut', dateDebut)
-      if (dateFin) p.set('dateFin', dateFin)
-      p.set('limit', '10000')
-
-      const res = await fetch('/api/produits?complet=1&' + p.toString())
-      if (res.ok) {
-        const response = await res.json()
-        setAllProductsForPrint(Array.isArray(response) ? response : (response.data || []))
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 1000)
-      } else {
-        showError("Erreur lors de la récupération de la liste complète.")
-        setIsPrinting(false)
-      }
-    } catch (e) {
-      showError("Erreur réseau lors de la préparation de l'impression.")
-      setIsPrinting(false)
-    }
-  }
-
-  // Raccourcis clavier
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+N ou Cmd+N : Nouveau produit
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !form) {
-        e.preventDefault()
-        setFormData({ code: '', codeBarres: '', designation: '', categorie: 'DIVERS', unite: 'unite', magasinId: '', prixAchat: '', prixVente: '', prixMinimum: '', fournisseurId: '', seuilMin: '5', quantiteInitiale: '0' })
-        setForm(true)
-        fetchNextCode('DIVERS')
-      }
-      // Échap : Fermer le formulaire
-      if (e.key === 'Escape' && form) {
-        setForm(false)
-        setEditing(null)
-        setErr('')
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [form])
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -187,7 +145,7 @@ export default function ProduitsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/produits/stats').then((r) => (r.ok ? r.json() : { total: 0, enStock: 0, totalConsolide: null })),
+      fetch('/api/produits/stats').then((r) => (r.ok ? r.json() : { total: 0, enStock: 0 })),
       fetch('/api/produits/categories').then((r) => (r.ok ? r.json() : ['DIVERS'])),
       fetch('/api/magasins').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/fournisseurs?complet=1').then((r) => (r.ok ? r.json() : [])),
@@ -261,7 +219,8 @@ export default function ProduitsPage() {
       if (res.ok) {
         setDeleting(null)
         fetchList()
-        showSuccess(data.softDeleted ? 'Produit archivé ( historique conservé).' : 'Produit supprimé définitivement.')
+        fetchStats()
+        showSuccess(data.softDeleted ? 'Produit archivé (historique conservé).' : 'Produit supprimé.')
       } else {
         showError(data.error || 'Erreur lors de la suppression.')
       }
@@ -269,6 +228,29 @@ export default function ProduitsPage() {
       showError('Erreur réseau lors de la suppression.')
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  const handleRestore = async (produitId: number) => {
+    setRestoring(produitId)
+    try {
+      const res = await fetch(`/api/produits/${produitId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restore' }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        fetchList()
+        fetchStats()
+        showSuccess('Produit restauré avec succès.')
+      } else {
+        showError(data.error || 'Erreur lors de la restauration.')
+      }
+    } catch (e) {
+      showError('Erreur réseau lors de la restauration.')
+    } finally {
+      setRestoring(null)
     }
   }
 
@@ -298,7 +280,7 @@ export default function ProduitsPage() {
           }
           showSuccess(msg)
           fetchList()
-          // Notifier les autres pages pour rafraîchir leurs listes de produits
+          fetchStats()
           window.dispatchEvent(new CustomEvent('produit-created'))
         } else {
           showError(formatApiError(data.error || 'Erreur import Excel'))
@@ -352,14 +334,19 @@ export default function ProduitsPage() {
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     const designation = formData.designation.trim()
-    if (!form || designation.length < 2) return
+    if (!form || designation.length < 2) {
+      setSuggesting(false)
+      return
+    }
     if (suggestTimeoutRef.current) clearTimeout(suggestTimeoutRef.current)
     suggestTimeoutRef.current = setTimeout(() => {
       suggestTimeoutRef.current = null
       const requestedDesignation = designation
+      setSuggesting(true)
       fetch('/api/produits/suggest?designation=' + encodeURIComponent(requestedDesignation))
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
+          setSuggesting(false)
           if (data?.code == null && data?.categorie == null) return
           setFormData((f) => {
             if (f.designation.trim() !== requestedDesignation) return f
@@ -375,6 +362,7 @@ export default function ProduitsPage() {
             )
           }
         })
+        .catch(() => setSuggesting(false))
     }, 400)
     return () => {
       if (suggestTimeoutRef.current) clearTimeout(suggestTimeoutRef.current)
@@ -384,6 +372,7 @@ export default function ProduitsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErr('')
+    setSavingForm(true)
 
     const validationData = {
       code: formData.code.trim().toUpperCase(),
@@ -399,25 +388,24 @@ export default function ProduitsPage() {
     if (!validation.success) {
       setErr(validation.error)
       showError(validation.error)
+      setSavingForm(false)
       return
     }
 
-    // POINT DE VENTE OBLIGATOIRE
     if (!formData.magasinId || formData.magasinId === '') {
       setErr('Le point de vente est obligatoire.')
       showError('Le point de vente est obligatoire pour créer un produit.')
+      setSavingForm(false)
       return
     }
 
     const requestData = {
       ...validationData,
-      codeBarres: formData.codeBarres.trim() || null,
+      codeBarres: formData.codeBarres.trim() || undefined,
       unite: formData.unite || 'unite',
       magasinId: Number(formData.magasinId),
       quantiteInitiale: Math.max(0, Number(formData.quantiteInitiale) || 0),
     }
-
-    // Dans GestiCom Offline, on enregistre toujours vers le serveur local.
 
     try {
       const res = await fetch('/api/produits', {
@@ -431,11 +419,9 @@ export default function ProduitsPage() {
         setFormData({ code: '', codeBarres: '', designation: '', categorie: 'DIVERS', unite: 'unite', magasinId: '', prixAchat: '', prixVente: '', prixMinimum: '', fournisseurId: '', seuilMin: '5', quantiteInitiale: '0' })
         setCurrentPage(1)
         fetchList(1)
-        // Notifier les autres pages pour rafraîchir leurs listes de produits
+        fetchStats()
         window.dispatchEvent(new CustomEvent('produit-created'))
         showSuccess(`Produit ${data.code} créé avec succès.`)
-        // Rafraîchir plusieurs fois pour être sûr (problème cache parfois en standalone)
-        fetchList(1)
         setTimeout(() => fetchList(1), 500)
         setTimeout(() => fetchStats(), 1000)
       } else {
@@ -447,9 +433,10 @@ export default function ProduitsPage() {
       const errorMsg = formatApiError(e)
       setErr(errorMsg)
       showError(errorMsg)
+    } finally {
+      setSavingForm(false)
     }
   }
-
 
   return (
     <div className="space-y-6">
@@ -472,12 +459,13 @@ export default function ProduitsPage() {
             Exporter Excel
           </button>
           <button
-            onClick={handleDirectPrint}
-            disabled={isPrinting}
-            className="flex items-center gap-2 rounded-xl border-2 border-orange-600 bg-orange-50 px-6 py-3 text-sm font-black text-orange-900 hover:bg-orange-100 disabled:opacity-50 transition-all shadow-xl active:scale-95 no-print"
+            onClick={handleImportExcel}
+            disabled={importing}
+            className="flex items-center gap-2 rounded-lg border-2 border-emerald-500 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+            title="Importer des produits depuis un fichier Excel"
           >
-            {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-            Imprimer
+            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Importer Excel
           </button>
           <button
             onClick={() => {
@@ -495,106 +483,6 @@ export default function ProduitsPage() {
         </div>
       </div>
 
-      {isPrinting && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md no-print">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm border-4 border-orange-500 transform scale-110">
-            <Loader2 className="h-16 w-16 animate-spin mx-auto text-orange-500 mb-6" />
-            <h3 className="text-2xl font-black text-gray-900 uppercase italic">Génération du Rapport</h3>
-            <p className="mt-2 text-gray-600 font-bold uppercase text-[11px] tracking-widest">
-              Veuillez patienter pendant la préparation de l'impression...
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Rendu masqué pour l'impression système direct */}
-      <div className="hidden print:block bg-white w-full">
-        {(() => {
-          const dataToPrint = allProductsForPrint.length > 0 ? allProductsForPrint : list
-          const chunks = paginateForPrint(dataToPrint, { firstPageSize: 15, otherPagesSize: 23 })
-          const offsetBefore = (pageIndex: number) =>
-            chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
-
-          return chunks.map((chunk, index, allChunks) => (
-            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-            <ListPrintWrapper
-              title="CATALOGUE GÉNÉRAL DES PRODUITS"
-              subtitle={q ? `Recherche : "${q}"` : "Inventaire complet du catalogue"}
-              pageNumber={index + 1}
-              totalPages={allChunks.length}
-              enterprise={params}
-              layout="landscape"
-              hideVisa={index < allChunks.length - 1}
-            >
-              <table className="w-full text-[14px] border-collapse border-2 border-black">
-                <thead>
-                  <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                    <th className="border border-black px-1 py-3 text-center w-10">N°</th>
-                    <th className="border border-black px-1 py-3 text-left">Code</th>
-                    <th className="border border-black px-2 py-3 text-left">Désignation de l'Article</th>
-                    <th className="border border-black px-1 py-3 text-left">Catégorie</th>
-                    <th className="border border-black px-1 py-3 text-right">Qté</th>
-                    <th className="border border-black px-1 py-3 text-right">P. Achat</th>
-                    <th className="border border-black px-1 py-3 text-right">P. Vente</th>
-                    <th className="border border-black px-1 py-3 text-right">P. Min</th>
-                    <th className="border border-black px-2 py-3 text-right bg-gray-50 uppercase text-[10px]">Val. Achat</th>
-                    <th className="border border-black px-2 py-3 text-right bg-gray-50 uppercase text-[10px]">Val. Vente</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {chunk.map((p, idx) => {
-                    const stock = p.stockConsolide ?? 0
-                    const pAchat = p.pamp || p.prixAchat || 0
-                    const pVente = p.prixVente || 0
-                    const pMin = p.prixMinimum || 0
-                    const valAchat = stock * pAchat
-                    const valVente = stock * pVente
-                    return (
-                      <tr key={idx} className="border border-black font-medium">
-                        <td className="border border-black px-1 py-2 text-center font-bold">
-                          {offsetBefore(index) + idx + 1}
-                        </td>
-                        <td className="border border-black px-1 py-2 font-mono text-[11px] font-bold">{p.code}</td>
-                        <td className="border border-black px-2 py-2 uppercase font-black text-[13px] leading-tight">{p.designation}</td>
-                        <td className="border border-black px-1 py-2 text-[11px] italic font-bold">{p.categorie}</td>
-                        <td className="border border-black px-1 py-2 text-right font-black text-[15px]">{stock.toLocaleString('fr-FR')}</td>
-                        <td className="border border-black px-1 py-2 text-right">{pAchat.toLocaleString('fr-FR')}</td>
-                        <td className="border border-black px-1 py-2 text-right font-bold">{pVente.toLocaleString('fr-FR')}</td>
-                        <td className="border border-black px-1 py-2 text-right italic text-gray-500">{pMin.toLocaleString('fr-FR')}</td>
-                        <td className="border border-black px-2 py-2 text-right font-bold bg-gray-50/50">{valAchat.toLocaleString('fr-FR')}</td>
-                        <td className="border border-black px-2 py-2 text-right font-black bg-gray-50/50 uppercase tracking-tighter italic">{valVente.toLocaleString('fr-FR')}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                {index === allChunks.length - 1 && (
-                  <tfoot>
-                    <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-lg">
-                      <td colSpan={4} className="border border-black px-2 py-4 text-right">
-                        BILAN GÉNÉRAL ({ (allProductsForPrint.length > 0 ? allProductsForPrint : list).length } RÉFÉRENCES) :
-                      </td>
-                      <td className="border border-black px-2 py-4 text-right bg-white shadow-inner">
-                        {(allProductsForPrint.length > 0 ? allProductsForPrint : list).reduce((acc, p) => acc + (p.stockConsolide ?? 0), 0).toLocaleString()}
-                      </td>
-                      <td colSpan={3} className="border border-black px-2 py-4 text-right bg-gray-50/50 text-[12px] font-bold tracking-widest leading-none">
-                        VALEUR TOTALE DU CATALOGUE <br/><span className="text-[9px] font-normal italic">(Calculée sur stock actuel)</span>
-                      </td>
-                      <td className="border border-black px-2 py-4 text-right bg-white text-orange-800">
-                        {(allProductsForPrint.length > 0 ? allProductsForPrint : list).reduce((acc, p) => acc + ((p.stockConsolide ?? 0) * (p.pamp && p.pamp > 0 ? p.pamp : (p.prixAchat || 0))), 0).toLocaleString()} F
-                      </td>
-                      <td className="border border-black px-2 py-4 text-right bg-slate-900 text-white shadow-2xl">
-                        {(allProductsForPrint.length > 0 ? allProductsForPrint : list).reduce((acc, p) => acc + ((p.stockConsolide ?? 0) * (p.prixVente || 0)), 0).toLocaleString()} F
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </ListPrintWrapper>
-            </div>
-          ))
-        })()}
-      </div>
-
       <div className="flex flex-col md:flex-row gap-4 no-print items-end bg-white/10 p-3 rounded-xl border border-white/20">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
@@ -606,41 +494,12 @@ export default function ProduitsPage() {
             className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-gray-900"
           />
         </div>
-        <div className="flex gap-2 items-end">
-          <div>
-            <label className="block text-[10px] font-black text-white uppercase mb-1">Depuis le</label>
-            <input
-              type="date"
-              value={dateDebut}
-              onChange={e => setDateDebut(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 text-gray-900"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-black text-white uppercase mb-1">Jusqu'au</label>
-            <input
-              type="date"
-              value={dateFin}
-              onChange={e => setDateFin(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 text-gray-900"
-            />
-          </div>
-          {(dateDebut || dateFin) && (
-            <button
-              onClick={() => { setDateDebut(''); setDateFin(''); }}
-              className="bg-white/20 hover:bg-white/30 text-white rounded-lg p-2 text-xs font-bold transition-all"
-            >
-              RÉINITIALISER
-            </button>
-          )}
-        </div>
       </div>
 
       {form && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-6">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">Nouveau produit</h2>
           <form onSubmit={handleSubmit} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Ligne 1 : Code + Désignation + Catégorie + Point de vente */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Code *</label>
               <input
@@ -652,14 +511,16 @@ export default function ProduitsPage() {
               <p className="mt-0.5 text-xs text-gray-500">Suggéré selon la catégorie ou la désignation</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Désignation *</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Désignation * {suggesting && <Loader2 className="inline h-3 w-3 animate-spin ml-1" />}
+              </label>
               <input
                 required
                 value={formData.designation}
                 onChange={(e) => setFormData((f) => ({ ...f, designation: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
               />
-              <p className="mt-0.5 text-xs text-gray-500">Code et catégorie suggérés automatiquement à partir des produits similaires en base.</p>
+              <p className="mt-0.5 text-xs text-gray-500">Code et catégorie suggérés automatiquement</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Catégorie *</label>
@@ -695,9 +556,8 @@ export default function ProduitsPage() {
                   <option key={m.id} value={m.id}>{m.code} — {m.nom}</option>
                 ))}
               </select>
-              <p className="mt-0.5 text-xs text-gray-500">Le produit sera en stock uniquement dans ce point de vente (obligatoire)</p>
+              <p className="mt-0.5 text-xs text-gray-500">Le produit sera en stock uniquement dans ce point de vente</p>
             </div>
-            {/* Ligne 2 : Code-barres + Unité + Prix achat + Prix vente */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Code-barres (EAN-13/QR)</label>
               <input
@@ -706,7 +566,7 @@ export default function ProduitsPage() {
                 placeholder="Ex: 3017620422003"
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none font-mono text-sm"
               />
-              <p className="mt-0.5 text-xs text-gray-500">Permet la détection automatique via le scanner caméra 📷</p>
+              <p className="mt-0.5 text-xs text-gray-500">Chiffres uniquement (8 à 14 caractères)</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Unité de vente</label>
@@ -764,10 +624,10 @@ export default function ProduitsPage() {
                 onChange={(e) => setFormData((f) => ({ ...f, prixMinimum: e.target.value }))}
                 className="mt-1 w-full rounded-lg border-2 border-red-200 px-3 py-2 focus:border-red-500 focus:outline-none bg-red-50/30 font-black italic"
               />
-              <p className="mt-0.5 text-[10px] text-red-500 font-bold uppercase tracking-widest">⚠️ Seuil de blocage à la vente</p>
+              <p className="mt-0.5 text-[10px] text-red-500 font-bold uppercase tracking-widest">Seuil de blocage à la vente</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Seuil min.</label>
+              <label className="block text-sm font-medium text-gray-700">Seuil min. alerte</label>
               <input
                 type="number"
                 min="0"
@@ -801,13 +661,22 @@ export default function ProduitsPage() {
                   <option key={f.id} value={f.id}>{f.nom}</option>
                 ))}
               </select>
-              <p className="mt-0.5 text-[10px] text-gray-400 uppercase font-black">Obligatoire pour la traçabilité des stocks</p>
+              <p className="mt-0.5 text-[10px] text-gray-400 uppercase font-black">Obligatoire pour la traçabilité</p>
             </div>
             <div className="flex gap-2 col-span-1 sm:col-span-2 lg:col-span-4">
-              <button type="submit" className="rounded-lg bg-orange-500 px-4 py-2 text-white hover:bg-orange-600">
+              <button
+                type="submit"
+                disabled={savingForm}
+                className="rounded-lg bg-orange-500 px-4 py-2 text-white hover:bg-orange-600 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingForm ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Enregistrer
               </button>
-              <button type="button" onClick={() => setForm(false)} className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300">
+              <button
+                type="button"
+                onClick={() => setForm(false)}
+                className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300"
+              >
                 Annuler
               </button>
             </div>
@@ -832,10 +701,11 @@ export default function ProduitsPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Code</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Désignation</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Catégorie</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Prix achat</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Magasin</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">PAMP</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Prix vente</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-red-800 bg-red-50 italic">Prix Min.</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Stock Actuel</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Stock</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Seuil</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Date création</th>
                   <th className="px-4 py-3"></th>
@@ -848,8 +718,17 @@ export default function ProduitsPage() {
                     <td className="px-4 py-3 font-mono text-sm text-gray-900">{p.code}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{p.designation}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{p.categorie}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {p.stocks && p.stocks.length > 0 ? (
+                        <span className="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800">
+                          Mag-{p.stocks[0].magasinId}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right text-sm text-gray-600">
-                      {p.prixAchat != null ? `${Number(p.prixAchat).toLocaleString('fr-FR')} F` : '—'}
+                      {p.pamp && p.pamp > 0 ? `${Number(p.pamp).toLocaleString('fr-FR')} F` : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-gray-600">
                       <input
@@ -897,7 +776,7 @@ export default function ProduitsPage() {
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-gray-600 font-medium">{p.seuilMin}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {formatDate(p.createdAt, { includeTime: true })}
+                      {formatDate(p.createdAt, { includeTime: false })}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
@@ -913,7 +792,7 @@ export default function ProduitsPage() {
                           type="button"
                           onClick={() => setDeleting(p)}
                           className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
-                          title="Supprimer ce produit"
+                          title="Archiver ce produit"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -949,7 +828,7 @@ export default function ProduitsPage() {
 
             <form onSubmit={handleSaveProduit} className="space-y-5">
               <div>
-                <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Désignation (Nom du produit)</label>
+                <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Désignation</label>
                 <input
                   required
                   value={editData.designation}
@@ -1032,7 +911,7 @@ export default function ProduitsPage() {
           </div>
         </div>
       )}
-      {/* Modal Confirmation Suppression */}
+
       {deleting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDeleting(null)}>
           <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -1040,11 +919,11 @@ export default function ProduitsPage() {
               <div className="rounded-full bg-red-100 p-2">
                 <AlertTriangle className="h-6 w-6" />
               </div>
-              <h3 className="text-lg font-bold">Confirmer la suppression</h3>
+              <h3 className="text-lg font-bold">Confirmer l&apos;archivage</h3>
             </div>
             <p className="mb-6 text-sm text-gray-600">
-              Voulez-vous vraiment supprimer le produit **{deleting.designation}** ({deleting.code}) ?
-              **Attention :** Cette opération est définitive et supprimera également tout l'historique associé (stocks, ventes, achats, mouvements) via la suppression en cascade.
+              Voulez-vous archiver le produit <strong>{deleting.designation}</strong> ({deleting.code}) ?
+              Le produit sera masqué mais l&apos;historique sera conservé.
             </p>
             <div className="flex gap-3">
               <button
@@ -1052,7 +931,7 @@ export default function ProduitsPage() {
                 onClick={handleDelete}
                 className="flex-1 rounded-lg bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700 disabled:opacity-50"
               >
-                {isDeleting ? 'Suppression...' : 'Oui, supprimer'}
+                {isDeleting ? 'Archivage...' : 'Oui, archiver'}
               </button>
               <button
                 onClick={() => setDeleting(null)}

@@ -95,12 +95,31 @@ export async function DELETE(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const forbidden = requirePermission(session, 'commandes:delete')
+  if (forbidden) return NextResponse.json({ error: 'Droits insuffisants pour cette action.' }, { status: 403 })
+
   const { id: idStr } = await params
   const id = Number(idStr)
   if (!id) return NextResponse.json({ error: 'ID invalide' }, { status: 400 })
 
   try {
-    // Les lignes seront supprimées via cascade si configuré, sinon deleteMany avant
+    // Vérifier que la commande est en brouillon
+    const commande = await prisma.commandeFournisseur.findUnique({
+      where: { id },
+      select: { statut: true }
+    })
+
+    if (!commande) {
+      return NextResponse.json({ error: 'Commande introuvable' }, { status: 404 })
+    }
+
+    if (commande.statut !== 'BROUILLON') {
+      return NextResponse.json({ 
+        error: 'Seules les commandes en brouillon peuvent être supprimées' 
+      }, { status: 400 })
+    }
+
     await prisma.commandeFournisseurLigne.deleteMany({ where: { commandeId: id } })
     await prisma.commandeFournisseur.delete({ where: { id } })
     revalidatePath('/dashboard/commandes-fournisseurs')
