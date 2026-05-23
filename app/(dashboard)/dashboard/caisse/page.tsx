@@ -525,7 +525,7 @@ export default function CaissePage() {
                               }
                             }}
                             disabled={deletingId === o.id}
-                            className="rounded p-1.5 text-red-700 hover:bg-red-100 disabled:opacity-50"
+                            className="rounded p-1.5 text-red-700 hover:bg-red-100 disabled:opacity-50 cursor-pointer hover:scale-110 transition-transform"
                             title="Supprimer (Super Admin)"
                           >
                             {deletingId === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -534,15 +534,20 @@ export default function CaissePage() {
                       </td>
                     </tr>
                 ))}
-                {totalPages > 1 && (
+                {totalPages >= 1 && (
                     <tr>
                       <td colSpan={7} className="px-0 py-0 border-t border-gray-200">
-                        <div className="bg-white px-4 py-3">
-                          <Pagination
-                            currentPage={currentPage}
-                            totalPages={totalPages}
-                            onPageChange={setCurrentPage}
-                          />
+                        <div className="bg-white px-4 py-3 flex items-center justify-between">
+                          <div className="text-sm text-gray-600">
+                            Page {currentPage} sur {totalPages} ({totalEntries} opérations)
+                          </div>
+                          {totalPages > 1 && (
+                            <Pagination
+                              currentPage={currentPage}
+                              totalPages={totalPages}
+                              onPageChange={setCurrentPage}
+                            />
+                          )}
                         </div>
                       </td>
                     </tr>

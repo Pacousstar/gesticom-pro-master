@@ -6,7 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'ventes:view')
+  const forbidden = requirePermission(session, 'rapports:view')
   if (forbidden) return forbidden
 
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
   const where: any = {
     vente: {
-      statut: 'VALIDEE'
+      statut: { in: ['VALIDE', 'VALIDEE'] }
     }
   }
 
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const lignes = await prisma.venteLigne.findMany({
       where: {
         vente: {
-          statut: 'VALIDEE',
+          statut: { in: ['VALIDE', 'VALIDEE'] },
           ...(dateDebut && dateFin ? {
             date: {
               gte: new Date(dateDebut + 'T00:00:00'),

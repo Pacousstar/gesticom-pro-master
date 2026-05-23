@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+    const forbidden = requirePermission(session, 'rapports:view')
+    if (forbidden) return forbidden
 
     try {
         const searchParams = request.nextUrl.searchParams
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
         // 1. Ventes par mode de paiement
         const ventesParMode = await prisma.vente.groupBy({
             by: ['modePaiement'],
-            where: { ...wherePeriode, statut: 'VALIDEE' },
+            where: { ...wherePeriode, statut: { in: ['VALIDE', 'VALIDEE'] } },
             _sum: { montantTotal: true, montantPaye: true }
         })
 

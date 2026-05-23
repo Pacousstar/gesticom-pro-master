@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
     request: NextRequest,
@@ -8,6 +9,8 @@ export async function GET(
 ) {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const authError = requirePermission(session, 'fournisseurs:view')
+    if (authError) return authError
 
     try {
         const id = Number((await params).id)
@@ -88,9 +91,21 @@ export async function GET(
         // Tri par date
         operations.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
+        // Calcul global du solde (cohérent avec clients/soldes)
+        const totalAchatsGlobal = achats.reduce((s, a) => s + (a.montantTotal || 0), 0)
+        const totalReglementsGlobal = reglements.reduce((s, r) => s + (r.montant || 0), 0)
+        const totalDebitGlobal = totalAchatsGlobal + (fournisseur.soldeInitial || 0)
+        const totalCreditGlobal = totalReglementsGlobal + (fournisseur.avoirInitial || 0)
+        const globalSolde = totalDebitGlobal - totalCreditGlobal
+
         return NextResponse.json({
             fournisseur,
-            operations
+            operations,
+            totalDebitGlobal,
+            totalCreditGlobal,
+            globalSolde,
+            soldeInitial: fournisseur.soldeInitial || 0,
+            avoirInitial: fournisseur.avoirInitial || 0
         })
     } catch (error) {
         console.error('Erreur API compte courant fournisseur:', error)

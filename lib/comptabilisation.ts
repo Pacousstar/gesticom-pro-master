@@ -818,11 +818,15 @@ export async function comptabiliserMouvementStock(data: {
 
 /**
  * Comptabilise une dépense
+ * - Montant total en charge
+ * - Montant payé crédite la trésorerie (Caisse/Banque)
+ * - Différence crédite un compte tiers (dette = montantPaye < montantTotal)
  */
 export async function comptabiliserDepense(data: {
   depenseId: number
   date: Date
-  montant: number
+  montantTotal: number
+  montantPaye: number
   categorie: string
   libelle: string
   modePaiement: string
@@ -903,7 +907,7 @@ export async function comptabiliserDepense(data: {
     }
   }
   
-  // Écriture 1 : Débit Charge, Crédit Caisse
+  // Écriture 1 : Débit Charge (montant total)
   await createEcriture({
     date: data.date,
     journalId: journal.id,
@@ -911,7 +915,7 @@ export async function comptabiliserDepense(data: {
     piece: null,
     libelle: data.libelle,
     compteId: compteCharge.id,
-    debit: data.montant,
+    debit: data.montantTotal,
     credit: 0,
     reference: `DEP-${data.depenseId}`,
     referenceType: 'DEPENSE',
@@ -919,20 +923,46 @@ export async function comptabiliserDepense(data: {
     utilisateurId: data.utilisateurId,
   }, tx)
   
-  await createEcriture({
-    date: data.date,
-    journalId: journal.id,
-    entiteId: entiteId,
-    piece: null,
-    libelle: data.libelle,
-    compteId: compteReglement.id,
-    debit: 0,
-    credit: data.montant,
-    reference: `DEP-${data.depenseId}`,
-    referenceType: 'DEPENSE',
-    referenceId: data.depenseId,
-    utilisateurId: data.utilisateurId,
-  }, tx)
+  // Écriture 2 : Crédit Trésorerie (montantPaye) + Dette (reste = montantTotal - montantPaye)
+  const montantPaye = data.montantPaye || 0
+  const resteAPayer = Math.max(0, data.montantTotal - montantPaye)
+  
+  // Si partiellement payé, créer écriture pour la trésorerie
+  if (montantPaye > 0) {
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: entiteId,
+      piece: null,
+      libelle: data.libelle + ' (payé)',
+      compteId: compteReglement.id,
+      debit: 0,
+      credit: montantPaye,
+      reference: `DEP-${data.depenseId}`,
+      referenceType: 'DEPENSE',
+      referenceId: data.depenseId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
+  
+  // Si reste à payer > 0, créer écriture pour la dette (compte tiers)
+  if (resteAPayer > 0) {
+    const compteDette = await getOrCreateCompte('408', 'Dettes charges à payer', '4', 'PASSIF', tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: entiteId,
+      piece: null,
+      libelle: data.libelle + ' (reste à payer)',
+      compteId: compteDette.id,
+      debit: 0,
+      credit: resteAPayer,
+      reference: `DEP-${data.depenseId}`,
+      referenceType: 'DEPENSE',
+      referenceId: data.depenseId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
 
 
 }

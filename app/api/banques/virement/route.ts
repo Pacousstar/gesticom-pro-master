@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { revalidatePath } from 'next/cache'
+import { requirePermission } from '@/lib/require-role'
 
 /**
  * Gère les virements internes : 
@@ -15,6 +16,8 @@ import { revalidatePath } from 'next/cache'
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:create')
+  if (authError) return authError
 
   try {
     const body = await request.json()

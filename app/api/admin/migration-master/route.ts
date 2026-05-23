@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     // Dépenses & Charges
     const depenses = await prisma.depense.findMany({})
     for (const d of depenses) await comptabiliserDepense({ 
-        ...d, depenseId: d.id, montant: Number(d.montant), date: d.date 
+        depenseId: d.id, date: d.date, montantTotal: Number(d.montant), montantPaye: Number(d.montantPaye || d.montant), categorie: d.categorie, libelle: d.libelle, modePaiement: d.modePaiement, utilisateurId: d.utilisateurId, entiteId: d.entiteId, magasinId: d.magasinId
     })
     const charges = await prisma.charge.findMany({})
     for (const c of charges) await comptabiliserCharge({ 

@@ -292,9 +292,15 @@ const result = await Promise.race([
     ])
 
     tresorerieBanque = toNum(soldesPhysiques[0]._sum?.soldeActuel)
-    const caisseEntrees = toNum(soldesPhysiques[1]._sum?.montant)
-    const caisseSorties = toNum(soldesPhysiques[2]._sum?.montant)
-    tresorerieCaisse = caisseEntrees - caisseSorties
+    
+    // Calculer la caisse sur toutes les périodes (comme la page Caisse)
+    const allCaisse = await prisma.caisse.groupBy({
+      by: ['type'],
+      _sum: { montant: true }
+    })
+    const entrees = allCaisse.find(c => c.type === 'ENTREE')?._sum?.montant || 0
+    const sorties = allCaisse.find(c => c.type === 'SORTIE')?._sum?.montant || 0
+    tresorerieCaisse = entrees - sorties
 
     const totalDettes = (toNum(dettesAgg._sum?.montantTotal) + toNum(dettesAgg._sum?.fraisApproche)) - toNum(dettesAgg._sum?.montantPaye)
     const totalCreances = toNum(creancesAgg._sum?.montantTotal) - toNum(creancesAgg._sum?.montantPaye)

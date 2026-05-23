@@ -26,25 +26,31 @@ export async function GET(
     return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
   }
 
-  const achat = await prisma.achat.findUnique({
+const achat = await prisma.achat.findUnique({
     where: { id },
     include: {
-      magasin: { select: { id: true, code: true, nom: true } },
-      fournisseur: { select: { id: true, nom: true, telephone: true, email: true, localisation: true, ncc: true } },
+      magasin: { select: { id: true, code: true, nom: true, localisation: true } },
+      fournisseur: { select: { id: true, nom: true, telephone: true, adresse: true, ncc: true } },
       lignes: true,
       reglements: true,
+      ReglementAchatLigne: { select: { montant: true } },
     },
   })
 
-  if (!achat) {
-    return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
-  }
+  if (!achat) return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
 
   if (session!.role !== 'SUPER_ADMIN' && achat.entiteId !== session!.entiteId) {
     return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
   }
 
-  return NextResponse.json(achat)
+  const totalLignePaye = (achat.ReglementAchatLigne as any[] || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+  const achatWithRealPaye = {
+    ...achat,
+    montantPaye: Math.max(totalLignePaye, achat.montantPaye || 0),
+    ReglementAchatLigne: undefined,
+  }
+
+  return NextResponse.json(achatWithRealPaye)
 }
 
 /** Suppression définitive (Super Admin uniquement). Annule les stocks et supprime les écritures comptables. */
@@ -122,6 +128,7 @@ export async function DELETE(
       }
 
       // 6. Supprimer règlements et achat
+      await tx.reglementAchatLigne.deleteMany({ where: { achatId: id } })
       await tx.reglementAchat.deleteMany({ where: { achatId: id } })
       await tx.achat.delete({ where: { id: id } })
       
@@ -157,7 +164,11 @@ export async function PATCH(
 
     if (action === 'PAGEMENT') {
       const montantReglement = Math.max(0, Number(body?.montant) || 0)
-      const modePaiement = body?.modePaiement || 'ESPECES'
+      const modePaiement = (body?.modePaiement || 'ESPECES').toUpperCase()
+      // CREDIT = dette à terme, ne peut pas être ajouté via un règlement (c'est une créance fournisseur)
+      if (modePaiement === 'CREDIT') {
+        return NextResponse.json({ error: 'Le mode CREDIT représente une dette à terme. Utilisez un véritable mode de paiement.' }, { status: 400 })
+      }
       const banqueId = body?.banqueId ? Number(body.banqueId) : null
       const now = new Date()
       let dateReglement = body?.date ? new Date(body.date) : now
@@ -173,7 +184,7 @@ export async function PATCH(
 
       const achat = await prisma.achat.findUnique({
         where: { id },
-        include: { magasin: true }
+        include: { magasin: true, ReglementAchatLigne: { select: { montant: true } } }
       })
 
       if (!achat) return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
@@ -181,7 +192,9 @@ export async function PATCH(
         return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
       }
 
-      const resteAPayer = Math.max(0, (achat.montantTotal || 0) - (achat.montantPaye || 0))
+      const totalLignePaye = (achat.ReglementAchatLigne as any[] || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+      const realMontantPaye = Math.max(totalLignePaye, achat.montantPaye || 0)
+      const resteAPayer = Math.max(0, (achat.montantTotal || 0) - realMontantPaye)
       if (montantReglement - resteAPayer > 1) {
         return NextResponse.json({
           error: `Paiement invalide : le montant (${montantReglement.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`
@@ -204,18 +217,26 @@ export async function PATCH(
           }
         })
 
-        await tx.reglementAchat.create({
-          data: {
-            achatId: id,
-            fournisseurId: achat.fournisseurId,
-            entiteId: achat.entiteId,
-            montant: montantReglement,
-            modePaiement: modePaiement,
-            utilisateurId: session!.userId,
-            date: dateReglement,
-            observation: `Paiement sur facture ${achat.numero}`
-          }
-        })
+const reglAchat = await tx.reglementAchat.create({
+            data: {
+              achatId: id,
+              fournisseurId: achat.fournisseurId,
+              entiteId: achat.entiteId,
+              montant: montantReglement,
+              modePaiement: modePaiement,
+              utilisateurId: session!.userId,
+              date: dateReglement,
+              observation: `Paiement sur facture ${achat.numero}`
+            }
+          })
+
+          await tx.reglementAchatLigne.create({
+            data: {
+              reglementId: reglAchat.id,
+              achatId: id,
+              montant: montantReglement,
+            }
+          })
 
         // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque)
         if (estModeEspeces(modePaiement)) {
@@ -301,7 +322,8 @@ export async function PATCH(
         await deleteEcrituresByReference('ACHAT', id, tx)
         await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
         await deleteEcrituresByReference('ACHAT_STOCK', id, tx)
-        await tx.reglementAchat.deleteMany({ where: { achatId: id } })
+await tx.reglementAchat.deleteMany({ where: { achatId: id } })
+        await tx.reglementAchatLigne.deleteMany({ where: { achatId: id } })
         // On supprime les mouvements de caisse liés exactement à ce numéro
         await tx.caisse.deleteMany({ 
           where: { 
@@ -475,7 +497,7 @@ export async function PATCH(
           for (const r of regsData) {
             const mntR = Number(r.montant) || 0
             if (mntR <= 0) continue
-            await tx.reglementAchat.create({
+            const reglA = await tx.reglementAchat.create({
               data: {
                 achatId: updated.id,
                 fournisseurId: updated.fournisseurId,
@@ -485,6 +507,13 @@ export async function PATCH(
                 utilisateurId: session!.userId,
                 observation: `Modif Achat ${updated.numero}`,
                 date: updated.date,
+              }
+            })
+            await tx.reglementAchatLigne.create({
+              data: {
+                reglementId: reglA.id,
+                achatId: updated.id,
+                montant: mntR,
               }
             })
             // Synchro physique trésorerie

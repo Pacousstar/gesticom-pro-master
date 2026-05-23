@@ -3,10 +3,13 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logAction } from '@/lib/audit'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
+import { requirePermission } from '@/lib/require-role'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:create')
+  if (authError) return authError
 
   try {
     const { id } = await params

@@ -14,15 +14,6 @@ async function main() {
   const existing = await prisma.utilisateur.findUnique({ where: { login: ADMIN_LOGIN } })
   const motDePasse = await bcrypt.hash(ADMIN_PASSWORD, 10)
   
-  if (existing) {
-    console.log('Admin existant. Passage du seed.')
-    return
-  }
-  if (totalUsers > 0) {
-    console.log('Des utilisateurs existent déjà. Aucun super admin bootstrap créé.')
-    return
-  }
-
   let entite = await prisma.entite.findFirst()
   if (!entite) {
     entite = await prisma.entite.create({
@@ -36,8 +27,8 @@ async function main() {
     })
   }
 
-  // Vérifier si le magasin existe déjà
-  let magasin = await prisma.magasin.findUnique({ where: { code: 'MAG01' } })
+  // Créer le magasin MAG01 systématiquement (même si admin existe déjà)
+  let magasin = await prisma.magasin.findFirst({ where: { code: 'MAG01' } })
   if (!magasin) {
     magasin = await prisma.magasin.create({
       data: {
@@ -48,6 +39,16 @@ async function main() {
         actif: true,
       },
     })
+    console.log('Magasin MAG01 créé automatiquement.')
+  }
+
+  if (existing) {
+    console.log('Admin existant. Passage du seed.')
+    return
+  }
+  if (totalUsers > 0) {
+    console.log('Des utilisateurs existent déjà. Aucun super admin bootstrap créé.')
+    return
   }
 
   await prisma.utilisateur.create({

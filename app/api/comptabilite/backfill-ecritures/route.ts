@@ -16,10 +16,13 @@ import {
   comptabiliserReglementAchat,
 } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requireRole } from '@/lib/require-role'
 
 export async function POST() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requireRole(session, ['SUPER_ADMIN', 'ADMIN'])
+  if (forbidden) return forbidden
 
   const eId = await getEntiteId(session)
   const whereEntite: any = eId > 0 ? { entiteId: eId } : {}
@@ -135,6 +138,7 @@ export async function POST() {
         id: true,
         date: true,
         montant: true,
+        montantPaye: true,
         categorie: true,
         libelle: true,
         modePaiement: true,
@@ -150,7 +154,8 @@ export async function POST() {
         await comptabiliserDepense({
           depenseId: d.id,
           date: d.date,
-          montant: Number(d.montant),
+          montantTotal: Number(d.montant),
+          montantPaye: Number(d.montantPaye || d.montant),
           categorie: d.categorie,
           libelle: d.libelle,
           modePaiement: d.modePaiement || 'ESPECES',

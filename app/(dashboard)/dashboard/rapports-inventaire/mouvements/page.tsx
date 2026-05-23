@@ -172,12 +172,12 @@ useEffect(() => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-white uppercase tracking-tight">Mouvements de Stock</h1>
           <p className="text-sm text-white/90 font-medium">Historique détaillé des flux de produits</p>
         </div>
-        <div className="flex gap-2 no-print">
+        <div className="flex gap-2 no-print print:hidden">
           <button 
             onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
             disabled={isPrinting}
@@ -233,7 +233,7 @@ useEffect(() => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print print:hidden">
         <div className="bg-white/10 backdrop-blur-md p-6 rounded-[2rem] border border-white/20 shadow-2xl flex items-center gap-6 group hover:bg-white/20 transition-all duration-300">
           <div className="h-16 w-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-300 shadow-inner group-hover:scale-110 transition-transform">
              <ArrowDownLeft className="h-8 w-8" />
@@ -280,8 +280,8 @@ useEffect(() => {
           <table className="w-full text-[10px] border-collapse border border-gray-300">
             <thead>
               <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                <th className="border border-gray-300 px-3 py-3 text-left">Date Opération</th>
-                <th className="border border-gray-300 px-3 py-3 text-left">Produit / Magasin</th>
+                <th className="border border-gray-300 px-3 py-3 text-left">Date (Enreg. / Opération)</th>
+                <th className="border border-gray-300 px-3 py-3 text-left">Produit / Magasin / Code</th>
                 <th className="border border-gray-300 px-3 py-3 text-center">Type</th>
                 <th className="border border-gray-300 px-3 py-3 text-right">Quantité</th>
                 <th className="border border-gray-300 px-3 py-3 text-left">Obs / Utilisateur</th>
@@ -290,12 +290,13 @@ useEffect(() => {
             <tbody>
               {filteredData.map((m, idx) => (
                 <tr key={idx} className="border-b border-gray-200">
-                  <td className="border border-gray-300 px-3 py-2">
-                    {new Date(m.dateOperation).toLocaleString('fr-FR')}
+                  <td className="border border-gray-300 px-3 py-2 text-[9px]">
+                    <p className="font-bold">{m.date ? new Date(m.date).toLocaleString('fr-FR') : '—'}</p>
+                    <p className="text-gray-500 italic">{m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR') : '—'}</p>
                   </td>
                   <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
                     {m.produit}<br/>
-                    <small className="font-normal italic text-gray-500">{m.magasin}</small>
+                    <small className="font-normal italic text-gray-500">{m.magasin} • {m.code || '—'}</small>
                   </td>
                   <td className="border border-gray-300 px-3 py-2 text-center font-black uppercase italic text-[9px]">
                     {m.type}
@@ -325,7 +326,7 @@ useEffect(() => {
         </ListPrintWrapper>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+      <div className="grid grid-cols-1 gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm print:hidden">
         <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Période du</label>
@@ -388,7 +389,7 @@ useEffect(() => {
         </form>
       </div>
 
-      <div className="relative">
+      <div className="relative print:hidden">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input
           type="text"
@@ -405,7 +406,7 @@ useEffect(() => {
         />
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm print:hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-blue-500" />

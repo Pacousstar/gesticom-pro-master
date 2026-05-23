@@ -13,10 +13,11 @@ interface ListPrintWrapperProps {
   pageNumber?: number
   totalPages?: number
   children: React.ReactNode
-  enterprise?: any // Données optionnelles pour éviter les appels API redondants
+  enterprise?: any
   hideHeader?: boolean
   hideVisa?: boolean
   layout?: 'portrait' | 'landscape'
+  kpis?: { label: string; value: string; color?: string }[]
 }
 
 export default function ListPrintWrapper({
@@ -29,7 +30,8 @@ export default function ListPrintWrapper({
   enterprise: providedEnterprise,
   hideHeader = false,
   hideVisa = false,
-  layout = 'portrait'
+  layout = 'portrait',
+  kpis
 }: ListPrintWrapperProps) {
   const [enterprise, setEnterprise] = useState<any>(providedEnterprise || null)
 
@@ -52,7 +54,7 @@ export default function ListPrintWrapper({
   }, [providedEnterprise])
 
   return (
-    <div className="print:flex flex-col font-sans text-black bg-white p-4 min-h-screen relative list-print-container">
+    <div className="print:flex flex-col font-sans text-black bg-white p-4 relative list-print-container">
       {/* HEADER PROFESSIONNEL */}
       {!hideHeader && (
         <div className="flex justify-between items-start mb-8 border-b-4 border-gray-900 pb-6">
@@ -121,33 +123,18 @@ export default function ListPrintWrapper({
       )}
 
       {/* CONTENU DE LA LISTE (TABLEAU) */}
-      <div className="print-content flex-grow">
+      <div className="print-content flex-1">
+        {kpis && kpis.length > 0 && (
+          <div className="bg-gray-50 border-2 border-black px-3 py-2 mb-3 flex justify-between text-[13px] font-black">
+            {kpis.map((kpi, idx) => (
+              <span key={idx}>{kpi.label}: <span className={kpi.color || ''}>{kpi.value}</span></span>
+            ))}
+          </div>
+        )}
         {children}
       </div>
 
-      {/* FOOTER & VISA */}
-      {!hideVisa && (
-        <div className="mt-12 flex justify-between items-end pt-8 border-t-2 border-black print-footer">
-          <div className="text-[16px] font-black text-gray-800 max-w-[50%] leading-tight">
-            Document officiel généré par le système GestiCom Pro. 
-            Tous droits réservés. {enterprise?.nomEntreprise || 'GESTICOM'}.
-            <br />
-            <span className="text-[14px] font-bold">{enterprise?.mentionSpeciale || 'Veuillez exiger votre reçu pour toute transaction.'}</span>
-          </div>
-          
-          <div className="flex gap-12">
-            <div className="text-center w-56">
-              <p className="text-[16px] font-black uppercase border-b-2 border-gray-900 pb-1 mb-20 whitespace-nowrap">Le Responsable / Visa</p>
-            </div>
-            <div className="text-center w-64">
-              <p className="text-[16px] font-black uppercase border-b-2 border-black pb-1 mb-20 whitespace-nowrap">La Direction / Cachet</p>
-              <div className="mt-16 text-[14px] font-bold text-gray-400">
-                (Signature et Cachet)
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* FOOTER & VISA - Désactivé temporairement */}
 
       <style jsx global>{`
         @media print {
@@ -178,15 +165,21 @@ export default function ListPrintWrapper({
             overflow: visible !important;
           }
           .list-print-container {
-            min-height: auto !important; /* CRITIQUE */
+            min-height: auto !important;
+            height: auto !important;
             padding: 0 !important;
             margin: 0 !important;
+            flex-grow: 0 !important;
           }
 
+          .print-content {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+          }
           .print-content table {
             width: 100% !important;
             border-collapse: collapse !important;
-            margin-bottom: 20px;
+            margin-bottom: 0 !important;
             table-layout: auto !important;
           }
           .print-content th {
@@ -211,7 +204,9 @@ export default function ListPrintWrapper({
           }
           .print-footer {
             page-break-inside: avoid !important;
-            margin-top: 2rem;
+            margin-top: 0.5rem;
+            flex-shrink: 0 !important;
+            align-self: flex-end !important;
           }
           .page-break {
             page-break-after: always;

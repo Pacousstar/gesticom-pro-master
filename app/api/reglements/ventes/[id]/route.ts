@@ -82,6 +82,10 @@ export async function DELETE(
             }
           })
 
+          await tx.reglementVenteLigne.deleteMany({
+            where: { reglementId: id }
+          })
+
           if (v.clientId && ancienStatut !== 'PAYE') {
             const pts = Math.floor(Math.max(0, reglement.montant) / 1000)
             if (pts > 0) {
@@ -191,17 +195,22 @@ export async function PATCH(
       if (updated.venteId) {
         const v = await tx.vente.findUnique({ where: { id: updated.venteId } })
         if (v) {
-          const tousReglements = await tx.reglementVente.findMany({
-            where: { venteId: v.id, statut: 'VALIDE' }
-          })
-          const totalPaye = tousReglements.reduce((acc, r) => acc + r.montant, 0)
+          const [allRegs, allLignes] = await Promise.all([
+            tx.reglementVente.findMany({
+              where: { venteId: v.id, statut: 'VALIDE' }
+            }),
+            tx.reglementVenteLigne.findMany({
+              where: { venteId: v.id },
+              select: { montant: true }
+            })
+          ])
+          const totalDirectPaye = allRegs.reduce((acc, r) => acc + r.montant, 0)
+          const totalLignePaye = allLignes.reduce((acc, l) => acc + l.montant, 0)
+          const totalPaye = Math.max(totalDirectPaye, totalLignePaye)
           if (totalPaye - v.montantTotal > 1) {
             throw new Error(`Paiement invalide : le total des règlements (${totalPaye.toLocaleString()} F) dépasse le montant de la facture (${v.montantTotal.toLocaleString()} F).`)
           }
           const nouveauPaye = Math.min(v.montantTotal, totalPaye)
-          if (v.montantTotal - nouveauPaye > 0 && v.montantTotal - nouveauPaye <= 1) {
-            // Tolérance anti-1F
-          }
           await tx.vente.update({
             where: { id: v.id },
             data: {
@@ -209,6 +218,19 @@ export async function PATCH(
               statutPaiement: nouveauPaye >= v.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
             }
           })
+
+          const diffMontant = montantFinal - old.montant
+          if (diffMontant !== 0 && old.venteId) {
+            const existingLigne = await tx.reglementVenteLigne.findFirst({
+              where: { reglementId: id, venteId: old.venteId }
+            })
+            if (existingLigne) {
+              await tx.reglementVenteLigne.update({
+                where: { id: existingLigne.id },
+                data: { montant: montantFinal }
+              })
+            }
+          }
         }
       }
 

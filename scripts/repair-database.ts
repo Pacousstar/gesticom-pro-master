@@ -71,6 +71,14 @@ async function repair() {
         }
       })
 
+      await tx.reglementVenteLigne.create({
+        data: {
+          reglementId: reg.id,
+          venteId: v.id,
+          montant: v.montantPaye!,
+        }
+      })
+
       // Comptabilisation
       await comptabiliserReglementVente({
         reglementId: reg.id,

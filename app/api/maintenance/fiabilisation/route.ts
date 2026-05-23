@@ -104,9 +104,18 @@ export async function POST() {
         include: { reglements: true }
     })
     for (const v of ventes) {
-        const totalPaye = v.reglements.filter(r => r.statut === 'VALIDE').reduce((sum, r) => sum + r.montant, 0)
+        const totalDirectPaye = v.reglements.filter(r => r.statut === 'VALIDE').reduce((sum, r) => sum + r.montant, 0)
+        
+        const lignesAgg = await prisma.reglementVenteLigne.aggregate({
+          where: { venteId: v.id },
+          _sum: { montant: true }
+        })
+        const totalLignePaye = lignesAgg._sum?.montant || 0
+
+        const totalPaye = Math.max(totalDirectPaye, totalLignePaye)
+        
         if (Math.abs(v.montantPaye - totalPaye) > 0.01) {
-            const statutPaiement = totalPaye >= v.montantTotal - 0.01 ? 'PAYE' : (totalPaye > 0 ? 'PARTIEL' : 'CREDIT')
+            const statutPaiement = totalPaye >= v.montantTotal - 0.5 ? 'PAYE' : (totalPaye > 0 ? 'PARTIEL' : 'CREDIT')
             await prisma.vente.update({
                 where: { id: v.id },
                 data: { montantPaye: totalPaye, statutPaiement }
@@ -121,9 +130,18 @@ export async function POST() {
         include: { reglements: true }
     })
     for (const a of achats) {
-        const totalPaye = a.reglements.filter(r => r.statut === 'VALIDE').reduce((sum, r) => sum + r.montant, 0)
+        const totalDirectPaye = a.reglements.filter(r => r.statut === 'VALIDE').reduce((sum, r) => sum + r.montant, 0)
+
+        const lignesAggAchat = await prisma.reglementAchatLigne.aggregate({
+          where: { achatId: a.id },
+          _sum: { montant: true }
+        })
+        const totalLignePaye = lignesAggAchat._sum?.montant || 0
+
+        const totalPaye = Math.max(totalDirectPaye, totalLignePaye)
+
         if (Math.abs((a.montantPaye || 0) - totalPaye) > 0.01) {
-            const statutPaiement = totalPaye >= a.montantTotal - 0.01 ? 'PAYE' : (totalPaye > 0 ? 'PARTIEL' : 'CREDIT')
+            const statutPaiement = totalPaye >= a.montantTotal - 0.5 ? 'PAYE' : (totalPaye > 0 ? 'PARTIEL' : 'CREDIT')
             await prisma.achat.update({
                 where: { id: a.id },
                 data: { montantPaye: totalPaye, statutPaiement }

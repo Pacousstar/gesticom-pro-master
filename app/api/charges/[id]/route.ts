@@ -10,6 +10,7 @@ import { comptabiliserCharge } from '@/lib/comptabilisation'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { enregistrerOperationBancaire } from '@/lib/banque'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
   _request: NextRequest,
@@ -17,6 +18,8 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'charges:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -51,6 +54,8 @@ export async function PATCH(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'charges:edit')
+  if (authError) return authError
 
   try {
     const id = Number((await params).id)

@@ -116,12 +116,17 @@ export type Permission =
   | 'fournisseurs:edit'
   | 'fournisseurs:delete'
 
-  // Commandes fournisseurs
+  // Commandes Fournisseurs
   | 'commandes:view'
   | 'commandes:create'
   | 'commandes:edit'
   | 'commandes:delete'
+  | 'commandes:transform'
   | 'commandes:receptionner'
+
+  // Archives
+  | 'archives:view'
+  | 'archives:export'
 
 /**
  * Définition des permissions par rôle
@@ -141,12 +146,14 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'comptabilite:view', 'comptabilite:rapports', 'comptabilite:export',
     'users:view', 'users:create', 'users:edit', 'users:delete',
     'parametres:view', 'parametres:edit',
+    'magasins:view', 'magasins:create', 'magasins:edit', 'magasins:delete',
     'sauvegardes:view', 'sauvegardes:create', 'sauvegardes:restore', 'sauvegardes:delete',
     'audit:view',
     'rapports:view', 'rapports:ventes',
     'clients:view', 'clients:create', 'clients:edit', 'clients:delete',
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit', 'fournisseurs:delete',
-    'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:delete', 'commandes:receptionner',
+    'archives:view', 'archives:export',
+    'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:transform', 'commandes:receptionner',
   ],
 
   ADMIN: [
@@ -161,15 +168,17 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'comptabilite:view', 'comptabilite:rapports',
     'users:view', 'users:create', 'users:edit',
     'parametres:view', 'parametres:edit',
+    'magasins:view', 'magasins:create', 'magasins:edit',
     'caisse:view', 'caisse:create',
     'sauvegardes:view', 'sauvegardes:create',
     'audit:view',
     'rapports:view', 'rapports:ventes',
     'clients:view', 'clients:create', 'clients:edit',
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit',
-    'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:receptionner',
     // RB9: Permissions Banque pour ADMIN
     'banque:view', 'banque:create',
+    'archives:view', 'archives:export',
+    'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:transform', 'commandes:receptionner',
   ],
 
   COMPTABLE: [
@@ -185,7 +194,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'comptabilite:view', 'comptabilite:rapports', 'comptabilite:export',
     'rapports:view', 'rapports:ventes',
     'clients:view', 'fournisseurs:view',
-    'commandes:view',
     // RB9: Permissions Banque pour COMPTABLE
     'banque:view',
   ],
@@ -203,7 +211,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'rapports:view',
     'clients:view', 'clients:create', 'clients:edit',
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit',
-    'commandes:view', 'commandes:create', 'commandes:edit',
   ],
 
   MAGASINIER: [
@@ -215,7 +222,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'achats:view',
     'clients:view',
     'fournisseurs:view',
-    'commandes:view',
   ],
 
   ASSISTANTE: [
@@ -237,7 +243,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
  * Si customPermissions est fourni et non vide, il remplace les permissions du rôle.
  */
 export function hasPermission(role: Role, permission: Permission, customPermissions?: string[]): boolean {
-  if (customPermissions !== undefined) {
+  if (customPermissions && customPermissions.length > 0) {
     return customPermissions.includes(permission)
   }
   const permissions = ROLE_PERMISSIONS[role] || []

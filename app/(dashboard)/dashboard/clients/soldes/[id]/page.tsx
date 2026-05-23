@@ -41,7 +41,7 @@ export default function CompteCourantClientPage() {
   const { error: showError } = useToast()
   
   const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<{ client: any, operations: Operation[] } | null>(null)
+  const [data, setData] = useState<{ client: any, operations: Operation[], totalDebitGlobal?: number, totalCreditGlobal?: number, globalSolde?: number } | null>(null)
   const [soldeTotal, setSoldeTotal] = useState(0)
   const [showPayModal, setShowPayModal] = useState(false)
   const [payAmount, setPayAmount] = useState('')
@@ -214,9 +214,8 @@ export default function CompteCourantClientPage() {
         const json = await res.json()
         setData(json)
         
-        // Calcul du solde total final
-        const total = Array.isArray(json.operations) ? json.operations.reduce((acc: number, op: Operation) => acc + op.debit - op.credit, 0) : 0
-        setSoldeTotal(total)
+        // Utiliser le globalSolde de l'API (inclut soldes initiaux)
+        setSoldeTotal(json.globalSolde ?? 0)
       } else {
         showError("Impossible de charger le compte courant.")
       }
@@ -416,25 +415,25 @@ export default function CompteCourantClientPage() {
 
       {/* BILAN RAPIDE */}
       <div className="grid gap-4 sm:grid-cols-3">
-         <div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex items-center justify-between group overflow-hidden">
-            <div>
-               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Débit (Achats)</p>
-               <h3 className="text-2xl font-black text-gray-900 tabular-nums">
-                   {ops.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F
-               </h3>
-            </div>
-            <TrendingUp className="h-10 w-10 text-orange-500/20 group-hover:scale-110 transition-transform" />
-         </div>
+<div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex items-center justify-between group overflow-hidden">
+             <div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Débit (Achats)</p>
+                <h3 className="text-2xl font-black text-gray-900 tabular-nums">
+                    {(data?.totalDebitGlobal ?? ops.reduce((acc, op) => acc + op.debit, 0)).toLocaleString('fr-FR')} F
+                </h3>
+             </div>
+             <TrendingUp className="h-10 w-10 text-orange-500/20 group-hover:scale-110 transition-transform" />
+          </div>
 
-         <div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex items-center justify-between group overflow-hidden">
-            <div>
-               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Crédit (Règlements)</p>
-               <h3 className="text-2xl font-black text-emerald-600 tabular-nums">
-                   {ops.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F
-               </h3>
-            </div>
-            <Wallet className="h-10 w-10 text-emerald-500/20 group-hover:scale-110 transition-transform" />
-         </div>
+          <div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex items-center justify-between group overflow-hidden">
+             <div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Crédit (Règlements)</p>
+                <h3 className="text-2xl font-black text-emerald-600 tabular-nums">
+                    {(data?.totalCreditGlobal ?? ops.reduce((acc, op) => acc + op.credit, 0)).toLocaleString('fr-FR')} F
+                </h3>
+             </div>
+             <Wallet className="h-10 w-10 text-emerald-500/20 group-hover:scale-110 transition-transform" />
+          </div>
 
          <div className={`rounded-[2rem] p-6 shadow-xl border flex items-center justify-between group overflow-hidden ${soldeTotal > 0 ? 'bg-orange-600 border-orange-500' : 'bg-emerald-600 border-emerald-500'}`}>
             <div className="text-white">

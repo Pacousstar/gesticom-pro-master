@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
 
@@ -17,6 +18,8 @@ function formatMontant(n: number): string {
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   const type = request.nextUrl.searchParams.get('type') || 'balance' // 'balance' ou 'grand-livre'
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()

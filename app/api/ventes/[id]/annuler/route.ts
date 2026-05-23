@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { verifierCloture } from '@/lib/cloture'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { logSuppression, getIpAddress } from '@/lib/audit'
+import { requireRole } from '@/lib/require-role'
 
 export async function POST(
   _request: NextRequest,
@@ -12,6 +13,8 @@ export async function POST(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const forbidden = requireRole(session, ['SUPER_ADMIN', 'ADMIN'])
+  if (forbidden) return forbidden
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {

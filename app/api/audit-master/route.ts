@@ -126,12 +126,14 @@ async function cleanAuditData(prefix: string) {
     const ventes = await prisma.vente.findMany({ where: { numero: { startsWith: prefix } } })
     for (const v of ventes) {
         await prisma.venteLigne.deleteMany({ where: { venteId: v.id } })
+        await prisma.reglementVenteLigne.deleteMany({ where: { venteId: v.id } })
         await prisma.reglementVente.deleteMany({ where: { venteId: v.id } })
         await prisma.vente.delete({ where: { id: v.id } })
     }
     const achats = await prisma.achat.findMany({ where: { numero: { startsWith: prefix } } })
     for (const a of achats) {
         await prisma.achatLigne.deleteMany({ where: { achatId: a.id } })
+        await prisma.reglementAchatLigne.deleteMany({ where: { achatId: a.id } })
         await prisma.reglementAchat.deleteMany({ where: { achatId: a.id } })
         await prisma.achat.delete({ where: { id: a.id } })
     }

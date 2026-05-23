@@ -66,8 +66,8 @@ export async function DELETE(
     // RC8 : Regex améliorée couvrant tous les motifs auto-générés
     if (op.motif) {
       // Extraction des références vente (V-NNN) et achat (A-NNN)
-      const venteRef = op.motif.match(/\b(V-\d+)\b/i)
-      const achatRef = op.motif.match(/\b(A-\d+)\b/i)
+      const venteRef = op.motif.match(/\bV\d+\b/i)
+      const achatRef = op.motif.match(/\bA\d+\b/i)
 
       if (venteRef) {
         const venteActive = await prisma.vente.findFirst({
@@ -93,13 +93,7 @@ export async function DELETE(
         }
       }
 
-      // Vérification supplémentaire : motifs auto-générés sans référence explicite
-      const motifsAutoGenere = /^(VENTE|ACHAT|R[ÈE]GLEMENT|MODIF|FRAIS|ANNULATION|ENTR[EÉ]E|SORTIE|D[ÉE]PENSE|CHARGE|TRANSFERT|VIREMENT)/i
-      if (motifsAutoGenere.test(op.motif.trim()) && !venteRef && !achatRef) {
-        return NextResponse.json({
-          error: 'Suppression bloquée : cette opération a été générée automatiquement. Utilisez la fonction appropriée pour la retirer.'
-        }, { status: 409 })
-      }
+      // Vérification supplémentaire supprimée pour permettre la suppression manuelle des règlements
     }
 
     const magasinId = op.magasinId

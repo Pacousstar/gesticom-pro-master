@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const authError = requirePermission(session, 'archives:view')
+    if (authError) return authError
 
     const archives = await prisma.archiveVente.findMany({
       where: { entiteId: session.entiteId },
       include: {
         lignes: true,
         client: { select: { nom: true } },
-        utilisateur: { select: { nom: true } }
+        utilisateur: { select: { nom: true } },
+        magasin: { select: { code: true, nom: true } },
       },
       orderBy: { date: 'desc' }
     })

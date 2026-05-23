@@ -195,21 +195,22 @@ export default function ArchivesVentesNouvellePage() {
       montant: l.montant,
     })))
 
-    const templateData: TemplateData = {
-      NUMERO: d.numero,
-      DATE: formatDate(d.date),
-      HEURE: dateDoc.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      MAGASIN_CODE: d.magasin.code,
-      MAGASIN_NOM: d.magasin.nom,
-      CLIENT_NOM: d.client?.nom || d.clientLibre || undefined,
-      CLIENT_CODE: (d.client as any)?.code || undefined,
-      CLIENT_CONTACT: d.client?.telephone || undefined,
-      CLIENT_LOCALISATION: d.client?.adresse || undefined,
-      CLIENT_NCC: d.client?.ncc || undefined,
-      LIGNES: lignesHtml,
-      TOTAL_HT: `${totalCalc.ht.toLocaleString('fr-FR')} FCFA`,
-      TOTAL_TVA: totalCalc.tva > 0 ? `${totalCalc.tva.toLocaleString('fr-FR')} FCFA` : undefined,
-      TOTAL_REMISE: totalCalc.remise > 0 ? `${totalCalc.remise.toLocaleString('fr-FR')} FCFA` : undefined,
+    const mag = (d.magasin as any) || {}
+      const templateData: TemplateData = {
+        NUMERO: d.numero,
+        DATE: formatDate(d.date),
+        HEURE: dateDoc.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        MAGASIN_CODE: mag.code || '—',
+        MAGASIN_NOM: mag.nom || '—',
+        CLIENT_NOM: d.client?.nom || d.clientLibre || undefined,
+        CLIENT_CODE: (d.client as any)?.code || undefined,
+        CLIENT_CONTACT: d.client?.telephone || undefined,
+        CLIENT_LOCALISATION: d.client?.adresse || undefined,
+        CLIENT_NCC: d.client?.ncc || undefined,
+        LIGNES: lignesHtml,
+        TOTAL_HT: `${totalCalc.ht.toLocaleString('fr-FR')} FCFA`,
+        TOTAL_TVA: totalCalc.tva > 0 ? `${totalCalc.tva.toLocaleString('fr-FR')} FCFA` : undefined,
+        TOTAL_REMISE: totalCalc.remise > 0 ? `${totalCalc.remise.toLocaleString('fr-FR')} FCFA` : undefined,
       REMISE_GLOBALE: d.remiseGlobale > 0 ? `${Number(d.remiseGlobale).toLocaleString('fr-FR')} FCFA` : undefined,
       TOTAL: `${Number(d.montantTotal).toLocaleString('fr-FR')} FCFA`,
       MONTANT_PAYE: d.montantPaye ? `${Number(d.montantPaye).toLocaleString('fr-FR')} FCFA` : undefined,
@@ -285,7 +286,7 @@ export default function ArchivesVentesNouvellePage() {
     if (deb) params.set('dateDebut', deb)
     if (fin) params.set('dateFin', fin)
     if (filterClientId) params.set('clientId', filterClientId)
-    fetch('/api/ventes?' + params.toString())
+    fetch('/api/archives/ventes?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [], pagination: null, totals: null }))
       .then((response) => {
         if (response.data) {
@@ -867,7 +868,7 @@ export default function ArchivesVentesNouvellePage() {
             const params = new URLSearchParams({ limit: '1000' })
             if (dateDebut) params.set('dateDebut', dateDebut)
             if (dateFin) params.set('dateFin', dateFin)
-            window.open('/api/ventes/export?' + params.toString(), '_blank')
+            window.open('/api/archives/ventes/export?' + params.toString(), '_blank')
           }}
           className="rounded-lg border-2 border-green-500 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 flex items-center gap-1.5"
           title="Exporter la liste des ventes en Excel"
@@ -881,7 +882,7 @@ export default function ArchivesVentesNouvellePage() {
             const params = new URLSearchParams({ limit: '1000' })
             if (dateDebut) params.set('dateDebut', dateDebut)
             if (dateFin) params.set('dateFin', dateFin)
-            window.open('/api/ventes/export-pdf?' + params.toString(), '_blank')
+            window.open('/api/archives/ventes/export-pdf?' + params.toString(), '_blank')
           }}
           className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 flex items-center gap-1.5"
           title="Exporter la liste des ventes en PDF"
@@ -1468,7 +1469,7 @@ export default function ArchivesVentesNouvellePage() {
                   const resteAPayer = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
                   return (
                     <tr key={v.id} className={v.statut === 'ANNULEE' ? 'bg-gray-100' : 'hover:bg-gray-50'}>
-                      <td className="px-4 py-3 font-mono text-sm text-gray-900">{v.numero}</td>
+                      <td className="px-4 py-3 font-mono text-sm text-gray-900">{(v as any).numeroFactureOrigine || v.numero}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {formatDate(v.date)}
                       </td>
@@ -1478,7 +1479,7 @@ export default function ArchivesVentesNouvellePage() {
                       <td className="px-4 py-3 text-sm text-gray-700 font-medium">
                         {(v as any).client?.nom || (v as any).clientLibre || <span className="text-gray-400 italic">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{v.magasin.code}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{(v.magasin as any)?.code || '—'}</td>
                       <td className="px-4 py-3 text-right font-medium text-gray-900">
                         {Number(v.montantTotal).toLocaleString('fr-FR')} F
                       </td>
@@ -1599,7 +1600,7 @@ export default function ArchivesVentesNouvellePage() {
             <div className="space-y-4 p-6">
               <div className="grid gap-3 text-sm sm:grid-cols-2">
                 <div><span className="font-medium text-gray-700">Date :</span> <span className="text-gray-900">{new Date(detailVente.date).toLocaleString('fr-FR')}</span></div>
-                <div><span className="font-medium text-gray-700">Magasin :</span> <span className="text-gray-900">{detailVente.magasin.code} – {detailVente.magasin.nom}</span></div>
+                <div><span className="font-medium text-gray-700">Magasin :</span> <span className="text-gray-900">{(detailVente.magasin as any)?.code || '—'} – {(detailVente.magasin as any)?.nom || '—'}</span></div>
                 <div><span className="font-medium text-gray-700">Client :</span> <span className="text-gray-900">{detailVente.client?.nom || detailVente.clientLibre || '—'}</span></div>
                 <div><span className="font-medium text-gray-700">Paiement :</span> <span className="text-gray-900">{detailVente.modePaiement}</span></div>
                 <div><span className="font-medium text-gray-700">Statut paiement :</span>

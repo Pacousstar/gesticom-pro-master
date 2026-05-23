@@ -57,6 +57,7 @@ export default function ClientsPage() {
   const [selectedHistory, setSelectedHistory] = useState<{ id: number; nom: string } | null>(null)
   const [historyData, setHistoryData] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyClientInitial, setHistoryClientInitial] = useState<{soldeInitial: number; avoirInitial: number}>({soldeInitial: 0, avoirInitial: 0})
   const [updatingDebt, setUpdatingDebt] = useState(false)
   const [tempDebt, setTempDebt] = useState('')
   const [editingDebt, setEditingDebt] = useState<number | null>(null)
@@ -269,15 +270,30 @@ export default function ClientsPage() {
     setSelectedHistory({ id: c.id, nom: c.nom })
     setLoadingHistory(true)
     try {
-      const res = await fetch(`/api/rapports/ventes/clients/${c.id}/history`)
-      const data = await res.json()
-      if (res.ok) {
-        setHistoryData(Array.isArray(data) ? data : [])
+      const [historyRes, clientRes] = await Promise.all([
+        fetch(`/api/rapports/ventes/clients/${c.id}/history`),
+        fetch(`/api/clients/${c.id}`)
+      ])
+      const historyDataRaw = await historyRes.json()
+      const clientData = await clientRes.json()
+      
+      if (historyRes.ok) {
+        setHistoryData(Array.isArray(historyDataRaw) ? historyDataRaw : [])
       } else {
         setHistoryData([])
       }
+      
+      if (clientRes.ok) {
+        setHistoryClientInitial({
+          soldeInitial: clientData?.soldeInitial || 0,
+          avoirInitial: clientData?.avoirInitial || 0
+        })
+      } else {
+        setHistoryClientInitial({soldeInitial: 0, avoirInitial: 0})
+      }
     } catch (e) {
       setHistoryData([])
+      setHistoryClientInitial({soldeInitial: 0, avoirInitial: 0})
       showError('Erreur chargement historique client.')
     } finally {
       setLoadingHistory(false)
@@ -315,7 +331,8 @@ export default function ClientsPage() {
 
   const openPaymentModal = async (c: Client) => {
     try {
-      const res = await fetch(`/api/rapports/finances/etat-paiements?type=VENTE&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31`)
+      const timestamp = Date.now()
+      const res = await fetch(`/api/rapports/finances/etat-paiements?type=VENTE&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31&_=${timestamp}`)
       if (res.ok) {
         const allInvoices = await res.json()
         const clientInvoices = allInvoices.filter((inv: any) => {
@@ -659,9 +676,9 @@ export default function ClientsPage() {
       </div>
 
       {selectedHistory && (
-        <div className="fixed inset-y-0 right-0 z-[140] flex h-screen max-h-screen min-h-0 w-full max-w-2xl flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300">
-          {/* Header avec Dégradé Professionnel */}
-          <div className="flex-shrink-0 p-6 border-b flex items-center justify-between bg-gradient-to-r from-blue-700 to-blue-900 text-white print:hidden">
+        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full">
+          {/* Header avec Dégradé Professionnel - Fixed */}
+          <div className="pt-24 flex-none p-4 border-b flex items-center justify-between bg-gradient-to-r from-blue-700 to-blue-900 text-white print:hidden min-h-[100px]">
             <div>
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Clock className="h-5 w-5" />
@@ -677,13 +694,13 @@ export default function ClientsPage() {
                 <Download className="h-4 w-4" />
                 Imprimer
               </button>
-              <button onClick={() => setSelectedHistory(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+              <button onClick={() => { setSelectedHistory(null); setHistoryData([]); setHistoryClientInitial({soldeInitial: 0, avoirInitial: 0}) }} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                 <X className="h-6 w-6" />
               </button>
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6" id="printable-history">
+          <div className="flex-1 overflow-y-auto p-6 pb-20" id="printable-history">
             {/* Style d'impression caché à l'écran */}
             <style dangerouslySetInnerHTML={{ __html: `
               @media print {

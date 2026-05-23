@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       const [tousProduits, stocksExistants, total] = await Promise.all([
         prisma.produit.findMany({
           where: whereProduit,
-          select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, prixVente: true, prixMinimum: true },
+          select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, pamp: true, prixVente: true, prixMinimum: true },
           orderBy: { code: 'asc' },
         }),
         prisma.stock.findMany({
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       const [tousProduits, tousStocks, total] = await Promise.all([
         prisma.produit.findMany({
           where: whereProduit,
-          select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, prixVente: true, prixMinimum: true },
+          select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, pamp: true, prixVente: true, prixMinimum: true },
           orderBy: { code: 'asc' },
         }),
         prisma.stock.findMany({

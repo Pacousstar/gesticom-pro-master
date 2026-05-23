@@ -104,7 +104,7 @@ model Magasin {
 model Produit {
   id              Int                        @id @default(autoincrement())
   code            String                     @unique
-  codeBarres      String?                     @unique
+  codeBarres      String?                    @unique
   designation     String
   categorie       String
   unite           String                     @default("unite")
@@ -272,21 +272,24 @@ model Fournisseur {
 }
 
 model ReglementVente {
-  id            Int         @id @default(autoincrement())
-  date          DateTime    @default(now())
-  montant       Float
-  modePaiement  String
-  statut        String      @default("VALIDE")
-  rapproche     Boolean     @default(false)
-  venteId       Int?
-  clientId      Int?
-  utilisateurId Int
-  observation   String?
-  createdAt     DateTime    @default(now())
-  entiteId      Int?        @default(1)
-  vente         Vente?      @relation(fields: [venteId], references: [id], onDelete: Restrict)
-  client        Client?     @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  id                  Int                   @id @default(autoincrement())
+  date                DateTime              @default(now())
+  montant             Float
+  modePaiement        String
+  statut              String                @default("VALIDE")
+  rapproche           Boolean               @default(false)
+  banqueId            Int?
+  venteId             Int?
+  clientId            Int?
+  utilisateurId       Int
+  observation         String?
+  createdAt           DateTime              @default(now())
+  entiteId            Int?                  @default(1)
+  vente               Vente?                @relation(fields: [venteId], references: [id], onDelete: Restrict)
+  client              Client?               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  utilisateur         Utilisateur           @relation(fields: [utilisateurId], references: [id])
+  banque              Banque?               @relation(fields: [banqueId], references: [id], onDelete: Restrict)
+  ReglementVenteLigne ReglementVenteLigne[]
 
   @@index([date])
   @@index([clientId])
@@ -296,23 +299,36 @@ model ReglementVente {
   @@index([rapproche])
 }
 
+model ReglementVenteLigne {
+  id          Int            @id @default(autoincrement())
+  reglementId Int
+  venteId     Int
+  montant     Float
+  reglement   ReglementVente @relation(fields: [reglementId], references: [id], onDelete: Cascade)
+  vente       Vente          @relation(fields: [venteId], references: [id], onDelete: Cascade)
+
+  @@index([reglementId])
+  @@index([venteId])
+}
+
 model ReglementAchat {
-  id            Int          @id @default(autoincrement())
-  date          DateTime     @default(now())
-  montant       Float
-  modePaiement  String
-  statut        String       @default("VALIDE")
-  rapproche     Boolean      @default(false)
-  achatId       Int?
-  fournisseurId Int?
-  utilisateurId Int
-  observation   String?
-createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  entiteId      Int?        @default(1)
-  achat         Achat?       @relation(fields: [achatId], references: [id], onDelete: Restrict)
-  fournisseur   Fournisseur? @relation(fields: [fournisseurId], references: [id], onDelete: Restrict)
-  utilisateur   Utilisateur  @relation(fields: [utilisateurId], references: [id])
+  id                  Int                   @id @default(autoincrement())
+  date                DateTime              @default(now())
+  montant             Float
+  modePaiement        String
+  statut              String                @default("VALIDE")
+  rapproche           Boolean               @default(false)
+  achatId             Int?
+  fournisseurId       Int?
+  utilisateurId       Int
+  observation         String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  entiteId            Int?                  @default(1)
+  achat               Achat?                @relation(fields: [achatId], references: [id], onDelete: Restrict)
+  fournisseur         Fournisseur?          @relation(fields: [fournisseurId], references: [id], onDelete: Restrict)
+  utilisateur         Utilisateur           @relation(fields: [utilisateurId], references: [id])
+  ReglementAchatLigne ReglementAchatLigne[]
 
   @@index([date])
   @@index([fournisseurId])
@@ -320,6 +336,18 @@ createdAt     DateTime    @default(now())
   @@index([entiteId])
   @@index([modePaiement])
   @@index([rapproche])
+}
+
+model ReglementAchatLigne {
+  id          Int            @id @default(autoincrement())
+  reglementId Int
+  achatId     Int
+  montant     Float
+  reglement   ReglementAchat @relation(fields: [reglementId], references: [id], onDelete: Cascade)
+  achat       Achat          @relation(fields: [achatId], references: [id], onDelete: Cascade)
+
+  @@index([reglementId])
+  @@index([achatId])
 }
 
 model Caisse {
@@ -346,67 +374,68 @@ model Caisse {
 }
 
 model Parametre {
-  id                  Int      @id @default(autoincrement())
-  nomEntreprise       String   @default("")
+  id                  Int       @id @default(autoincrement())
+  nomEntreprise       String    @default("")
   slogan              String?
-  contact             String   @default("")
+  contact             String    @default("")
   email               String?
   siteWeb             String?
-  localisation        String   @default("")
+  localisation        String    @default("")
   numNCC              String?
-  devise              String   @default("FCFA")
-  tvaParDefaut        Float    @default(0)
-  typeCommerce        String   @default("GENERAL")
+  devise              String    @default("FCFA")
+  tvaParDefaut        Float     @default(0)
+  typeCommerce        String    @default("GENERAL")
   logo                String?
   piedDePage          String?
   smtpHost            String?
   smtpPort            Int?
   smtpUser            String?
   smtpPass            String?
-  backupAuto          Boolean  @default(false)
-  backupFrequence     String   @default("QUOTIDIEN")
-  backupDestination   String   @default("LOCAL")
+  backupAuto          Boolean   @default(false)
+  backupFrequence     String    @default("QUOTIDIEN")
+  backupDestination   String    @default("LOCAL")
   backupEmailDest     String?
-  fideliteActive      Boolean  @default(false)
-  fideliteSeuilPoints Int      @default(100)
-  fideliteTauxRemise  Float    @default(5)
-  updatedAt           DateTime @updatedAt
+  fideliteActive      Boolean   @default(false)
+  fideliteSeuilPoints Int       @default(100)
+  fideliteTauxRemise  Float     @default(5)
+  updatedAt           DateTime  @updatedAt
   logoLocal           String?
   registreCommerce    String?
-  mentionSpeciale     String?  @default("Les produits sortis du magasin ne seront plus repris. Veuillez exiger votre facture avant de partir.")
+  mentionSpeciale     String?   @default("Les produits sortis du magasin ne seront plus repris. Veuillez exiger votre facture avant de partir.")
   dateCloture         DateTime?
 }
 
 model Vente {
-  id             Int              @id @default(autoincrement())
-  numero         String           @unique
-  date           DateTime         @default(now())
-  magasinId      Int
-  entiteId       Int
-  utilisateurId  Int
-  clientId       Int?
-  clientLibre    String?
-  montantTotal   Float
-  fraisApproche  Float            @default(0)
-  remiseGlobale  Float            @default(0)
-  montantPaye    Float            @default(0)
-  statutPaiement String           @default("CREDIT")
-  modePaiement   String
-  pointsGagnes   Int              @default(0)
-  statut         String           @default("VALIDEE")
-  estVenteRapide Boolean          @default(false)
-  observation    String?
-  numeroBon      String?
-  dateOperation  DateTime         @default(now())
-  estHistorique  Boolean          @default(false)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  reglements     ReglementVente[]
-  client         Client?          @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  magasin        Magasin          @relation(fields: [magasinId], references: [id])
-  entite         Entite           @relation(fields: [entiteId], references: [id])
-  utilisateur    Utilisateur      @relation(fields: [utilisateurId], references: [id])
-  lignes         VenteLigne[]
+  id                  Int                   @id @default(autoincrement())
+  numero              String                @unique
+  date                DateTime              @default(now())
+  magasinId           Int
+  entiteId            Int
+  utilisateurId       Int
+  clientId            Int?
+  clientLibre         String?
+  montantTotal        Float
+  fraisApproche       Float                 @default(0)
+  remiseGlobale       Float                 @default(0)
+  montantPaye         Float                 @default(0)
+  statutPaiement      String                @default("CREDIT")
+  modePaiement        String
+  pointsGagnes        Int                   @default(0)
+  statut              String                @default("VALIDEE")
+  estVenteRapide      Boolean               @default(false)
+  observation         String?
+  numeroBon           String?
+  dateOperation       DateTime              @default(now())
+  estHistorique       Boolean               @default(false)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  reglements          ReglementVente[]
+  client              Client?               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  magasin             Magasin               @relation(fields: [magasinId], references: [id])
+  entite              Entite                @relation(fields: [entiteId], references: [id])
+  utilisateur         Utilisateur           @relation(fields: [utilisateurId], references: [id])
+  lignes              VenteLigne[]
+  ReglementVenteLigne ReglementVenteLigne[]
 
   @@index([date])
   @@index([numero])
@@ -418,51 +447,52 @@ model Vente {
 }
 
 model VenteLigne {
-  id           Int     @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   venteId      Int
   produitId    Int
   designation  String
   quantite     Float
   prixUnitaire Float
-  coutUnitaire Float   @default(0)
-  tva          Float   @default(0)
-  remise       Float   @default(0)
+  coutUnitaire Float    @default(0)
+  tva          Float    @default(0)
+  remise       Float    @default(0)
   montant      Float
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  produit      Produit @relation(fields: [produitId], references: [id], onDelete: Cascade)
-  vente        Vente   @relation(fields: [venteId], references: [id], onDelete: Cascade)
+  produit      Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  vente        Vente    @relation(fields: [venteId], references: [id], onDelete: Cascade)
 
   @@index([venteId])
   @@index([produitId])
 }
 
 model Achat {
-  id               Int              @id @default(autoincrement())
-  numero           String           @unique
-  date             DateTime         @default(now())
-  magasinId        Int
-  entiteId         Int
-  utilisateurId    Int
-  fournisseurId    Int?
-  fournisseurLibre String?
-  montantTotal     Float
-  fraisApproche    Float            @default(0)
-  montantPaye      Float?           @default(0)
-  statut           String           @default("VALIDEE")
-  statutPaiement   String           @default("CREDIT")
-  modePaiement     String           @default("ESPECES")
-  numeroCamion     String?
-  observation      String?
-  dateOperation    DateTime         @default(now())
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  fournisseur      Fournisseur?     @relation(fields: [fournisseurId], references: [id], onDelete: Restrict)
-  magasin          Magasin          @relation(fields: [magasinId], references: [id])
-  entite           Entite           @relation(fields: [entiteId], references: [id])
-  utilisateur      Utilisateur      @relation(fields: [utilisateurId], references: [id])
-  lignes           AchatLigne[]
-  reglements       ReglementAchat[]
+  id                  Int                   @id @default(autoincrement())
+  numero              String                @unique
+  date                DateTime              @default(now())
+  magasinId           Int
+  entiteId            Int
+  utilisateurId       Int
+  fournisseurId       Int?
+  fournisseurLibre    String?
+  montantTotal        Float
+  fraisApproche       Float                 @default(0)
+  montantPaye         Float?                @default(0)
+  statut              String                @default("VALIDEE")
+  statutPaiement      String                @default("CREDIT")
+  modePaiement        String                @default("ESPECES")
+  numeroCamion        String?
+  observation         String?
+  dateOperation       DateTime              @default(now())
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  fournisseur         Fournisseur?          @relation(fields: [fournisseurId], references: [id], onDelete: Restrict)
+  magasin             Magasin               @relation(fields: [magasinId], references: [id])
+  entite              Entite                @relation(fields: [entiteId], references: [id])
+  utilisateur         Utilisateur           @relation(fields: [utilisateurId], references: [id])
+  lignes              AchatLigne[]
+  reglements          ReglementAchat[]
+  ReglementAchatLigne ReglementAchatLigne[]
 
   @@index([date])
   @@index([entiteId])
@@ -472,20 +502,20 @@ model Achat {
 }
 
 model AchatLigne {
-  id           Int     @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   achatId      Int
   produitId    Int
   designation  String
   quantite     Float
   prixUnitaire Float
-  coutUnitaire Float   @default(0)
-  tva          Float   @default(0)
-  remise       Float   @default(0)
+  coutUnitaire Float    @default(0)
+  tva          Float    @default(0)
+  remise       Float    @default(0)
   montant      Float
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  produit      Produit @relation(fields: [produitId], references: [id], onDelete: Cascade)
-  achat        Achat   @relation(fields: [achatId], references: [id], onDelete: Cascade)
+  produit      Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  achat        Achat    @relation(fields: [achatId], references: [id], onDelete: Cascade)
 
   @@index([achatId])
   @@index([produitId])
@@ -551,22 +581,23 @@ model Depense {
 }
 
 model Banque {
-  id           Int                 @id @default(autoincrement())
-  numero       String              @unique
-  nomBanque    String
-  libelle      String
-  soldeInitial Float               @default(0)
-  soldeActuel  Float               @default(0)
-  entiteId     Int
-  compteId     Int?
-  actif        Boolean             @default(true)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  entite       Entite              @relation(fields: [entiteId], references: [id])
-  compte       PlanCompte?         @relation(fields: [compteId], references: [id])
-  charges      Charge[]
-  depenses     Depense[]
-  operations   OperationBancaire[]
+  id             Int                 @id @default(autoincrement())
+  numero         String              @unique
+  nomBanque      String
+  libelle        String
+  soldeInitial   Float               @default(0)
+  soldeActuel    Float               @default(0)
+  entiteId       Int
+  compteId       Int?
+  actif          Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  entite         Entite              @relation(fields: [entiteId], references: [id])
+  compte         PlanCompte?         @relation(fields: [compteId], references: [id])
+  charges        Charge[]
+  depenses       Depense[]
+  operations     OperationBancaire[]
+  ReglementVente ReglementVente[]
 
   @@index([entiteId])
   @@index([compteId])

@@ -85,9 +85,27 @@ function calcTrend(current: number, previous: number): { trend: 'up' | 'down' | 
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
+  const [creancesFromClients, setCreancesFromClients] = useState(0)
+  const [dettesFromFournisseurs, setDettesFromFournisseurs] = useState(0)
 
   useEffect(() => {
     setMounted(true)
+    fetch('/api/clients/soldes', { credentials: 'include' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.totalCreances !== undefined) {
+          setCreancesFromClients(data.totalCreances)
+        }
+      })
+      .catch(() => {})
+    fetch('/api/fournisseurs/soldes', { credentials: 'include' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.totalDettes !== undefined) {
+          setDettesFromFournisseurs(data.totalDettes)
+        }
+      })
+      .catch(() => {})
   }, [])
 
   // Fetcher personnalisé pour gérer le timeout et les erreurs spécifiques
@@ -549,8 +567,8 @@ export default function DashboardPage() {
                  <span className="text-[8px] font-black uppercase tracking-widest opacity-70 italic font-serif">OHADA</span>
               </div>
               <div>
-                 <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Trésorerie Globale</p>
-                 <h3 className="text-2xl font-black mt-1">{(data?.tresorerieReelle || 0).toLocaleString()} F</h3>
+<p className="text-[9px] font-black uppercase tracking-widest opacity-60">Trésorerie Globale</p>
+                  <h3 className="text-2xl font-black mt-1">{((data?.tresorerieCaisse || 0) + (data?.tresorerieBanque || 0)).toLocaleString()} F</h3>
                  
                  <div className="h-px bg-white/10 my-3" />
                  <div className="grid grid-cols-2 gap-2">
@@ -574,7 +592,7 @@ export default function DashboardPage() {
                        <ArrowDownRight className="h-4 w-4 text-red-500" />
                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Dettes</span>
                     </div>
-                    <span className="text-sm font-black text-red-600">{(data?.totalDettes || 0).toLocaleString()} F</span>
+                    <span className="text-sm font-black text-red-600">{dettesFromFournisseurs.toLocaleString('fr-FR')} F</span>
                  </div>
                  <div className="h-px bg-gray-50" />
                  <div className="flex items-center justify-between">
@@ -582,7 +600,7 @@ export default function DashboardPage() {
                        <ArrowUpRight className="h-4 w-4 text-emerald-500" />
                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Créances</span>
                     </div>
-                    <span className="text-sm font-black text-emerald-600">{(data?.totalCreances || 0).toLocaleString()} F</span>
+                    <span className="text-sm font-black text-emerald-600">{creancesFromClients.toLocaleString('fr-FR')} F</span>
                  </div>
               </div>
            </div>

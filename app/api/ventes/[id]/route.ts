@@ -38,6 +38,7 @@ export async function GET(
         include: { produit: { select: { id: true, code: true, designation: true } } },
       },
       reglements: true,
+      ReglementVenteLigne: { select: { montant: true } },
     },
   })
 
@@ -47,7 +48,18 @@ export async function GET(
     return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
   }
 
-  return NextResponse.json(vente)
+  const totalLignePaye = (vente.ReglementVenteLigne || []).reduce((s, l) => s + (l.montant || 0), 0)
+  const venteWithRealPaye = {
+    ...vente,
+    montantPaye: Math.max(totalLignePaye, vente.montantPaye || 0),
+    reglements: vente.reglements?.map((r: any) => {
+      const { ReglementVenteLigne, ...rest } = r
+      return rest
+    }),
+    ReglementVenteLigne: undefined,
+  }
+
+  return NextResponse.json(venteWithRealPaye)
 }
 
 /** Suppression définitive (Super Admin uniquement). Annule les stocks et supprime les écritures comptables. */
@@ -130,6 +142,7 @@ export async function DELETE(
       })
 
       // 6. Supprimer règlements et vente
+      await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
       await tx.reglementVente.deleteMany({ where: { venteId: id } })
       await tx.vente.delete({ where: { id: id } })
 
@@ -218,7 +231,7 @@ export async function PATCH(
         })
 
         // Créer le règlement avec le montant effectivement appliqué
-        await tx.reglementVente.create({
+        const reglement = await tx.reglementVente.create({
           data: {
             venteId: id,
             clientId: vente.clientId,
@@ -228,6 +241,14 @@ export async function PATCH(
             utilisateurId: session!.userId,
             date: dateReglement,
             observation: body?.observation || `Paiement sur facture ${vente.numero}`
+          }
+        })
+
+        await tx.reglementVenteLigne.create({
+          data: {
+            reglementId: reglement.id,
+            venteId: id,
+            montant: montantReglementApplique,
           }
         })
 
@@ -335,6 +356,7 @@ export async function PATCH(
         }
         await deleteEcrituresByReference('VENTE_STOCK', id, tx)
         await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
+await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
         await tx.reglementVente.deleteMany({ where: { venteId: id } })
         // On supprime les mouvements de caisse liés exactement à ce numéro
         await tx.caisse.deleteMany({ 
@@ -473,7 +495,7 @@ export async function PATCH(
           for (const r of regsData) {
             const mntR = Number(r.montant) || 0
             if (mntR <= 0) continue
-            await tx.reglementVente.create({
+            const regl = await tx.reglementVente.create({
               data: {
                 venteId: updated.id,
                 clientId: updated.clientId,
@@ -483,6 +505,13 @@ export async function PATCH(
                 utilisateurId: session!.userId,
                 observation: `Modif Vente ${updated.numero}`,
                 date: updated.date,
+              }
+            })
+            await tx.reglementVenteLigne.create({
+              data: {
+                reglementId: regl.id,
+                venteId: updated.id,
+                montant: mntR,
               }
             })
             // Synchro physique trésorerie

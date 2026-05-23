@@ -5,7 +5,7 @@ import {
   FileText, Loader2, AlertTriangle, TrendingUp, ArrowRightLeft,
   FileSpreadsheet, Trash2, Search, Filter, X,
   Users, ShoppingBag, CreditCard, PieChart,
-  Package, DollarSign, Star
+  Package, DollarSign, Star, Printer
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
@@ -219,6 +219,11 @@ export default function RapportsPage() {
   }, [])
 
   const fetchAllData = async () => {
+    if (new Date(dateDebut) > new Date(dateFin)) {
+      showError('La date de début doit être antérieure à la date de fin')
+      return
+    }
+    
     setLoading(true)
     const params = new URLSearchParams({
       dateDebut,
@@ -227,66 +232,84 @@ export default function RapportsPage() {
     })
 
     try {
-      // 1. Rapports Généraux
+// 1. Rapports Généraux
       try {
         const resG = await fetch(`/api/rapports?dateDebut=${dateDebut}&dateFin=${dateFin}&magasinId=${filtreMagasin}`)
-        if (resG.ok) {
-          const dataG = await resG.json()
-          setAlertes(dataG.alertes || [])
-          setTopProduits(dataG.topProduits || [])
-          setComparaison(dataG.comparaison || null)
-        }
-      } catch (e) { console.error("Erreur rapports généraux:", e) }
+        if (!resG.ok) throw new Error('Rapports généraux')
+        const dataG = await resG.json()
+        setAlertes(dataG.alertes || [])
+        setTopProduits(dataG.topProduits || [])
+        setComparaison(dataG.comparaison || null)
+      } catch (e) { 
+        console.error("Erreur rapports généraux:", e)
+        showError('Erreur chargement rapports généraux')
+      }
 
       // 2. CA par Client
       try {
-        const resC = await fetch(`/api/rapports/ventes/clients?start=${dateDebut}&end=${dateFin}`)
-        if (resC.ok) setCaClients(await resC.json())
-      } catch (e) { console.error("Erreur CA par client:", e) }
+        const resC = await fetch(`/api/rapports/ventes/clients?dateDebut=${dateDebut}&dateFin=${dateFin}`)
+        if (!resC.ok) throw new Error('CA Clients')
+        setCaClients(await resC.json())
+      } catch (e) { 
+        console.error("Erreur CA par client:", e)
+        showError('Erreur chargement CA clients')
+      }
 
-      // 3. Etat Paiement Ventes & Achats
+      // 3.Etat Paiement Ventes & Achats
       try {
-        const resPV = await fetch(`/api/rapports/ventes/etat-paiement?start=${dateDebut}&end=${dateFin}`)
-        if (resPV.ok) {
-          const dataPV = await resPV.json()
-          setEtatPaiementVentes(Array.isArray(dataPV) ? dataPV : [])
-        }
-      } catch (e) { console.error("Erreur paiement ventes:", e) }
+        const resPV = await fetch(`/api/rapports/ventes/etat-paiement?dateDebut=${dateDebut}&dateFin=${dateFin}`)
+        if (!resPV.ok) throw new Error('Paiements Ventes')
+        const dataPV = await resPV.json()
+        setEtatPaiementVentes(Array.isArray(dataPV) ? dataPV : [])
+      } catch (e) { 
+        console.error("Erreur paiement ventes:", e)
+        showError('Erreur chargement paiements ventes')
+      }
 
       try {
-        const resPA = await fetch(`/api/rapports/achats/fournisseurs?start=${dateDebut}&end=${dateFin}`)
-        if (resPA.ok) {
-          const dataPA = await resPA.json()
-          setEtatPaiementAchats(Array.isArray(dataPA) ? dataPA : [])
-        }
-      } catch (e) { console.error("Erreur paiement achats:", e) }
+        const resPA = await fetch(`/api/rapports/achats/fournisseurs?dateDebut=${dateDebut}&dateFin=${dateFin}`)
+        if (!resPA.ok) throw new Error('Paiements Fournisseurs')
+        const dataPA = await resPA.json()
+        setEtatPaiementAchats(Array.isArray(dataPA) ? dataPA : [])
+      } catch (e) { 
+        console.error("Erreur paiement achats:", e)
+        showError('Erreur chargement paiements fournisseurs')
+      }
 
       // 4. Factures
       try {
-        const resF = await fetch(`/api/rapports/ventes/factures?start=${dateDebut}&end=${dateFin}&page=${facturesPage}`)
-        if (resF.ok) {
-          const dataF = await resF.json()
-          setFacturesVentes(Array.isArray(dataF.data) ? dataF.data : [])
-          setPaginationFactures(dataF.pagination)
-        }
-      } catch (e) { console.error("Erreur factures:", e) }
+        const resF = await fetch(`/api/rapports/ventes/factures?dateDebut=${dateDebut}&dateFin=${dateFin}&page=${facturesPage}`)
+        if (!resF.ok) throw new Error('Factures')
+        const dataF = await resF.json()
+        setFacturesVentes(Array.isArray(dataF.data) ? dataF.data : [])
+        setPaginationFactures(dataF.pagination)
+      } catch (e) { 
+        console.error("Erreur factures:", e)
+        showError('Erreur chargement factures')
+      }
 
       // 5. Valorisation Stock
       try {
         const resV = await fetch(`/api/rapports/stocks/valeur?dateDebut=${dateDebut}&dateFin=${dateFin}&magasinId=${filtreMagasin}`)
-        if (resV.ok) setValeurStock(await resV.json())
-      } catch (e) { console.error("Erreur valorisation stock:", e) }
+        if (!resV.ok) throw new Error('Valorisation')
+        setValeurStock(await resV.json())
+      } catch (e) { 
+        console.error("Erreur valorisation stock:", e)
+        showError('Erreur chargement valorisation stock')
+      }
 
       // 6. Mouvements Stock
       try {
         const resM = await fetch(`/api/rapports/stocks/mouvements?dateDebut=${dateDebut}&dateFin=${dateFin}&magasinId=${filtreMagasin}&page=${mouvementsPage}`)
-        if (resM.ok) {
-          const dataM = await resM.json()
-          setMouvementsDetailles(dataM.mouvements || [])
-          setMouvementsTotals(dataM.totals || { entree: 0, sortie: 0 })
-          setMouvementsPagination(dataM.pagination || null)
-        }
-      } catch (e) { console.error("Erreur mouvements stock:", e) }
+        if (!resM.ok) throw new Error('Mouvements')
+        const dataM = await resM.json()
+        setMouvementsDetailles(dataM.mouvements || [])
+        setMouvementsTotals(dataM.totals || { entree: 0, sortie: 0 })
+        setMouvementsPagination(dataM.pagination || null)
+      } catch (e) { 
+        console.error("Erreur mouvements stock:", e)
+        showError('Erreur chargement mouvements stock')
+      }
 
 
     } catch (e) {
@@ -300,7 +323,7 @@ export default function RapportsPage() {
   const fetchProduitsClient = async (clientId: number) => {
     setSelectedClientId(clientId)
     try {
-      const res = await fetch(`/api/rapports/ventes/clients/produits?clientId=${clientId}&start=${dateDebut}&end=${dateFin}`)
+      const res = await fetch(`/api/rapports/ventes/clients/produits?clientId=${clientId}&dateDebut=${dateDebut}&dateFin=${dateFin}`)
       const data = await res.json()
       setProduitsParClient(Array.isArray(data) ? data : [])
     } catch (e) {
@@ -311,7 +334,7 @@ export default function RapportsPage() {
   const fetchProduitsFournisseur = async (fournisseurId: number) => {
     setSelectedFournisseurId(fournisseurId)
     try {
-      const res = await fetch(`/api/rapports/achats/fournisseurs/produits?fournisseurId=${fournisseurId}&start=${dateDebut}&end=${dateFin}`)
+      const res = await fetch(`/api/rapports/achats/fournisseurs/produits?fournisseurId=${fournisseurId}&dateDebut=${dateDebut}&dateFin=${dateFin}`)
       const data = await res.json()
       setProduitsParFournisseur(Array.isArray(data) ? data : [])
     } catch (e) {
@@ -384,11 +407,19 @@ export default function RapportsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.open(`/api/rapports/export?start=${dateDebut}&end=${dateFin}`, '_blank')}
+            onClick={() => window.print()}
+            className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-[10px] font-black text-slate-700 hover:bg-gray-50 shadow-xl shadow-slate-900/5 transition-all uppercase tracking-widest active:scale-95 border border-gray-200"
+            title="Imprimer / Sauvegarder en PDF"
+          >
+            <Printer className="h-4 w-4" />
+            PDF
+          </button>
+          <button
+            onClick={() => window.open(`/api/rapports/export?dateDebut=${dateDebut}&dateFin=${dateFin}`, '_blank')}
             className="flex items-center gap-2 rounded-xl bg-slate-800 px-6 py-3 text-[10px] font-black text-white hover:bg-orange-600 shadow-xl shadow-slate-900/10 transition-all uppercase tracking-widest active:scale-95 border border-slate-700"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exporter les données
+            Exporter Excel
           </button>
         </div>
       </div>
@@ -469,14 +500,14 @@ export default function RapportsPage() {
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Performance Recouvrement</p>
                 <div className="mt-4 flex items-baseline gap-2">
                     <span className="text-3xl font-black text-white tracking-tighter italic">
-                        {comparaison.periodeActuelle.ca > 0 ? ((comparaison.periodeActuelle.caEncaisse / comparaison.periodeActuelle.ca) * 100).toFixed(1) : '100'}
+                        {comparaison.periodeActuelle.ca > 0 ? ((comparaison.periodeActuelle.caEncaisse / comparaison.periodeActuelle.ca) * 100).toFixed(1) : 'N/A'}
                     </span>
-                    <span className="text-xl font-bold text-slate-500 uppercase italic opacity-60">%</span>
+                    {comparaison.periodeActuelle.ca > 0 && <span className="text-xl font-bold text-slate-500 uppercase italic opacity-60">%</span>}
                 </div>
                 <div className="mt-7 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
                     <div 
                         className="h-full bg-emerald-500 transition-all duration-1000" 
-                        style={{ width: `${Math.min(100, comparaison.periodeActuelle.ca > 0 ? (comparaison.periodeActuelle.caEncaisse / comparaison.periodeActuelle.ca) * 100 : 100)}%` }} 
+                        style={{ width: `${comparaison.periodeActuelle.ca > 0 ? Math.min(100, (comparaison.periodeActuelle.caEncaisse / comparaison.periodeActuelle.ca) * 100) : 0}%` }} 
                     />
                 </div>
             </div>
@@ -641,7 +672,11 @@ export default function RapportsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {mouvementsDetailles.map((m: any, i: number) => (
+                                {mouvementsDetailles.filter((m: any) => 
+                                  !searchTerm || 
+                                  m.produit?.designation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                  m.magasin?.nom?.toLowerCase().includes(searchTerm.toLowerCase())
+                                ).map((m: any, i: number) => (
                                     <tr key={i} className="hover:bg-gray-50 transition-all duration-300">
                                         <td className="px-8 py-5 text-xs text-slate-400 italic">
                                             {new Date(m.date).toLocaleDateString('fr-FR')} à {new Date(m.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}

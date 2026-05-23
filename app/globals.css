@@ -169,7 +169,18 @@ tbody td {
 
 /* Utilitaires d'impression */
 @media print {
-  .no-print {
+  .no-print { 
+    display: none !important; 
+  }
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+  .page-break {
+    page-break-after: always;
+  }
+  .print\:hidden {
     display: none !important;
   }
 }

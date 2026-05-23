@@ -39,12 +39,20 @@ export default function RapportFinancesPage() {
     }, [])
 
     const fetchData = async (t: string, start: string, end: string, f: string) => {
+        if (start && end && new Date(start) > new Date(end)) {
+            showError('La date de début doit être antérieure à la date de fin')
+            return
+        }
+        
         setLoading(true)
         try {
             const res = await fetch(`/api/rapports/finances/etat-paiements?type=${t}&dateDebut=${start}&dateFin=${end}&filter=${f}`)
-            if (res.ok) {
-                setData(await res.json())
+            if (!res.ok) {
+                const err = await res.json()
+                showError(err.error || 'Erreur chargement des données')
+                return
             }
+            setData(await res.json())
         } catch (e) {
             showError('Erreur chargement des données.')
         } finally {

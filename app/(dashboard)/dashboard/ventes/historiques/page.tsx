@@ -164,7 +164,8 @@ export default function AnciennesVentesPage() {
       v.numero?.toLowerCase().includes(s) ||
       v.client?.nom?.toLowerCase().includes(s) ||
       v.clientLibre?.toLowerCase().includes(s) ||
-      v.magasin?.nom?.toLowerCase().includes(s)
+      (v.magasin?.nom?.toLowerCase().includes(s) || false) ||
+      (v.magasinId?.toString().includes(s) || false)
     )
   })
 
@@ -303,7 +304,7 @@ export default function AnciennesVentesPage() {
                     <div className="absolute top-full left-0 mt-1 z-50 w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl">
                       {produits.filter(p => {
                         const s = ajoutProduit.recherche.toLowerCase()
-                        return p.designation.toLowerCase().includes(s) || p.code.toLowerCase().includes(s)
+                        return p && p.id && (p.designation?.toLowerCase().includes(s) || p.code?.toLowerCase().includes(s))
                       }).map(p => (
                         <button key={p.id} type="button" 
                           onClick={() => setAjoutProduit(a => ({ ...a, produitId: String(p.id), recherche: p.designation, prixUnitaire: String(p.prixVente || '') }))}
@@ -415,7 +416,7 @@ export default function AnciennesVentesPage() {
             <div className="text-sm text-gray-600 space-y-1">
               <p><strong>Date :</strong> {formatDate(detailVente.date)}</p>
               <p><strong>Client :</strong> {detailVente.client?.nom || detailVente.clientLibre || '—'}</p>
-              <p><strong>Magasin :</strong> {detailVente.magasin?.code}</p>
+              <p><strong>Magasin :</strong> {(detailVente.magasin as any)?.code || detailVente.magasinId || '—'}</p>
               <p><strong>Paiement :</strong> {detailVente.modePaiement}</p>
               {detailVente.observation && <p><strong>Observation :</strong> {detailVente.observation}</p>}
             </div>

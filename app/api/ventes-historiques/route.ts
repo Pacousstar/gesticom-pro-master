@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     // Règlement automatique si payé
     if (modePaiement !== 'CREDIT' && montantPaye > 0 && clientId) {
-      await prisma.reglementVente.create({
+      const regl = await prisma.reglementVente.create({
         data: {
           venteId: vente.id,
           clientId,
@@ -229,6 +229,13 @@ export async function POST(request: NextRequest) {
           utilisateurId: session.userId,
           observation: `Règlement historique - Vente ${num}`,
           date: dateVente,
+        }
+      })
+      await prisma.reglementVenteLigne.create({
+        data: {
+          reglementId: regl.id,
+          venteId: vente.id,
+          montant: montantPaye,
         }
       })
     }

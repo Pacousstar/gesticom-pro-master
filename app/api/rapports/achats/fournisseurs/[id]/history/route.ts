@@ -31,46 +31,52 @@ export async function GET(
 
         const entiteCur = await getEntiteId(session)
 
-        const where: any = {
-            AND: [
-                {
-                    OR: [
-                        { fournisseurId },
-                        ...(tier.nom.trim()
-                            ? [{ fournisseurLibre: { equals: tier.nom.trim(), mode: 'insensitive' as const } }]
-                            : []),
-                        ...(tier.code?.trim()
-                            ? [{ fournisseurLibre: { equals: tier.code.trim(), mode: 'insensitive' as const } }]
-                            : []),
-                    ],
-                },
-            ],
-            statut: { notIn: ['ANNULE', 'ANNULEE'] },
+        const conditions: any[] = []
+
+        // Condition fournisseur
+        if (tier.nom) {
+            conditions.push({
+                OR: [
+                    { fournisseurId },
+                    { fournisseurLibre: tier.nom.trim() }
+                ]
+            })
+        } else {
+            conditions.push({ fournisseurId })
         }
 
+        // Condition entité
         if (entiteCur > 0) {
-            where.AND.push({ entiteId: entiteCur })
+            conditions.push({ entiteId: entiteCur })
         }
 
+        // Condition dates
         if (start && end) {
             const endDate = new Date(end)
             endDate.setHours(23, 59, 59, 999)
-            where.date = { gte: new Date(start), lte: endDate }
+            conditions.push({ date: { gte: new Date(start), lte: endDate } })
         }
+
+        const where = { AND: conditions }
 
         const achats = await prisma.achat.findMany({
             where,
             orderBy: { date: 'desc' },
-            include: {
+            select: {
+                id: true,
+                numero: true,
+                date: true,
+                montantTotal: true,
+                montantPaye: true,
+                modePaiement: true,
+                statut: true,
+                statutPaiement: true,
                 magasin: { select: { nom: true } },
                 lignes: {
-                    include: {
-                        produit: {
-                            select: {
-                                designation: true,
-                                code: true
-                            }
-                        }
+                    select: {
+                        designation: true,
+                        quantite: true,
+                        prixUnitaire: true,
                     }
                 }
             }
@@ -83,6 +89,7 @@ export async function GET(
         })
     } catch (error) {
         console.error('Erreur API historique fournisseur:', error)
-        return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+        const message = error instanceof Error ? error.message : 'Erreur serveur'
+        return NextResponse.json({ error: message }, { status: 500 })
     }
 }

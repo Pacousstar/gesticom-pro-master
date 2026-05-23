@@ -14,6 +14,7 @@ import Pagination from '@/components/ui/Pagination'
 import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import PrintPreview from '@/components/print/PrintPreview'
+import { paginateForPrint } from '@/lib/print-helpers'
 import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import {
   montantLigneTTC,
@@ -100,6 +101,10 @@ export default function AchatsPage() {
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  // Filtres de recherche avancée
+  const [searchNumero, setSearchNumero] = useState('')
+  const [searchNumeroCamion, setSearchNumeroCamion] = useState('')
+  const [searchFournisseur, setSearchFournisseur] = useState('')
   const [showCreateFournisseur, setShowCreateFournisseur] = useState(false)
   const [fournisseurForm, setFournisseurForm] = useState({
     nom: '',
@@ -232,6 +237,10 @@ export default function AchatsPage() {
     if (deb) params.set('dateDebut', deb)
     if (fin) params.set('dateFin', fin)
     if (searchQuery) params.set('q', searchQuery)
+    // Filtres de recherche avancée
+    if (searchNumero) params.set('numero', searchNumero)
+    if (searchNumeroCamion) params.set('numeroCamion', searchNumeroCamion)
+    if (searchFournisseur) params.set('fournisseurSearch', searchFournisseur)
     fetch('/api/achats?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [], pagination: null, totals: null }))
       .then((response) => {
@@ -422,6 +431,18 @@ export default function AchatsPage() {
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printData, setPrintData] = useState<TemplateData | null>(null)
+  const [isPrintingData, setIsPrintingData] = useState(false)
+  const [allAchatsForPrint, setAllAchatsForPrint] = useState<any[]>([])
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+
+  const ITEMS_PER_PAGE_REPORT = 22
+
+  const handleOpenPreview = () => {
+    setIsPrintingData(true)
+    setAllAchatsForPrint(achats)
+    setIsPreviewOpen(true)
+    setIsPrintingData(false)
+  }
 
   useEffect(() => {
     fetch('/api/print-templates?type=ACHAT&actif=true')
@@ -681,9 +702,9 @@ export default function AchatsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={handleOpenPreview}
             className="no-print flex items-center gap-2 rounded-xl bg-white/10 px-5 py-3 text-sm font-black text-white hover:bg-white/20 border border-white/20 uppercase tracking-widest"
-            title="Imprimer l'historique des achats (selon filtres)"
+            title="Imprimer le journal des achats"
           >
             <Printer className="h-4 w-4" />
             Imprimer
@@ -761,6 +782,36 @@ export default function AchatsPage() {
           </div>
         </div>
         <div className="flex items-end gap-2 pt-4 sm:pt-0">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-500 uppercase ml-2 mb-1">N° Achat</span>
+            <input
+              type="text"
+              placeholder="Recherche..."
+              value={searchNumero}
+              onChange={(e) => setSearchNumero(e.target.value)}
+              className="rounded-xl border-2 border-slate-700 bg-slate-900/50 px-3 py-2 text-sm font-bold text-white placeholder:text-slate-600 focus:border-orange-500 focus:outline-none transition-all w-32"
+            />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-500 uppercase ml-2 mb-1">Fournisseur</span>
+            <input
+              type="text"
+              placeholder="Nom ou code..."
+              value={searchFournisseur}
+              onChange={(e) => setSearchFournisseur(e.target.value)}
+              className="rounded-xl border-2 border-slate-700 bg-slate-900/50 px-3 py-2 text-sm font-bold text-white placeholder:text-slate-600 focus:border-orange-500 focus:outline-none transition-all w-36"
+            />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-500 uppercase ml-2 mb-1">N° Camion</span>
+            <input
+              type="text"
+              placeholder="Recherche..."
+              value={searchNumeroCamion}
+              onChange={(e) => setSearchNumeroCamion(e.target.value)}
+              className="rounded-xl border-2 border-slate-700 bg-slate-900/50 px-3 py-2 text-sm font-bold text-white placeholder:text-slate-600 focus:border-orange-500 focus:outline-none transition-all w-32"
+            />
+          </div>
           <button
             type="button"
             onClick={() => { setCurrentPage(1); fetchAchats(undefined, undefined, 1); }}
@@ -770,7 +821,15 @@ export default function AchatsPage() {
           </button>
           <button
             type="button"
-            onClick={() => { setDateDebut(''); setDateFin(''); setCurrentPage(1); fetchAchats('', '', 1); }}
+            onClick={() => { 
+              setDateDebut(''); 
+              setDateFin(''); 
+              setSearchNumero(''); 
+              setSearchFournisseur(''); 
+              setSearchNumeroCamion(''); 
+              setCurrentPage(1); 
+              fetchAchats('', '', 1); 
+            }}
             className="flex items-center gap-2 rounded-xl border-2 border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-400 hover:text-white hover:border-slate-500 transition-all"
           >
             RESET
@@ -1887,6 +1946,106 @@ export default function AchatsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu du Rapport des Achats</h2>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                  Journal des Achats
+                </p>
+              </div>
+              <div className="h-10 w-px bg-gray-200" />
+              <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
+                {allAchatsForPrint.length} OPÉRATIONS
+              </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => { setIsPreviewOpen(false); setTimeout(() => window.print(), 100); }}
+                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
+               {paginateForPrint(allAchatsForPrint, { firstPageSize: 18, otherPagesSize: ITEMS_PER_PAGE_REPORT }).map((chunk, index, allChunks) => (
+                 <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
+                   <ListPrintWrapper
+                      title="Journal des Achats"
+                      subtitle={dateDebut || dateFin ? `Période: ${dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...'} au ${dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...'}` : 'Toutes périodes'}
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      kpis={[
+                        { label: 'VOLUME ACHATS', value: allAchatsForPrint.reduce((acc, a) => acc + a.montantTotal, 0).toLocaleString() + ' F', color: 'text-blue-600' },
+                        { label: 'TOTAL PAYÉ', value: allAchatsForPrint.reduce((acc, a) => acc + (a.montantPaye || 0), 0).toLocaleString() + ' F', color: 'text-emerald-600' },
+                        { label: 'RESTE À PAYER', value: (allAchatsForPrint.reduce((acc, a) => acc + a.montantTotal, 0) - allAchatsForPrint.reduce((acc, a) => acc + (a.montantPaye || 0), 0)).toLocaleString() + ' F', color: 'text-orange-600' },
+                        { label: 'NB OPÉRATIONS', value: String(allAchatsForPrint.length), color: 'text-purple-600' }
+                      ]}
+                   >
+                     <table className="w-full text-[14px] border-collapse border-2 border-black">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                            <th className="border-r-2 border-black px-3 py-3 text-left">Réf / Date</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-left">Fournisseur / Magasin</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-center">Paiement</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-right">Montant Total</th>
+                            <th className="px-3 py-3 text-right">Payé</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((a) => (
+                            <tr key={a.id} className="border-b border-black">
+                              <td className="border-r-2 border-black px-3 py-2">
+                                <span className="font-black text-slate-800">{a.numero}</span><br/>
+                                <span className="text-xs italic font-bold text-gray-500">{new Date(a.date).toLocaleDateString('fr-FR')}</span>
+                              </td>
+                              <td className="border-r-2 border-black px-3 py-2 font-black uppercase italic">
+                                {a.fournisseur?.nom || a.fournisseurLibre || '—'}<br/>
+                                <span className="text-xs font-normal text-gray-500">{a.magasin.code}</span>
+                              </td>
+                              <td className="border-r-2 border-black px-3 py-2 text-center">
+                                <span className="inline-block px-2 py-1 text-xs font-black rounded bg-gray-200">{a.modePaiement}</span>
+                              </td>
+                              <td className="border-r-2 border-black px-3 py-2 text-right font-black">
+                                {Number(a.montantTotal).toLocaleString('fr-FR')} F
+                              </td>
+                              <td className="px-3 py-2 text-right font-black text-emerald-600">
+                                {Number(a.montantPaye || 0).toLocaleString('fr-FR')} F
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-200 font-black">
+                              <td colSpan={3} className="border-r-2 border-black px-3 py-2 text-right">TOTAUX</td>
+                              <td className="border-r-2 border-black px-3 py-2 text-right">{allAchatsForPrint.reduce((acc, a) => acc + a.montantTotal, 0).toLocaleString('fr-FR')} F</td>
+                              <td className="px-3 py-2 text-right">{allAchatsForPrint.reduce((acc, a) => acc + (a.montantPaye || 0), 0).toLocaleString('fr-FR')} F</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                   </ListPrintWrapper>
+                 </div>
+               ))}
+            </div>
           </div>
         </div>
       )}

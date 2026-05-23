@@ -191,7 +191,8 @@ export async function POST(request: NextRequest) {
       await comptabiliserDepense({
         depenseId: d.id,
         date: d.date,
-        montant: d.montant,
+        montantTotal: d.montant,
+        montantPaye: d.montantPaye || d.montant,
         categorie: d.categorie,
         libelle: d.libelle,
         modePaiement: d.modePaiement,

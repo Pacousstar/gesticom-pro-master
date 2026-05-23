@@ -158,7 +158,8 @@ export async function PATCH(
         await comptabiliserDepense({
           depenseId: d.id,
           date: d.date,
-          montant: montantCompta,
+          montantTotal: montantCompta,
+          montantPaye: d.montantPaye || 0,
           categorie: d.categorie,
           libelle: d.libelle,
           modePaiement: d.modePaiement,
@@ -279,7 +280,7 @@ export async function DELETE(
     // RD3: Mettre à jour le solde de la caisse après suppression
     let magasinIdCaisse: number | null = null
 
-    await prisma.$transaction(async (tx) => {
+await prisma.$transaction(async (tx) => {
       const entiteId = await getEntiteId(session)
       const d = await tx.depense.findUnique({ where: { id } })
       if (!d) throw new Error('Dépense introuvable.')
@@ -342,7 +343,7 @@ export async function DELETE(
 
       // 5. LOG D'AUDIT
       await logSuppression(session, 'DEPENSE', id, `SUPPRESSION RADICALE : Dépense "${d.libelle}" (${d.montant} F) annulée avec régul. trésorerie`, { id, libelle: d.libelle, montant: d.montant }, getIpAddress(_request))
-    }, { timeout: 20000 })
+    }, { timeout: 30000 })
 
     // RD3: Recalculer le solde de la caisse après suppression
     if (magasinIdCaisse) {

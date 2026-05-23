@@ -60,7 +60,13 @@ export async function GET(request: NextRequest) {
         if (!Number.isNaN(num)) maxNum = Math.max(maxNum, num)
       }
     }
-    const code = `${prefix}-${String(maxNum + 1).padStart(3, '0')}`
+    let code = `${prefix}-${String(maxNum + 1).padStart(3, '0')}`
+    let exists = await prisma.produit.findFirst({ where: { code, entiteId } })
+    while (exists) {
+      maxNum++
+      code = `${prefix}-${String(maxNum).padStart(3, '0')}`
+      exists = await prisma.produit.findFirst({ where: { code, entiteId } })
+    }
 
     return NextResponse.json({ code, categorie })
   } catch (e) {

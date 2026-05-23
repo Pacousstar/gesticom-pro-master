@@ -25,10 +25,13 @@ export async function GET(request: NextRequest) {
   try {
     const rows: any[] = []
     if (type === 'ACHAT') {
-      const forbidden = requirePermission(session, 'achats:view')
+      const forbidden = requirePermission(session, 'rapports:view')
       if (forbidden) return forbidden
 
-      const where: any = { date: dateFilter }
+      const where: any = { 
+        date: dateFilter,
+        statut: { in: ['VALIDE', 'VALIDEE'] }
+      }
       if (session.role !== 'SUPER_ADMIN' && session.entiteId) where.entiteId = session.entiteId
       else if (entiteId) where.entiteId = entiteId
       if (filter === 'NON_SOLDER') where.statutPaiement = { in: ['PARTIEL', 'CREDIT'] }
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest) {
         })
       }
     } else {
-      const forbidden = requirePermission(session, 'ventes:view')
+      const forbidden = requirePermission(session, 'rapports:view')
       if (forbidden) return forbidden
 
       const where: any = { date: dateFilter, statut: { in: ['VALIDE', 'VALIDEE'] } }

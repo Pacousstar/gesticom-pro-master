@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
   request: NextRequest,
@@ -8,6 +9,8 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'clients:view')
+  if (authError) return authError
 
   const { id } = await params
   const clientId = Number(id)
@@ -99,6 +102,8 @@ export async function POST(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'clients:edit')
+  if (authError) return authError
 
   const { id } = await params
   const clientId = Number(id)

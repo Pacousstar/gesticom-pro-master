@@ -1275,55 +1275,55 @@ export default function PedagogiePage() {
                       </div>
                   </div>
 
-                  {/* Quatre Sections de l'Expert */}
-                  <div className="p-8 md:p-16 grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 flex-1 bg-white">
+{/* Quatre Sections de l'Expert */}
+                  <div className="max-w-5xl mx-auto p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 flex-1 bg-white">
                       {/* Section 1 : Ce que c'est */}
-                      <div className="space-y-6">
-                          <div className="flex items-center gap-4 text-orange-600 font-black uppercase text-xs tracking-widest">
-                            <span className="h-8 w-8 rounded-full bg-orange-100 flex items-center justify-center">1</span>
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-3 text-orange-600 font-black uppercase text-xs tracking-widest">
+                            <span className="h-7 w-7 rounded-full bg-orange-100 flex items-center justify-center">1</span>
                             Ce que c'est :
                           </div>
-                          <p className="text-xl md:text-2xl text-slate-800 font-bold leading-tight italic pl-10 border-l-[6px] border-orange-500/30">
+                          <p className="text-base md:text-xl text-slate-800 font-bold leading-tight italic pl-8 border-l-[5px] border-orange-500/30">
                             {currentCounter.what}
                           </p>
                       </div>
 
                       {/* Section 2 : Comment on l'obtient */}
-                      <div className="space-y-6">
-                          <div className="flex items-center gap-4 text-blue-600 font-black uppercase text-xs tracking-widest">
-                            <span className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">2</span>
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-3 text-blue-600 font-black uppercase text-xs tracking-widest">
+                            <span className="h-7 w-7 rounded-full bg-blue-100 flex items-center justify-center">2</span>
                             Comment on l'obtient :
                           </div>
-                          <div className="p-8 rounded-3xl bg-slate-950 text-slate-100 font-mono text-lg shadow-inner border border-white/5 relative overflow-hidden">
-                              <Calculator className="absolute right-4 bottom-4 h-12 w-12 text-blue-500/20" />
-                              <p className="relative z-10 italic leading-snug">
-                                {currentCounter.how}
-                              </p>
+                          <div className="p-4 md:p-6 rounded-2xl bg-slate-950 text-slate-100 font-mono text-sm md:text-base shadow-inner border border-white/5 relative overflow-hidden">
+                            <Calculator className="absolute right-3 bottom-3 h-8 w-8 text-blue-500/20" />
+                            <p className="relative z-10 italic leading-snug pr-8">
+                              {currentCounter.how}
+                            </p>
                           </div>
                       </div>
 
                       {/* Section 3 : Exemples concrets */}
-                      <div className="space-y-6">
-                          <div className="flex items-center gap-4 text-emerald-600 font-black uppercase text-xs tracking-widest">
-                            <span className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">3</span>
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-3 text-emerald-600 font-black uppercase text-xs tracking-widest">
+                            <span className="h-7 w-7 rounded-full bg-emerald-100 flex items-center justify-center">3</span>
                             Des exemples concrets :
                           </div>
-                          <div className="p-8 rounded-3xl bg-emerald-50 text-emerald-950 border border-emerald-100 italic font-bold text-lg leading-relaxed">
+                          <div className="p-4 md:p-6 rounded-2xl bg-emerald-50 text-emerald-950 border border-emerald-100 italic font-bold text-sm md:text-base leading-relaxed">
                              "{currentCounter.example}"
                           </div>
                       </div>
 
                       {/* Section 4 : Analyse Financière */}
-                      <div className="space-y-6">
-                          <div className="flex items-center gap-4 text-rose-600 font-black uppercase text-xs tracking-widest">
-                            <span className="h-8 w-8 rounded-full bg-rose-100 flex items-center justify-center">4</span>
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-3 text-rose-600 font-black uppercase text-xs tracking-widest">
+                            <span className="h-7 w-7 rounded-full bg-rose-100 flex items-center justify-center">4</span>
                             Analyse Financière du compteur :
                           </div>
-                          <div className="flex gap-4">
-                              <div className="shrink-0 h-14 w-14 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-lg transform rotate-6">
-                                  <TrendingUp className="h-6 w-6" />
+                          <div className="flex gap-3 items-start">
+                              <div className="shrink-0 h-12 w-12 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-lg transform rotate-6">
+                                  <TrendingUp className="h-5 w-5" />
                               </div>
-                              <p className="text-lg text-slate-600 font-bold leading-tight italic">
+                              <p className="text-sm md:text-base text-slate-600 font-bold leading-tight italic">
                                 {currentCounter.analysis}
                               </p>
                           </div>

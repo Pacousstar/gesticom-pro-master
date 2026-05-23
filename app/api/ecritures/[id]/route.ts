@@ -195,13 +195,14 @@ export async function PATCH(
       } else if (refType === 'DEPENSE') {
         const depense = await prisma.depense.findUnique({
           where: { id: refId },
-          select: { date: true, montant: true, categorie: true, libelle: true, modePaiement: true, utilisateurId: true, entiteId: true },
+          select: { date: true, montant: true, montantPaye: true, categorie: true, libelle: true, modePaiement: true, utilisateurId: true, entiteId: true },
         })
         if (depense) {
           await comptabiliserDepense({
             depenseId: refId,
             date: depense.date,
-            montant: Number(depense.montant),
+            montantTotal: Number(depense.montant),
+            montantPaye: Number(depense.montantPaye || depense.montant),
             categorie: depense.categorie,
             libelle: depense.libelle,
             modePaiement: depense.modePaiement || 'ESPECES',
@@ -289,9 +290,9 @@ export async function DELETE(
           await comptabiliserAchat({ achatId: refId, numeroAchat: achat.numero, date: achat.date, montantTotal: Number(achat.montantTotal), modePaiement: achat.modePaiement || 'ESPECES', fournisseurId: achat.fournisseurId ?? undefined, utilisateurId: achat.utilisateurId, entiteId: achat.entiteId, magasinId: achat.magasinId })
         }
       } else if (refType === 'DEPENSE') {
-        const depense = await prisma.depense.findUnique({ where: { id: refId }, select: { date: true, montant: true, categorie: true, libelle: true, modePaiement: true, utilisateurId: true, entiteId: true } })
+        const depense = await prisma.depense.findUnique({ where: { id: refId }, select: { date: true, montant: true, montantPaye: true, categorie: true, libelle: true, modePaiement: true, utilisateurId: true, entiteId: true } })
         if (depense) {
-          await comptabiliserDepense({ depenseId: refId, date: depense.date, montant: Number(depense.montant), categorie: depense.categorie, libelle: depense.libelle, modePaiement: depense.modePaiement || 'ESPECES', utilisateurId: depense.utilisateurId, entiteId: depense.entiteId })
+          await comptabiliserDepense({ depenseId: refId, date: depense.date, montantTotal: Number(depense.montant), montantPaye: Number(depense.montantPaye || depense.montant), categorie: depense.categorie, libelle: depense.libelle, modePaiement: depense.modePaiement || 'ESPECES', utilisateurId: depense.utilisateurId, entiteId: depense.entiteId })
         }
       } else if (refType === 'CHARGE') {
         const charge = await prisma.charge.findUnique({ where: { id: refId }, select: { date: true, montant: true, rubrique: true, observation: true, utilisateurId: true, entiteId: true, magasinId: true, modePaiement: true } })

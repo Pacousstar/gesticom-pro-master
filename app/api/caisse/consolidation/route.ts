@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 const MODES_ESPECES = ['ESPECES', 'CASH', 'ESPECE']
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'caisse:view')
+  if (authError) return authError
   const entiteId = await getEntiteId(session)
 
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
@@ -127,13 +130,13 @@ export async function GET(request: NextRequest) {
       else ouvertures.ESPECES -= c.montant
     })
 
-    // Opérations Bancaires passées — exclure REGLEMENT_CLIENT/FOURNISSEUR (déjà comptés)
+    // Opérations Bancaires passées — exclure REGLEMENT_CLIENT/FOURNISSEUR et VENTE (déjà comptés dans reglements)
     const pastOpsBanque = await prisma.operationBancaire.findMany({
       where: { date: { lt: startOfPeriod }, banque: whereEntite },
       select: { montant: true, type: true }
     })
     pastOpsBanque.forEach(o => {
-      if (o.type === 'REGLEMENT_CLIENT' || o.type === 'REGLEMENT_FOURNISSEUR') return
+      if (['REGLEMENT_CLIENT', 'REGLEMENT_FOURNISSEUR', 'VENTE', 'ACHAT'].includes(o.type)) return
       const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
       if (isEntree) ouvertures.VIREMENT += o.montant
       else ouvertures.VIREMENT -= o.montant
@@ -168,9 +171,9 @@ export async function GET(request: NextRequest) {
     else stats.ESPECES -= c.montant
   })
 
-  // Agrégation OP BANQUE (Période) — on exclut REGLEMENT_CLIENT/FOURNISSEUR déjà comptés
+  // Agrégation OP BANQUE (Période) — on exclut REGLEMENT_CLIENT/FOURNISSEUR/VENTE/ACHAT déjà comptés dans reglements
   opsBancaires.forEach(o => {
-    if (o.type === 'REGLEMENT_CLIENT' || o.type === 'REGLEMENT_FOURNISSEUR') return
+    if (['REGLEMENT_CLIENT', 'REGLEMENT_FOURNISSEUR', 'VENTE', 'ACHAT'].includes(o.type)) return
     const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
     if (isEntree) stats.VIREMENT += o.montant
     else stats.VIREMENT -= o.montant

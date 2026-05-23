@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')
     const dateFin = request.nextUrl.searchParams.get('dateFin')
 
-    const where: any = { entiteId: Number(entiteId), statut: 'VALIDEE' }
+    const where: any = { entiteId: Number(entiteId), statut: { in: ['VALIDE', 'VALIDEE'] } }
     if (dateDebut && dateFin) {
       where.date = {
         gte: new Date(dateDebut + 'T00:00:00'),

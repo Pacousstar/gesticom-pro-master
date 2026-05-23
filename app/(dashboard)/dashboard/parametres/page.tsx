@@ -147,7 +147,15 @@ export default function ParametresPage() {
     setMagasinsLoading(true)
     try {
       const res = await fetch('/api/magasins')
-      if (res.ok) setMagasins(await res.json())
+      if (res.ok) {
+        const data = await res.json()
+        setMagasins(data)
+        if (data.length === 0) {
+          await fetch('/api/magasins/ajout-defaut', { method: 'POST' })
+          const retry = await fetch('/api/magasins')
+          if (retry.ok) setMagasins(await retry.json())
+        }
+      }
     } catch (e) {
       setMagasinsErr('Erreur lors du chargement des magasins.')
     } finally {

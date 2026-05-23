@@ -12,7 +12,7 @@ function isValidBackupName(name: string): boolean {
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  const authError = requirePermission(session, 'parametres:backup')
+  const authError = requirePermission(session, 'sauvegardes:view')
   if (authError) return authError
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 

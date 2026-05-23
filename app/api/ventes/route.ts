@@ -29,12 +29,13 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const clientId = request.nextUrl.searchParams.get('clientId')
-  const where: { date?: { gte?: Date; lte?: Date }; entiteId?: number; clientId?: number } = {}
-  if (dateDebut || dateFin) {
-    where.date = {}
-    if (dateDebut) where.date.gte = new Date(dateDebut + 'T00:00:00')
-    if (dateFin) where.date.lte = new Date(dateFin + 'T23:59:59')
-  }
+  // Nouveaux paramètres de recherche avancée
+  const searchNumero = request.nextUrl.searchParams.get('numero')?.trim() || request.nextUrl.searchParams.get('search')?.trim()
+  const searchNumeroBon = request.nextUrl.searchParams.get('numeroBon')?.trim()
+  const searchClient = request.nextUrl.searchParams.get('clientSearch')?.trim()
+
+  const where: Prisma.VenteWhereInput = { entiteId: await getEntiteId(session) }
+
   // Filtrer par entité (support SUPER_ADMIN)
   const entiteId = await getEntiteId(session)
   if (session.role === 'SUPER_ADMIN') {
@@ -44,13 +45,39 @@ export async function GET(request: NextRequest) {
     } else if (entiteId > 0) {
       where.entiteId = entiteId
     }
-    // Si entiteId = 0, SUPER_ADMIN voit toutes les entités (pas de filtre)
   } else if (entiteId > 0) {
     where.entiteId = entiteId
   }
-  
+
+  // Filtre par date
+  if (dateDebut || dateFin) {
+    where.date = {}
+    if (dateDebut) where.date.gte = new Date(dateDebut + 'T00:00:00')
+    if (dateFin) where.date.lte = new Date(dateFin + 'T23:59:59')
+  }
+
+  // Filtre par clientId spécifique
   if (clientId) {
     where.clientId = Number(clientId)
+  }
+
+  // Filtre par numéro de facture (recherche partielle insensible à la casse)
+  if (searchNumero) {
+    where.numero = { contains: searchNumero }
+  }
+
+  // Filtre par numéro de bon de commande
+  if (searchNumeroBon) {
+    where.numeroBon = { contains: searchNumeroBon }
+  }
+
+  // Filtre recherche client (nom OU code) - avec OR
+  if (searchClient) {
+    where.OR = [
+      { client: { nom: { contains: searchClient } } },
+      { client: { code: { contains: searchClient } } },
+      { clientLibre: { contains: searchClient } },
+    ]
   }
 
   const [ventes, total, aggregates] = await Promise.all([
@@ -64,6 +91,7 @@ export async function GET(request: NextRequest) {
         client: { select: { code: true, nom: true } },
         lignes: { include: { produit: { select: { code: true, designation: true } } } },
         reglements: true,
+        ReglementVenteLigne: { select: { montant: true } },
       },
     }),
     prisma.vente.count({ where }),
@@ -76,12 +104,24 @@ export async function GET(request: NextRequest) {
     })
   ])
 
+  const dataWithRealPaye = ventes.map(v => {
+    const totalLignePaye = (v.ReglementVenteLigne || []).reduce((s, l) => s + (l.montant || 0), 0)
+    return {
+      ...v,
+      montantPaye: Math.max(totalLignePaye, v.montantPaye || 0),
+      ReglementVenteLigne: undefined,
+    }
+  })
+
+  const totalRealPaye = dataWithRealPaye.reduce((s, v) => s + (v.montantPaye || 0), 0)
+  const totalMontant = dataWithRealPaye.reduce((s, v) => s + (v.montantTotal || 0), 0)
+
   const res = NextResponse.json({
-    data: ventes,
+    data: dataWithRealPaye,
     totals: {
-      montantTotal: aggregates._sum.montantTotal || 0,
-      montantPaye: aggregates._sum.montantPaye || 0,
-      resteAPayer: Math.max(0, (aggregates._sum.montantTotal || 0) - (aggregates._sum.montantPaye || 0)),
+      montantTotal: totalMontant,
+      montantPaye: totalRealPaye,
+      resteAPayer: Math.max(0, totalMontant - totalRealPaye),
     },
     pagination: {
       page,
@@ -123,16 +163,18 @@ export async function POST(request: NextRequest) {
     if (reglementsPayload.length > 0) {
       for (const r of reglementsPayload) {
         const amt = Math.max(0, Number(r.montant) || 0)
-        if (amt > 0) {
-          listReglements.push({ mode: String(r.mode).toUpperCase(), montant: amt })
+        const mode = String(r.mode).toUpperCase()
+        if (amt > 0 && mode !== 'CREDIT') {
+          // CREDIT = créance à terme, on ne crée PAS de règlement
+          listReglements.push({ mode, montant: amt })
           montantPaye += amt
         }
       }
     } else {
       const montantPayeRaw = body?.montantPaye != null ? Math.max(0, Number(body.montantPaye) || 0) : null
-      if (montantPayeRaw !== null) {
+      if (montantPayeRaw !== null && modePaiementPrincipal !== 'CREDIT') {
+         listReglements.push({ mode: modePaiementPrincipal, montant: montantPayeRaw })
          montantPaye = montantPayeRaw
-         listReglements.push({ mode: modePaiementPrincipal, montant: montantPaye })
       } else {
          montantPaye = 0
          autoReglementComplet = modePaiementPrincipal !== 'CREDIT'
@@ -399,6 +441,14 @@ await tx.stock.update({
             utilisateurId: session.userId,
             observation: `Règlement ${reg.mode} - Vente ${num}`,
             date: dateVente,
+          }
+        })
+
+        await tx.reglementVenteLigne.create({
+          data: {
+            reglementId: rv.id,
+            venteId: v.id,
+            montant: montantReg,
           }
         })
 

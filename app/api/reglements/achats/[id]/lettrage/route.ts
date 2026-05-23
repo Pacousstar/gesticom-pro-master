@@ -34,7 +34,8 @@ export async function PATCH(
 
             // 2. Vérifier l'achat
             const achat = await tx.achat.findUnique({
-                where: { id: achatId }
+                where: { id: achatId },
+                include: { ReglementAchatLigne: { select: { montant: true } } }
             })
 
             if (!achat) throw new Error('Achat introuvable')
@@ -49,7 +50,9 @@ export async function PATCH(
             })
 
             // 4. Mettre à jour l'achat
-            const resteAPayer = Math.max(0, (achat.montantTotal || 0) - (achat.montantPaye || 0))
+            const totalLignePaye = (achat.ReglementAchatLigne as any[] || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+            const realMontantPaye = Math.max(totalLignePaye, achat.montantPaye || 0)
+            const resteAPayer = Math.max(0, (achat.montantTotal || 0) - realMontantPaye)
             if (reglement.montant - resteAPayer > 0.01) {
                 throw new Error(`Paiement invalide: le règlement (${reglement.montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
             }
@@ -61,6 +64,14 @@ export async function PATCH(
                 data: { 
                     montantPaye: nouveauMontantPaye,
                     statutPaiement: nouveauStatutPaiement
+                }
+            })
+
+            await tx.reglementAchatLigne.create({
+                data: {
+                    reglementId: id,
+                    achatId,
+                    montant: Math.min(reglement.montant, resteAPayer),
                 }
             })
 

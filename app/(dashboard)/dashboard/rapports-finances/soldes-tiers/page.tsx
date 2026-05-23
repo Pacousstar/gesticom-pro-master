@@ -114,8 +114,8 @@ export default function SoldesTiersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Soldes Globaux - Tous les Tiers</h1>
-          <p className="text-gray-500 text-sm">Vue consolidée Clients + Fournisseurs</p>
+          <h1 className="text-2xl font-bold text-white">Soldes Globaux - Tous les Tiers</h1>
+          <p className="text-white/70 text-sm">Vue consolidée Clients + Fournisseurs</p>
         </div>
       </div>
 
@@ -139,17 +139,17 @@ export default function SoldesTiersPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className={`rounded-xl p-4 border-2 ${totals.netGlobal > 0 ? 'bg-red-100 border-red-300' : totals.netGlobal < 0 ? 'bg-green-100 border-green-300' : 'bg-gray-100 border-gray-300'}`}>
-          <p className="text-xs font-bold uppercase">Position Nette Globale</p>
-          <p className={`text-3xl font-black ${totals.netGlobal > 0 ? 'text-red-700' : totals.netGlobal < 0 ? 'text-green-700' : 'text-gray-700'}`}>
+        <div className={`rounded-xl p-4 border-2 ${totals.netGlobal > 0 ? 'bg-red-600 border-red-700' : totals.netGlobal < 0 ? 'bg-emerald-600 border-emerald-700' : 'bg-gray-500 border-gray-600'}`}>
+          <p className="text-xs font-bold text-white uppercase">Position Nette Globale</p>
+          <p className="text-3xl font-black text-white">
             {Math.abs(totals.netGlobal).toLocaleString()} F
           </p>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-white/80 mt-1">
             {totals.netGlobal > 0 ? 'Dette nette envers les tiers' : totals.netGlobal < 0 ? 'Créance nette sur les tiers' : 'Équilibré'}
           </p>
         </div>
-        <div className="bg-gray-900 rounded-xl p-4 text-white">
-          <p className="text-xs font-bold text-gray-400 uppercase">Total Tiers</p>
+        <div className="bg-gray-800 rounded-xl p-4 text-white border border-gray-700">
+          <p className="text-xs font-bold text-gray-300 uppercase">Total Tiers</p>
           <p className="text-3xl font-black">{clients.length + fournisseurs.length}</p>
           <p className="text-xs text-gray-400 mt-1">{clients.length} clients, {fournisseurs.length} fournisseurs</p>
         </div>

@@ -3,10 +3,13 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:view')
+  if (authError) return authError
 
   const entiteId = await getEntiteId(session)
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()

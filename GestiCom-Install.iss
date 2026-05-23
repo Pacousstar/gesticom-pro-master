@@ -1,6 +1,7 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
+; Version 2.5.0 - Production Finale
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "2.0.18"
+#define MyAppVersion "2.5.0"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "GestiComService.exe"
@@ -17,7 +18,7 @@ DefaultDirName=C:\GestiComPro
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=.
-OutputBaseFilename=GestiCom-Installateur
+OutputBaseFilename=GestiCom-Pro-v{#MyAppVersion}-Setup
 SetupIconFile=public\gesticom.ico
 ; --- VISUELS PREMIUM ORANGE (VALIDÉS) ---
 WizardImageFile=public\wizard-side.bmp
@@ -30,6 +31,8 @@ SolidCompression=yes
 InternalCompressLevel=ultra
 WizardStyle=modern
 PrivilegesRequired=admin
+DisableWelcomePage=no
+ShowLanguageDialog=no
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
@@ -113,18 +116,18 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "stop"; Flags: runhidden; RunOnce
 Filename: "{app}\{#MyAppExeName}"; Parameters: "uninstall"; Flags: runhidden; RunOnceId: "UninstallService"
 
 [Code]
-// Fonction de sécurité pour arrêter toute ancienne instance lors d'une mise à jour
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
   Result := '';
-  // Force l'arrêt de node pour libérer les fichiers
   Exec('taskkill', '/F /IM node.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  
-  // Supprime proprement l'ancien service s'il existe
   Exec('sc', 'stop GestiComPro', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('sc', 'delete GestiComPro', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  
-  Sleep(1000); // Laisse le temps au système de souffler
+  Sleep(1000);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
 end;

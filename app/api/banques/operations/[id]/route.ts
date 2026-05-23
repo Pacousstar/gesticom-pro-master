@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { verifierCloture } from '@/lib/cloture'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
   _request: NextRequest,
@@ -12,6 +13,8 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {

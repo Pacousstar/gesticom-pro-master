@@ -58,9 +58,10 @@ export default function SoldesClientsPage() {
         const d = await res.json()
         if (Array.isArray(d)) {
           setData(d)
+        } else if (d?.clients) {
+          setData(d.clients)
         } else {
           setData([])
-          showError('Format de données invalide reçu du serveur.')
         }
       } else {
         showError('Impossible de charger les soldes.')

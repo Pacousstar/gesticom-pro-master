@@ -11,6 +11,8 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'commandes:view')
+  if (authError) return authError
   const { id: idStr } = await params
   const id = Number(idStr)
   if (!id) return NextResponse.json({ error: 'ID invalide' }, { status: 400 })
@@ -34,6 +36,8 @@ export async function PATCH(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'commandes:edit')
+  if (authError) return authError
   const { id: idStr } = await params
   const id = Number(idStr)
   if (!id) return NextResponse.json({ error: 'ID invalide' }, { status: 400 })

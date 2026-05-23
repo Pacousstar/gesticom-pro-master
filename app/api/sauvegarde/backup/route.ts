@@ -16,7 +16,7 @@ import {
  */
 export async function POST() {
   const session = await getSession()
-  const authError = requirePermission(session, 'parametres:backup')
+  const authError = requirePermission(session, 'sauvegardes:create')
   if (authError) return authError
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 

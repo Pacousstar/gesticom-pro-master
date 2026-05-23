@@ -51,7 +51,7 @@ export default function SoldesFournisseursPage() {
       const res = await fetch(`/api/fournisseurs/soldes?dateDebut=${start}&dateFin=${end}`)
       if (res.ok) {
         const d = await res.json()
-        setData(d)
+        setData(d.fournisseurs || [])
       } else {
         showError('Impossible de charger les soldes fournisseurs.')
       }
@@ -230,10 +230,10 @@ export default function SoldesFournisseursPage() {
               <tbody className="divide-y divide-gray-100">
                 {paginatedData.map((f, i) => (
                   <tr key={i} className="group hover:bg-orange-50/10 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-black text-gray-900 uppercase text-sm tracking-tighter">{f.nom}</div>
-                      <div className="text-[10px] text-gray-400 font-mono">#{f.code || '---'}</div>
-                    </td>
+<td className="px-6 py-4 whitespace-nowrap cursor-pointer hover:bg-orange-50 transition-colors" onClick={() => router.push(`/dashboard/fournisseurs/soldes/${f.id}`)}>
+                        <div className="font-black text-gray-900 uppercase text-sm tracking-tighter">{f.nom}</div>
+                        <div className="text-[10px] text-gray-400 font-mono">#{f.code || '---'}</div>
+                      </td>
                     <td className="px-6 py-4 text-right tabular-nums text-sm font-medium text-indigo-600">
                       {f.achats.toLocaleString()} F
                     </td>

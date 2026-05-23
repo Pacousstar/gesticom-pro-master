@@ -8,7 +8,6 @@ import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
-import { estModeBanque } from '@/lib/banque'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -43,13 +42,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Montant et (Vente ou Client) requis.' }, { status: 400 })
     }
 
-    if (modePaiement === 'ESPECES' && !body.magasinId) {
-      return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire pour un règlement en espèces.' }, { status: 400 })
+    if (modePaiement === 'ESPECES' && !body.magasinId && !venteId) {
+      return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire pour un règlement libre en espèces.' }, { status: 400 })
     }
-    if (estModeBanque(modePaiement) && !body.banqueId) {
-      return NextResponse.json({ error: 'Banque obligatoire pour un règlement non espèces.' }, { status: 400 })
-    }
-
     const entiteId = await getEntiteId(session)
     if (!entiteId) {
       return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
@@ -109,6 +104,16 @@ export async function POST(request: NextRequest) {
           date: dateReglement
         }
       })
+
+      if (venteId && v) {
+        await tx.reglementVenteLigne.create({
+          data: {
+            reglementId: reglement.id,
+            venteId,
+            montant,
+          }
+        })
+      }
 
       if (venteId && v) {
         let nouveauMontantPaye = Math.min(v.montantTotal, (v.montantPaye || 0) + montant)

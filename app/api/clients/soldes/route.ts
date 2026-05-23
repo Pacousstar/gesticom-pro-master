@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'clients:view')
+  if (authError) return authError
 
   const entiteId = await getEntiteId(session)
   const searchParams = request.nextUrl.searchParams
@@ -59,17 +62,9 @@ export async function GET(request: NextRequest) {
       _sum: { montant: true },
     })
 
-    // CL-01: Requêtes globales respectent le filtre période si spécifié
+    // CL-01: Requêtes globales SANS filtre période (vraies données globales)
     const whereVenteGlobale: any = { entiteId, statut: { in: ['VALIDEE', 'VALIDE'] }, clientId: { not: null } }
     const whereReglementGlobal: any = { entiteId, statut: { in: ['VALIDEE', 'VALIDE'] } }
-    if (dateDebut) {
-      whereVenteGlobale.date = { ...whereVenteGlobale.date, gte: new Date(dateDebut) }
-      whereReglementGlobal.date = { ...whereReglementGlobal.date, gte: new Date(dateDebut) }
-    }
-    if (dateFin) {
-      whereVenteGlobale.date = { ...whereVenteGlobale.date, lte: new Date(dateFin) }
-      whereReglementGlobal.date = { ...whereReglementGlobal.date, lte: new Date(dateFin) }
-    }
 
     const ventesGlobales = await prisma.vente.groupBy({
       by: ['clientId'],
@@ -130,6 +125,16 @@ export async function GET(request: NextRequest) {
           c.code?.toLowerCase().includes(q) ||
           c.localisation?.toLowerCase().includes(q)
       )
+    }
+
+    // Calcul des totaux pour le dashboard
+    const totalCreances = data.reduce((sum, c) => sum + (c.soldeClient || 0), 0)
+    const totalFactures = data.reduce((sum, c) => sum + (c.factures || 0), 0)
+    const totalPaiements = data.reduce((sum, c) => sum + (c.paiements || 0), 0)
+
+    // Si pas de filtre q, retourner aussi les totaux
+    if (!q) {
+      return NextResponse.json({ clients: data, totalCreances, totalFactures, totalPaiements })
     }
 
     return NextResponse.json(data)

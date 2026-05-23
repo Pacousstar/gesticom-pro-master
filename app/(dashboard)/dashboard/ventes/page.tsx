@@ -117,6 +117,10 @@ export default function VentesPage() {
   const [dateFin, setDateFin] = useState('')
   const [filterClientId, setFilterClientId] = useState('')
   const [filterClientSearch, setFilterClientSearch] = useState('')
+  // Filtres de recherche avancée
+  const [searchNumero, setSearchNumero] = useState('')
+  const [searchNumeroBon, setSearchNumeroBon] = useState('')
+  const [searchClient, setSearchClient] = useState('')
   const [addLignesPopupOpen, setAddLignesPopupOpen] = useState(false)
   const [popupLignes, setPopupLignes] = useState<Ligne[]>([])
   const [popupAjoutProduit, setPopupAjoutProduit] = useState({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
@@ -403,6 +407,10 @@ export default function VentesPage() {
     if (deb) params.set('dateDebut', deb)
     if (fin) params.set('dateFin', fin)
     if (filterClientId) params.set('clientId', filterClientId)
+    // Filtres de recherche avancée
+    if (searchNumero) params.set('numero', searchNumero)
+    if (searchNumeroBon) params.set('numeroBon', searchNumeroBon)
+    if (searchClient) params.set('clientSearch', searchClient)
     fetch('/api/ventes?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [], pagination: null, totals: null }))
       .then((response) => {
@@ -1000,9 +1008,24 @@ export default function VentesPage() {
       {/* Configuration d'impression globale pour la page */}
       <style jsx global>{`
         @media print {
-          @page { size: portrait; margin: 10mm; }
-          nav, aside, header, footer, .no-print, button, form, .flex-wrap, .Pagination, [role="pagination"], .fixed { 
+          @page { 
+            size: landscape; 
+            margin: 8mm; 
+          }
+          nav, aside, header, footer, .no-print, button, form, .flex-wrap, .Pagination, [role="pagination"], .fixed, .hide-on-print, .screen-only { 
             display: none !important; 
+          }
+          .screen-only {
+            display: none !important;
+          }
+          .print-only { 
+            display: none !important; 
+          }
+          .print-section { 
+            display: block !important; 
+          }
+          .print-only { 
+            display: block !important; 
           }
           body, main, .min-h-screen { 
             background: white !important; 
@@ -1013,6 +1036,93 @@ export default function VentesPage() {
           }
           .lg\\:pl-72 { padding-left: 0 !important; }
           main { width: 100% !important; display: block !important; }
+          
+          /* Afficher les KPIs à l'impression */
+          .print-kpi { 
+            display: grid !important; 
+            grid-template-columns: repeat(3, 1fr) !important;
+            gap: 10px !important;
+            margin-bottom: 20px !important;
+          }
+          .print-kpi-item {
+            border: 1px solid #ddd !important;
+            padding: 10px !important;
+            text-align: center !important;
+            border-radius: 4px !important;
+            background: #f9f9f9 !important;
+          }
+          .print-kpi-label {
+            font-size: 10px !important;
+            font-weight: bold !important;
+            text-transform: uppercase !important;
+            color: #666 !important;
+          }
+          .print-kpi-value {
+            font-size: 16px !important;
+            font-weight: bold !important;
+            color: #000 !important;
+          }
+          .print-kpi-sub {
+            font-size: 8px !important;
+            color: #888 !important;
+          }
+          
+          /* Tableau d'impression */
+          .print-table-container {
+            page-break-after: auto !important;
+          }
+          .print-table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            font-size: 9px !important;
+          }
+          .print-table th {
+            background: #f0f0f0 !important;
+            border: 1px solid #000 !important;
+            padding: 6px !important;
+            font-weight: bold !important;
+            text-align: center !important;
+          }
+          .print-table td {
+            border: 1px solid #000 !important;
+            padding: 4px !important;
+            text-align: center !important;
+          }
+          .print-table .text-left { text-align: left !important; }
+          .print-table .text-right { text-align: right !important; }
+          .print-total-row {
+            background: #e0e0e0 !important;
+            font-weight: bold !important;
+          }
+          
+          /* En-tête et pied de page */
+          .print-header {
+            display: block !important;
+            margin-bottom: 15px !important;
+            text-align: center !important;
+          }
+          .print-header h1 {
+            font-size: 18px !important;
+            font-weight: bold !important;
+            margin: 0 !important;
+          }
+          .print-header p {
+            font-size: 12px !important;
+            color: #666 !important;
+            margin: 5px 0 0 0 !important;
+          }
+          .print-footer {
+            display: block !important;
+            margin-top: 15px !important;
+            text-align: right !important;
+            font-size: 10px !important;
+            color: #666 !important;
+          }
+          
+          /* Pagination */
+          .print-pagination {
+            display: block !important;
+          }
         }
       `}</style>
 
@@ -1032,7 +1142,77 @@ export default function VentesPage() {
         </button>
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={() => {
+            const generatePrintHTML = () => {
+              const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+              const entite = entreprise ? (entreprise.nom || entreprise.raisonSociale || 'GestiCom') : 'GestiCom'
+              const periode = (dateDebut || dateFin) ? 'Période: ' + (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...') : 'Toutes périodes'
+              const rows = ventes.map((v) => {
+                const rp = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
+                return '<tr>' +
+                  '<td>' + v.numero + '</td>' +
+                  '<td>' + ((v as any).numeroBon || '—') + '</td>' +
+                  '<td>' + formatDate(v.date, { includeTime: false }) + '</td>' +
+                  '<td>' + ((v as any).client?.code || '—') + '</td>' +
+                  '<td>' + ((v as any).client?.nom || (v as any).clientLibre || '—') + '</td>' +
+                  '<td>' + v.magasin.code + '</td>' +
+                  '<td>' + Number(v.montantTotal).toLocaleString('fr-FR') + ' F</td>' +
+                  '<td>' + v.modePaiement.replace('_', ' ') + '</td>' +
+                  '<td>' + (v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit') + '</td>' +
+                  '<td>' + (rp > 0 ? rp.toLocaleString('fr-FR') + ' F' : '-') + '</td>' +
+                  '<td>' + (v.statut === 'ANNULEE' ? 'Annulée' : 'Validée') + '</td>' +
+                '</tr>'
+              }).join('')
+              
+              const totalRow = totals ? '<tfoot><tr>' +
+                '<td colspan="6">TOTAUX</td>' +
+                '<td>' + totals.montantTotal.toLocaleString('fr-FR') + ' F</td>' +
+                '<td colspan="2"></td>' +
+                '<td>' + totals.resteAPayer.toLocaleString('fr-FR') + ' F</td>' +
+                '<td></td>' +
+              '</tr></tfoot>' : ''
+              
+              return '<!DOCTYPE html><html><head>' +
+                '<title>Ventes</title>' +
+                '<style>@page { size: landscape; margin: 5mm; }' +
+                'body { font-family: Arial, sans-serif; font-size: 13px; }' +
+                '.header { text-align: center; margin-bottom: 10px; }' +
+                'h1 { font-size: 14px; margin: 0; }' +
+                '.subtitle { font-size: 13px; color: #666; }' +
+                '.info { font-size: 13px; color: #888; margin-bottom: 10px; }' +
+                '.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px; }' +
+                '.kpi { border: 1px solid #ddd; padding: 12px; text-align: center; border-radius: 4px; background: #f9f9f9; }' +
+                '.kpi-label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #666; }' +
+                '.kpi-value { font-size: 16px; font-weight: bold; color: #000; margin: 5px 0; }' +
+                '.kpi-sub { font-size: 8px; color: #888; }' +
+                'table { width: 100%; border-collapse: collapse; font-size: 13px; }' +
+                'th, td { border: 1px solid #000; padding: 2px 4px; text-align: center; }' +
+                'th { background: #f0f0f0; font-weight: bold; font-size: 12px; }' +
+                'tfoot td { background: #e0e0e0; font-weight: bold; }' +
+                '.footer { margin-top: 10px; text-align: right; font-size: 10px; color: #666; }' +
+                '</style></head><body>' +
+                '<div class="header">' +
+                  '<h1>' + entite + '</h1>' +
+                  '<p class="subtitle">Flux de ventes et encaissements clients</p>' +
+                  '<p class="info">' + today + ' • ' + periode + '</p>' +
+                '</div>' +
+                '<div class="kpis">' +
+                  '<div class="kpi"><div class="kpi-label">Chiffre d\'Affaires</div><div class="kpi-value">' + (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F</div><div class="kpi-sub">Volume de ventes période</div></div>' +
+                  '<div class="kpi"><div class="kpi-label">Total Encaissé</div><div class="kpi-value">' + (totals?.montantPaye || 0).toLocaleString('fr-FR') + ' F</div><div class="kpi-sub">Encaissements réels</div></div>' +
+                  '<div class="kpi"><div class="kpi-label">Reste à Recouvrer</div><div class="kpi-value">' + (totals?.resteAPayer || 0).toLocaleString('fr-FR') + ' F</div><div class="kpi-sub">Créances clients en cours</div></div>' +
+                '</div>' +
+                '<table><thead><tr>' +
+                  '<th>N°</th><th>Bon N°</th><th>Date</th><th>Code Client</th><th>Client</th><th>Magasin</th><th>Montant</th><th>Paiement</th><th>Statut Paiement</th><th>Reste à payer</th><th>Statut</th>' +
+                '</tr></thead><tbody>' + rows + '</tbody>' + totalRow + '</table>' +
+                '<div class="footer">Page ' + (pagination?.page || 1) + '/' + (pagination?.totalPages || 1) + ' • Total: ' + (pagination?.total || 0) + ' ventes</div>' +
+                '<script>window.print();<\/script></body></html>'
+            }
+            const printWindow = window.open('', '_blank')
+            if (printWindow) {
+              printWindow.document.write(generatePrintHTML())
+              printWindow.document.close()
+            }
+          }}
           className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20"
           title="Imprimer la liste des ventes (selon filtres)"
         >
@@ -1117,7 +1297,7 @@ export default function VentesPage() {
                   Tous les clients
                 </div>
                 {clients
-                  .filter(c => c.nom.toLowerCase().includes(filterClientSearch.toLowerCase()))
+                  .filter(c => c.nom.toLowerCase().includes(filterClientSearch.toLowerCase()) || (c.code && c.code.toLowerCase().includes(filterClientSearch.toLowerCase())))
                   .slice(0, 30) // Limiter pour la performance
                   .map(c => (
                     <div
@@ -1136,7 +1316,7 @@ export default function VentesPage() {
                     </div>
                   ))
                 }
-                {clients.filter(c => c.nom.toLowerCase().includes(filterClientSearch.toLowerCase())).length > 30 && (
+                {clients.filter(c => c.nom.toLowerCase().includes(filterClientSearch.toLowerCase()) || (c.code && c.code.toLowerCase().includes(filterClientSearch.toLowerCase()))).length > 30 && (
                   <div className="px-4 py-2 text-[10px] text-gray-400 italic bg-gray-50 uppercase font-black text-center border-t border-gray-200">Affiner votre recherche...</div>
                 )}
               </div>
@@ -1151,6 +1331,36 @@ export default function VentesPage() {
             )}
           </div>
         </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-800">N° Facture</label>
+          <input
+            type="text"
+            placeholder="Recherche..."
+            value={searchNumero}
+            onChange={(e) => setSearchNumero(e.target.value)}
+            className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm w-32"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-800">N° Bon cmd</label>
+          <input
+            type="text"
+            placeholder="Recherche..."
+            value={searchNumeroBon}
+            onChange={(e) => setSearchNumeroBon(e.target.value)}
+            className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm w-32"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-800">Client (nom/code)</label>
+          <input
+            type="text"
+            placeholder="Nom ou code client..."
+            value={searchClient}
+            onChange={(e) => setSearchClient(e.target.value)}
+            className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm w-40"
+          />
+        </div>
         <button
           type="button"
           onClick={() => { setCurrentPage(1); fetchVentes(undefined, undefined, 1); }}
@@ -1160,7 +1370,17 @@ export default function VentesPage() {
         </button>
         <button
           type="button"
-          onClick={() => { setDateDebut(''); setDateFin(''); setFilterClientId(''); setCurrentPage(1); fetchVentes('', '', 1); }}
+          onClick={() => { 
+            setDateDebut(''); 
+            setDateFin(''); 
+            setFilterClientId(''); 
+            setFilterClientSearch('');
+            setSearchNumero('');
+            setSearchNumeroBon('');
+            setSearchClient('');
+            setCurrentPage(1); 
+            fetchVentes('', '', 1); 
+          }}
           className="rounded-lg border-2 border-orange-400 bg-orange-100 px-3 py-1.5 text-sm font-medium text-orange-900 hover:bg-orange-200"
         >
           Réinitialiser
@@ -2195,6 +2415,7 @@ export default function VentesPage() {
             </table>
           </div>
         )}
+
         {pagination && (
           <Pagination
             currentPage={pagination.page}

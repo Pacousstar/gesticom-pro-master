@@ -33,7 +33,7 @@ export async function GET(
     const venteLignes = await prisma.venteLigne.findMany({
       where: { 
         produitId: id,
-        vente: { statut: 'VALIDEE' }
+        vente: { statut: { in: ['VALIDE', 'VALIDEE'] } }
       },
       include: {
         vente: {
@@ -49,7 +49,7 @@ export async function GET(
     const achatLignes = await prisma.achatLigne.findMany({
       where: { 
         produitId: id,
-        achat: { statut: 'VALIDE' } 
+        achat: { statut: { in: ['VALIDE', 'VALIDEE'] } } 
       },
       include: {
         achat: {

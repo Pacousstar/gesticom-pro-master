@@ -64,6 +64,14 @@ export async function PATCH(
                 }
             })
 
+            await tx.reglementVenteLigne.create({
+                data: {
+                    reglementId: id,
+                    venteId,
+                    montant: Math.min(reglement.montant, resteAPayer),
+                }
+            })
+
             return updatedReglement
         })
 

@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: Request) {
     try {
         const session = await getSession()
         if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+        const authError = requirePermission(session, 'comptabilite:view')
+        if (authError) return authError
 
         const { searchParams } = new URL(request.url)
         const annee = parseInt(searchParams.get('annee') || '', 10) || new Date().getFullYear()

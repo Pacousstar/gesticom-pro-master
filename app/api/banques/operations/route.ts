@@ -5,10 +5,13 @@ import { logAction } from '@/lib/audit'
 import { comptabiliserOperationBancaire } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:view')
+  if (authError) return authError
 
   try {
     const entiteId = await getEntiteId(session)
@@ -83,6 +86,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:create')
+  if (authError) return authError
 
   try {
     const data = await request.json()

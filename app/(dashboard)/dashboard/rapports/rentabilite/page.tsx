@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { TrendingUp, ArrowUpRight, ArrowDownRight, Filter, FileBarChart2, Loader2, Package, Search } from 'lucide-react'
 import { formatDate } from '@/lib/format-date'
 import Pagination from '@/components/ui/Pagination'
+import { useToast } from '@/hooks/useToast'
 
 export default function RentabilitePage() {
   const [data, setData] = useState<any[]>([])
@@ -16,18 +17,29 @@ export default function RentabilitePage() {
   const [dateFin, setDateFin] = useState(() => new Date().toISOString().split('T')[0])
   const [recherche, setRecherche] = useState('')
   const [page, setPage] = useState(1)
+  const { success: showSuccess, error: showError } = useToast()
 
   useEffect(() => {
     fetchRentabilite()
   }, [dateDebut, dateFin])
 
   const fetchRentabilite = async () => {
+    if (dateDebut && dateFin && new Date(dateDebut) > new Date(dateFin)) {
+      showError('La date de début doit être antérieure à la date de fin')
+      return
+    }
+    
     setLoading(true)
     try {
       const res = await fetch(`/api/rapports/rentabilite?dateDebut=${dateDebut}&dateFin=${dateFin}`)
-      if (res.ok) {
-        setData(await res.json())
+      if (!res.ok) {
+        const err = await res.json()
+        showError(err.error || 'Erreur chargement rentabilité')
+        return
       }
+      setData(await res.json())
+    } catch (e) {
+      showError('Erreur chargement des données')
     } finally {
       setLoading(false)
     }

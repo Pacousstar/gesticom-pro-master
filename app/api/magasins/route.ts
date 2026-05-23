@@ -12,14 +12,11 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   const tous = request.nextUrl.searchParams.get('tous') === '1'
-  const where: { actif?: boolean; entiteId?: number } = {}
+  const entiteId = await getEntiteId(session)
+  const where: { actif?: boolean; entiteId: number } = { entiteId }
   
   if (!tous) {
     where.actif = true
-  }
-  
-  if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-    where.entiteId = session.entiteId
   }
   
   const magasins = await prisma.magasin.findMany({

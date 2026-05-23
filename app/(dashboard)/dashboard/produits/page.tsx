@@ -84,6 +84,7 @@ export default function ProduitsPage() {
 
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
+  const [entreprise, setEntreprise] = useState<any>(null)
 
   const fetchList = async (page?: number) => {
     setLoading(true)
@@ -127,6 +128,10 @@ export default function ProduitsPage() {
   useEffect(() => {
     fetchList()
   }, [currentPage])
+
+  useEffect(() => {
+    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) })
+  }, [])
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -350,11 +355,7 @@ export default function ProduitsPage() {
           if (data?.code == null && data?.categorie == null) return
           setFormData((f) => {
             if (f.designation.trim() !== requestedDesignation) return f
-            return {
-              ...f,
-              ...(data.code != null && { code: data.code }),
-              ...(data.categorie != null && { categorie: data.categorie }),
-            }
+            return { ...f, categorie: data.categorie || f.categorie }
           })
           if (data.categorie) {
             setCategories((prev) =>
@@ -375,7 +376,6 @@ export default function ProduitsPage() {
     setSavingForm(true)
 
     const validationData = {
-      code: formData.code.trim().toUpperCase(),
       designation: formData.designation.trim(),
       categorie: formData.categorie.trim() || 'DIVERS',
       prixAchat: formData.prixAchat ? Number(formData.prixAchat) : null,
@@ -457,6 +457,89 @@ export default function ProduitsPage() {
           >
             <Download className="h-4 w-4" />
             Exporter Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const generatePrintHTML = () => {
+                const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+                const entite = entreprise ? (entreprise.nom || entreprise.raisonSociale || 'GestiCom') : 'GestiCom'
+                const periode = (dateDebut || dateFin) ? 'Période: ' + (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...') : 'Toutes périodes'
+                
+                let totalValeurVente = 0
+                let totalValeurAchat = 0
+                let totalStock = 0
+                
+                const rows = list.map((p, idx) => {
+                  const stock = p.stocks && p.stocks.length > 0 ? p.stocks[0].quantite : 0
+                  const prixVente = Number(p.prixVente) || 0
+                  const prixAchat = Number(p.pamp) || Number(p.prixAchat) || 0
+                  const valeurVente = stock * prixVente
+                  const valeurAchat = stock * prixAchat
+                  totalValeurVente += valeurVente
+                  totalValeurAchat += valeurAchat
+                  totalStock += stock
+                  
+                  const magName = p.stocks && p.stocks.length > 0 ? 'Mag-' + p.stocks[0].magasinId : '—'
+                  
+                  return '<tr>' +
+                    '<td>' + (idx + 1) + '</td>' +
+                    '<td>' + (p.code || '—') + '</td>' +
+                    '<td>' + (p.designation || '—') + '</td>' +
+                    '<td>' + (p.categorie || '—') + '</td>' +
+                    '<td>' + magName + '</td>' +
+                    '<td>' + (prixAchat > 0 ? prixAchat.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
+                    '<td>' + (prixVente > 0 ? prixVente.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
+                    '<td>' + (p.prixMinimum ? Number(p.prixMinimum).toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
+                    '<td>' + stock + '</td>' +
+                    '<td>' + (p.seuilMin || '—') + '</td>' +
+                    '<td>' + (p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '—') + '</td>' +
+                    '<td>' + (valeurVente > 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
+                    '<td>' + (valeurAchat > 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
+                  '</tr>'
+                }).join('')
+                
+                return '<!DOCTYPE html><html><head>' +
+                  '<title>Produits</title>' +
+                  '<style>@page { size: landscape; margin: 5mm; }' +
+                  'body { font-family: Arial, sans-serif; font-size: 12px; }' +
+                  '.header { text-align: center; margin-bottom: 10px; }' +
+                  'h1 { font-size: 14px; margin: 0; }' +
+                  '.subtitle { font-size: 13px; color: #666; }' +
+                  '.info { font-size: 13px; color: #888; margin-bottom: 10px; }' +
+                  'table { width: 100%; border-collapse: collapse; font-size: 11px; }' +
+                  'th, td { border: 1px solid #000; padding: 2px 3px; text-align: center; }' +
+                  'th { background: #f0f0f0; font-weight: bold; font-size: 10px; }' +
+                  'tfoot td { background: #e0e0e0; font-weight: bold; }' +
+                  '.footer { margin-top: 10px; text-align: right; font-size: 10px; color: #666; }' +
+                  '</style></head><body>' +
+                  '<div class="header">' +
+                    '<h1>' + entite + '</h1>' +
+                    '<p class="subtitle">Liste des produits</p>' +
+                    '<p class="info">' + today + ' • ' + periode + '</p>' +
+                  '</div>' +
+                  '<table><thead><tr>' +
+                    '<th>N°</th><th>Code</th><th>Désignation</th><th>Catégorie</th><th>Magasin</th><th>PAMP</th><th>Prix vente</th><th>Prix Min.</th><th>Stock</th><th>Seuil</th><th>Date création</th><th>Valeur vente</th><th>Valeur achat</th>' +
+                  '</tr></thead><tbody>' + rows + '</tbody>' +
+                  '<tfoot><tr>' +
+                    '<td colspan="8">TOTAUX</td>' +
+                    '<td>' + totalStock.toLocaleString('fr-FR') + '</td>' +
+                    '<td>—</td>' +
+                    '<td>—</td>' +
+                    '<td>' + totalValeurVente.toLocaleString('fr-FR') + ' F</td>' +
+                    '<td>' + totalValeurAchat.toLocaleString('fr-FR') + ' F</td>' +
+                  '</tr></tfoot></table>' +
+                  '<div class="footer">Total: ' + list.length + ' produits</div>' +
+                  '<script>window.print();<\/script></body></html>'
+              }
+              const printWindow = window.open('', '_blank')
+              if (printWindow) { printWindow.document.write(generatePrintHTML()); printWindow.document.close() }
+            }}
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-400 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100"
+            title="Imprimer la liste des produits"
+          >
+            <Printer className="h-4 w-4" />
+            Imprimer
           </button>
           <button
             onClick={handleImportExcel}

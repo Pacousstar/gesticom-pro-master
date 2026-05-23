@@ -18,11 +18,12 @@ export async function GET(request: NextRequest) {
   } : undefined
 
   if (type === 'ACHAT') {
-    const forbidden = requirePermission(session, 'achats:view')
+    const forbidden = requirePermission(session, 'rapports:view')
     if (forbidden) return forbidden
 
     const where: any = {
       date: dateFilter,
+      statut: { in: ['VALIDE', 'VALIDEE'] }
     }
     if (session.role !== 'SUPER_ADMIN' && session.entiteId) where.entiteId = session.entiteId
     if (filter === 'NON_SOLDER') where.statutPaiement = { in: ['PARTIEL', 'CREDIT'] }
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     })))
   } else {
     // VENTES par défaut
-    const forbidden = requirePermission(session, 'ventes:view')
+    const forbidden = requirePermission(session, 'rapports:view')
     if (forbidden) return forbidden
 
     const where: any = {
@@ -63,15 +64,19 @@ export async function GET(request: NextRequest) {
       orderBy: { date: 'desc' }
     })
 
-    return NextResponse.json(ventes.map(v => ({
+const response = NextResponse.json(ventes.map(v => ({
       id: v.id,
       numero: v.numero,
       date: v.date,
       tier: v.client?.nom || v.clientLibre || 'Divers',
       montantTotal: v.montantTotal,
       montantPaye: v.montantPaye,
-      solde: v.montantTotal - (v.montantPaye || 0),
+      remaining: (v.montantTotal || 0) - (v.montantPaye || 0),
+      magasinId: v.magasinId,
+      clientId: v.clientId,
       statut: v.statutPaiement
     })))
+    response.headers.set('Cache-Control', 'no-store, max-age=0')
+    return response
   }
 }

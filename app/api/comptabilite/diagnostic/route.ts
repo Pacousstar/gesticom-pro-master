@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 /**
  * GET /api/comptabilite/diagnostic — Diagnostic des données comptables
@@ -9,6 +10,8 @@ import { getEntiteId } from '@/lib/get-entite-id'
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   try {
     const eId = await getEntiteId(session)

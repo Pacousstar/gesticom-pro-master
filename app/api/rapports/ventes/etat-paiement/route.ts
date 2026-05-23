@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-    // Vérification de la permission
-    if (session.role !== 'SUPER_ADMIN' && (!session.permissions || !session.permissions.includes('rapports:view'))) {
-        return NextResponse.json({ error: 'Permission insuffisante' }, { status: 403 })
-    }
+    const forbidden = requirePermission(session, 'rapports:view')
+    if (forbidden) return forbidden
 
     try {
         const searchParams = request.nextUrl.searchParams
         const start = searchParams.get('start')
         const end = searchParams.get('end')
 
-        const where: any = { statut: 'VALIDEE' }
+        const where: any = { statut: { in: ['VALIDE', 'VALIDEE'] } }
         if (start && end) {
             const endDate = new Date(end)
             endDate.setHours(23, 59, 59, 999)

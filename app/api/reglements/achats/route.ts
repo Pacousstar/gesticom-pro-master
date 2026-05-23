@@ -7,7 +7,6 @@ import { comptabiliserReglementAchat } from '@/lib/comptabilisation'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { estModeBanque } from '@/lib/banque'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -43,9 +42,6 @@ export async function POST(request: NextRequest) {
     if (modePaiement === 'ESPECES' && !body.magasinId) {
       return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire pour un règlement en espèces.' }, { status: 400 })
     }
-    if (estModeBanque(modePaiement) && !body.banqueId) {
-      return NextResponse.json({ error: 'Banque obligatoire pour un règlement non espèces.' }, { status: 400 })
-    }
 
     const entiteId = await getEntiteId(session)
     if (!entiteId) {
@@ -70,7 +66,10 @@ export async function POST(request: NextRequest) {
         throw new Error('DOUBLE_TRANSACTION: Ce règlement achat semble être un doublon.')
       }
 
-      const a = achatId ? await tx.achat.findUnique({ where: { id: achatId } }) : null
+      const a = achatId ? await tx.achat.findUnique({
+        where: { id: achatId },
+        include: { ReglementAchatLigne: { select: { montant: true } } }
+      }) : null
       if (a && a.entiteId !== entiteId) {
         throw new Error('Accès refusé à cette facture (entité différente).')
       }
@@ -87,7 +86,9 @@ export async function POST(request: NextRequest) {
       }
 
       if (achatId && a) {
-        const resteAPayer = Math.max(0, (a.montantTotal || 0) - (a.montantPaye || 0))
+        const totalLignePaye = (a.ReglementAchatLigne as any[] || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+        const realMontantPaye = Math.max(totalLignePaye, a.montantPaye || 0)
+        const resteAPayer = Math.max(0, (a.montantTotal || 0) - realMontantPaye)
         if (montant - resteAPayer > 0.01) {
           throw new Error(`Paiement invalide: le montant (${montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
         }
@@ -112,6 +113,14 @@ export async function POST(request: NextRequest) {
         await tx.achat.update({
           where: { id: achatId },
           data: { montantPaye: nouveauMontantPaye, statutPaiement: nouveauStatutPaiement }
+        })
+
+        await tx.reglementAchatLigne.create({
+          data: {
+            reglementId: reglement.id,
+            achatId,
+            montant,
+          }
         })
       }
 

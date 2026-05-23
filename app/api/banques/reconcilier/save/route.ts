@@ -5,10 +5,13 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { comptabiliserOperationBancaire } from '@/lib/comptabilisation'
 import { verifierCloture } from '@/lib/cloture'
+import { requirePermission } from '@/lib/require-role'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'banque:create')
+  if (authError) return authError
 
   try {
     const entiteId = await getEntiteId(session)

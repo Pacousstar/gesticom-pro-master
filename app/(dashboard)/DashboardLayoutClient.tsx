@@ -60,8 +60,8 @@ const navigation = [
     section: '📦 LOGISTIQUE',
     items: [
       { name: 'Produits', href: '/dashboard/produits', icon: Package, permission: 'produits:view', key: 'produits' },
-      { name: 'Mouvements de Stock', href: '/dashboard/rapports-inventaire/mouvements', icon: ArrowRightLeft, permission: 'stocks:view', key: 'stocks' },
-      { name: 'Valeur de Stock', href: '/dashboard/rapports-inventaire/valeur', icon: TrendingUp, permission: 'stocks:view', key: 'stocks' },
+      { name: 'Mouvements de Stock', href: '/dashboard/rapports-inventaire/mouvements', icon: ArrowRightLeft, permission: 'stocks:view', key: 'mouvements-stock' },
+      { name: 'Valeur de Stock', href: '/dashboard/rapports-inventaire/valeur', icon: TrendingUp, permission: 'stocks:view', key: 'valeur-stock' },
       { name: 'Bons de Commande', href: '/dashboard/commandes-fournisseurs', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'commandes:view', key: 'commandes' },
       { name: 'Stocks', href: '/dashboard/stock', icon: Warehouse, permission: 'stocks:view', key: 'stocks' },
     ]
@@ -549,7 +549,7 @@ export default function DashboardLayoutClient({
                             const Icon = navItem.icon
                             return (
                               <Link
-                                key={navItem.name}
+                                key={navItem.key || navItem.name}
                                 href={navItem.href}
                                 title={navItem.name}
                                 className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all duration-300 ${

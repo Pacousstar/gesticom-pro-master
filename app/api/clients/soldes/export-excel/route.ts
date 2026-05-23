@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx-prototype-pollution-fixed')
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'clients:view')
+  if (authError) return authError
 
   const entiteId = await getEntiteId(session)
   const searchParams = request.nextUrl.searchParams

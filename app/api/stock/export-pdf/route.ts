@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'stocks:view')
+  if (authError) return authError
 
   try {
     const magasinId = request.nextUrl.searchParams.get('magasinId')?.trim()
@@ -118,7 +121,7 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.setFont(undefined, 'bold')
     doc.text(`Total produits: ${totalProduits}`, 15, y)
-    doc.text(`Total quantité: ${totalQuantite}`, 100, y)
+    doc.text(`Total quantité: ${totalQuantite}`, 140, y)
 
     const buffer = Buffer.from(doc.output('arraybuffer'))
     return new NextResponse(buffer, {

@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'fournisseurs:view')
+  if (authError) return authError
 
   const entiteId = await getEntiteId(session)
   const searchParams = request.nextUrl.searchParams
@@ -83,9 +86,9 @@ export async function GET(request: NextRequest) {
       _sum: { montant: true },
     })
 
-    const achatMap = Object.fromEntries(achats.map((a: any) => [a.fournisseurId, (a._sum.montantTotal || 0) + (a._sum.fraisApproche || 0)]))
+    const achatMap = Object.fromEntries(achats.map((a: any) => [a.fournisseurId, (a._sum.montantTotal || 0)]))
     const reglementMap = Object.fromEntries(reglements.map((r: any) => [r.fournisseurId, r._sum.montant || 0]))
-    const achatGlobalMap = Object.fromEntries(achatsGlobaux.map((a: any) => [a.fournisseurId, (a._sum.montantTotal || 0) + (a._sum.fraisApproche || 0)]))
+    const achatGlobalMap = Object.fromEntries(achatsGlobaux.map((a: any) => [a.fournisseurId, (a._sum.montantTotal || 0)]))
     const reglementGlobalMap = Object.fromEntries(reglementsGlobaux.map((r: any) => [r.fournisseurId, r._sum.montant || 0]))
 
     const data = await Promise.all(fournisseurs.map(async (f: any) => {
@@ -114,7 +117,12 @@ export async function GET(request: NextRequest) {
       }
     }))
 
-    return NextResponse.json(data)
+    // Calcul des totaux pour le dashboard
+    const totalDettes = data.reduce((sum, f) => sum + (f.soldeGlobal || 0), 0)
+    const totalAchats = data.reduce((sum, f) => sum + (f.achats || 0), 0)
+    const totalPaiements = data.reduce((sum, f) => sum + (f.paiements || 0), 0)
+
+    return NextResponse.json({ fournisseurs: data, totalDettes, totalAchats, totalPaiements })
   } catch (error) {
     console.error('GET /api/fournisseurs/soldes:', error)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

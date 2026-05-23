@@ -13,7 +13,7 @@ function isValidBackupName(name: string): boolean {
 
 export async function DELETE(request: NextRequest) {
   const session = await getSession()
-  const authError = requirePermission(session, 'parametres:backup')
+  const authError = requirePermission(session, 'sauvegardes:delete')
   if (authError) return authError
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 

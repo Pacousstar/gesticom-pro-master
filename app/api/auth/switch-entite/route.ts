@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { createToken, getCookieName } from '@/lib/auth'
 import { cookies } from 'next/headers'
+import { ROLE_PERMISSIONS } from '@/lib/roles-permissions'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -41,13 +42,17 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const permissionsList = session.permissions && session.permissions.length > 0
+      ? session.permissions
+      : (ROLE_PERMISSIONS[session.role as keyof typeof ROLE_PERMISSIONS] || [])
+
     const token = await createToken({
       userId: session.userId,
       login: session.login,
       nom: session.nom,
       role: session.role,
       entiteId: entiteId,
-      permissions: session.permissions,
+      permissions: permissionsList,
       tokenVersion: session.tokenVersion,
     })
 

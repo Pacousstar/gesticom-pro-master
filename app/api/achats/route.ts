@@ -31,21 +31,46 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const q = request.nextUrl.searchParams.get('q')?.trim()
+  // Nouveaux filtres dédiés
+  const searchNumero = request.nextUrl.searchParams.get('numero')?.trim()
+  const searchNumeroCamion = request.nextUrl.searchParams.get('numeroCamion')?.trim()
+  const searchFournisseur = request.nextUrl.searchParams.get('fournisseurSearch')?.trim()
   
   const entiteId = await getEntiteId(session)
   const where: any = {}
 
-  if (q) {
+  // Filtre par numéro d'achat
+  if (searchNumero) {
+    where.numero = { contains: searchNumero }
+  }
+
+  // Filtre par numéro de camion
+  if (searchNumeroCamion) {
+    where.numeroCamion = { contains: searchNumeroCamion }
+  }
+
+  // Filtre recherche fournisseur (nom, code, téléphone ou nom libre)
+  if (searchFournisseur) {
     where.OR = [
-      { numero: { contains: q, mode: 'insensitive' } },
-      { fournisseur: { nom: { contains: q, mode: 'insensitive' } } },
-      { fournisseur: { code: { contains: q, mode: 'insensitive' } } },
-      { fournisseur: { telephone: { contains: q, mode: 'insensitive' } } },
-      { fournisseurLibre: { contains: q, mode: 'insensitive' } }
+      { fournisseur: { nom: { contains: searchFournisseur } } },
+      { fournisseur: { code: { contains: searchFournisseur } } },
+      { fournisseur: { telephone: { contains: searchFournisseur } } },
+      { fournisseurLibre: { contains: searchFournisseur } }
     ]
   }
 
-  if (dateDebut && dateFin) {
+  // Support du paramètre q existant (recherche globale)
+  if (q && !searchNumero && !searchNumeroCamion && !searchFournisseur) {
+    where.OR = [
+      { numero: { contains: q } },
+      { fournisseur: { nom: { contains: q } } },
+      { fournisseur: { code: { contains: q } } },
+      { fournisseur: { telephone: { contains: q } } },
+      { fournisseurLibre: { contains: q } }
+    ]
+  }
+
+  if (dateDebut || dateFin) {
     where.date = {
       gte: new Date(dateDebut + 'T00:00:00'),
       lte: new Date(dateFin + 'T23:59:59'),
@@ -75,6 +100,7 @@ export async function GET(request: NextRequest) {
         magasin: { select: { code: true, nom: true } },
         fournisseur: { select: { id: true, code: true, nom: true, telephone: true, email: true, localisation: true, ncc: true } },
         lignes: { include: { produit: { select: { code: true, designation: true } } } },
+        ReglementAchatLigne: { select: { montant: true } },
       },
     }),
     prisma.achat.count({ where }),
@@ -87,12 +113,24 @@ export async function GET(request: NextRequest) {
     })
   ])
 
+  const dataWithRealPaye = achats.map(a => {
+    const totalLignePaye = (a.ReglementAchatLigne || []).reduce((s, l) => s + (l.montant || 0), 0)
+    return {
+      ...a,
+      montantPaye: Math.max(totalLignePaye, a.montantPaye || 0),
+      ReglementAchatLigne: undefined,
+    }
+  })
+
+  const totalRealPaye = dataWithRealPaye.reduce((s, a) => s + (a.montantPaye || 0), 0)
+  const totalMontant = dataWithRealPaye.reduce((s, a) => s + (a.montantTotal || 0), 0)
+
   const res = NextResponse.json({
-    data: achats,
+    data: dataWithRealPaye,
     totals: {
-      montantTotal: aggregates._sum.montantTotal || 0,
-      montantPaye: aggregates._sum.montantPaye || 0,
-      resteAPayer: Math.max(0, (aggregates._sum.montantTotal || 0) - (aggregates._sum.montantPaye || 0)),
+      montantTotal: totalMontant,
+      montantPaye: totalRealPaye,
+      resteAPayer: Math.max(0, totalMontant - totalRealPaye),
     },
     pagination: {
       page,
@@ -133,16 +171,18 @@ export async function POST(request: NextRequest) {
     if (reglementsPayload.length > 0) {
       for (const r of reglementsPayload) {
         const amt = Math.max(0, Number(r.montant) || 0)
-        if (amt > 0) {
-          listReglements.push({ mode: String(r.mode).toUpperCase(), montant: amt })
+        const mode = String(r.mode).toUpperCase()
+        if (amt > 0 && mode !== 'CREDIT') {
+          // CREDIT = dette à terme, on ne crée PAS de règlement
+          listReglements.push({ mode, montant: amt })
           montantPaye += amt
         }
       }
     } else {
       const montantPayeRaw = body?.montantPaye != null ? Math.max(0, Number(body.montantPaye) || 0) : null
-      if (montantPayeRaw !== null) {
+      if (montantPayeRaw !== null && modePaiementPrincipal !== 'CREDIT') {
+        listReglements.push({ mode: modePaiementPrincipal, montant: montantPayeRaw })
         montantPaye = montantPayeRaw
-        listReglements.push({ mode: modePaiementPrincipal, montant: montantPaye })
       } else {
         montantPaye = 0
         autoReglementComplet = modePaiementPrincipal !== 'CREDIT'
@@ -205,7 +245,7 @@ export async function POST(request: NextRequest) {
 
     for (const l of lignes) {
       const produitId = Number(l?.produitId)
-      const quantite = Math.max(0, Number(l?.quantite) || 0) // Supprimé Math.floor
+      const quantite = Math.max(0, Number(l?.quantite) || 0)
       const prixUnitaire = Math.max(0, Number(l?.prixUnitaire) || 0)
       const tva = Math.max(0, Number(l?.tva ?? l?.tvaPerc) || 0)
       const remise = Math.max(0, Number(l?.remise) || 0)
@@ -226,6 +266,8 @@ export async function POST(request: NextRequest) {
         remiseLigne: remise,
         tvaPourcent: tva,
       })
+      const partFrais = partFraisApprocheLigne(htNet, montantFactureHT, fraisApproche)
+      const valNet = valeurAchatNetAvecFrais(htNet, partFrais)
 
       montantFactureHT += htNet
       lignesValides.push({
@@ -237,6 +279,7 @@ export async function POST(request: NextRequest) {
         remise,
         montant: montantLigne,
         htNet,
+        valeurAchatNet: valNet,
         coutUnitaire: htNet / quantite,
       })
     }
@@ -391,7 +434,7 @@ export async function POST(request: NextRequest) {
         resteReglement -= montantReg
         reglementsEffectifs.push({ mode: reg.mode, montant: montantReg })
 
-        await tx.reglementAchat.create({
+        const reglAchat = await tx.reglementAchat.create({
           data: {
             achatId: a.id,
             fournisseurId,
@@ -401,6 +444,14 @@ export async function POST(request: NextRequest) {
             utilisateurId: session.userId,
             observation: `Règlement ${reg.mode} - Achat ${num}`,
             date: dateAchat,
+          }
+        })
+
+        await tx.reglementAchatLigne.create({
+          data: {
+            reglementId: reglAchat.id,
+            achatId: a.id,
+            montant: montantReg,
           }
         })
 

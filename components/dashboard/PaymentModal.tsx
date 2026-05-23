@@ -15,10 +15,14 @@ interface PaymentModalProps {
   invoices: any[] // Liste des factures non soldées
 }
 
+const isBankMode = (m: string) => ['MOBILE_MONEY', 'VIREMENT', 'CHEQUE'].includes(m)
+
 export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId, tierNom, totalDu, invoices }: PaymentModalProps) {
   const [loading, setLoading] = useState(false)
   const [magasins, setMagasins] = useState<{ id: number, nom: string }[]>([])
+  const [banques, setBanques] = useState<{ id: number, libelle: string, nomBanque: string }[]>([])
   const [selectedMagasinId, setSelectedMagasinId] = useState<string>('')
+  const [selectedBanqueId, setSelectedBanqueId] = useState<string>('')
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('')
   const [montant, setMontant] = useState<string>('')
   const [modePaiement, setModePaiement] = useState('ESPECES')
@@ -26,12 +30,17 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
   const { success: showSuccess, error: showError } = useToast()
 
   useEffect(() => {
-    fetch('/api/magasins').then(r => r.ok ? r.json() : []).then(setMagasins)
+    fetch('/api/magasins').then(r => r.ok ? r.json() : []).then(ms => {
+      setMagasins(Array.isArray(ms) ? ms : (ms.data || []))
+    })
+    fetch('/api/banques').then(r => r.ok ? r.json() : { data: [] }).then(res => {
+      setBanques(Array.isArray(res) ? res : (res.data || []))
+    })
   }, [])
 
   if (!isOpen) return null
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!montant) return showError('Veuillez saisir un montant.')
     if (Number(montant) <= 0) return showError('Le montant doit être supérieur à zéro.')
@@ -43,18 +52,26 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
         montant: Number(montant), 
         modePaiement, 
         observation,
-        magasinId: selectedMagasinId ? Number(selectedMagasinId) : null 
+        magasinId: selectedMagasinId ? Number(selectedMagasinId) : null,
+        banqueId: selectedBanqueId ? Number(selectedBanqueId) : null
       }
-      
-if (type === 'VENTE') {
+
+      if (type === 'VENTE') {
+        payload.clientId = tierId
         payload.venteId = selectedInvoiceId || null
       } else {
+        payload.fournisseurId = tierId
         payload.achatId = selectedInvoiceId || null
       }
 
       if (!selectedInvoiceId && !selectedMagasinId && modePaiement === 'ESPECES') {
          setLoading(false)
          return showError('Veuillez sélectionner un magasin (Caisse) pour ce règlement libre.')
+      }
+
+      if (isBankMode(modePaiement) && !selectedBanqueId) {
+         setLoading(false)
+         return showError('Veuillez sélectionner une banque pour ce mode de paiement.')
       }
 
       const res = await fetch(endpoint, {
@@ -99,8 +116,14 @@ if (type === 'VENTE') {
               onChange={(e) => {
                 setSelectedInvoiceId(e.target.value)
                 const inv = invoices.find(i => String(i.id) === e.target.value)
-                if (inv) setMontant(String(inv.montantTotal - inv.montantPaye))
-                else setMontant('')
+                if (inv) {
+                  setMontant(String(inv.montantTotal - inv.montantPaye))
+                  if (inv.magasinId && !selectedMagasinId) {
+                    setSelectedMagasinId(String(inv.magasinId))
+                  }
+                } else {
+                  setMontant('')
+                }
               }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500/20 focus:outline-none"
             >
@@ -147,8 +170,8 @@ if (type === 'VENTE') {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mode de paiement</label>
-            <div className="grid grid-cols-3 gap-2">
-              {['ESPECES', 'MOBILE_MONEY', 'CHEQUE'].map(m => (
+            <div className="grid grid-cols-2 gap-2">
+              {['ESPECES', 'MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].map(m => (
                 <button
                   key={m}
                   type="button"
@@ -162,11 +185,28 @@ if (type === 'VENTE') {
                   {m === 'ESPECES' && <Wallet className="h-4 w-4" />}
                   {m === 'MOBILE_MONEY' && <CreditCard className="h-4 w-4" />}
                   {m === 'CHEQUE' && <FileText className="h-4 w-4 text-gray-400" />}
+                  {m === 'VIREMENT' && <CreditCard className="h-4 w-4 text-blue-400" />}
                   {m.replace('_', ' ')}
                 </button>
               ))}
             </div>
           </div>
+
+          {isBankMode(modePaiement) && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Banque *</label>
+              <select
+                value={selectedBanqueId}
+                onChange={(e) => setSelectedBanqueId(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500/20 focus:outline-none"
+              >
+                <option value="">Sélectionner une banque...</option>
+                {banques.map(b => (
+                  <option key={b.id} value={b.id}>{b.nomBanque} - {b.libelle}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="pt-4 flex gap-3">
             <button

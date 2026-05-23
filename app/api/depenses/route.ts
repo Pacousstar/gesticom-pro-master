@@ -204,12 +204,13 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Comptabilisation automatique (seulement si payé)
+      // Comptabilisation automatique : toujours le montant total en charge
       if (statutPaiement === 'PAYE' || montantPaye > 0) {
         await comptabiliserDepense({
           depenseId: d.id,
           date,
-          montant: montantPaye > 0 ? montantPaye : montant,
+          montantTotal: montant,
+          montantPaye,
           categorie,
           libelle,
           modePaiement,

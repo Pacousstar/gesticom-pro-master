@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { 
-  Users, Search, Calendar, FileText, Download, Printer, 
+  Truck, Search, Calendar, FileText, Download, Printer, 
   ArrowLeft, Loader2, DollarSign, CreditCard, ChevronRight,
   TrendingDown, TrendingUp, Wallet
 } from 'lucide-react'
@@ -48,219 +48,435 @@ export default function FournisseurRelevesPage() {
     d.setDate(1)
     return d.toISOString().split('T')[0]
   })
-  const [dateFin, setDateFin] = useState<string>(() => new Date().toISOString().split('T')[0])
+  const [dateFin, setDateFin] = useState<string>(new Date().toISOString().split('T')[0])
+  
+  const [data, setData] = useState<Achat[]>([])
   const [loading, setLoading] = useState(false)
-  const [historyData, setHistoryData] = useState<Achat[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
-  const [selectedFournisseur, setSelectedFournisseur] = useState<Fournisseur | null>(null)
+  const [loadingFournisseurs, setLoadingFournisseurs] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
+  const itemsPerPage = 20
+  const ITEMS_PER_PAGE_REPORT = 18
 
   useEffect(() => {
-    fetchFournisseurs()
+    fetch('/api/fournisseurs?limit=1000')
+      .then(r => r.ok ? r.json() : { data: [] })
+      .then(res => {
+        setFournisseurs(res.data || [])
+        setLoadingFournisseurs(false)
+      })
+      .catch(() => setLoadingFournisseurs(false))
   }, [])
 
-  useEffect(() => {
-    if (initialFournisseurId) {
-      fetchHistory(Number(initialFournisseurId))
-    }
-  }, [initialFournisseurId])
-
-  const fetchFournisseurs = async () => {
+  const fetchReleve = async () => {
+    if (!selectedFournisseurId) return
+    setLoading(true)
     try {
-      const res = await fetch('/api/fournisseurs?limit=1000')
+      const params = new URLSearchParams({
+        start: dateDebut,
+        end: dateFin
+      })
+      const res = await fetch(`/api/rapports/achats/fournisseurs/${selectedFournisseurId}/history?${params.toString()}`)
       if (res.ok) {
-        const data = await res.json()
-        setFournisseurs(data.data || [])
-      }
-    } catch (e) {
-      showError("Erreur chargement fournisseurs.")
-    }
-  }
-
-  const fetchHistory = async (fournisseurId: number) => {
-    if (!fournisseurId) return
-    setLoadingHistory(true)
-    try {
-      const params = new URLSearchParams()
-      if (dateDebut) params.set('start', dateDebut)
-      if (dateFin) params.set('end', dateFin)
-      
-      const res = await fetch(`/api/rapports/achats/fournisseurs/${fournisseurId}/history?${params.toString()}`)
-      if (res.ok) {
-        const data = await res.json()
-        setHistoryData(data)
-        const selected = fournisseurs.find(f => f.id === fournisseurId)
-        setSelectedFournisseur(selected || null)
+        setData(await res.json())
       } else {
         showError("Impossible de charger le relevé.")
       }
     } catch (e) {
       showError("Erreur réseau lors du chargement du relevé.")
     } finally {
-      setLoadingHistory(false)
+      setLoading(false)
     }
   }
 
-  const handleFournisseurChange = (fId: string) => {
-    setSelectedFournisseurId(fId)
-    if (fId) {
-      fetchHistory(Number(fId))
-    } else {
-      setHistoryData([])
-      setSelectedFournisseur(null)
-    }
-  }
-
-  const handleDateChange = () => {
+  useEffect(() => {
     if (selectedFournisseurId) {
-      fetchHistory(Number(selectedFournisseurId))
+      setCurrentPage(1)
+      fetchReleve()
     }
+  }, [selectedFournisseurId, dateDebut, dateFin])
+
+  const selectedFournisseur = fournisseurs.find(f => f.id === Number(selectedFournisseurId))
+
+  const totals = useMemo(() => {
+    return data.reduce((acc, a) => {
+      acc.du += a.montantTotal
+      acc.paye += a.montantPaye
+      return acc
+    }, { du: 0, paye: 0 })
+  }, [data])
+
+  const handlePrint = () => {
+    setIsPrinting(true)
+    setTimeout(() => {
+      setIsPreviewOpen(true)
+      setIsPrinting(false)
+    }, 500)
   }
 
-  const totalAchats = useMemo(() => historyData.reduce((acc, a) => acc + (a.montantTotal || 0), 0), [historyData])
-  const totalPaye = useMemo(() => historyData.reduce((acc, a) => acc + (a.montantPaye || 0), 0), [historyData])
-  const resteAPayer = totalAchats - totalPaye
+  const paginatedData = useMemo(() => {
+    return data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+  }, [data, currentPage])
 
-  const handlePrint = () => window.print()
-
-  const handleExport = async () => {
-    if (!selectedFournisseurId || !selectedFournisseur) return
-    try {
-      const params = new URLSearchParams()
-      params.set('fournisseurId', selectedFournisseurId)
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
-      
-      const res = await fetch(`/api/fournisseurs/${selectedFournisseurId}/compte-courant/export?${params.toString()}`)
-      if (res.ok) {
-        const blob = await res.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `releve_compte_${selectedFournisseur.nom}_${dateDebut}_${dateFin}.pdf`
-        a.click()
-      }
-    } catch (e) {
-      showError("Erreur lors de l'export.")
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
-      </div>
-    )
-  }
+  const totalPages = Math.ceil(data.length / itemsPerPage)
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+
+      {/* Header & Filtres */}
+      <div className="flex flex-wrap items-center justify-between gap-4 no-print">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Relevés de Comptes - Fournisseurs</h1>
-          <p className="text-gray-500 text-sm">Générer les relevés de compte fournisseurs par période</p>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Relevés de Comptes</h1>
+          <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Analyse détaillée de la dette fournisseur</p>
         </div>
-        <button onClick={() => window.location.href = '/dashboard/fournisseurs'} className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
-          <ArrowLeft className="h-4 w-4" /> Retour
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handlePrint}
+            disabled={!selectedFournisseurId || data.length === 0 || isPrinting}
+            className="flex items-center gap-2 rounded-lg border-2 border-blue-500 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-50 no-print shadow-xl transition-all"
+          >
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+            Imprimer
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Fournisseur</label>
+      {/* Barre de Filtres */}
+      <div className="grid gap-4 sm:grid-cols-3 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 no-print">
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-white/60 uppercase tracking-widest ml-1">Fournisseur</label>
           <select
             value={selectedFournisseurId}
-            onChange={(e) => handleFournisseurChange(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none"
+            onChange={(e) => setSelectedFournisseurId(e.target.value)}
+            className="w-full rounded-xl bg-white border-2 border-transparent px-4 py-3 text-sm font-bold text-gray-900 focus:border-orange-500 outline-none"
           >
-            <option value="">Sélectionner un fournisseur</option>
+            <option value="">— Sélectionner un fournisseur —</option>
             {fournisseurs.map(f => (
-              <option key={f.id} value={f.id}>{f.code || ''} - {f.nom}</option>
+              <option key={f.id} value={f.id}>{f.nom} {f.code ? `(${f.code})` : ''}</option>
             ))}
           </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date début</label>
-          <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} onBlur={handleDateChange} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none" />
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-white/60 uppercase tracking-widest ml-1">Date Début</label>
+          <input
+            type="date"
+            value={dateDebut}
+            onChange={(e) => setDateDebut(e.target.value)}
+            className="w-full rounded-xl bg-white border-2 border-transparent px-4 py-3 text-sm font-bold text-gray-900 focus:border-orange-500 outline-none"
+          />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date fin</label>
-          <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} onBlur={handleDateChange} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none" />
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-white/60 uppercase tracking-widest ml-1">Date Fin</label>
+          <input
+            type="date"
+            value={dateFin}
+            onChange={(e) => setDateFin(e.target.value)}
+            className="w-full rounded-xl bg-white border-2 border-transparent px-4 py-3 text-sm font-bold text-gray-900 focus:border-orange-500 outline-none"
+          />
         </div>
       </div>
 
-      {selectedFournisseurId && (
-        <div className="flex gap-2 no-print">
-          <button onClick={handlePrint} className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
-            <Printer className="h-4 w-4" /> Imprimer
-          </button>
-          <button onClick={handleExport} className="flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700">
-            <Download className="h-4 w-4" /> Exporter PDF
-          </button>
-        </div>
-      )}
-
-      {!selectedFournisseurId ? (
-        <div className="text-center py-20 text-gray-500">
-          <FileText className="h-16 w-16 mx-auto mb-4 opacity-20" />
-          <p className="text-lg font-medium">Sélectionnez un fournisseur pour générer son relevé de compte</p>
-        </div>
-      ) : loadingHistory ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
-          <p className="ml-3 text-gray-500">Génération du relevé en cours...</p>
-        </div>
-      ) : historyData.length === 0 ? (
-        <div className="text-center py-20 text-gray-500 no-print">
-          <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
-          Aucun achat enregistré pour ce fournisseur sur cette période.
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <div className="hidden print:block border-b-2 border-gray-900 pb-4 mb-6">
-            <h1 className="text-2xl font-bold uppercase">Relevé de Compte Fournisseur</h1>
-            <p className="text-lg font-medium">Fournisseur : {selectedFournisseur?.nom}</p>
-            <p className="text-sm text-gray-600 italic">Édité le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}</p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-blue-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-blue-800">
-              <p className="text-[10px] uppercase font-bold text-blue-100">Total Achats</p>
-              <p className="text-xl font-black italic tracking-tighter">{totalAchats.toLocaleString()} F</p>
-            </div>
-            <div className="bg-emerald-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-emerald-800">
-              <p className="text-[10px] uppercase font-bold text-emerald-100">Total Payé</p>
-              <p className="text-xl font-black italic tracking-tighter">{totalPaye.toLocaleString()} F</p>
-            </div>
-            <div className="bg-red-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-red-800">
-              <p className="text-[10px] uppercase font-bold text-red-100">Reste à Payer</p>
-              <p className="text-xl font-black italic tracking-tighter">{resteAPayer.toLocaleString()} F</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest border-l-4 border-blue-600 pl-3">Détail chronologique</h3>
-            {historyData.map((a, i) => (
-              <div key={i} className="border-2 border-gray-100 rounded-2xl p-5 bg-white hover:border-blue-200 hover:shadow-xl transition-all group relative overflow-hidden">
-                <div className="absolute top-2 right-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <FileText className="h-16 w-16 -rotate-12" />
-                </div>
-                <div className="flex items-center justify-between mb-4 relative z-10">
-                  <div>
-                    <p className="font-bold text-gray-900">{a.numero}</p>
-                    <p className="text-sm text-gray-500">{new Date(a.date).toLocaleDateString('fr-FR')}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black text-lg text-gray-900">{Number(a.montantTotal).toLocaleString()} F</p>
-                    <p className={`text-xs font-medium ${Number(a.montantPaye) >= Number(a.montantTotal) ? 'text-green-600' : 'text-orange-600'}`}>
-                      Payé: {Number(a.montantPaye).toLocaleString()} F
-                    </p>
-                  </div>
-                </div>
+      {selectedFournisseurId ? (
+        <>
+          {/* Compteurs Professionnels */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 no-print">
+            <div className="bg-white rounded-[2rem] p-6 shadow-xl border-b-8 border-red-600">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-red-50 rounded-2xl text-red-600"><TrendingUp className="h-6 w-6" /></div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Achats (Période)</span>
               </div>
-            ))}
+              <p className="text-3xl font-black text-gray-900 tracking-tighter italic">{totals.du.toLocaleString()} F</p>
+            </div>
+
+            <div className="bg-white rounded-[2rem] p-6 shadow-xl border-b-8 border-emerald-500">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600"><TrendingDown className="h-6 w-6" /></div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Payé (Période)</span>
+              </div>
+              <p className="text-3xl font-black text-gray-900 tracking-tighter italic">{totals.paye.toLocaleString()} F</p>
+            </div>
+
+            <div className={`bg-white rounded-[2rem] p-6 shadow-xl border-b-8 ${(totals.du - totals.paye) > 0 ? 'border-amber-500' : 'border-gray-200'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-amber-50 rounded-2xl text-amber-600"><CreditCard className="h-6 w-6" /></div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Solde Période</span>
+              </div>
+              <p className={`text-3xl font-black tracking-tighter italic ${(totals.du - totals.paye) > 0 ? 'text-amber-600' : 'text-gray-900'}`}>
+                {(totals.du - totals.paye).toLocaleString()} F
+              </p>
+            </div>
+
+            <div className="bg-gray-900 rounded-[2rem] p-6 shadow-xl border-b-8 border-blue-500">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-500"><Wallet className="h-6 w-6" /></div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dette Globale Fournisseur</span>
+              </div>
+              <p className="text-3xl font-black text-white tracking-tighter italic">
+                {(selectedFournisseur?.dette || 0).toLocaleString()} F
+              </p>
+            </div>
+          </div>
+
+          {/* Tableau de transactions */}
+          <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-gray-100 no-print">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                <FileText className="h-4 w-4 text-gray-400" />
+                Détail des opérations
+              </h3>
+              <p className="text-[10px] text-gray-400 font-bold italic uppercase tracking-tighter">
+                Du {formatDate(dateDebut)} au {formatDate(dateFin)}
+              </p>
+            </div>
+
+            {loading ? (
+              <div className="py-20 flex flex-col items-center justify-center gap-4">
+                <Loader2 className="h-10 w-10 animate-spin text-orange-500" />
+                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Génération du relevé en cours...</p>
+              </div>
+            ) : data.length === 0 ? (
+              <div className="py-20 text-center">
+                <p className="text-gray-400 italic">Aucune transaction trouvée sur cette période.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead>
+                    <tr className="bg-gray-50/50">
+                      <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
+                      <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Référence</th>
+                      <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Dû (Achats)</th>
+                      <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Réglé (Payé)</th>
+                      <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Reste</th>
+                      <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {paginatedData.map((a) => (
+                      <tr key={a.id} className="hover:bg-gray-50/80 transition-colors group">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <p className="text-sm font-bold text-gray-700">{formatDate(a.date)}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-black text-gray-900 italic tracking-tight">{a.numero}</p>
+                          <p className="text-[10px] text-gray-400 font-medium uppercase">{a.modePaiement}</p>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <p className="text-sm font-black text-red-600">{a.montantTotal.toLocaleString()} F</p>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <p className="text-sm font-black text-emerald-600">{a.montantPaye.toLocaleString()} F</p>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <p className={`text-sm font-black ${(a.montantTotal - a.montantPaye) > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                            {(a.montantTotal - a.montantPaye).toLocaleString()} F
+                          </p>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${a.statutPaiement === 'PAYE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
+                            {a.statutPaiement === 'PAYE' ? 'RÉGLÉ' : 'À RÉGLER'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-900 text-white">
+                    <tr>
+                      <td colSpan={2} className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-widest opacity-60">Totaux Période :</td>
+                      <td className="px-6 py-4 text-right font-black text-lg italic tracking-tighter">{totals.du.toLocaleString()} F</td>
+                      <td className="px-6 py-4 text-right font-black text-lg text-emerald-400 italic tracking-tighter">{totals.paye.toLocaleString()} F</td>
+                      <td className="px-6 py-4 text-right font-black text-lg text-red-400 italic tracking-tighter">{(totals.du - totals.paye).toLocaleString()} F</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+            
+            {totalPages > 1 && (
+              <div className="p-4 border-t border-gray-100">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={data.length}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setCurrentPage}
+                />
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="bg-white rounded-[2rem] p-20 shadow-xl border border-white/20 flex flex-col items-center justify-center text-center no-print">
+          <div className="p-8 bg-orange-50 rounded-full text-orange-500 mb-6 group-hover:scale-110 transition-transform">
+            <Truck className="h-16 w-16" />
+          </div>
+          <h2 className="text-2xl font-black text-gray-900 uppercase italic tracking-tighter">Aucun fournisseur sélectionné</h2>
+        </div>
+      )}
+
+      {/* MODALE D'APERÇU IMPRESSION RELEVÉ FOURNISSEUR */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu du Relevé de Compte Fournisseur</h2>
+                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic">{selectedFournisseur?.nom}</p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-red-100 px-4 py-2 text-xs font-black text-red-600 uppercase">
+                 {data.length} Transactions
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 rounded-xl bg-red-600 px-10 py-2 text-sm font-black text-white hover:bg-red-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] shadow-2xl">
+               {(() => {
+                  const chunks = [];
+                  for (let i = 0; i < data.length; i += ITEMS_PER_PAGE_REPORT) {
+                    chunks.push(data.slice(i, i + ITEMS_PER_PAGE_REPORT));
+                  }
+                  return chunks.map((chunk, index, allChunks) => (
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break mb-8 border-b-2 border-dashed border-gray-100 pb-8' : ''}>
+                      <ListPrintWrapper
+                        title={`RELEVÉ DE COMPTE : ${selectedFournisseur?.nom}`}
+                        subtitle={`Transactions du ${formatDate(dateDebut)} au ${formatDate(dateFin)}`}
+                        pageNumber={index + 1}
+                        totalPages={allChunks.length}
+                        hideHeader={index > 0}
+                        hideVisa={index < allChunks.length - 1}
+                      >
+                         <table className="w-full text-[14px] border-collapse border-2 border-black">
+                          <thead>
+                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-2 border-black">
+                              <th className="border-2 border-black px-3 py-3 text-left">Date</th>
+                              <th className="border-2 border-black px-3 py-3 text-left">Référence / Mode</th>
+                              <th className="border-2 border-black px-3 py-3 text-right">Dû (Achats)</th>
+                              <th className="border-2 border-black px-3 py-3 text-right">Réglé (Payé)</th>
+                              <th className="border-2 border-black px-3 py-3 text-right">Solde</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chunk.map((a, idx) => (
+                              <tr key={idx} className="border border-black">
+                                <td className="border border-black px-3 py-2 whitespace-nowrap">{formatDate(a.date)}</td>
+                                <td className="border border-black px-3 py-2 font-black">
+                                   <div className="uppercase tracking-tight">{a.numero}</div>
+                                   <div className="text-[10px] italic font-normal text-gray-500">{a.modePaiement}</div>
+                                </td>
+                                <td className="border border-black px-3 py-2 text-right font-black text-red-700">
+                                  {a.montantTotal.toLocaleString()} F
+                                </td>
+                                <td className="border border-black px-3 py-2 text-right font-black text-emerald-800 bg-emerald-50/20">
+                                  {a.montantPaye.toLocaleString()} F
+                                </td>
+                                <td className="border border-black px-3 py-2 text-right font-black text-rose-800">
+                                  {(a.montantTotal - a.montantPaye).toLocaleString()} F
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {index === allChunks.length - 1 && (
+                            <tfoot>
+                              <tr className="bg-gray-200 font-black text-[15px] border-2 border-black uppercase italic">
+                                <td colSpan={2} className="border border-black px-3 py-5 text-right tracking-widest">SITUATION TOTALE</td>
+                                <td className="border border-black px-3 py-5 text-right bg-white">{totals.du.toLocaleString()} F</td>
+                                <td className="border border-black px-3 py-5 text-right bg-white text-emerald-800">{totals.paye.toLocaleString()} F</td>
+                                <td className="border border-black px-3 py-5 text-right bg-white text-rose-800 underline decoration-double">{(totals.du - totals.paye).toLocaleString()} F</td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                        {index === allChunks.length - 1 && (
+                          <div className="mt-6 p-4 border-2 border-black bg-gray-50 rounded-lg">
+                             <p className="text-[15px] font-black uppercase text-gray-900 italic">Dette de clôture globale du fournisseur au {formatDate(dateFin)} :</p>
+                             <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedFournisseur?.dette || 0).toLocaleString()} FCFA</p>
+                          </div>
+                        )}
+                      </ListPrintWrapper>
+                    </div>
+                  ));
+               })()}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Rendu Système (Impression Native) */}
+      <div className="hidden print:block absolute inset-0 bg-white">
+          {(() => {
+                const chunks = [];
+                for (let i = 0; i < data.length; i += ITEMS_PER_PAGE_REPORT) {
+                  chunks.push(data.slice(i, i + ITEMS_PER_PAGE_REPORT));
+                }
+                return chunks.map((chunk, index, allChunks) => (
+                  <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                    <ListPrintWrapper
+                      title={`RELEVÉ DE COMPTE : ${selectedFournisseur?.nom}`}
+                      subtitle={`Audit des transactions du ${formatDate(dateDebut)} au ${formatDate(dateFin)}`}
+                      pageNumber={index + 1}
+                      totalPages={allChunks.length}
+                      hideHeader={index > 0}
+                      hideVisa={index < allChunks.length - 1}
+                    >
+                       <table className="w-full text-[14px] border-collapse border-2 border-black shadow-inner">
+                        <thead>
+                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                            <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-left italic">Référence / Mode</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-right">Dû (Achats)</th>
+                            <th className="border-r-2 border-black px-3 py-3 text-right">Réglé (Payé)</th>
+                            <th className="px-3 py-3 text-right">Solde</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunk.map((a, idx) => (
+                            <tr key={idx} className="border-b border-black hover:bg-gray-50 transition-colors shadow-sm">
+                              <td className="border-r-2 border-black px-3 py-2 font-medium italic text-slate-800">{formatDate(a.date)}</td>
+                              <td className="border-r-2 border-black px-3 py-2 font-black uppercase text-[12px] italic text-red-700 tracking-tighter">
+                                {a.numero}
+                                <div className="text-[9px] font-bold text-gray-400 not-italic tracking-widest">{a.modePaiement}</div>
+                              </td>
+                              <td className="border-r-2 border-black px-3 py-2 text-right font-black tabular-nums text-red-700">{a.montantTotal.toLocaleString()} F</td>
+                              <td className="border-r-2 border-black px-3 py-2 text-right font-black tabular-nums text-emerald-800 bg-emerald-50/10 shadow-inner">{a.montantPaye.toLocaleString()} F</td>
+                              <td className="px-3 py-2 text-right font-black tabular-nums text-rose-800 underline decoration-double underline-offset-2 italic">{(a.montantTotal - a.montantPaye).toLocaleString()} F</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
+                              <td colSpan={2} className="px-3 py-6 text-right tracking-[0.2em] underline decoration-slate-400">ARRÊTÉ DU RELEVÉ AU {formatDate(dateFin)}</td>
+                              <td className="border-r-2 border-black px-3 py-6 text-right bg-white ring-2 ring-black font-mono shadow-inner">{totals.du.toLocaleString()} F</td>
+                              <td className="border-r-2 border-black px-3 py-6 text-right bg-white text-emerald-800 font-mono shadow-inner">{totals.paye.toLocaleString()} F</td>
+                              <td className="px-3 py-6 text-right bg-slate-900 text-white font-mono shadow-2xl">{(totals.du - totals.paye).toLocaleString()} F</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </ListPrintWrapper>
+                  </div>
+                ));
+          })()}
+      </div>
     </div>
   )
 }

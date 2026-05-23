@@ -85,15 +85,13 @@ function validateEan13(code: string | null | undefined): string | null {
   if (!code) return null
   const cleaned = code.trim().replace(/\s/g, '')
   if (cleaned.length === 0) return null
-  if (!/^\d{8,14}$/.test(cleaned)) {
-    throw new Error('Le code-barres doit contenir uniquement des chiffres (8 à 14 caractères : EAN-8, EAN-13, UPC-A).')
-  }
+  if (!/^\d{8,14}$/.test(cleaned)) return null
   return cleaned
 }
 
 /** Produit : code, désignation, catégorie, prix, code-barres */
 export const produitSchema = z.object({
-  code: z.string().min(1, 'Le code est requis.').max(50, 'Le code ne peut pas dépasser 50 caractères.').trim(),
+  code: z.string().max(50, 'Le code ne peut pas dépasser 50 caractères.').trim().optional(),
   designation: z.string().min(1, 'La désignation est requise.').max(MAX_STRING, 'La désignation ne peut pas dépasser 500 caractères.').trim(),
   categorie: z.string().min(1, 'La catégorie est requise.').max(100).trim(),
   prixAchat: z.coerce.number().min(0, 'Le prix d\'achat doit être positif.').nullable().optional(),

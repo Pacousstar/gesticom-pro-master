@@ -257,7 +257,8 @@ export default function FournisseursPage() {
 
   const openPaymentModal = async (f: Fournisseur) => {
     try {
-      const res = await fetch(`/api/rapports/finances/etat-paiements?type=ACHAT&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31`)
+      const timestamp = Date.now()
+      const res = await fetch(`/api/rapports/finances/etat-paiements?type=ACHAT&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31&_=${timestamp}`)
       if (res.ok) {
         const allInvoices = await res.json()
         const providerInvoices = allInvoices.filter((inv: any) => inv.tier === f.nom)

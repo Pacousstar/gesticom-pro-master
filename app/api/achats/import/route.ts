@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { requireRole } from '@/lib/require-role'
 
 export async function POST(req: NextRequest) {
     try {
         const session = await getSession()
         if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+        const forbidden = requireRole(session, ['SUPER_ADMIN', 'ADMIN'])
+        if (forbidden) return forbidden
 
         const formData = await req.formData()
         const file = formData.get('file') as Blob

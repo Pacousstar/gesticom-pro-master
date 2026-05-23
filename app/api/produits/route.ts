@@ -21,7 +21,7 @@ async function generateProductCode(categorie: string, entiteId: number): Promise
         { categorie: categorie }
       ]
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { code: 'desc' },
     select: { code: true }
   })
 
@@ -34,12 +34,12 @@ async function generateProductCode(categorie: string, entiteId: number): Promise
   }
 
   let code = `${prefix}-${String(nextNum).padStart(CODE_PADDING, '0')}`
-  let exists = await prisma.produit.findUnique({ where: { code } })
+  let exists = await prisma.produit.findFirst({ where: { code, entiteId } })
 
   while (exists) {
     nextNum++
     code = `${prefix}-${String(nextNum).padStart(CODE_PADDING, '0')}`
-    exists = await prisma.produit.findUnique({ where: { code } })
+    exists = await prisma.produit.findFirst({ where: { code, entiteId } })
   }
 
   return code
@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
           motif: `Stock initial à la création`,
           utilisateurId: session.userId,
           entiteId,
-          mouvementId: mvt.id
+          mouvementId: mvt.id,
         }, tx)
       }
 

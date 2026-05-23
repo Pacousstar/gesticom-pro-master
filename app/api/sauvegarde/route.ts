@@ -6,7 +6,7 @@ import { logModification, getIpAddress } from '@/lib/audit'
 
 export async function GET() {
   const session = await getSession()
-  const authError = requirePermission(session, 'parametres:backup')
+  const authError = requirePermission(session, 'sauvegardes:view')
   if (authError) return authError
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
@@ -21,7 +21,7 @@ export async function GET() {
 
 export async function POST() {
   const session = await getSession()
-  const authError = requirePermission(session, 'parametres:backup')
+  const authError = requirePermission(session, 'sauvegardes:create')
   if (authError) return authError
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 

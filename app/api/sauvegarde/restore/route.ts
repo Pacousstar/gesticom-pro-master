@@ -9,7 +9,7 @@ import { getDatabaseFilePath, getBackupDir } from '@/lib/sauvegarde-db'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  const authError = requirePermission(session, 'parametres:backup')
+  const authError = requirePermission(session, 'sauvegardes:restore')
   if (authError) return authError
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 

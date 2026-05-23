@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       // 2. Re-créer les règlements
       if (data.reglements && Array.isArray(data.reglements)) {
         for (const r of data.reglements) {
-          await tx.reglementVente.create({
+          const regl = await tx.reglementVente.create({
             data: {
               venteId: v.id,
               clientId: r.clientId,
@@ -91,6 +91,13 @@ export async function POST(request: NextRequest) {
               utilisateurId: r.utilisateurId,
               date: new Date(r.date),
               observation: `[RESTAURATION] ${r.observation || ''}`,
+            }
+          })
+          await tx.reglementVenteLigne.create({
+            data: {
+              reglementId: regl.id,
+              venteId: v.id,
+              montant: r.montant,
             }
           })
         }
