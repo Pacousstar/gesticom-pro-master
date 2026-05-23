@@ -260,8 +260,8 @@ export async function DELETE(
           entiteId: charge.entiteId,
           type: 'SORTIE',
           OR: [
-            { motif: { contains: charge.rubrique } },
-            { motif: { contains: charge.beneficiaire ?? '___X___' } }
+            { motif: { contains: `Charge #${id}` } },
+            { motif: { contains: `Charge : ${charge.rubrique}` } }
           ]
         }
       })
@@ -269,15 +269,22 @@ export async function DELETE(
       // 3. Nettoyage Trésorerie : BANQUE
       const opsBancaires = await tx.operationBancaire.findMany({
         where: {
-          libelle: { contains: charge.rubrique },
+          montant: charge.montant,
+          date: charge.date,
+          OR: [
+            { libelle: { contains: `Charge #${id}` } },
+            { libelle: { contains: charge.rubrique } }
+          ],
           banque: { entiteId: charge.entiteId }
         }
       })
 
+      const typesEntreeBanque = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU']
       for (const op of opsBancaires) {
+        const estEntree = typesEntreeBanque.includes(op.type.toUpperCase())
         await tx.banque.update({
           where: { id: op.banqueId },
-          data: { soldeActuel: { increment: op.montant } }
+          data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
         })
         await tx.operationBancaire.delete({ where: { id: op.id } })
       }

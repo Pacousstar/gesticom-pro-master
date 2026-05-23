@@ -36,8 +36,9 @@ export default function CaissePage() {
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
   const { success: showSuccess, error: showError } = useToast()
-  const [dateDebut, setDateDebut] = useState('')
-  const [dateFin, setDateFin] = useState('')
+  const today = new Date().toISOString().split('T')[0]
+  const [dateDebut, setDateDebut] = useState(today)
+  const [dateFin, setDateFin] = useState(today)
   const [filtreMagasin, setFiltreMagasin] = useState('')
   const [filtreType, setFiltreType] = useState('')
   const [showFilters, setShowFilters] = useState(false)

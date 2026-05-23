@@ -98,37 +98,44 @@ export async function DELETE(
       await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
 
 // 2/3. Stock : éviter le double retour si la vente a déjà été annulée.
+      await tx.mouvement.deleteMany({
+          where: {
+            OR: [
+              { observation: `Annulation vente ${v.numero}` },
+              { observation: `Sortie Vente ${v.numero}` },
+              { observation: `Modif Vente ${v.numero}` }
+            ]
+          }
+        })
        if (v.statut !== 'ANNULEE') {
-        await tx.mouvement.deleteMany({
-           where: {
-             OR: [
-               { observation: `Annulation vente ${v.numero}` },
-               { observation: `Sortie Vente ${v.numero}` },
-               { observation: `Modif Vente ${v.numero}` }
-             ]
-           }
-         })
-        for (const l of v.lignes) {
-          await tx.stock.updateMany({
-            where: { produitId: l.produitId, magasinId: v.magasinId },
-            data: { quantite: { increment: l.quantite } },
-          })
-        }
-      }
+         for (const l of v.lignes) {
+           await tx.stock.updateMany({
+             where: { produitId: l.produitId, magasinId: v.magasinId },
+             data: { quantite: { increment: l.quantite } },
+           })
+         }
+       }
 
-      // 4. Nettoyage Trésorerie : CAISSE (exact match, pas de contains)
+       // 4. Nettoyage Trésorerie : CAISSE (y compris écritures d'annulation)
       await tx.caisse.deleteMany({
         where: {
           OR: [
             { motif: `Vente ${v.numero}` },
-            { motif: `Règlement Vente ${v.numero}` }
+            { motif: `Règlement Vente ${v.numero}` },
+            { motif: `ANNULATION VENTE ${v.numero}` }
           ]
         }
       })
 
-      // 5. Nettoyage Trésorerie : BANQUE (Opérations Bancaires + inversion solde)
+      // 5. Nettoyage Trésorerie : BANQUE (y compris opérations d'annulation)
+      const allBanqueRefs = [
+        v.numero,
+        `ANN-${v.numero}`
+      ]
       const opsBancaires = await tx.operationBancaire.findMany({
-        where: { reference: v.numero }
+        where: {
+          reference: { in: allBanqueRefs }
+        }
       })
       for (const op of opsBancaires) {
         const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
@@ -138,7 +145,9 @@ export async function DELETE(
         })
       }
       await tx.operationBancaire.deleteMany({
-        where: { reference: v.numero }
+        where: {
+          reference: { in: allBanqueRefs }
+        }
       })
 
       // 6. Supprimer règlements et vente

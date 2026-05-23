@@ -117,13 +117,13 @@ export async function DELETE(
         where: { reference: a.numero }
       })
 
+      const typesEntreeBanque = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU']
       for (const op of opsBancaires) {
-        // MAJ du solde de la banque concernée (on rajoute le montant car c'était une sortie / remboursement)
+        const estEntree = typesEntreeBanque.includes(op.type.toUpperCase())
         await tx.banque.update({
           where: { id: op.banqueId },
-          data: { soldeActuel: { increment: op.montant } }
+          data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
         })
-        // Suppression de l'opération
         await tx.operationBancaire.delete({ where: { id: op.id } })
       }
 

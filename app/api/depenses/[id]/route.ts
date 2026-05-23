@@ -304,16 +304,10 @@ await prisma.$transaction(async (tx) => {
         where: {
           entiteId: d.entiteId,
           type: 'SORTIE',
-          montant: d.montantPaye || d.montant,
           OR: [
-             { motif: { contains: `Dépense #${id}` } },
-             { 
-               AND: [
-                 { motif: { contains: d.libelle } },
-                 { date: d.date }
-               ]
-             }
-           ]
+            { motif: { contains: `Dépense #${id}` } },
+            { motif: { contains: `Dépense ${d.libelle}` } }
+          ]
         }
       })
 
@@ -330,10 +324,12 @@ await prisma.$transaction(async (tx) => {
         }
       })
 
+      const typesEntreeBanque = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU']
       for (const op of opsBancaires) {
+        const estEntree = typesEntreeBanque.includes(op.type.toUpperCase())
         await tx.banque.update({
           where: { id: op.banqueId },
-          data: { soldeActuel: { increment: op.montant } }
+          data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
         })
         await tx.operationBancaire.delete({ where: { id: op.id } })
       }
