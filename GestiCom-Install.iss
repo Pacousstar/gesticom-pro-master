@@ -46,7 +46,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; IMPORTANT: Recopie du serveur standalone (optimisé par Next.js)
-Source: ".next\standalone\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.ts, *.map, *.bak, *.tmp, node_modules\prisma\build\public, node_modules\prisma\scripts"
+Source: ".next\standalone\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.d.ts, *.ts, *.map, *.bak, *.tmp"
 
 ; Recopie des fichiers statiques essentiels pour le rendu UI (Poids plume)
 Source: ".next\static\*"; DestDir: "{app}\.next\static"; Flags: ignoreversion recursesubdirs createallsubdirs
