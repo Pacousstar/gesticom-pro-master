@@ -336,9 +336,10 @@ export default function ClientsPage() {
       if (res.ok) {
         const allInvoices = await res.json()
         const clientInvoices = allInvoices.filter((inv: any) => {
-        const tierName = inv.tier || (inv.client?.nom) || (typeof inv.client === 'string' ? inv.client : null)
-        return tierName === c.nom
-      })
+          if (inv.clientId && c.id) return inv.clientId === c.id
+          const tierName = inv.tier || (inv.client?.nom) || (typeof inv.client === 'string' ? inv.client : null)
+          return tierName === c.nom || tierName === c.nom?.trim()
+        })
         if (clientInvoices.length === 0) {
             showError("Aucune facture impayée trouvée pour ce client.")
             return

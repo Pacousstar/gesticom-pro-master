@@ -160,6 +160,7 @@ export async function POST(request: NextRequest) {
             montant,
             utilisateurId: session.userId,
             reference: v?.numero || `REG-${Date.now()}`,
+            beneficiaire: client?.nom || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
         }

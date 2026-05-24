@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
       const a = achatId ? await tx.achat.findUnique({
         where: { id: achatId },
-        include: { ReglementAchatLigne: { select: { montant: true } } }
+        include: { ReglementAchatLigne: { select: { montant: true } }, fournisseur: { select: { nom: true } } }
       }) : null
       if (a && a.entiteId !== entiteId) {
         throw new Error('Accès refusé à cette facture (entité différente).')
@@ -149,6 +149,7 @@ export async function POST(request: NextRequest) {
             montant,
             utilisateurId: session.userId,
             reference: a?.numero || `PAY-${Date.now()}`,
+            beneficiaire: a?.fournisseur?.nom || a?.fournisseurLibre || fournisseur?.nom || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
         }

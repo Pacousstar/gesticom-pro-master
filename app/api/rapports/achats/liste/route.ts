@@ -26,8 +26,19 @@ export async function GET(request: NextRequest) {
   }
 
   const where: any = {
-    entiteId,
     statut: { in: ['VALIDE', 'VALIDEE'] },
+  }
+
+  // Filtrage par entité (support SUPER_ADMIN)
+  if (session.role === 'SUPER_ADMIN') {
+    const entiteIdFromParams = searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    } else if (entiteId && entiteId > 0) {
+      where.entiteId = entiteId
+    }
+  } else if (entiteId && entiteId > 0) {
+    where.entiteId = entiteId
   }
 
   where.date = {

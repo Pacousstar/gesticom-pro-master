@@ -34,6 +34,16 @@ export async function GET(request: NextRequest) {
       include: { fournisseur: { select: { nom: true } } },
       orderBy: { date: 'desc' }
     })
+
+    const achatIds = achats.map(a => a.id)
+    const achatLignes = await prisma.reglementAchatLigne.findMany({
+      where: { achatId: { in: achatIds } },
+      select: { achatId: true, montant: true }
+    })
+    const montantPayeParAchat = new Map<number, number>()
+    for (const l of achatLignes) {
+      montantPayeParAchat.set(l.achatId, (montantPayeParAchat.get(l.achatId) || 0) + l.montant)
+    }
     
     return NextResponse.json(achats.map(a => ({
       id: a.id,
@@ -41,9 +51,11 @@ export async function GET(request: NextRequest) {
       date: a.date,
       tier: a.fournisseur?.nom || a.fournisseurLibre || 'Divers',
       montantTotal: a.montantTotal,
-      montantPaye: a.montantPaye,
-      solde: Math.max(0, (a.montantTotal || 0) - (a.montantPaye || 0)),
-      statut: a.statutPaiement
+      montantPaye: Math.max(a.montantPaye || 0, montantPayeParAchat.get(a.id) || 0),
+      solde: Math.max(0, (a.montantTotal || 0) - Math.max(a.montantPaye || 0, montantPayeParAchat.get(a.id) || 0)),
+      statut: a.statutPaiement,
+      magasinId: a.magasinId,
+      fournisseurId: a.fournisseurId,
     })))
   } else {
     // VENTES par défaut
@@ -64,14 +76,24 @@ export async function GET(request: NextRequest) {
       orderBy: { date: 'desc' }
     })
 
-const response = NextResponse.json(ventes.map(v => ({
+    const venteIds = ventes.map(v => v.id)
+    const venteLignes = await prisma.reglementVenteLigne.findMany({
+      where: { venteId: { in: venteIds } },
+      select: { venteId: true, montant: true }
+    })
+    const montantPayeParVente = new Map<number, number>()
+    for (const l of venteLignes) {
+      montantPayeParVente.set(l.venteId, (montantPayeParVente.get(l.venteId) || 0) + l.montant)
+    }
+
+ const response = NextResponse.json(ventes.map(v => ({
       id: v.id,
       numero: v.numero,
       date: v.date,
       tier: v.client?.nom || v.clientLibre || 'Divers',
       montantTotal: v.montantTotal,
-      montantPaye: v.montantPaye,
-      remaining: (v.montantTotal || 0) - (v.montantPaye || 0),
+      montantPaye: Math.max(v.montantPaye || 0, montantPayeParVente.get(v.id) || 0),
+      remaining: (v.montantTotal || 0) - Math.max(v.montantPaye || 0, montantPayeParVente.get(v.id) || 0),
       magasinId: v.magasinId,
       clientId: v.clientId,
       statut: v.statutPaiement
