@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteIdOrAll } from '@/lib/get-entite-id'
 
 const DASHBOARD_TIMEOUT_MS = 20000
 
@@ -17,7 +17,7 @@ function toNum(val: unknown): number {
   return isNaN(n) ? 0 : n
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     let startTime = 0;
     try {
       const session = await getSession()
@@ -42,12 +42,15 @@ export async function GET() {
     }
 
     // Utiliser l'entité de la session
-    const entiteId = await getEntiteId(session)
-    if (!entiteId || entiteId <= 0) {
-      console.warn('[dashboard] Aucune entité valide trouvée, accès restreint')
-      return NextResponse.json({ error: 'Aucune entité associée à cet utilisateur' }, { status: 403 })
+    const entiteIdFilter = await getEntiteIdOrAll(session)
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    let entiteId: number | undefined
+    if (entiteIdFilter != null) {
+      entiteId = entiteIdFilter
+    } else if (entiteIdFromParams) {
+      entiteId = Number(entiteIdFromParams)
     }
-    const entiteCondition = { entiteId }
+    const entiteCondition = entiteId != null ? { entiteId } : {}
 
     // Début des dates pour SQL
     const isoAuj = debAuj.toISOString()
@@ -175,7 +178,7 @@ export async function GET() {
 
       // 14 - Alertes Système
       prisma.systemAlerte.findMany({
-        where: { lu: false, entiteId: entiteId || undefined },
+        where: { lu: false, ...(entiteId != null ? { entiteId } : {}) },
         orderBy: { date: 'desc' },
         take: 10
       }).catch(catchEmpty('systemAlerte.findMany')),

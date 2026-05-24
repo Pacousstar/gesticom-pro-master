@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logCreation, getIpAddress } from '@/lib/audit'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { produitSchema } from '@/lib/validations'
 
@@ -51,22 +51,18 @@ export async function GET(request: NextRequest) {
   const forbidden = requirePermission(session, 'produits:view')
   if (forbidden) return forbidden
 
-  const entiteId = await getEntiteId(session)
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
   const complet = request.nextUrl.searchParams.get('complet') === '1'
 
   const whereEntite: any = {}
-  if (session.role === 'SUPER_ADMIN') {
+  if (entiteIdFilter != null) {
+    whereEntite.entiteId = entiteIdFilter
+  } else {
     const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
     if (entiteIdFromParams) {
       whereEntite.entiteId = Number(entiteIdFromParams)
-    } else if (entiteId > 0) {
-      whereEntite.entiteId = entiteId
     }
-  } else if (entiteId > 0) {
-    whereEntite.entiteId = entiteId
-  } else {
-    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
   }
 
   const baseWhere = complet ? { ...whereEntite } : { ...whereEntite, actif: true }

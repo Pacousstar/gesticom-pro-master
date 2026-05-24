@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { logModification, getIpAddress } from '@/lib/audit'
 
@@ -12,8 +12,16 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   const tous = request.nextUrl.searchParams.get('tous') === '1'
-  const entiteId = await getEntiteId(session)
-  const where: { actif?: boolean; entiteId: number } = { entiteId }
+  const entiteIdFilter = await getEntiteIdOrAll(session)
+  const where: any = {}
+  if (entiteIdFilter != null) {
+    where.entiteId = entiteIdFilter
+  } else {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    }
+  }
   
   if (!tous) {
     where.actif = true

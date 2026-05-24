@@ -68,3 +68,13 @@ export async function getEntiteId(session: Session | null): Promise<number> {
   
   return entiteId
 }
+
+export async function getEntiteIdOrAll(session: Session | null): Promise<number | undefined> {
+  if (!session) return await ensureDefaultEntite()
+  
+  if (session.role === 'SUPER_ADMIN') {
+    return undefined
+  }
+  
+  return getEntiteId(session)
+}

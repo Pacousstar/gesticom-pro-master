@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { comptabiliserAchat, comptabiliserReglementAchat } from '@/lib/comptabilisation'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { estModeBanque } from '@/lib/banque'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   const searchNumeroCamion = request.nextUrl.searchParams.get('numeroCamion')?.trim()
   const searchFournisseur = request.nextUrl.searchParams.get('fournisseurSearch')?.trim()
   
-  const entiteId = await getEntiteId(session)
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const where: any = {}
 
   // Filtre par numéro d'achat
@@ -78,16 +78,13 @@ export async function GET(request: NextRequest) {
   }
 
   // Filtrage par entité (support SUPER_ADMIN)
-  if (session.role === 'SUPER_ADMIN') {
+  if (entiteIdFilter != null) {
+    where.entiteId = entiteIdFilter
+  } else {
     const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
     if (entiteIdFromParams) {
       where.entiteId = Number(entiteIdFromParams)
-    } else if (entiteId > 0) {
-      where.entiteId = entiteId
     }
-    // Si entiteId = 0, SUPER_ADMIN voit toutes les entités (pas de filtre)
-  } else if (entiteId > 0) {
-    where.entiteId = entiteId
   }
 
   const [achats, total, aggregates] = await Promise.all([

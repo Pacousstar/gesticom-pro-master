@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { comptabiliserDepense } from '@/lib/comptabilisation'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import fs from 'fs'
@@ -22,19 +22,17 @@ export async function GET(request: NextRequest) {
   const magasinId = request.nextUrl.searchParams.get('magasinId')?.trim()
   const search = request.nextUrl.searchParams.get('search')?.trim()
 
-  const entiteId = await getEntiteId(session)
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const where: any = {}
 
   // Filtrage par entité (support SUPER_ADMIN)
-  if (session.role === 'SUPER_ADMIN') {
+  if (entiteIdFilter != null) {
+    where.entiteId = entiteIdFilter
+  } else {
     const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
     if (entiteIdFromParams) {
       where.entiteId = Number(entiteIdFromParams)
-    } else if (entiteId > 0) {
-      where.entiteId = entiteId
     }
-  } else if (entiteId > 0) {
-    where.entiteId = entiteId
   }
 
   if (dateDebut && dateFin) {

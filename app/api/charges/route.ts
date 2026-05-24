@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { comptabiliserCharge } from '@/lib/comptabilisation'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { requirePermission } from '@/lib/require-role'
 
@@ -33,16 +33,14 @@ export async function GET(request: NextRequest) {
   } = {}
 
   // Filtrer par entité (support SUPER_ADMIN)
-  const entiteId = await getEntiteId(session)
-  if (session.role === 'SUPER_ADMIN') {
+  const entiteIdFilter = await getEntiteIdOrAll(session)
+  if (entiteIdFilter != null) {
+    where.entiteId = entiteIdFilter
+  } else {
     const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
     if (entiteIdFromParams) {
       where.entiteId = Number(entiteIdFromParams)
-    } else if (entiteId > 0) {
-      where.entiteId = entiteId
     }
-  } else if (entiteId > 0) {
-    where.entiteId = entiteId
   }
 
   if (dateDebut && dateFin) {

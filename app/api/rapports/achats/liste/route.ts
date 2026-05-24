@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteIdOrAll } from '@/lib/get-entite-id'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  const entiteId = await getEntiteId(session)
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const searchParams = request.nextUrl.searchParams
   const dateDebut = searchParams.get('dateDebut')?.trim()
   const dateFin = searchParams.get('dateFin')?.trim()
@@ -30,15 +30,13 @@ export async function GET(request: NextRequest) {
   }
 
   // Filtrage par entité (support SUPER_ADMIN)
-  if (session.role === 'SUPER_ADMIN') {
+  if (entiteIdFilter != null) {
+    where.entiteId = entiteIdFilter
+  } else {
     const entiteIdFromParams = searchParams.get('entiteId')?.trim()
     if (entiteIdFromParams) {
       where.entiteId = Number(entiteIdFromParams)
-    } else if (entiteId && entiteId > 0) {
-      where.entiteId = entiteId
     }
-  } else if (entiteId && entiteId > 0) {
-    where.entiteId = entiteId
   }
 
   where.date = {

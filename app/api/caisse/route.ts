@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { comptabiliserCaisse } from '@/lib/comptabilisation'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 
@@ -23,19 +23,17 @@ export async function GET(request: NextRequest) {
   const searchTerm = request.nextUrl.searchParams.get('search')?.trim()
   
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const entiteId = await getEntiteId(session)
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const where: any = {}
 
   // Filtrage par entité (support SUPER_ADMIN)
-  if (session.role === 'SUPER_ADMIN') {
+  if (entiteIdFilter != null) {
+    where.magasin = { entiteId: entiteIdFilter }
+  } else {
     const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
     if (entiteIdFromParams) {
       where.magasin = { entiteId: Number(entiteIdFromParams) }
-    } else if (entiteId > 0) {
-      where.magasin = { entiteId }
     }
-  } else if (entiteId > 0) {
-    where.magasin = { entiteId }
   }
 
   if (dateDebut && dateFin) {

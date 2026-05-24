@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { logAction, getIpAddress, getUserAgent } from '@/lib/audit'
 import { comptabiliserVente, comptabiliserReglementVente } from '@/lib/comptabilisation'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
@@ -34,19 +34,13 @@ export async function GET(request: NextRequest) {
   const searchNumeroBon = request.nextUrl.searchParams.get('numeroBon')?.trim()
   const searchClient = request.nextUrl.searchParams.get('clientSearch')?.trim()
 
-  const where: Prisma.VenteWhereInput = { entiteId: await getEntiteId(session) }
-
-  // Filtrer par entité (support SUPER_ADMIN)
-  const entiteId = await getEntiteId(session)
-  if (session.role === 'SUPER_ADMIN') {
-    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
-    if (entiteIdFromParams) {
-      where.entiteId = Number(entiteIdFromParams)
-    } else if (entiteId > 0) {
-      where.entiteId = entiteId
-    }
-  } else if (entiteId > 0) {
-    where.entiteId = entiteId
+  const entiteIdFilter = await getEntiteIdOrAll(session)
+  const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+  const where: Prisma.VenteWhereInput = {}
+  if (entiteIdFilter != null) {
+    where.entiteId = entiteIdFilter
+  } else if (entiteIdFromParams) {
+    where.entiteId = Number(entiteIdFromParams)
   }
 
   // Filtre par date

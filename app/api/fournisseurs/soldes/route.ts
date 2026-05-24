@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
@@ -10,14 +10,20 @@ export async function GET(request: NextRequest) {
   const authError = requirePermission(session, 'fournisseurs:view')
   if (authError) return authError
 
-  const entiteId = await getEntiteId(session)
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const searchParams = request.nextUrl.searchParams
   const dateDebut = searchParams.get('dateDebut')
   const dateFin = searchParams.get('dateFin')
 
+  // Build reusable entiteId filter
+  const entiteId: number | undefined = entiteIdFilter != null
+    ? entiteIdFilter
+    : (searchParams.get('entiteId')?.trim() ? Number(searchParams.get('entiteId')?.trim()) : undefined)
+  const entiteFilter = entiteId != null ? { entiteId } : {}
+
   try {
     const fournisseurs = await prisma.fournisseur.findMany({
-      where: { actif: true, entiteId },
+      where: { actif: true, ...entiteFilter },
       select: {
         id: true,
         code: true,
@@ -31,12 +37,12 @@ export async function GET(request: NextRequest) {
     })
 
     const whereAchat: any = {
-      entiteId,
+      ...entiteFilter,
       fournisseurId: { not: null },
     }
     
     const whereReglement: any = {
-      entiteId,
+      ...entiteFilter,
       statut: { in: ['VALIDE', 'VALIDEE'] },
     }
 
@@ -63,8 +69,8 @@ export async function GET(request: NextRequest) {
     })
 
     // CL-01: Totaux globaux respectent le filtre période si spécifié
-    const whereAchatGlobal: any = { entiteId, fournisseurId: { not: null }, statut: { in: ['VALIDE', 'VALIDEE'] } }
-    const whereReglementGlobal: any = { entiteId, statut: { in: ['VALIDE', 'VALIDEE'] } }
+    const whereAchatGlobal: any = { ...entiteFilter, fournisseurId: { not: null }, statut: { in: ['VALIDE', 'VALIDEE'] } }
+    const whereReglementGlobal: any = { ...entiteFilter, statut: { in: ['VALIDE', 'VALIDEE'] } }
     if (dateDebut) {
       whereAchatGlobal.date = { ...whereAchatGlobal.date, gte: new Date(dateDebut) }
       whereReglementGlobal.date = { ...whereReglementGlobal.date, gte: new Date(dateDebut) }
@@ -102,7 +108,7 @@ export async function GET(request: NextRequest) {
 
       // R3: Récupérer le numéro de la dernière facture validée
       const derA = await prisma.achat.findFirst({
-        where: { fournisseurId: f.id, entiteId, statut: { in: ['VALIDEE', 'VALIDE'] } },
+        where: { fournisseurId: f.id, ...entiteFilter, statut: { in: ['VALIDEE', 'VALIDE'] } },
         orderBy: { date: 'desc' },
         select: { numero: true }
       })

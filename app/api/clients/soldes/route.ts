@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
@@ -10,15 +10,20 @@ export async function GET(request: NextRequest) {
   const authError = requirePermission(session, 'clients:view')
   if (authError) return authError
 
-  const entiteId = await getEntiteId(session)
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const searchParams = request.nextUrl.searchParams
   const dateDebut = searchParams.get('dateDebut')
   const dateFin = searchParams.get('dateFin')
 
+  // Build reusable entiteId filter
+  const entiteId: number | undefined = entiteIdFilter != null
+    ? entiteIdFilter
+    : (searchParams.get('entiteId')?.trim() ? Number(searchParams.get('entiteId')?.trim()) : undefined)
+
   try {
     console.log('[API] GET /api/clients/soldes - Start');
     const clients = await prisma.client.findMany({
-      where: { actif: true, entiteId },
+      where: { actif: true, ...(entiteId != null ? { entiteId } : {}) },
       select: {
         id: true,
         code: true,
@@ -32,14 +37,15 @@ export async function GET(request: NextRequest) {
       orderBy: { nom: 'asc' },
     })
 
+    const entiteFilter = entiteId != null ? { entiteId } : {}
     const whereVente: any = {
-      entiteId,
+      ...entiteFilter,
       statut: { in: ['VALIDEE', 'VALIDE'] },
       clientId: { not: null },
     }
     
     const whereReglement: any = {
-      entiteId,
+      ...entiteFilter,
       statut: { in: ['VALIDEE', 'VALIDE'] },
     }
 
@@ -63,8 +69,8 @@ export async function GET(request: NextRequest) {
     })
 
     // CL-01: Requêtes globales SANS filtre période (vraies données globales)
-    const whereVenteGlobale: any = { entiteId, statut: { in: ['VALIDEE', 'VALIDE'] }, clientId: { not: null } }
-    const whereReglementGlobal: any = { entiteId, statut: { in: ['VALIDEE', 'VALIDE'] } }
+    const whereVenteGlobale: any = { ...entiteFilter, statut: { in: ['VALIDEE', 'VALIDE'] }, clientId: { not: null } }
+    const whereReglementGlobal: any = { ...entiteFilter, statut: { in: ['VALIDEE', 'VALIDE'] } }
 
     const ventesGlobales = await prisma.vente.groupBy({
       by: ['clientId'],
@@ -100,7 +106,7 @@ export async function GET(request: NextRequest) {
 
       // Récupérer le numéro de la dernière facture
       const derV = await prisma.vente.findFirst({
-        where: { clientId: c.id, entiteId, statut: { in: ['VALIDEE', 'VALIDE'] } },
+        where: { clientId: c.id, ...entiteFilter, statut: { in: ['VALIDEE', 'VALIDE'] } },
         orderBy: { date: 'desc' },
         select: { numero: true, numeroBon: true }
       })

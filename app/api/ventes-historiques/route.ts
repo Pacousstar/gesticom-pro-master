@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { logAction, getIpAddress } from '@/lib/audit'
 import { comptabiliserVente } from '@/lib/comptabilisation'
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const clientId = request.nextUrl.searchParams.get('clientId')
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const where: any = { estHistorique: true }
 
   if (dateDebut && dateFin) {
@@ -39,8 +40,13 @@ export async function GET(request: NextRequest) {
       lte: new Date(dateFin + 'T23:59:59'),
     }
   }
-  if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-    where.entiteId = session.entiteId
+  if (entiteIdFilter != null) {
+    where.entiteId = entiteIdFilter
+  } else {
+    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+    if (entiteIdFromParams) {
+      where.entiteId = Number(entiteIdFromParams)
+    }
   }
   if (clientId) {
     where.clientId = Number(clientId)

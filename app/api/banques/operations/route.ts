@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logAction } from '@/lib/audit'
 import { comptabiliserOperationBancaire } from '@/lib/comptabilisation'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { requirePermission } from '@/lib/require-role'
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   if (authError) return authError
 
   try {
-    const entiteId = await getEntiteId(session)
+    const entiteIdFilter = await getEntiteIdOrAll(session)
     const banqueId = request.nextUrl.searchParams.get('banqueId')
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
@@ -24,14 +24,12 @@ export async function GET(request: NextRequest) {
     const where: any = {}
 
     // Isolation Multi-Entité
-    if (session.role === 'SUPER_ADMIN') {
+    if (entiteIdFilter != null) {
+        where.banque = { entiteId: entiteIdFilter }
+    } else {
         const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
         if (entiteIdFromParams) {
             where.banque = { entiteId: Number(entiteIdFromParams) }
-        }
-    } else {
-        if (entiteId && entiteId > 0) {
-            where.banque = { entiteId }
         }
     }
 
