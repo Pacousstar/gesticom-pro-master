@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
       if (a && a.entiteId !== entiteId) {
         throw new Error('Accès refusé à cette facture (entité différente).')
       }
+      if (a && a.statut === 'ANNULEE') {
+        throw new Error('Impossible d\'ajouter un règlement à un achat annulé.')
+      }
       const targetFournisseurId = achatId ? a?.fournisseurId : fournisseurId
       if (!targetFournisseurId) throw new Error('Fournisseur introuvable')
 
@@ -108,19 +111,23 @@ export async function POST(request: NextRequest) {
       })
 
       if (achatId && a) {
-        const nouveauMontantPaye = Math.min(a.montantTotal, (a.montantPaye || 0) + montant)
-        const nouveauStatutPaiement = nouveauMontantPaye >= a.montantTotal - 0.01 ? 'PAYE' : 'PARTIEL'
-        await tx.achat.update({
-          where: { id: achatId },
-          data: { montantPaye: nouveauMontantPaye, statutPaiement: nouveauStatutPaiement }
-        })
-
         await tx.reglementAchatLigne.create({
           data: {
             reglementId: reglement.id,
             achatId,
             montant,
           }
+        })
+        const allLignes = await tx.reglementAchatLigne.findMany({
+          where: { achatId },
+          select: { montant: true }
+        })
+        const totalFromLignes = allLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+        const nouveauMontantPaye = Math.min(a.montantTotal, totalFromLignes)
+        const nouveauStatutPaiement = nouveauMontantPaye >= a.montantTotal - 0.01 ? 'PAYE' : 'PARTIEL'
+        await tx.achat.update({
+          where: { id: achatId },
+          data: { montantPaye: nouveauMontantPaye, statutPaiement: nouveauStatutPaiement }
         })
       }
 

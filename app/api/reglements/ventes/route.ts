@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
       if (v && v.entiteId !== entiteId) {
         throw new Error('Accès refusé à cette facture (entité différente).')
       }
+      if (v && v.statut === 'ANNULEE') {
+        throw new Error('Impossible d\'ajouter un règlement à une vente annulée.')
+      }
       const targetClientId = venteId ? v?.clientId : clientId
       if (!targetClientId) throw new Error('Client introuvable')
 
@@ -86,7 +89,13 @@ export async function POST(request: NextRequest) {
       }
 
       if (venteId && v) {
-        const resteAPayer = Math.max(0, (v.montantTotal || 0) - (v.montantPaye || 0))
+        const existingLignes = venteId ? await tx.reglementVenteLigne.findMany({
+          where: { venteId },
+          select: { montant: true }
+        }) : []
+        const totalLignePaye = existingLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+        const realMontantPaye = Math.max(totalLignePaye, v.montantPaye || 0)
+        const resteAPayer = Math.max(0, (v.montantTotal || 0) - realMontantPaye)
         if (montant - resteAPayer > 1) {
           throw new Error(`Paiement invalide: le montant (${montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
         }
@@ -116,7 +125,12 @@ export async function POST(request: NextRequest) {
       }
 
       if (venteId && v) {
-        let nouveauMontantPaye = Math.min(v.montantTotal, (v.montantPaye || 0) + montant)
+        const allLignes = await tx.reglementVenteLigne.findMany({
+          where: { venteId },
+          select: { montant: true }
+        })
+        const totalFromLignes = allLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+        let nouveauMontantPaye = Math.min(v.montantTotal, totalFromLignes)
         if (v.montantTotal - nouveauMontantPaye > 0 && v.montantTotal - nouveauMontantPaye <= 1) {
           nouveauMontantPaye = v.montantTotal
         }

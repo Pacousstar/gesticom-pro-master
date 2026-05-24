@@ -47,10 +47,13 @@ export async function DELETE(
           where: {
             OR: [
               { motif: `Règlement Vente ${reglement.vente?.numero || ''}` },
-              { motif: { contains: `Règlement ${id}` } }
-            ]
+              { motif: `Règlement : ${reglement.vente?.numero || ''}` },
+              { id: reglement.id }
+            ].filter(Boolean) as any
           }
         })
+        const magasinId = reglement.vente?.magasinId || reglement.vente?.magasinId
+        if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
       } else if (estModeBanque(reglement.modePaiement)) {
         const opsBancaires = await tx.operationBancaire.findMany({
           where: { reference: reglement.vente?.numero || `REG-${id}` }
@@ -70,9 +73,16 @@ export async function DELETE(
       if (reglement.venteId) {
         const v = await tx.vente.findUnique({ where: { id: reglement.venteId } })
         if (v) {
-          const ancienPaye = v.montantPaye || 0
-          const ancienStatut = v.statutPaiement
-          const nouveauPaye = Math.max(0, ancienPaye - reglement.montant)
+          await tx.reglementVenteLigne.deleteMany({
+            where: { reglementId: id }
+          })
+
+          const remainingLignes = await tx.reglementVenteLigne.findMany({
+            where: { venteId: reglement.venteId },
+            select: { montant: true }
+          })
+          const newTotalFromLignes = remainingLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+          const nouveauPaye = Math.max(0, newTotalFromLignes)
           const nouveauStatut = nouveauPaye >= v.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
           await tx.vente.update({
             where: { id: reglement.venteId },
@@ -82,11 +92,7 @@ export async function DELETE(
             }
           })
 
-          await tx.reglementVenteLigne.deleteMany({
-            where: { reglementId: id }
-          })
-
-          if (v.clientId && ancienStatut !== 'PAYE') {
+          if (v.clientId) {
             const pts = Math.floor(Math.max(0, reglement.montant) / 1000)
             if (pts > 0) {
               await tx.client.update({

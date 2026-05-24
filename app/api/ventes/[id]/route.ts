@@ -211,7 +211,7 @@ export async function PATCH(
 
       const vente = await prisma.vente.findUnique({
         where: { id },
-        include: { magasin: true }
+        include: { magasin: true, ReglementVenteLigne: { select: { montant: true } } }
       })
 
       if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
@@ -219,7 +219,9 @@ export async function PATCH(
         return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
       }
 
-      const resteAPayer = Math.max(0, (vente.montantTotal || 0) - (vente.montantPaye || 0))
+      const totalFromLignes = (vente.ReglementVenteLigne || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+      const realMontantPaye = Math.max(totalFromLignes, vente.montantPaye || 0)
+      const resteAPayer = Math.max(0, (vente.montantTotal || 0) - realMontantPaye)
       if (montantReglement - resteAPayer > 1) {
         return NextResponse.json({
           error: `Paiement invalide : le montant (${montantReglement.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`
@@ -227,12 +229,12 @@ export async function PATCH(
       }
 
       const result = await prisma.$transaction(async (tx) => {
-        let nouveauMontantPaye = Math.min(vente.montantTotal, (vente.montantPaye || 0) + montantReglement)
+        let nouveauMontantPaye = Math.min(vente.montantTotal, realMontantPaye + montantReglement)
         if (vente.montantTotal - nouveauMontantPaye > 0 && vente.montantTotal - nouveauMontantPaye <= 1) {
           nouveauMontantPaye = vente.montantTotal
         }
         const nouveauStatut = nouveauMontantPaye >= vente.montantTotal ? 'PAYE' : 'PARTIEL'
-        const montantReglementApplique = nouveauMontantPaye - (vente.montantPaye || 0)
+        const montantReglementApplique = nouveauMontantPaye - realMontantPaye
 
         const updatedVente = await tx.vente.update({
           where: { id },

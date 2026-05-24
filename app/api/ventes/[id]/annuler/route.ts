@@ -136,12 +136,16 @@ export async function POST(
         }
       }
 
-      // 4. Décrémenter les points de fidélité
+      // 4. Décrémenter les points de fidélité (1 point par 1000 FCFA)
       if (v.clientId && v.montantPaye && v.montantPaye > 0) {
-        await tx.client.update({
-          where: { id: v.clientId },
-          data: { pointsFidelite: { decrement: Math.floor(v.montantPaye) } }
-        }).catch(() => {})
+        const { pointsFideliteDepuisEncaissement } = await import('@/lib/calculs-commerciaux')
+        const pointsADeduire = pointsFideliteDepuisEncaissement(v.montantPaye)
+        if (pointsADeduire > 0) {
+          await tx.client.update({
+            where: { id: v.clientId },
+            data: { pointsFidelite: { decrement: pointsADeduire } }
+          }).catch(() => {})
+        }
       }
 
       // 5. Supprimer toutes les écritures comptables

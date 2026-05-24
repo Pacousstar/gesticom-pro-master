@@ -237,16 +237,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ce magasin n\'appartient pas à votre entité.' }, { status: 403 })
     }
 
-    let montantFactureHT = 0
-    const lignesValides: any[] = []
+let montantFactureHT = 0
+    const lignesBrutes: any[] = []
 
     for (const l of lignes) {
       const produitId = Number(l?.produitId)
-      const quantite = Math.max(0, Number(l?.quantite) || 0)
-      const prixUnitaire = Math.max(0, Number(l?.prixUnitaire) || 0)
-      const tva = Math.max(0, Number(l?.tva ?? l?.tvaPerc) || 0)
-      const remise = Math.max(0, Number(l?.remise) || 0)
-      if (!produitId || quantite <= 0) continue
+      const quantite = Number(l?.quantite) || 0
+      const prixUnitaire = Number(l?.prixUnitaire) || 0
+      const tva = Number(l?.tva) || 0
+      const remise = Number(l?.remise) || 0
+
+      if (quantite <= 0) continue
 
       const produit = await prisma.produit.findUnique({ where: { id: produitId } })
       if (!produit) continue
@@ -263,11 +264,9 @@ export async function POST(request: NextRequest) {
         remiseLigne: remise,
         tvaPourcent: tva,
       })
-      const partFrais = partFraisApprocheLigne(htNet, montantFactureHT, fraisApproche)
-      const valNet = valeurAchatNetAvecFrais(htNet, partFrais)
 
       montantFactureHT += htNet
-      lignesValides.push({
+      lignesBrutes.push({
         produitId,
         designation,
         quantite,
@@ -276,10 +275,18 @@ export async function POST(request: NextRequest) {
         remise,
         montant: montantLigne,
         htNet,
-        valeurAchatNet: valNet,
-        coutUnitaire: htNet / quantite,
       })
     }
+
+    const lignesValides = lignesBrutes.map(l => {
+      const partFrais = partFraisApprocheLigne(l.htNet, montantFactureHT, fraisApproche)
+      const valNet = valeurAchatNetAvecFrais(l.htNet, partFrais)
+      return {
+        ...l,
+        valeurAchatNet: valNet,
+        coutUnitaire: l.htNet / l.quantite,
+      }
+    })
 
     if (!lignesValides.length) {
       return NextResponse.json({ error: 'Lignes invalides.' }, { status: 400 })

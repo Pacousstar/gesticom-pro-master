@@ -86,21 +86,34 @@ export async function DELETE(
 
 // 2/3. Stock : éviter le double retour si l'achat a déjà été annulé.
        if (a.statut !== 'ANNULEE') {
-         await tx.mouvement.deleteMany({
-           where: {
-             OR: [
-               { observation: `Achat ${a.numero}` },
-               { observation: `Modif Achat ${a.numero}` }
-             ]
-           }
-         })
-        for (const l of a.lignes) {
-          await tx.stock.updateMany({
-            where: { produitId: l.produitId, magasinId: a.magasinId, entiteId: a.entiteId },
-            data: { quantite: { decrement: l.quantite } },
+          await tx.mouvement.deleteMany({
+            where: {
+              OR: [
+                { observation: `Achat ${a.numero}` },
+                { observation: `Modif Achat ${a.numero}` }
+              ]
+            }
           })
+         for (const l of a.lignes) {
+           await tx.stock.updateMany({
+             where: { produitId: l.produitId, magasinId: a.magasinId, entiteId: a.entiteId },
+             data: { quantite: { decrement: l.quantite } },
+           })
+         }
+
+        // Recalcul PAMP pour chaque produit affecte
+        const produitIds = [...new Set(a.lignes.map((l: any) => l.produitId))]
+        for (const pid of produitIds) {
+          const produit = await tx.produit.findUnique({ where: { id: pid } })
+          if (produit) {
+            const stocks = await tx.stock.findMany({ where: { produitId: pid } })
+            const totalQte = stocks.reduce((s: number, st: any) => s + (st.quantite || 0), 0)
+            if (totalQte <= 0) {
+              await tx.produit.update({ where: { id: pid }, data: { pamp: a.lignes.filter((l: any) => l.produitId === pid)[0]?.prixUnitaire || produit.prixAchat || 0 } })
+            }
+          }
         }
-       }
+        }
 
       // 4. Nettoyage Trésorerie : CAISSE (correspondance exacte, pas de contains)
       await tx.caisse.deleteMany({
@@ -204,7 +217,7 @@ export async function PATCH(
         }, { status: 400 })
       }
 
-      const nouveauMontantPaye = Math.min(achat.montantTotal, (achat.montantPaye || 0) + montantReglement)
+      const nouveauMontantPaye = Math.min(achat.montantTotal, realMontantPaye + montantReglement)
       const nouveauStatut = nouveauMontantPaye >= achat.montantTotal ? 'PAYE' : 'PARTIEL'
 
       const { estModeBanque, enregistrerOperationBancaire } = await import('@/lib/banque')

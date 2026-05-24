@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
+import { estModeBanque } from '@/lib/banque'
 
 export async function DELETE(
   _request: NextRequest,
@@ -11,7 +14,6 @@ export async function DELETE(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  // VERROU DE SÉCURITÉ : suppression réservée au SUPER_ADMIN
   if (session.role !== 'SUPER_ADMIN') {
     return NextResponse.json(
       { error: 'Action interdite : Les règlements validés ne peuvent être supprimés que par la Direction Générale (Super Administrateur).' },
@@ -36,51 +38,68 @@ export async function DELETE(
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
 
+    if (reglement.statut === 'ANNULE') {
+      return NextResponse.json({ error: 'Ce règlement est déjà annulé.' }, { status: 400 })
+    }
+
     await prisma.$transaction(async (tx) => {
-      // Les écritures des règlements achat sont stockées sous 'ACHAT_REGLEMENT' (cf. lib/comptabilisation.ts)
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
 
-      // Supprimer les mouvements de caisse associés (heuristique par motif / numéro)
-      await tx.caisse.deleteMany({
-        where: {
-          OR: [
-            { motif: { contains: `Règlement ${id}` } },
-            { motif: { contains: reglement.achat?.numero || '---' } },
-          ]
+      if (estModeEspeces(reglement.modePaiement)) {
+        await tx.caisse.deleteMany({
+          where: {
+            OR: [
+              { motif: `Règlement Achat ${reglement.achat?.numero || ''}` },
+              { motif: `Règlement : ${reglement.achat?.numero || ''}` },
+            ].filter(Boolean)
+          }
+        })
+        const magasinId = reglement.achat?.magasinId
+        if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+      } else if (estModeBanque(reglement.modePaiement)) {
+        const opsBancaires = await tx.operationBancaire.findMany({
+          where: { reference: reglement.achat?.numero || `REG-A-${id}` }
+        })
+        for (const op of opsBancaires) {
+          const estSortie = ['RETRAIT', 'VIREMENT_SORTANT', 'FRAIS', 'REGLEMENT_FOURNISSEUR', 'ACHAT', 'SORTIE'].includes(op.type.toUpperCase())
+          await tx.banque.update({
+            where: { id: op.banqueId },
+            data: { soldeActuel: estSortie ? { increment: op.montant } : { decrement: op.montant } }
+          })
         }
-      })
+        await tx.operationBancaire.deleteMany({
+          where: { reference: reglement.achat?.numero || `REG-A-${id}` }
+        })
+      }
 
-      // Mettre à jour l'achat si lié
       if (reglement.achatId) {
+        await tx.reglementAchatLigne.deleteMany({
+          where: { reglementId: id }
+        })
+
         const a = await tx.achat.findUnique({ where: { id: reglement.achatId } })
         if (a) {
-          const nouveauPaye = Math.max(0, (a.montantPaye || 0) - reglement.montant)
+          const remainingLignes = await tx.reglementAchatLigne.findMany({
+            where: { achatId: reglement.achatId },
+            select: { montant: true }
+          })
+          const newTotalFromLignes = remainingLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+          const nouveauPaye = Math.max(0, newTotalFromLignes)
+          const nouveauStatut = nouveauPaye >= a.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
           await tx.achat.update({
             where: { id: reglement.achatId },
             data: {
               montantPaye: nouveauPaye,
-              statutPaiement: nouveauPaye >= a.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
+              statutPaiement: nouveauStatut
             }
           })
-
-          await tx.reglementAchatLigne.deleteMany({
-            where: { reglementId: id }
-          })
         }
       }
 
-      // Mettre à jour la banque si nécessaire (sortie de fonds)
-      if (['CHEQUE', 'VIREMENT', 'MOBILE_MONEY'].includes(reglement.modePaiement)) {
-        const banque = await tx.banque.findFirst({ where: { actif: true, entiteId } })
-        if (banque) {
-          await tx.banque.update({
-            where: { id: banque.id },
-            data: { soldeActuel: { increment: reglement.montant } }
-          })
-        }
-      }
-
-      await tx.reglementAchat.delete({ where: { id } })
+      await tx.reglementAchat.update({
+        where: { id },
+        data: { statut: 'ANNULE' }
+      })
     })
 
     return NextResponse.json({ success: true })
