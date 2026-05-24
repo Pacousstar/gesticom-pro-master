@@ -98,23 +98,23 @@ export async function DELETE(
       await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
 
 // 2/3. Stock : éviter le double retour si la vente a déjà été annulée.
-      await tx.mouvement.deleteMany({
-          where: {
-            OR: [
-              { observation: `Annulation vente ${v.numero}` },
-              { observation: `Sortie Vente ${v.numero}` },
-              { observation: `Modif Vente ${v.numero}` }
-            ]
+       await tx.mouvement.deleteMany({
+           where: {
+             OR: [
+               { observation: `Annulation vente ${v.numero}` },
+               { observation: `Vente ${v.numero}` },
+               { observation: `Modif Vente ${v.numero}` }
+             ]
+           }
+         })
+        if (v.statut !== 'ANNULEE') {
+          for (const l of v.lignes) {
+            await tx.stock.updateMany({
+              where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
+              data: { quantite: { increment: l.quantite } },
+            })
           }
-        })
-       if (v.statut !== 'ANNULEE') {
-         for (const l of v.lignes) {
-           await tx.stock.updateMany({
-             where: { produitId: l.produitId, magasinId: v.magasinId },
-             data: { quantite: { increment: l.quantite } },
-           })
-         }
-       }
+        }
 
        // 4. Nettoyage Trésorerie : CAISSE (y compris écritures d'annulation)
       await tx.caisse.deleteMany({
@@ -155,7 +155,7 @@ export async function DELETE(
       await tx.reglementVente.deleteMany({ where: { venteId: id } })
       await tx.vente.delete({ where: { id: id } })
 
-      // 7. LOG D'AUDIT : Mouchard de suppression (Capture intégrale pour restauration)
+// 7. LOG D'AUDIT : Mouchard de suppression (Capture intégrale pour restauration)
       await logSuppression(
         session, 
         'VENTE', 
@@ -164,6 +164,9 @@ export async function DELETE(
         v, // Snapshot complet
         getIpAddress(_request)
       )
+
+      // 8. Recalculer le solde caisse après suppression
+      await recalculerSoldeCaisse(v.magasinId, tx)
     }, { timeout: 30000 })
     
     // Invalider le cache pour affichage immédiat
@@ -344,7 +347,7 @@ export async function PATCH(
         // 1. Rollback stocks
         for (const l of oldVente.lignes) {
           await tx.stock.updateMany({
-            where: { produitId: l.produitId, magasinId: oldVente.magasinId },
+            where: { produitId: l.produitId, magasinId: oldVente.magasinId, entiteId: oldVente.entiteId },
             data: { quantite: { increment: l.quantite } }
           })
 }
@@ -352,7 +355,7 @@ export async function PATCH(
            where: {
              OR: [
                { observation: `Annulation vente ${oldVente.numero}` },
-               { observation: `Sortie Vente ${oldVente.numero}` },
+               { observation: `Vente ${oldVente.numero}` },
                { observation: `Modif Vente ${oldVente.numero}` }
              ]
            }
@@ -483,7 +486,7 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
         // 5. Appliquer stocks
         for (const l of lignesAcreer) {
           await tx.stock.updateMany({
-            where: { produitId: l.produitId, magasinId: updated.magasinId },
+            where: { produitId: l.produitId, magasinId: updated.magasinId, entiteId: updated.entiteId },
             data: { quantite: { decrement: l.quantite } }
           })
           await tx.mouvement.create({

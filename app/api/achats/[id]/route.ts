@@ -84,7 +84,7 @@ export async function DELETE(
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
       await deleteEcrituresByReference('ACHAT_STOCK', id, tx)
 
-      // 2/3. Stock : éviter le double retour si l'achat a déjà été annulé.
+// 2/3. Stock : éviter le double retour si l'achat a déjà été annulé.
        if (a.statut !== 'ANNULEE') {
          await tx.mouvement.deleteMany({
            where: {
@@ -96,11 +96,11 @@ export async function DELETE(
          })
         for (const l of a.lignes) {
           await tx.stock.updateMany({
-            where: { produitId: l.produitId, magasinId: a.magasinId },
+            where: { produitId: l.produitId, magasinId: a.magasinId, entiteId: a.entiteId },
             data: { quantite: { decrement: l.quantite } },
           })
         }
-      }
+       }
 
       // 4. Nettoyage Trésorerie : CAISSE (correspondance exacte, pas de contains)
       await tx.caisse.deleteMany({
@@ -134,6 +134,9 @@ export async function DELETE(
       
       // 7. LOG D'AUDIT : Mouchard de suppression (Indélébile)
       await logSuppression(session, 'ACHAT', id, `SUPPRESSION RADICALE : Achat fournisseur ${a.numero} effacé avec régul. stocks et trésorerie par Super Admin`, { numero: a.numero, montant: a.montantTotal }, getIpAddress(_request))
+
+      // 8. Recalculer le solde caisse après suppression
+      await recalculerSoldeCaisse(a.magasinId, tx)
     }, { timeout: 30000 })
     
     // Invalider le cache pour affichage immédiat
@@ -305,7 +308,7 @@ const reglAchat = await tx.reglementAchat.create({
         // 1. Rollback stocks : Retirer les produits du stock car c'était une entrée
         for (const l of oldAchat.lignes) {
           await tx.stock.updateMany({
-            where: { produitId: l.produitId, magasinId: oldAchat.magasinId },
+            where: { produitId: l.produitId, magasinId: oldAchat.magasinId, entiteId: oldAchat.entiteId },
             data: { quantite: { decrement: l.quantite } }
           })
         }
@@ -474,7 +477,7 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
 
         for (const l of nouvellesLignes) {
           await tx.stock.updateMany({
-            where: { produitId: l.produitId, magasinId: updated.magasinId },
+            where: { produitId: l.produitId, magasinId: updated.magasinId, entiteId: updated.entiteId },
             data: { quantite: { increment: l.quantite } }
           })
 

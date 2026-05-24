@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
         await enregistrerMouvementCaisse({
           magasinId: targetMagasinId,
           type: 'SORTIE',
-          motif: `Charge : ${rubrique}${observation ? ' (' + observation + ')' : ''}`,
+          motif: `Charge #${c.id} : ${rubrique}${observation ? ' (' + observation + ')' : ''}`,
           montant: montant,
           utilisateurId: session.userId,
           entiteId: entiteId || 1,
@@ -249,7 +249,7 @@ export async function POST(request: NextRequest) {
             libelle: `Charge : ${rubrique}`,
             montant: montant,
             utilisateurId: session.userId,
-            reference: `CHG-${Date.now()}`,
+            reference: `CHG-${c.id}`,
             observation: observation
           }, tx)
         }

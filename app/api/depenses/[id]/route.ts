@@ -171,26 +171,20 @@ export async function PATCH(
 
       // RD2: Re-synchroniser la trésorerie (caisse ou banque)
       if (shouldComptabiliser && d.montantPaye && d.montantPaye > 0) {
-        // Nettoyer les anciens mouvements de trésorerie (par motif)
+        // Nettoyer les anciens mouvements de trésorerie (par motif exact basé sur l'ID)
         await tx.caisse.deleteMany({
           where: {
             entiteId: d.entiteId,
             type: 'SORTIE',
-            OR: [
-              { motif: { contains: `Dépense #${id}` } },
-              { AND: [{ motif: { contains: d.libelle } }, { date: d.date }] }
-            ]
+            motif: { contains: `Dépense #${id}` }
           }
         })
 
-        // Supprimer les anciennes opérations bancaires
+        // Supprimer les anciennes opérations bancaires (par libellé basé sur l'ID)
         const oldOpsBancaires = await tx.operationBancaire.findMany({
           where: {
             entiteId: d.entiteId,
-            OR: [
-              { libelle: { contains: `Dépense #${id}` } },
-              { AND: [{ libelle: { contains: d.libelle } }, { date: d.date }] }
-            ]
+            libelle: { contains: `Dépense #${id}` }
           }
         })
         for (const op of oldOpsBancaires) {
@@ -299,27 +293,20 @@ await prisma.$transaction(async (tx) => {
       // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('DEPENSE', id, tx)
 
-      // 2. Nettoyage Trésorerie : CAISSE
+      // 2. Nettoyage Trésorerie : CAISSE (motif exact basé sur l'ID)
       await tx.caisse.deleteMany({
         where: {
           entiteId: d.entiteId,
           type: 'SORTIE',
-          OR: [
-            { motif: { contains: `Dépense #${id}` } },
-            { motif: { contains: `Dépense ${d.libelle}` } }
-          ]
+          motif: { contains: `Dépense #${id}` }
         }
       })
 
-      // 3. Nettoyage Trésorerie : BANQUE
+      // 3. Nettoyage Trésorerie : BANQUE (libellé basé sur l'ID)
       const opsBancaires = await tx.operationBancaire.findMany({
         where: { 
-          montant: d.montantPaye || d.montant,
-          date: d.date,
-          OR: [
-            { libelle: { contains: `Dépense #${id}` } },
-            { libelle: { contains: d.libelle } }
-          ],
+          entiteId: d.entiteId,
+          libelle: { contains: `Dépense #${id}` },
           banque: { entiteId: d.entiteId }
         }
       })

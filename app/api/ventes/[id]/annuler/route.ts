@@ -6,6 +6,9 @@ import { verifierCloture } from '@/lib/cloture'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { logSuppression, getIpAddress } from '@/lib/audit'
 import { requireRole } from '@/lib/require-role'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
+import { estModeBanque } from '@/lib/banque'
 
 export async function POST(
   _request: NextRequest,
@@ -24,7 +27,7 @@ export async function POST(
   try {
     const v = await prisma.vente.findUnique({
       where: { id },
-      include: { lignes: true },
+      include: { lignes: true, reglements: true },
     })
     if (!v) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
     if (session.role !== 'SUPER_ADMIN') {
@@ -56,7 +59,7 @@ export async function POST(
 
       for (const l of v.lignes) {
         await tx.stock.updateMany({
-          where: { produitId: l.produitId, magasinId: v.magasinId },
+          where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
           data: { quantite: { increment: l.quantite } },
         })
         await tx.mouvement.create({
@@ -80,54 +83,55 @@ export async function POST(
         data: { statut: 'ANNULE' }
       })
 
-      // 3. Compenser les mouvements de trésorerie par un mouvement inverse
-      if (v.montantPaye && v.montantPaye > 0) {
-        const { estModeEspeces } = await import('@/lib/enums-commerce')
-        const { estModeBanque } = await import('@/lib/banque')
+      // 3. Compenser les mouvements de trésorerie en fonction des règlements réels
+      const reglements = (v.reglements || []) as any[]
+      const totalEspeces = reglements.filter((r: any) => estModeEspeces(r.modePaiement)).reduce((s: number, r: any) => s + (r.montant || 0), 0)
+        || (estModeEspeces(v.modePaiement) ? (v.montantPaye || 0) : 0)
+      const totalBanque = reglements.filter((r: any) => estModeBanque(r.modePaiement)).reduce((s: number, r: any) => s + (r.montant || 0), 0)
+        || (estModeBanque(v.modePaiement) ? (v.montantPaye || 0) : 0)
 
-        if (estModeEspeces(v.modePaiement)) {
-          // Compensation CAISSE : créer une SORTIE pour annuler l'entrée
-          const { enregistrerMouvementCaisse } = await import('@/lib/caisse')
-          await enregistrerMouvementCaisse({
-            magasinId: v.magasinId,
-            type: 'SORTIE',
-            motif: `ANNULATION VENTE ${v.numero}`,
-            montant: v.montantPaye,
-            utilisateurId: session.userId,
-            date: dateOperation
-          }, tx)
-        } else if (estModeBanque(v.modePaiement)) {
-          // Compensation BANQUE : créer une opération inverse
-          const opBancaire = await tx.operationBancaire.findFirst({
-            where: { reference: v.numero },
-            orderBy: { date: 'desc' }
-          })
-          if (opBancaire) {
-            const banque = await tx.banque.findUnique({ where: { id: opBancaire.banqueId } })
-            if (banque) {
-              const soldeAvant = banque.soldeActuel
-              const soldeApres = soldeAvant - v.montantPaye
-              // Rollback balance
-              await tx.banque.update({
-                where: { id: opBancaire.banqueId },
-                data: { soldeActuel: soldeApres }
-              })
-              // Create reimbursement op
-              await tx.operationBancaire.create({
-                data: {
-                  banqueId: opBancaire.banqueId,
-                  type: 'REMBOURSEMENT',
-                  libelle: `ANNULATION VENTE ${v.numero}`,
-                  montant: v.montantPaye,
-                  soldeAvant,
-                  soldeApres,
-                  utilisateurId: session.userId,
-                  reference: `ANN-${v.numero}`,
-                  date: dateOperation,
-                  observation: `Annulation de la vente ${v.numero} - rollback automatique`
-                }
-              })
-            }
+      if (totalEspeces > 0) {
+        await enregistrerMouvementCaisse({
+          magasinId: v.magasinId,
+          type: 'SORTIE',
+          motif: `ANNULATION VENTE ${v.numero}`,
+          montant: totalEspeces,
+          utilisateurId: session.userId,
+          entiteId: v.entiteId,
+          date: dateOperation,
+        }, tx)
+        await recalculerSoldeCaisse(v.magasinId, tx)
+      }
+
+      if (totalBanque > 0) {
+        const opBancaire = await tx.operationBancaire.findFirst({
+          where: { reference: v.numero },
+          orderBy: { date: 'desc' }
+        })
+        if (opBancaire) {
+          const banque = await tx.banque.findUnique({ where: { id: opBancaire.banqueId } })
+          if (banque) {
+            const soldeAvant = banque.soldeActuel
+            const soldeApres = soldeAvant - totalBanque
+            await tx.banque.update({
+              where: { id: opBancaire.banqueId },
+              data: { soldeActuel: soldeApres }
+            })
+            await tx.operationBancaire.create({
+              data: {
+                banqueId: opBancaire.banqueId,
+                type: 'REMBOURSEMENT',
+                libelle: `ANNULATION VENTE ${v.numero}`,
+                montant: totalBanque,
+                soldeAvant,
+                soldeApres,
+                utilisateurId: session.userId,
+                reference: `ANN-${v.numero}`,
+                date: dateOperation,
+                observation: `Annulation de la vente ${v.numero} - rollback automatique`,
+                entiteId: v.entiteId,
+              }
+            })
           }
         }
       }

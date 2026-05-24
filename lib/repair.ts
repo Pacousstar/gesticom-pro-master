@@ -63,6 +63,37 @@ export async function repairBankIntegrity() {
 }
 
 /**
+ * RÉPARATION CAISSE : Recalcule le soldeCaisse de chaque magasin à partir des mouvements réels.
+ */
+export async function repairCaisseIntegrity() {
+  const magasins = await prisma.magasin.findMany();
+  let repairedCount = 0;
+
+  for (const m of magasins) {
+    const entrees = (await prisma.caisse.aggregate({
+      where: { magasinId: m.id, type: 'ENTREE' },
+      _sum: { montant: true },
+    }))._sum.montant || 0;
+
+    const sorties = (await prisma.caisse.aggregate({
+      where: { magasinId: m.id, type: 'SORTIE' },
+      _sum: { montant: true },
+    }))._sum.montant || 0;
+
+    const soldeReel = entrees - sorties;
+
+    if (Math.abs((m.soldeCaisse || 0) - soldeReel) > 0.01) {
+      await prisma.magasin.update({
+        where: { id: m.id },
+        data: { soldeCaisse: soldeReel },
+      });
+      repairedCount++;
+    }
+  }
+  return repairedCount;
+}
+
+/**
  * Rattache toutes les données orphelines (entiteId = 0 ou null) à l'entité principale (ID: 1).
  */
 export async function repairVisibility() {
@@ -106,15 +137,17 @@ export async function repairVisibility() {
  * MAIN SELF-HEALING : Lance toutes les réparations
  */
 export async function runFullSelfHealing() {
-    console.log("🚀 Lancement du Self-Healing GestiCom Pro...");
+    console.log("Lancement du Self-Healing GestiCom Pro...");
     const vis = await repairVisibility();
     const stocks = await repairStockIntegrity();
     const banks = await repairBankIntegrity();
+    const caisses = await repairCaisseIntegrity();
     
     return {
         visibility: vis,
         stocksRepaired: stocks,
         banksRepaired: banks,
+        caissesRepaired: caisses,
         timestamp: new Date()
     };
 }

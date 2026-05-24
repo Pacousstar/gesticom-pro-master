@@ -137,22 +137,20 @@ export async function PATCH(
         modePaiement: c.modePaiement,
       }, tx)
 
-      // RC2: Re-synchroniser la trésorerie (caisse ou banque)
-      // Nettoyer les anciens mouvements
+// RC2: Re-synchroniser la trésorerie (caisse ou banque)
+      // Nettoyer les anciens mouvements par motif exact basé sur l'ID
       await tx.caisse.deleteMany({
         where: {
           entiteId: c.entiteId,
           type: 'SORTIE',
-          OR: [
-            { motif: { contains: c.rubrique } },
-            { motif: { contains: c.beneficiaire ?? '___X___' } }
-          ]
+          motif: { contains: `Charge #${id}` }
         }
       })
 
       const oldOpsBancaires = await tx.operationBancaire.findMany({
         where: {
-          libelle: { contains: c.rubrique },
+          entiteId: c.entiteId,
+          reference: { contains: `CHG-${id}` },
           banque: { entiteId: c.entiteId }
         }
       })
@@ -178,7 +176,7 @@ export async function PATCH(
           await enregistrerMouvementCaisse({
             magasinId: targetMagasinId,
             type: 'SORTIE',
-            motif: `Charge : ${c.rubrique}${c.observation ? ' (' + c.observation + ')' : ''}`,
+            motif: `Charge #${c.id} : ${c.rubrique}${c.observation ? ' (' + c.observation + ')' : ''}`,
             montant: c.montant,
             utilisateurId: session.userId,
             entiteId: c.entiteId,
@@ -254,27 +252,19 @@ export async function DELETE(
       // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('CHARGE', id, tx)
 
-      // 2. Nettoyage Trésorerie : CAISSE
+      // 2. Nettoyage Trésorerie : CAISSE (motif exact basé sur l'ID)
       await tx.caisse.deleteMany({
         where: {
           entiteId: charge.entiteId,
           type: 'SORTIE',
-          OR: [
-            { motif: { contains: `Charge #${id}` } },
-            { motif: { contains: `Charge : ${charge.rubrique}` } }
-          ]
+          motif: { contains: `Charge #${id}` }
         }
       })
 
-      // 3. Nettoyage Trésorerie : BANQUE
+      // 3. Nettoyage Trésorerie : BANQUE (libellé exact basé sur l'ID)
       const opsBancaires = await tx.operationBancaire.findMany({
         where: {
-          montant: charge.montant,
-          date: charge.date,
-          OR: [
-            { libelle: { contains: `Charge #${id}` } },
-            { libelle: { contains: charge.rubrique } }
-          ],
+          reference: `CHG-${id}`,
           banque: { entiteId: charge.entiteId }
         }
       })

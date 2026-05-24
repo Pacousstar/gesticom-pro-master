@@ -200,3 +200,34 @@ export async function POST() {
     return NextResponse.json({ error: 'Erreur lors de la maintenance.' }, { status: 500 })
   }
 }
+
+export async function PUT() {
+  const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
+  if (process.env.NODE_ENV === 'production' || !maintenanceEnabled) {
+    return NextResponse.json({ error: 'Route de maintenance désactivée en production.' }, { status: 403 })
+  }
+  const session = await getSession()
+  if (!session || session.role !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
+  }
+
+  try {
+    const { repairCaisseIntegrity, repairStockIntegrity, repairBankIntegrity } = await import('@/lib/repair')
+
+    const [caissesRepaired, stocksRepaired, banksRepaired] = await Promise.all([
+      repairCaisseIntegrity(),
+      repairStockIntegrity(),
+      repairBankIntegrity(),
+    ])
+
+    return NextResponse.json({
+      ok: true,
+      caissesRepaired,
+      stocksRepaired,
+      banksRepaired,
+    })
+  } catch (error) {
+    console.error('Repair Error:', error)
+    return NextResponse.json({ error: 'Erreur lors de la réparation.' }, { status: 500 })
+  }
+}

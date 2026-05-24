@@ -9,6 +9,7 @@ import {
   comptabiliserReglementVente,
   comptabiliserReglementAchat
 } from '@/lib/comptabilisation'
+import { repairCaisseIntegrity, repairStockIntegrity, repairBankIntegrity } from '@/lib/repair'
 import path from 'path'
 import fs from 'fs'
 
@@ -137,6 +138,20 @@ export async function POST(request: NextRequest) {
     })
 
     addLog('⚖️ Réalignement des soldes tiers terminé.')
+
+    // 6. REALIGNEMENT DES SOLDES CAISSE, STOCKS ET BANQUES (Post-Corrections C1-C8)
+    addLog('💰 Réalignement des soldes caisse...')
+    const caissesReparees = await repairCaisseIntegrity()
+    addLog(`   ${caissesReparees} magasin(s) de caisse recalculé(s)`)
+
+    addLog('📦 Réalignement des stocks...')
+    const stocksReparess = await repairStockIntegrity()
+    addLog(`   ${stocksReparess} stock(s) recalculé(s)`)
+
+    addLog('🏦 Réalignement des soldes bancaires...')
+    const banksReparees = await repairBankIntegrity()
+    addLog(`   ${banksReparees} banque(s) recalculée(s)`)
+
     addLog('🌟 MIGRATION MASTER TERMINÉE AVEC SUCCÈS.')
 
     return NextResponse.json({ success: true, logs })
