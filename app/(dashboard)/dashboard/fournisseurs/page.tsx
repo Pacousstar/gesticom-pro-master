@@ -265,10 +265,6 @@ export default function FournisseursPage() {
           if (inv.fournisseurId && f.id) return inv.fournisseurId === f.id
           return inv.tier === f.nom || inv.tier === f.nom?.trim()
         })
-        if (providerInvoices.length === 0) {
-            showError("Aucun achat impayé trouvé pour ce fournisseur.")
-            return
-        }
         setPaymentModal({ fournisseur: f, invoices: providerInvoices })
       }
     } catch (e) {

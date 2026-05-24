@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { getEntiteIdOrAll } from '@/lib/get-entite-id'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -11,6 +12,7 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')
   const dateFin = request.nextUrl.searchParams.get('dateFin')
   const filter = request.nextUrl.searchParams.get('filter') // 'TOUT', 'SOLDER', 'NON_SOLDER'
+  const entiteIdFilter = await getEntiteIdOrAll(session)
 
   const dateFilter = dateDebut && dateFin ? {
     gte: new Date(dateDebut + 'T00:00:00'),
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
       date: dateFilter,
       statut: { in: ['VALIDE', 'VALIDEE'] }
     }
-    if (session.role !== 'SUPER_ADMIN' && session.entiteId) where.entiteId = session.entiteId
+    if (entiteIdFilter) where.entiteId = entiteIdFilter
     if (filter === 'NON_SOLDER') where.statutPaiement = { in: ['PARTIEL', 'CREDIT'] }
     if (filter === 'SOLDER') where.statutPaiement = 'PAYE'
 
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
       date: dateFilter,
       statut: { in: ['VALIDE', 'VALIDEE'] }
     }
-    if (session.role !== 'SUPER_ADMIN' && session.entiteId) where.entiteId = session.entiteId
+    if (entiteIdFilter) where.entiteId = entiteIdFilter
     if (filter === 'NON_SOLDER') where.statutPaiement = { in: ['PARTIEL', 'CREDIT'] }
     if (filter === 'SOLDER') where.statutPaiement = 'PAYE'
 

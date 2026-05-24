@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { getEntiteId } from '@/lib/get-entite-id'
+import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { clientSchema } from '@/lib/validations'
 
@@ -19,20 +19,10 @@ export async function GET(request: NextRequest) {
   const skip = (page - 1) * limit
 
   const q = String(request.nextUrl.searchParams.get('q') || '').trim()
-  const entiteId = await getEntiteId(session)
+  const entiteIdFilter = await getEntiteIdOrAll(session)
   const where: any = { actif: true }
 
-  // Filtrage par entité (support SUPER_ADMIN)
-  if (session.role === 'SUPER_ADMIN') {
-    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
-    if (entiteIdFromParams) {
-      where.entiteId = Number(entiteIdFromParams)
-    } else if (entiteId > 0) {
-      where.entiteId = entiteId
-    }
-  } else if (entiteId > 0) {
-    where.entiteId = entiteId
-  }
+  if (entiteIdFilter) where.entiteId = entiteIdFilter
 
   if (q) {
     where.OR = [

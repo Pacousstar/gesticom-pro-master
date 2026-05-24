@@ -340,10 +340,6 @@ export default function ClientsPage() {
           const tierName = inv.tier || (inv.client?.nom) || (typeof inv.client === 'string' ? inv.client : null)
           return tierName === c.nom || tierName === c.nom?.trim()
         })
-        if (clientInvoices.length === 0) {
-            showError("Aucune facture impayée trouvée pour ce client.")
-            return
-        }
         setPaymentModal({ client: c, invoices: clientInvoices })
       }
     } catch (e) {
