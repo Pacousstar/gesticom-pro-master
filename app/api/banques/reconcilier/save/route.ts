@@ -49,18 +49,51 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // 2. Vérifier si une opération similaire existe déjà pour éviter les doublons
+      // 2. Verifier si une operation existe deja pour ce reglement (eviter le double-comptage)
+      // Le reglement a deja cree une operation bancaire a la creation (ex: REGLEMENT_CLIENT)
+      // La reconciliation cree une operation VIREMENT_ENTRANT/SORTANT
+      // On verifie d'abord si une operation VIREMENT_ENTRANT/SORTANT de rapprochement existe deja
       const typeOpBancaire = type === 'VENTE' ? 'VIREMENT_ENTRANT' : 'VIREMENT_SORTANT'
-      const exists = await tx.operationBancaire.findFirst({
+      const existsRap = await tx.operationBancaire.findFirst({
         where: {
           banqueId: Number(banqueId),
-          type: typeOpBancaire,
           reference: `RAP-${reglementId}`
         }
       })
 
-      if (exists) {
+      if (existsRap) {
         return { success: true, existing: true }
+      }
+
+      // Verifier si le reglement a deja une operation bancaire associee
+      // Si oui, on marque juste le reglement comme rapproche sans creer une nouvelle operation
+      let reglementHasExistingOp = false
+      if (type === 'VENTE') {
+        const regl = await tx.reglementVente.findUnique({ where: { id: reglementId }, select: { venteId: true, modePaiement: true } })
+        if (regl?.venteId) {
+          const vente = await tx.vente.findUnique({ where: { id: regl.venteId }, select: { numero: true } })
+          if (vente) {
+            const existingOp = await tx.operationBancaire.findFirst({
+              where: { reference: vente.numero, type: { in: ['REGLEMENT_CLIENT', 'VENTE'] } }
+            })
+            if (existingOp) reglementHasExistingOp = true
+          }
+        }
+      } else if (type === 'ACHAT') {
+        const regl = await tx.reglementAchat.findUnique({ where: { id: reglementId }, select: { achatId: true, modePaiement: true } })
+        if (regl?.achatId) {
+          const achat = await tx.achat.findUnique({ where: { id: regl.achatId }, select: { numero: true } })
+          if (achat) {
+            const existingOp = await tx.operationBancaire.findFirst({
+              where: { reference: achat.numero, type: { in: ['REGLEMENT_FOURNISSEUR', 'ACHAT'] } }
+            })
+            if (existingOp) reglementHasExistingOp = true
+          }
+        }
+      }
+
+      if (reglementHasExistingOp) {
+        return { success: true, existing: true, message: 'Rapprochement enregistre. Operation bancaire deja existante.' }
       }
 
       // RB2: Utiliser enregistrerOperationBancaire (montant toujours positif, direction via type)

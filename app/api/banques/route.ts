@@ -23,23 +23,36 @@ export async function GET(request: NextRequest) {
       orderBy: { nomBanque: 'asc' },
     })
 
-    // Calculer le solde actuel pour chaque banque
-    const banquesAvecSolde = await Promise.all(
-      banques.map(async (banque) => {
-        const operations = await prisma.operationBancaire.findMany({
-          where: { banqueId: banque.id },
-        })
-        let solde = banque.soldeInitial
-        for (const op of operations) {
-          if (estTypeOperationBanqueEntree(op.type)) {
-            solde += op.montant
-          } else {
-            solde -= op.montant
-          }
-        }
-        return { ...banque, soldeActuel: solde }
-      })
-    )
+    const banqueIds = banques.map(b => b.id)
+    const operationAggregates = await prisma.operationBancaire.groupBy({
+      by: ['banqueId'],
+      where: { banqueId: { in: banqueIds } },
+      _sum: { montant: true },
+    })
+
+    const typeAggregates = await prisma.operationBancaire.groupBy({
+      by: ['banqueId', 'type'],
+      where: { banqueId: { in: banqueIds } },
+      _sum: { montant: true },
+    })
+
+    const soldeByBanque = new Map<number, number>()
+    for (const b of banques) {
+      soldeByBanque.set(b.id, b.soldeInitial)
+    }
+    for (const row of typeAggregates) {
+      const current = soldeByBanque.get(row.banqueId) || 0
+      if (estTypeOperationBanqueEntree(row.type)) {
+        soldeByBanque.set(row.banqueId, current + (row._sum.montant || 0))
+      } else {
+        soldeByBanque.set(row.banqueId, current - (row._sum.montant || 0))
+      }
+    }
+
+    const banquesAvecSolde = banques.map(b => ({
+      ...b,
+      soldeActuel: soldeByBanque.get(b.id) ?? b.soldeInitial,
+    }))
 
     return NextResponse.json({ data: banquesAvecSolde })
   } catch (error) {

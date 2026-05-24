@@ -216,19 +216,19 @@ export async function PATCH(
         }
       }
 
-      return updated
-    })
+      const { comptabiliserReglementAchat } = await import('@/lib/comptabilisation')
+      await comptabiliserReglementAchat({
+        reglementId: updated.id,
+        achatId: updated.achatId ?? 0,
+        numeroAchat: updated.achat?.numero || 'SANS_NUMERO',
+        date: updated.date,
+        montant: updated.montant,
+        modePaiement: updated.modePaiement,
+        utilisateurId: session.userId,
+        entiteId: updated.entiteId ?? undefined
+      }, tx)
 
-    const { comptabiliserReglementAchat } = await import('@/lib/comptabilisation')
-    await comptabiliserReglementAchat({
-      reglementId: result.id,
-      achatId: result.achatId ?? 0,
-      numeroAchat: result.achat?.numero || 'SANS_NUMERO',
-      date: result.date,
-      montant: result.montant,
-      modePaiement: result.modePaiement,
-      utilisateurId: session.userId,
-      entiteId: result.entiteId ?? undefined
+      return updated
     })
 
     return NextResponse.json(result)

@@ -156,10 +156,12 @@ export async function PATCH(
           where: {
             OR: [
               { motif: `Règlement Vente ${old.vente?.numero || ''}` },
-              { motif: { contains: `Règlement ${id}` } }
-            ]
+              { motif: `Règlement : ${old.vente?.numero || ''}` },
+            ].filter(Boolean)
           }
         })
+        const magasinId = old.vente?.magasinId
+        if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
       } else if (estModeBanque(old.modePaiement)) {
         const opsBancaires = await tx.operationBancaire.findMany({
           where: { reference: old.vente?.numero || `REG-${id}` }

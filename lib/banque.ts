@@ -90,3 +90,27 @@ export async function enregistrerOperationBancaire(
 
 // RB5: Ré-exporter les helpers depuis enums-commerce pour compatibilité
 export { estModeBanque, estTypeOperationBanqueEntree }
+
+export async function recalculerSoldeBanque(banqueId: number, tx: any) {
+  const banque = await tx.banque.findUnique({ where: { id: banqueId } })
+  if (!banque) return
+
+  const operations = await tx.operationBancaire.findMany({
+    where: { banqueId },
+    select: { type: true, montant: true },
+  })
+
+  let solde = banque.soldeInitial
+  for (const op of operations) {
+    if (estTypeOperationBanqueEntree(op.type)) {
+      solde += op.montant
+    } else {
+      solde -= op.montant
+    }
+  }
+
+  await tx.banque.update({
+    where: { id: banqueId },
+    data: { soldeActuel: solde },
+  })
+}

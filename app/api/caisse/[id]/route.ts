@@ -98,11 +98,11 @@ export async function DELETE(
 
     const magasinId = op.magasinId
 
-    await deleteEcrituresByReference('CAISSE', id)
-    await prisma.caisse.delete({ where: { id } })
-
-    // RC2 : Recalculer le solde caisse après suppression
-    await recalculerSoldeCaisse(magasinId)
+    await prisma.$transaction(async (tx: any) => {
+      await deleteEcrituresByReference('CAISSE', id, tx)
+      await tx.caisse.delete({ where: { id } })
+      await recalculerSoldeCaisse(magasinId, tx)
+    })
 
     // P3-C : Invalider le cache pour affichage immédiat
     const { revalidatePath } = await import('next/cache')

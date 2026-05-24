@@ -8,7 +8,7 @@ import { logSuppression, getIpAddress } from '@/lib/audit'
 import { requireRole } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
-import { estModeBanque } from '@/lib/banque'
+import { estModeBanque, estTypeOperationBanqueEntree } from '@/lib/banque'
 
 export async function POST(
   _request: NextRequest,
@@ -25,19 +25,19 @@ export async function POST(
   }
 
   try {
-    const v = await prisma.vente.findUnique({
+    const a = await prisma.achat.findUnique({
       where: { id },
       include: { lignes: true, reglements: true },
     })
-    if (!v) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
+    if (!a) return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
     if (session.role !== 'SUPER_ADMIN') {
       const entiteId = await getEntiteId(session)
-      if (v.entiteId !== entiteId) {
+      if (a.entiteId !== entiteId) {
         return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
       }
     }
-    if (v.statut === 'ANNULEE') {
-      return NextResponse.json({ error: 'Cette vente est déjà annulée.' }, { status: 400 })
+    if (a.statut === 'ANNULEE') {
+      return NextResponse.json({ error: 'Cet achat est déjà annulé.' }, { status: 400 })
     }
 
     const body = await _request.json().catch(() => ({}))
@@ -54,65 +54,78 @@ export async function POST(
     }
 
     return await prisma.$transaction(async (tx) => {
-      // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
-      await verifierCloture(v.date, session, tx)
+      await verifierCloture(a.date, session, tx)
 
-      for (const l of v.lignes) {
+      for (const l of a.lignes) {
         await tx.stock.updateMany({
-          where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
-          data: { quantite: { increment: l.quantite } },
+          where: { produitId: l.produitId, magasinId: a.magasinId, entiteId: a.entiteId },
+          data: { quantite: { decrement: l.quantite } },
         })
         await tx.mouvement.create({
           data: {
-            type: 'ENTREE',
+            type: 'SORTIE',
             produitId: l.produitId,
-            magasinId: v.magasinId,
-            entiteId: v.entiteId,
+            magasinId: a.magasinId,
+            entiteId: a.entiteId,
             utilisateurId: session.userId,
             quantite: l.quantite,
-            observation: `Annulation vente ${v.numero}`,
+            observation: `Annulation achat ${a.numero}`,
           },
         })
       }
 
-      await tx.vente.update({ where: { id }, data: { statut: 'ANNULEE' } })
+      const produitIds = [...new Set(a.lignes.map(l => l.produitId))]
+      for (const pid of produitIds) {
+        const produit = await tx.produit.findUnique({ where: { id: pid } })
+        if (produit) {
+          const stocks = await tx.stock.findMany({ where: { produitId: pid } })
+          const totalQte = stocks.reduce((s: number, st: any) => s + (st.quantite || 0), 0)
+          if (totalQte <= 0) {
+            const ligne = a.lignes.find(l => l.produitId === pid)
+            await tx.produit.update({
+              where: { id: pid },
+              data: { pamp: ligne?.coutUnitaire || produit.prixAchat || 0 }
+            })
+          }
+        }
+      }
 
-      // 2. Annuler les règlements associés (on ne supprime plus rien pour la traçabilité)
-      await tx.reglementVente.updateMany({ 
-        where: { venteId: id },
+      await tx.achat.update({ where: { id }, data: { statut: 'ANNULEE' } })
+
+      await tx.reglementAchat.updateMany({
+        where: { achatId: id },
         data: { statut: 'ANNULE' }
       })
 
-      // 3. Compenser les mouvements de trésorerie en fonction des règlements réels
-      const reglements = (v.reglements || []) as any[]
+      const reglements = (a.reglements || []) as any[]
       const totalEspeces = reglements.filter((r: any) => estModeEspeces(r.modePaiement)).reduce((s: number, r: any) => s + (r.montant || 0), 0)
-        || (estModeEspeces(v.modePaiement) ? (v.montantPaye || 0) : 0)
+        || (estModeEspeces(a.modePaiement) ? (a.montantPaye || 0) : 0)
       const totalBanque = reglements.filter((r: any) => estModeBanque(r.modePaiement)).reduce((s: number, r: any) => s + (r.montant || 0), 0)
-        || (estModeBanque(v.modePaiement) ? (v.montantPaye || 0) : 0)
+        || (estModeBanque(a.modePaiement) ? (a.montantPaye || 0) : 0)
 
       if (totalEspeces > 0) {
         await enregistrerMouvementCaisse({
-          magasinId: v.magasinId,
-          type: 'SORTIE',
-          motif: `ANNULATION VENTE ${v.numero}`,
+          magasinId: a.magasinId,
+          type: 'ENTREE',
+          motif: `ANNULATION ACHAT ${a.numero}`,
           montant: totalEspeces,
           utilisateurId: session.userId,
-          entiteId: v.entiteId,
+          entiteId: a.entiteId,
           date: dateOperation,
         }, tx)
-        await recalculerSoldeCaisse(v.magasinId, tx)
+        await recalculerSoldeCaisse(a.magasinId, tx)
       }
 
       if (totalBanque > 0) {
         const opsBancaires = await tx.operationBancaire.findMany({
-          where: { reference: v.numero }
+          where: { reference: a.numero }
         })
         for (const op of opsBancaires) {
-          const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
+          const estSortie = ['RETRAIT', 'VIREMENT_SORTANT', 'FRAIS', 'REGLEMENT_FOURNISSEUR', 'ACHAT', 'SORTIE'].includes(op.type.toUpperCase())
           const banque = await tx.banque.findUnique({ where: { id: op.banqueId } })
           if (banque) {
             const soldeAvant = banque.soldeActuel
-            const soldeApres = estEntree ? soldeAvant - op.montant : soldeAvant + op.montant
+            const soldeApres = estSortie ? soldeAvant + op.montant : soldeAvant - op.montant
             await tx.banque.update({
               where: { id: op.banqueId },
               data: { soldeActuel: soldeApres }
@@ -120,58 +133,43 @@ export async function POST(
             await tx.operationBancaire.create({
               data: {
                 banqueId: op.banqueId,
-                type: estEntree ? 'REMBOURSEMENT' : 'DEPOT',
-                libelle: `ANNULATION VENTE ${v.numero}`,
+                type: estSortie ? 'DEPOT' : 'RETRAIT',
+                libelle: `ANNULATION ACHAT ${a.numero}`,
                 montant: op.montant,
                 soldeAvant,
                 soldeApres,
                 utilisateurId: session.userId,
-                reference: `ANN-${v.numero}`,
+                reference: `ANN-A-${a.numero}`,
                 date: dateOperation,
-                observation: `Annulation de la vente ${v.numero} - rollback automatique`,
-                entiteId: v.entiteId,
+                observation: `Annulation de l'achat ${a.numero} - rollback automatique`,
+                entiteId: a.entiteId,
               }
             })
           }
         }
       }
 
-      // 4. Décrémenter les points de fidélité (1 point par 1000 FCFA)
-      if (v.clientId && v.montantPaye && v.montantPaye > 0) {
-        const { pointsFideliteDepuisEncaissement } = await import('@/lib/calculs-commerciaux')
-        const pointsADeduire = pointsFideliteDepuisEncaissement(v.montantPaye)
-        if (pointsADeduire > 0) {
-          await tx.client.update({
-            where: { id: v.clientId },
-            data: { pointsFidelite: { decrement: pointsADeduire } }
-          }).catch(() => {})
-        }
-      }
-
-      // 5. Supprimer toutes les écritures comptables
       const { deleteEcrituresByReference } = await import('@/lib/delete-ecritures')
-      await deleteEcrituresByReference('VENTE', id, tx)
-      await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
-      await deleteEcrituresByReference('VENTE_STOCK', id, tx)
-      await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
+      await deleteEcrituresByReference('ACHAT', id, tx)
+      await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
+      await deleteEcrituresByReference('ACHAT_STOCK', id, tx)
 
-      // 6. LOG D'AUDIT
       await logSuppression(
         session,
-        'VENTE',
+        'ACHAT',
         id,
-        `ANNULATION : Facture ${v.numero} annulée, stocks restitués, trésorerie compensée`,
-        { numero: v.numero, montantTotal: v.montantTotal, montantPaye: v.montantPaye, modePaiement: v.modePaiement },
+        `ANNULATION : Achat ${a.numero} annulé, stocks restitués, trésorerie compensée`,
+        { numero: a.numero, montantTotal: a.montantTotal, montantPaye: a.montantPaye, modePaiement: a.modePaiement },
         getIpAddress(_request)
       )
-      
-      revalidatePath('/dashboard/ventes')
-      revalidatePath('/api/ventes')
-      
+
+      revalidatePath('/dashboard/achats')
+      revalidatePath('/api/achats')
+
       return NextResponse.json({ ok: true })
     })
   } catch (e) {
-    console.error('POST /api/ventes/[id]/annuler:', e)
+    console.error('POST /api/achats/[id]/annuler:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
