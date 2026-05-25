@@ -60,12 +60,23 @@ export async function GET(request: NextRequest) {
     select: { montant: true, type: true }
   })
 
-  // 4. Depenses (Sorties) — RC5 : exclure ESPECE singulier aussi
+  // 4. Depenses (Sorties) — uniquement les montants payés
   const depenses = await prisma.depense.findMany({
     where: {
       ...whereDate,
       modePaiement: { notIn: MODES_ESPECES },
+      montantPaye: { gt: 0 },
       ...whereMagasin,
+      ...whereEntite,
+    },
+    select: { montantPaye: true, modePaiement: true }
+  })
+
+  // 4b. Charges (Sorties) — modes bancaires uniquement
+  const charges = await prisma.charge.findMany({
+    where: {
+      ...whereDate,
+      modePaiement: { notIn: MODES_ESPECES },
       ...whereEntite,
     },
     select: { montant: true, modePaiement: true }
@@ -136,20 +147,30 @@ export async function GET(request: NextRequest) {
       select: { montant: true, type: true }
     })
     pastOpsBanque.forEach(o => {
-      if (['REGLEMENT_CLIENT', 'REGLEMENT_FOURNISSEUR', 'VENTE', 'ACHAT'].includes(o.type)) return
+      if (['REGLEMENT_CLIENT', 'REGLEMENT_FOURNISSEUR', 'VENTE', 'ACHAT', 'DEPENSE', 'CHARGE'].includes(o.type)) return
       const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
       if (isEntree) ouvertures.VIREMENT += o.montant
       else ouvertures.VIREMENT -= o.montant
     })
 
-    // Dépenses passées (Exclu Espèces) — RC5
+    // Dépenses passées — uniquement les montants payés
     const pastDepenses = await prisma.depense.findMany({
-      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, ...whereMagasin, ...whereEntite },
-      select: { montant: true, modePaiement: true }
+      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, montantPaye: { gt: 0 }, ...whereMagasin, ...whereEntite },
+      select: { montantPaye: true, modePaiement: true }
     })
     pastDepenses.forEach(d => {
       const mode = mapMode(d.modePaiement) as keyof typeof ouvertures
-      if (ouvertures[mode] !== undefined) ouvertures[mode] -= d.montant
+      if (ouvertures[mode] !== undefined) ouvertures[mode] -= d.montantPaye
+    })
+
+    // Charges passées — modes bancaires uniquement
+    const pastCharges = await prisma.charge.findMany({
+      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, ...whereEntite },
+      select: { montant: true, modePaiement: true }
+    })
+    pastCharges.forEach(c => {
+      const mode = mapMode(c.modePaiement) as keyof typeof ouvertures
+      if (ouvertures[mode] !== undefined) ouvertures[mode] -= c.montant
     })
   }
 
@@ -171,18 +192,24 @@ export async function GET(request: NextRequest) {
     else stats.ESPECES -= c.montant
   })
 
-  // Agrégation OP BANQUE (Période) — on exclut REGLEMENT_CLIENT/FOURNISSEUR/VENTE/ACHAT déjà comptés dans reglements
+  // Agrégation OP BANQUE (Période) — on exclut les types déjà comptés via reglements, depenses et charges
   opsBancaires.forEach(o => {
-    if (['REGLEMENT_CLIENT', 'REGLEMENT_FOURNISSEUR', 'VENTE', 'ACHAT'].includes(o.type)) return
+    if (['REGLEMENT_CLIENT', 'REGLEMENT_FOURNISSEUR', 'VENTE', 'ACHAT', 'DEPENSE', 'CHARGE'].includes(o.type)) return
     const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
     if (isEntree) stats.VIREMENT += o.montant
     else stats.VIREMENT -= o.montant
   })
 
-  // Agrégation Depenses (Période)
+  // Agrégation Depenses (Période) — montantPaye payé uniquement
   depenses.forEach(d => {
     const mode = mapMode(d.modePaiement) as keyof typeof stats
-    if (stats[mode] !== undefined) stats[mode] -= d.montant
+    if (stats[mode] !== undefined) stats[mode] -= d.montantPaye
+  })
+
+  // Agrégation Charges (Période)
+  charges.forEach(c => {
+    const mode = mapMode(c.modePaiement) as keyof typeof stats
+    if (stats[mode] !== undefined) stats[mode] -= c.montant
   })
 
   // RC7 : Crédits fournisseurs — filtrer aussi les achats annulés
