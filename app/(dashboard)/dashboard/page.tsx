@@ -296,8 +296,7 @@ export default function DashboardPage() {
             key={i}
             title={s.title}
             value={s.isFcfa ? `${(s.value as number).toLocaleString('fr-FR')} F` : (s as any).isPercent ? `${s.value}%` : s.value}
-            // @ts-ignore
-            subValue={s.subValue}
+    subtitle={(s as any).subValue}
             icon={s.icon}
             color={s.color as any}
             loading={refreshing}

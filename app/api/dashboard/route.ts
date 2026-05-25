@@ -116,12 +116,12 @@ export async function GET(request: NextRequest) {
         INNER JOIN "Produit" p ON s."produitId" = p.id
         INNER JOIN "Magasin" m ON s."magasinId" = m.id
         WHERE p.actif = 1 AND s.quantite < p."seuilMin"
-        ${entiteId ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
+        ${entiteId != null ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
         ORDER BY s.quantite ASC LIMIT 5
       `.catch(catchEmpty('stock.low')),
       // 5 - Ventes récentes
       prisma.vente.findMany({
-        where: entiteCondition, take: 5, orderBy: { date: 'desc' },
+        where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition }, take: 5, orderBy: { date: 'desc' },
         select: { id: true, numero: true, date: true, montantTotal: true, clientLibre: true, client: { select: { nom: true } } },
       }).catch(catchEmpty('vente.recent')),
       // 6 - Répartition par catégorie
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
         INNER JOIN "Produit" p ON s."produitId" = p.id
         INNER JOIN "Magasin" m ON s."magasinId" = m.id
         WHERE p.actif = 1
-        ${entiteId ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
+        ${entiteId != null ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
       `.catch(err => {
         console.error('[dashboard] stock.raw', err)
         return [{ total_achat: 0, total_vente: 0, nb_ruptures: 0, nb_en_stock: 0 }]
@@ -160,9 +160,9 @@ export async function GET(request: NextRequest) {
         _sum: { debit: true, credit: true }
       }).catch(() => ({ _sum: { debit: 0, credit: 0 } })),
 
-      // 11 - Dettes Fournisseurs (Achats non soldés - exclure ANNULEE)
+      // 11 - Dettes Fournisseurs (Achats validés non soldés)
       prisma.achat.aggregate({
-        where: { statut: { not: 'ANNULEE' }, ...entiteCondition as any },
+        where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
         _sum: { montantTotal: true, montantPaye: true, fraisApproche: true }
       }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0, fraisApproche: 0 } })),
 
@@ -270,13 +270,8 @@ const result = await Promise.race([
     // liées au champ magasin.soldeCaisse historique.
     // FILTRAGE PAR DATE : Caisse = opérations du jour (date), pas date de création (createdAt)
     // Banque = solde actuel (toutes dates)
-    const soldesPhysiques = await prisma.$transaction([
-        prisma.banque.aggregate({ where: entiteCondition, _sum: { soldeActuel: true } }),
-        prisma.caisse.aggregate({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'ENTREE' }, _sum: { montant: true } }),
-        prisma.caisse.aggregate({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'SORTIE' }, _sum: { montant: true } })
-      ])
-
-    tresorerieBanque = toNum(soldesPhysiques[0]._sum?.soldeActuel)
+    const soldeBanque = await prisma.banque.aggregate({ where: entiteCondition, _sum: { soldeActuel: true } })
+    tresorerieBanque = toNum(soldeBanque._sum?.soldeActuel)
     
     // Calculer la caisse sur toutes les périodes (comme la page Caisse)
     const allCaisse = await prisma.caisse.groupBy({
