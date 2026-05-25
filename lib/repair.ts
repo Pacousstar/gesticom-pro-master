@@ -143,6 +143,106 @@ export async function repairVisibility() {
 }
 
 /**
+ * RÉPARATION LIGNES RÈGLEMENTS : Crée les ReglementVenteLigne et ReglementAchatLigne
+ * manquantes pour les règlements qui n'ont aucune ligne associée.
+ */
+export async function repairReglementLigneIntegrity() {
+  let venteLignesCreated = 0
+  let achatLignesCreated = 0
+
+  const reglementsVente = await prisma.reglementVente.findMany({
+    where: { venteId: { not: null } },
+    select: { id: true, venteId: true, montant: true }
+  })
+  for (const rv of reglementsVente) {
+    if (!rv.venteId) continue
+    const existing = await prisma.reglementVenteLigne.findFirst({
+      where: { reglementId: rv.id, venteId: rv.venteId }
+    })
+    if (!existing) {
+      await prisma.reglementVenteLigne.create({
+        data: {
+          reglementId: rv.id,
+          venteId: rv.venteId,
+          montant: rv.montant,
+        }
+      })
+      venteLignesCreated++
+    }
+  }
+
+  const reglementsAchat = await prisma.reglementAchat.findMany({
+    where: { achatId: { not: null } },
+    select: { id: true, achatId: true, montant: true }
+  })
+  for (const ra of reglementsAchat) {
+    if (!ra.achatId) continue
+    const existing = await prisma.reglementAchatLigne.findFirst({
+      where: { reglementId: ra.id, achatId: ra.achatId }
+    })
+    if (!existing) {
+      await prisma.reglementAchatLigne.create({
+        data: {
+          reglementId: ra.id,
+          achatId: ra.achatId,
+          montant: ra.montant,
+        }
+      })
+      achatLignesCreated++
+    }
+  }
+
+  return { venteLignesCreated, achatLignesCreated }
+}
+
+/**
+ * RÉPARATION MONTANT PAYE : Recalcule vente.montantPaye et achat.montantPaye
+ * à partir des ReglementLigne (source de vérité).
+ */
+export async function repairMontantPayeIntegrity() {
+  let ventesRepaired = 0
+  let achatsRepaired = 0
+
+  const ventes = await prisma.vente.findMany({
+    select: { id: true, montantPaye: true }
+  })
+  for (const v of ventes) {
+    const lignes = await prisma.reglementVenteLigne.findMany({
+      where: { venteId: v.id },
+      select: { montant: true }
+    })
+    const montantPayeReel = lignes.reduce((s, l) => s + (l.montant || 0), 0)
+    if (Math.abs((v.montantPaye || 0) - montantPayeReel) > 0.01) {
+      await prisma.vente.update({
+        where: { id: v.id },
+        data: { montantPaye: montantPayeReel }
+      })
+      ventesRepaired++
+    }
+  }
+
+  const achats = await prisma.achat.findMany({
+    select: { id: true, montantPaye: true }
+  })
+  for (const a of achats) {
+    const lignes = await prisma.reglementAchatLigne.findMany({
+      where: { achatId: a.id },
+      select: { montant: true }
+    })
+    const montantPayeReel = lignes.reduce((s, l) => s + (l.montant || 0), 0)
+    if (Math.abs((a.montantPaye || 0) - montantPayeReel) > 0.01) {
+      await prisma.achat.update({
+        where: { id: a.id },
+        data: { montantPaye: montantPayeReel }
+      })
+      achatsRepaired++
+    }
+  }
+
+  return { ventesRepaired, achatsRepaired }
+}
+
+/**
  * MAIN SELF-HEALING : Lance toutes les réparations
  */
 export async function runFullSelfHealing() {
@@ -151,12 +251,16 @@ export async function runFullSelfHealing() {
     const stocks = await repairStockIntegrity();
     const banks = await repairBankIntegrity();
     const caisses = await repairCaisseIntegrity();
+    const lignes = await repairReglementLigneIntegrity();
+    const montantPaye = await repairMontantPayeIntegrity();
     
     return {
         visibility: vis,
         stocksRepaired: stocks,
         banksRepaired: banks,
         caissesRepaired: caisses,
+        lignesCreated: lignes,
+        montantPayeRepaired: montantPaye,
         timestamp: new Date()
     };
 }
