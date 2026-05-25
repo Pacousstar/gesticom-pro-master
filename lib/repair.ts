@@ -38,28 +38,37 @@ export async function repairStockIntegrity() {
 }
 
 /**
- * RÉPARATION TRÉSORERIE : Aligne le solde des banques sur la dernière opération connue.
+ * RÉPARATION TRÉSORERIE : Recalcule le solde de chaque banque à partir de toutes les opérations.
  */
 export async function repairBankIntegrity() {
-  const banques = await prisma.banque.findMany();
-  let repairedCount = 0;
+  const { estTypeOperationBanqueEntree } = await import('./enums-commerce')
+  const banques = await prisma.banque.findMany()
+  let repairedCount = 0
 
   for (const b of banques) {
-    const lastOp = await prisma.operationBancaire.findFirst({
+    const operations = await prisma.operationBancaire.findMany({
       where: { banqueId: b.id },
-      orderBy: { id: 'desc' }
-    });
-    const soldeReel = lastOp ? lastOp.soldeApres : b.soldeInitial;
-    
+      select: { type: true, montant: true }
+    })
+
+    let soldeReel = b.soldeInitial
+    for (const op of operations) {
+      if (estTypeOperationBanqueEntree(op.type)) {
+        soldeReel += op.montant
+      } else {
+        soldeReel -= op.montant
+      }
+    }
+
     if (Math.abs(b.soldeActuel - soldeReel) > 0.01) {
       await prisma.banque.update({
         where: { id: b.id },
         data: { soldeActuel: soldeReel }
-      });
-      repairedCount++;
+      })
+      repairedCount++
     }
   }
-  return repairedCount;
+  return repairedCount
 }
 
 /**

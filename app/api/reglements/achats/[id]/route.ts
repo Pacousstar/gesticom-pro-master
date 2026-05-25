@@ -143,14 +143,33 @@ export async function PATCH(
 
     const result = await prisma.$transaction(async (tx) => {
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
-      await tx.caisse.deleteMany({
-        where: {
-          OR: [
-            { motif: { contains: `Règlement ${id}` } },
-            { motif: { contains: old.achat?.numero || '---' } }
-          ]
+
+      if (estModeEspeces(old.modePaiement)) {
+        await tx.caisse.deleteMany({
+          where: {
+            OR: [
+              { motif: `Règlement Achat ${old.achat?.numero || ''}` },
+              { motif: `Règlement : ${old.achat?.numero || ''}` },
+            ].filter(Boolean)
+          }
+        })
+        const magasinId = old.achat?.magasinId
+        if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+      } else if (estModeBanque(old.modePaiement)) {
+        const opsBancaires = await tx.operationBancaire.findMany({
+          where: { reference: old.achat?.numero || `REG-A-${id}` }
+        })
+        for (const op of opsBancaires) {
+          const estSortie = ['RETRAIT', 'VIREMENT_SORTANT', 'FRAIS', 'REGLEMENT_FOURNISSEUR', 'ACHAT', 'SORTIE'].includes(op.type.toUpperCase())
+          await tx.banque.update({
+            where: { id: op.banqueId },
+            data: { soldeActuel: estSortie ? { increment: op.montant } : { decrement: op.montant } }
+          })
         }
-      })
+        await tx.operationBancaire.deleteMany({
+          where: { reference: old.achat?.numero || `REG-A-${id}` }
+        })
+      }
 
       const updated = await tx.reglementAchat.update({
         where: { id },
