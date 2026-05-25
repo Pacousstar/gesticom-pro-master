@@ -749,6 +749,7 @@ export default function BanquePage() {
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Type</th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Mode</th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Source</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Bénéficiaire</th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Libellé / Référence</th>
                   <th className="px-4 py-2 text-right text-xs font-medium uppercase text-gray-500">Montant</th>
                 </tr>
@@ -771,6 +772,9 @@ export default function BanquePage() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-[10px] text-gray-500 uppercase tracking-tighter">
                       {f.source}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-xs text-gray-600">
+                      {f.beneficiaire || '—'}
                     </td>
                     <td className="px-4 py-2 text-xs text-gray-700">
                       <div className="font-semibold">{f.libelle}</div>

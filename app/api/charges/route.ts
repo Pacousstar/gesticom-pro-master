@@ -239,8 +239,8 @@ export async function POST(request: NextRequest) {
         // ✅ SYNCHRO BANQUE : Charge par Chèque/Virement/MM
         const { enregistrerOperationBancaire } = await import('@/lib/banque')
         if (estModeBanque(modePaiementRaw)) {
-          await enregistrerOperationBancaire({
-            banqueId: banqueId,
+await enregistrerOperationBancaire({
+            banqueId,
             entiteId,
             date,
             type: 'CHARGE',
@@ -248,6 +248,7 @@ export async function POST(request: NextRequest) {
             montant: montant,
             utilisateurId: session.userId,
             reference: `CHG-${c.id}`,
+            beneficiaire: c.beneficiaire || null,
             observation: observation
           }, tx)
         }

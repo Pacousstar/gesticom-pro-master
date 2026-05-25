@@ -255,6 +255,7 @@ export async function POST(request: NextRequest) {
               montant: montantPaye,
               utilisateurId: session.userId,
               reference: pieceJustificative || `EXP-${d.id}`,
+              beneficiaire: body.beneficiaire || d.beneficiaire || null,
               observation: observation
             }, tx)
           }

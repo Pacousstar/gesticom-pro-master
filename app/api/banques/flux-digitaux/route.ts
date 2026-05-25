@@ -70,6 +70,15 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // 3b. Charges bancaires (filtrées par entité)
+    const charges = await prisma.charge.findMany({
+      where: {
+        date: whereDate,
+        modePaiement: { in: modesFiltre },
+        ...whereEntite
+      }
+    })
+
     // Types d'opérations bancaires manuelles
     const TYPES_OPS_MANUEL_FLUX = new Set([
       'DEPOT',
@@ -102,6 +111,7 @@ export async function GET(request: NextRequest) {
         libelle: `Règlement Vente ${r.vente?.numero || ''} - ${r.client?.nom || 'Client'}`,
         mode: r.modePaiement,
         montant: r.montant,
+        beneficiaire: r.client?.nom || '—',
       })),
       ...regsAchat.map(r => ({
         id: `RA-${r.id}`,
@@ -112,6 +122,7 @@ export async function GET(request: NextRequest) {
         libelle: `Règlement Achat ${r.achat?.numero || ''} - ${r.fournisseur?.nom || 'Fournisseur'}`,
         mode: r.modePaiement,
         montant: r.montant,
+        beneficiaire: r.fournisseur?.nom || '—',
       })),
       ...depenses.map(d => ({
         id: `DP-${d.id}`,
@@ -122,6 +133,18 @@ export async function GET(request: NextRequest) {
         libelle: `Dépense : ${d.libelle}`,
         mode: d.modePaiement,
         montant: d.montantPaye,
+        beneficiaire: d.beneficiaire || '—',
+      })),
+      ...charges.map(c => ({
+        id: `CH-${c.id}`,
+        date: c.date,
+        type: 'SORTIE',
+        source: 'CHARGE',
+        reference: `CHG-${c.id}`,
+        libelle: `Charge : ${c.rubrique}`,
+        mode: c.modePaiement,
+        montant: c.montant,
+        beneficiaire: c.beneficiaire || '—',
       })),
       ...opsBancaires.filter((o) =>
         TYPES_OPS_MANUEL_FLUX.has(String(o.type || '').toUpperCase()),
@@ -135,6 +158,7 @@ export async function GET(request: NextRequest) {
           libelle: `${o.libelle} (${o.banque.nomBanque})`,
           mode: 'BANQUE',
           montant: o.montant,
+          beneficiaire: o.beneficiaire || '—',
         }))
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
