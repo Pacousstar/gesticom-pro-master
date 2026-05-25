@@ -553,7 +553,7 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
                 montant: mntR,
                 utilisateurId: session!.userId,
                 reference: updated.numero,
-                beneficiaire: updated.clientLibre || null,
+                beneficiaire: updated.client?.nom || updated.clientLibre || null,
               }, tx)
             }
           }

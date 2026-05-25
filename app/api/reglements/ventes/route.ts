@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
       const client = await tx.client.findUnique({
         where: { id: targetClientId },
-        select: { id: true, entiteId: true, code: true }
+        select: { id: true, entiteId: true, code: true, nom: true }
       })
       if (!client) throw new Error('Client introuvable')
       if (client.entiteId && client.entiteId !== entiteId) {
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
             montant,
             utilisateurId: session.userId,
             reference: v?.numero || `REG-${Date.now()}`,
-            beneficiaire: client?.nom || null,
+            beneficiaire: client?.nom || v?.clientLibre || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
         }

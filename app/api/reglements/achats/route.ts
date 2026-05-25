@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
       const fournisseur = await tx.fournisseur.findUnique({
         where: { id: targetFournisseurId },
-        select: { id: true, entiteId: true }
+        select: { id: true, entiteId: true, nom: true }
       })
       if (!fournisseur) throw new Error('Fournisseur introuvable')
       if (fournisseur.entiteId && fournisseur.entiteId !== entiteId) {

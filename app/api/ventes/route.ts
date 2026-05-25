@@ -395,7 +395,7 @@ const st = await tx.stock.findUnique({
             })),
           },
         },
-        include: { lignes: true, magasin: { select: { code: true, nom: true } } },
+        include: { client: { select: { nom: true } }, lignes: true, magasin: { select: { code: true, nom: true } } },
       })
 
       for (const l of lignesValides) {
@@ -470,7 +470,7 @@ await tx.stock.update({
               montant: montantReg,
               utilisateurId: session.userId,
               reference: num,
-              beneficiaire: clientLibre || null,
+              beneficiaire: v?.client?.nom || clientLibre || null,
             }, tx)
           }
         }

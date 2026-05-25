@@ -557,7 +557,7 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
                 montant: mntR,
                 utilisateurId: session!.userId,
                 reference: updated.numero,
-                beneficiaire: updated.fournisseurLibre || null,
+                beneficiaire: updated.fournisseur?.nom || updated.fournisseurLibre || null,
               }, tx)
             }
           }
