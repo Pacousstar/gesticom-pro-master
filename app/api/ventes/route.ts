@@ -469,7 +469,8 @@ await tx.stock.update({
               libelle: `Vente ${num}`,
               montant: montantReg,
               utilisateurId: session.userId,
-              reference: num
+              reference: num,
+              beneficiaire: clientLibre || null,
             }, tx)
           }
         }

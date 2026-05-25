@@ -33,14 +33,15 @@ export async function POST(request: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       // 1. DÉBIT DE LA SOURCE
       if (sourceIdType === 'BANQUE') {
-        await enregistrerOperationBancaire({
+await enregistrerOperationBancaire({
           banqueId: Number(sourceId),
           entiteId,
           date: dateVirement,
           type: 'VIREMENT_SORTANT',
           libelle: `Virement Interne => ${destIdType === 'CAISSE' ? 'Caisse' : 'Banque ' + destId}`,
-          montant: montant + fraisMontant, // On retire aussi les frais du compte source
+          montant: montant + fraisMontant,
           utilisateurId: session.userId,
+          reference: `VIR-${Date.now()}`,
           observation: motif
         }, tx)
       } else if (sourceIdType === 'CAISSE') {
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
           libelle: `Virement Interne depuis ${sourceIdType === 'CAISSE' ? 'Caisse' : 'Banque ' + sourceId}`,
           montant: montant,
           utilisateurId: session.userId,
+          reference: `VIR-${Date.now()}`,
           observation: motif
         }, tx)
       } else if (destIdType === 'CAISSE') {

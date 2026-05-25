@@ -317,6 +317,7 @@ export async function POST(
             montant,
             utilisateurId: session.userId,
             reference: `CC-CLI-${clientId}-${Date.now()}`,
+            beneficiaire: client.nom || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
         }

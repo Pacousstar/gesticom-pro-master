@@ -482,6 +482,7 @@ let montantFactureHT = 0
             montant: montantReg,
             utilisateurId: session.userId,
             reference: num,
+            beneficiaire: fournisseurLibre || null,
             observation: `Paiement via ${reg.mode}`
           }, tx)
         }

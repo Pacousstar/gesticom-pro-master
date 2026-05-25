@@ -165,6 +165,7 @@ export async function POST(
             montant,
             utilisateurId: session.userId,
             reference: `CC-FOURN-${fournisseurId}-${Date.now()}`,
+            beneficiaire: fournisseur.nom || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
         }

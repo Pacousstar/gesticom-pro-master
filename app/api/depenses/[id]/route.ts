@@ -229,6 +229,7 @@ export async function PATCH(
               montant: d.montantPaye,
               utilisateurId: session.userId,
               reference: d.pieceJustificative || `EXP-${d.id}`,
+              beneficiaire: d.beneficiaire || null,
               observation: d.observation
             }, tx)
           }

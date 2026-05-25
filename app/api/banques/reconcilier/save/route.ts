@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       }
 
       // RB2: Utiliser enregistrerOperationBancaire (montant toujours positif, direction via type)
-      const operation = await enregistrerOperationBancaire({
+const operation = await enregistrerOperationBancaire({
         banqueId: Number(banqueId),
         entiteId: banque.entiteId,
         date: new Date(date),
@@ -105,7 +105,8 @@ export async function POST(request: NextRequest) {
         libelle: `Rapprochement: ${libelle}`,
         montant: Math.abs(Number(montant)),
         utilisateurId: session.userId,
-        reference: `RAP-${reglementId}`
+        reference: `RAP-${reglementId}`,
+        beneficiaire: libelle || null,
       }, tx)
 
       if (!operation) {

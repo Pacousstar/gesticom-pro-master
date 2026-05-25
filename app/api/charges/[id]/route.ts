@@ -193,6 +193,7 @@ export async function PATCH(
           montant: c.montant,
           utilisateurId: session.userId,
           reference: `CHG-${c.id}`,
+          beneficiaire: c.beneficiaire || null,
           observation: c.observation
         }, tx)
       }

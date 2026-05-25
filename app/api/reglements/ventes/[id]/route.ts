@@ -197,7 +197,7 @@ export async function PATCH(
           date: dateFinal,
           observation: observation !== undefined ? (observation || null) : old.observation
         },
-        include: { vente: true }
+include: { vente: { include: { client: { select: { nom: true } } } } }
       })
 
       if (updated.venteId) {
@@ -265,6 +265,7 @@ export async function PATCH(
           montant: montantFinal,
           utilisateurId: session.userId,
           reference: updated.vente?.numero || `REG-${updated.id}`,
+          beneficiaire: updated.vente?.client?.nom || updated.vente?.clientLibre || null,
         }, tx)
       }
 

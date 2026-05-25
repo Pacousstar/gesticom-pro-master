@@ -200,7 +200,7 @@ export async function PATCH(
 
       const achat = await prisma.achat.findUnique({
         where: { id },
-        include: { magasin: true, ReglementAchatLigne: { select: { montant: true } } }
+        include: { fournisseur: { select: { nom: true } }, magasin: true, ReglementAchatLigne: { select: { montant: true } } }
       })
 
       if (!achat) return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
@@ -279,6 +279,7 @@ const reglAchat = await tx.reglementAchat.create({
             montant: montantReglement,
             utilisateurId: session!.userId,
             reference: achat.numero,
+            beneficiaire: achat.fournisseur?.nom || achat.fournisseurLibre || null,
             observation: `Paiement via ${modePaiement}`,
           }, tx)
         }
@@ -556,6 +557,7 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
                 montant: mntR,
                 utilisateurId: session!.userId,
                 reference: updated.numero,
+                beneficiaire: updated.fournisseurLibre || null,
               }, tx)
             }
           }

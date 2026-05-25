@@ -211,7 +211,7 @@ export async function PATCH(
 
       const vente = await prisma.vente.findUnique({
         where: { id },
-        include: { magasin: true, ReglementVenteLigne: { select: { montant: true } } }
+        include: { client: { select: { nom: true } }, magasin: true, ReglementVenteLigne: { select: { montant: true } } }
       })
 
       if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
@@ -305,6 +305,7 @@ export async function PATCH(
             montant: montantReglementApplique,
             utilisateurId: session!.userId,
             reference: vente.numero,
+            beneficiaire: vente.client?.nom || vente.clientLibre || null,
             observation: `Paiement via ${modePaiement}`,
           }, tx)
         }
@@ -552,6 +553,7 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
                 montant: mntR,
                 utilisateurId: session!.userId,
                 reference: updated.numero,
+                beneficiaire: updated.clientLibre || null,
               }, tx)
             }
           }
