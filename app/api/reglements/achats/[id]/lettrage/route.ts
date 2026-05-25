@@ -43,35 +43,42 @@ export async function PATCH(
             if (achat.fournisseurId !== reglement.fournisseurId) throw new Error('Le règlement appartient à un autre fournisseur')
             if (achat.entiteId !== entiteId) throw new Error('Accès refusé à cet achat (entité différente)')
 
-            // 3. Mettre à jour le règlement
+            // 4. Calculer le reste à payer depuis les Lignes (source de vérité)
+            const totalLignePaye = (achat.ReglementAchatLigne as any[] || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+            const realMontantPaye = totalLignePaye
+            const resteAPayer = Math.max(0, (achat.montantTotal || 0) - realMontantPaye)
+            if (reglement.montant - resteAPayer > 0.01) {
+                throw new Error(`Paiement invalide: le règlement (${reglement.montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
+            }
+
+            // 5. Mettre à jour le règlement
             const updatedReglement = await tx.reglementAchat.update({
                 where: { id },
                 data: { achatId }
             })
 
-            // 4. Mettre à jour l'achat
-            const totalLignePaye = (achat.ReglementAchatLigne as any[] || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
-            const realMontantPaye = Math.max(totalLignePaye, achat.montantPaye || 0)
-            const resteAPayer = Math.max(0, (achat.montantTotal || 0) - realMontantPaye)
-            if (reglement.montant - resteAPayer > 0.01) {
-                throw new Error(`Paiement invalide: le règlement (${reglement.montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
-            }
-            const nouveauMontantPaye = Math.min(achat.montantTotal, (achat.montantPaye || 0) + reglement.montant)
-            const nouveauStatutPaiement = nouveauMontantPaye >= achat.montantTotal - 0.01 ? 'PAYE' : 'PARTIEL'
+            // 6. Créer la Ligne
+            await tx.reglementAchatLigne.create({
+                data: {
+                    reglementId: id,
+                    achatId,
+                    montant: Math.min(reglement.montant, resteAPayer),
+                }
+            })
+
+            // 7. Recalculer montantPaye depuis toutes les Lignes
+            const allLignes = await tx.reglementAchatLigne.findMany({
+                where: { achatId },
+                select: { montant: true }
+            })
+            const nouveauMontantPaye = allLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+            const nouveauStatutPaiement = nouveauMontantPaye >= (achat.montantTotal || 0) - 0.01 ? 'PAYE' : 'PARTIEL'
 
             await tx.achat.update({
                 where: { id: achatId },
                 data: { 
                     montantPaye: nouveauMontantPaye,
                     statutPaiement: nouveauStatutPaiement
-                }
-            })
-
-            await tx.reglementAchatLigne.create({
-                data: {
-                    reglementId: id,
-                    achatId,
-                    montant: Math.min(reglement.montant, resteAPayer),
                 }
             })
 

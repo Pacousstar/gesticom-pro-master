@@ -34,7 +34,8 @@ export async function PATCH(
 
             // 2. Vérifier la vente
             const vente = await tx.vente.findUnique({
-                where: { id: venteId }
+                where: { id: venteId },
+                include: { ReglementVenteLigne: { select: { montant: true } } }
             })
 
             if (!vente) throw new Error('Vente introuvable')
@@ -42,33 +43,43 @@ export async function PATCH(
             if (vente.clientId !== reglement.clientId) throw new Error('Le règlement appartient à un autre client')
             if (vente.entiteId !== entiteId) throw new Error('Accès refusé à cette vente (entité différente)')
 
+            // 2b. Calculer le montantPaye réel depuis les Lignes (source de vérité)
+            const realMontantPaye = (vente.ReglementVenteLigne || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+
             // 3. Mettre à jour le règlement
             const updatedReglement = await tx.reglementVente.update({
                 where: { id },
                 data: { venteId }
             })
 
-            // 4. Mettre à jour la vente
-            const resteAPayer = Math.max(0, (vente.montantTotal || 0) - (vente.montantPaye || 0))
+            // 4. Calculer le reste à payer
+            const resteAPayer = Math.max(0, (vente.montantTotal || 0) - realMontantPaye)
             if (reglement.montant - resteAPayer > 0.01) {
                 throw new Error(`Paiement invalide: le règlement (${reglement.montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
             }
-            const nouveauMontantPaye = Math.min(vente.montantTotal, (vente.montantPaye || 0) + reglement.montant)
-            const nouveauStatutPaiement = nouveauMontantPaye >= vente.montantTotal - 0.01 ? 'PAYE' : 'PARTIEL'
+
+            // 5. Créer la Ligne de règlement
+            await tx.reglementVenteLigne.create({
+                data: {
+                    reglementId: id,
+                    venteId,
+                    montant: Math.min(reglement.montant, resteAPayer),
+                }
+            })
+
+            // 6. Recalculer montantPaye depuis toutes les Lignes
+            const allLignes = await tx.reglementVenteLigne.findMany({
+                where: { venteId },
+                select: { montant: true }
+            })
+            const nouveauMontantPaye = allLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+            const nouveauStatutPaiement = nouveauMontantPaye >= (vente.montantTotal || 0) - 0.01 ? 'PAYE' : 'PARTIEL'
 
             await tx.vente.update({
                 where: { id: venteId },
                 data: { 
                     montantPaye: nouveauMontantPaye,
                     statutPaiement: nouveauStatutPaiement
-                }
-            })
-
-            await tx.reglementVenteLigne.create({
-                data: {
-                    reglementId: id,
-                    venteId,
-                    montant: Math.min(reglement.montant, resteAPayer),
                 }
             })
 
