@@ -167,7 +167,7 @@ export default function ParametresPage() {
     setBackupsLoading(true)
     try {
       const res = await fetch('/api/sauvegarde')
-      if (res.ok) setBackups(await res.json())
+      if (res.ok) { const d = await res.json(); setBackups(d.backups || d) }
     } catch (e) {
       setSauvegardeErr('Erreur lors du chargement des sauvegardes.')
     } finally {
@@ -262,6 +262,9 @@ export default function ParametresPage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors de la modification')
       }
+    } catch (e) {
+      console.error(e)
+      showError('Erreur réseau lors de la modification.')
     } finally {
       setMagasinSaving(false)
     }
@@ -279,6 +282,9 @@ export default function ParametresPage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors de la suppression')
       }
+    } catch (e) {
+      console.error(e)
+      showError('Erreur réseau lors de la suppression.')
     } finally {
       setMagasinSaving(false)
     }
@@ -304,6 +310,9 @@ export default function ParametresPage() {
         const data = await res.json()
         showError(data.error || 'Erreur lors de la restauration.')
       }
+    } catch (e) {
+      console.error(e)
+      showError('Erreur réseau lors de la restauration.')
     } finally {
       setRestoreLoading(null)
     }
@@ -315,6 +324,9 @@ export default function ParametresPage() {
     try {
       const res = await fetch(`/api/sauvegarde/delete?name=${encodeURIComponent(name)}`, { method: 'DELETE' })
       if (res.ok) fetchBackups()
+    } catch (e) {
+      console.error(e)
+      showError('Erreur réseau lors de la suppression.')
     } finally {
       setDeleteLoading(null)
     }

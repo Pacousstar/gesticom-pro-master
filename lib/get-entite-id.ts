@@ -1,14 +1,9 @@
 import { Session } from './auth'
 import { prisma } from './db'
 
-let defaultEntiteIdCache: number | null = null
-
 export async function ensureDefaultEntite(): Promise<number> {
-  if (defaultEntiteIdCache !== null) return defaultEntiteIdCache
-  
   let entite = await prisma.entite.findFirst({ orderBy: { id: 'asc' }, select: { id: true } })
   if (entite) {
-    defaultEntiteIdCache = entite.id
     return entite.id
   }
   
@@ -22,7 +17,6 @@ export async function ensureDefaultEntite(): Promise<number> {
     },
     select: { id: true },
   })
-  defaultEntiteIdCache = entite.id
   return entite.id
 }
 

@@ -53,6 +53,7 @@ export default function BalancePage() {
     fetch('/api/balance?' + params.toString())
       .then((r) => (r.ok ? r.json() : null))
       .then(setData)
+      .catch(() => { setData(null); setLoading(false) })
       .finally(() => setLoading(false))
   }
 

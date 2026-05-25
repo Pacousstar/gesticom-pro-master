@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
-  const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
+  try {
+    const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const compteId = request.nextUrl.searchParams.get('compteId')?.trim()
   const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
@@ -97,4 +101,8 @@ export async function GET(request: NextRequest) {
       'Cache-Control': 'no-store, max-age=0',
     },
   })
+  } catch (e) {
+    console.error('GET /api/grand-livre:', e)
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+  }
 }

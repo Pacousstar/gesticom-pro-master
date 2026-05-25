@@ -74,9 +74,11 @@ export default function EcrituresPage() {
     fetch('/api/journaux')
       .then((r) => (r.ok ? r.json() : []))
       .then(setJournaux)
+      .catch(() => {})
     fetch('/api/plan-comptes')
       .then((r) => (r.ok ? r.json() : []))
       .then(setComptes)
+      .catch(() => {})
   }, [])
 
   const fetchEcritures = () => {
@@ -92,6 +94,7 @@ export default function EcrituresPage() {
     fetch('/api/ecritures?' + params.toString())
       .then((r) => (r.ok ? r.json() : []))
       .then(setEcritures)
+      .catch(() => { setEcritures([]); setLoading(false) })
       .finally(() => setLoading(false))
   }
 

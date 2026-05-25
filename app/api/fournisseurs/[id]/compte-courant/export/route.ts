@@ -63,7 +63,7 @@ export async function GET(
                 Libellé: 'Solde Initial (Dette reportée)',
                 Débit: fournisseur.soldeInitial,
                 Crédit: 0,
-                'Solde':-solde
+                'Solde': solde
             })
         }
 
@@ -75,7 +75,7 @@ export async function GET(
                 Libellé: 'Avoir Initial (Acompte reporté)',
                 Débit: 0,
                 Crédit: fournisseur.avoirInitial,
-                'Solde':-solde
+                'Solde': solde
             })
         }
 
@@ -83,30 +83,30 @@ export async function GET(
         for (const a of achats) {
             const montant = Number(a.montantTotal) || 0
             const dateAchat = new Date(a.date)
+            solde += montant
             rows.push({
                 Date: dateAchat.toLocaleDateString('fr-FR'),
                 'N° Pièce': a.numero,
                 Libellé: 'Achat',
                 Débit: montant,
                 Crédit: 0,
-                'Solde': ''
+                'Solde': solde
             })
-            solde += montant
         }
 
         // Rglements
         for (const r of reglements) {
             const montant = Number(r.montant) || 0
             const dateReg = new Date(r.date)
+            solde -= montant
             rows.push({
                 Date: dateReg.toLocaleDateString('fr-FR'),
                 'N° Pièce': 'RGL',
                 Libellé: `Règlement ${r.modePaiement || ''}`,
                 Débit: 0,
                 Crédit: montant,
-                'Solde': ''
+                'Solde': solde
             })
-            solde -= montant
         }
 
         // Total line
@@ -116,7 +116,7 @@ export async function GET(
             Libellé: 'TOTAL',
             Débit: rows.reduce((sum, r) => sum + (Number(r.Débit) || 0), 0),
             Crédit: rows.reduce((sum, r) => sum + (Number(r.Crédit) || 0), 0),
-            'Solde': ''
+            'Solde': solde
         })
 
         const ws = XLSX.utils.json_to_sheet(rows)

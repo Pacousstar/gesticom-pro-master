@@ -54,7 +54,10 @@ export async function GET(request: NextRequest) {
             const prixRevient = m.produit.pamp && m.produit.pamp > 0 ? m.produit.pamp : (m.produit.prixAchat || 0)
             return acc + (m.quantite * prixRevient)
         }, 0)
-        const stockSortie = mouvements.filter(m => m.type === 'SORTIE').reduce((acc, m) => acc + (m.quantite * (m.produit.prixVente || 0)), 0)
+        const stockSortie = mouvements.filter(m => m.type === 'SORTIE').reduce((acc, m) => {
+            const prixRevient = m.produit.pamp && m.produit.pamp > 0 ? m.produit.pamp : (m.produit.prixAchat || 0)
+            return acc + (m.quantite * prixRevient)
+        }, 0)
 
         // 3. Synthèse Trésorerie (Caisse / Banque)
         const transactionsCaisse = await prisma.caisse.groupBy({

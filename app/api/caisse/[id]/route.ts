@@ -71,7 +71,7 @@ export async function DELETE(
 
       if (venteRef) {
         const venteActive = await prisma.vente.findFirst({
-          where: { numero: venteRef[1], statut: { not: 'ANNULEE' } },
+          where: { numero: venteRef[0], statut: { not: 'ANNULEE' } },
           select: { id: true, numero: true }
         })
         if (venteActive) {
@@ -83,7 +83,7 @@ export async function DELETE(
 
       if (achatRef) {
         const achatActif = await prisma.achat.findFirst({
-          where: { numero: achatRef[1] },
+          where: { numero: achatRef[0] },
           select: { id: true, numero: true }
         })
         if (achatActif) {

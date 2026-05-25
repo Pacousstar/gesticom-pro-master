@@ -55,6 +55,7 @@ export default function GrandLivrePage() {
     fetch('/api/plan-comptes')
       .then((r) => (r.ok ? r.json() : []))
       .then(setComptes)
+      .catch(() => {})
   }, [])
 
   const fetchGrandLivre = () => {
@@ -67,6 +68,7 @@ export default function GrandLivrePage() {
     fetch('/api/grand-livre?' + params.toString())
       .then((r) => (r.ok ? r.json() : []))
       .then(setData)
+      .catch(() => { setData([]); setLoading(false) })
       .finally(() => setLoading(false))
   }
 

@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { getEntiteIdOrAll } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 const DASHBOARD_TIMEOUT_MS = 20000
 
@@ -22,6 +23,8 @@ export async function GET(request: NextRequest) {
     try {
       const session = await getSession()
       if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+      const authError = requirePermission(session, 'dashboard:view')
+      if (authError) return authError
   
       startTime = Date.now();
     console.log('[API] GET /api/dashboard - Début');
@@ -169,21 +172,14 @@ export async function GET(request: NextRequest) {
         _sum: { montantTotal: true, montantPaye: true }
       }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0 } })),
 
-      // 13 - Détail Trésorerie par compte
-      prisma.ecritureComptable.groupBy({
-        by: ['compteId'],
-        where: { compte: { numero: { startsWith: '5' } }, ...entiteCondition as any },
-        _sum: { debit: true, credit: true }
-      }).catch(() => []) as Promise<any[]>,
-
-      // 14 - Alertes Système
+      // 13 - Alertes Système
       prisma.systemAlerte.findMany({
         where: { lu: false, ...(entiteId != null ? { entiteId } : {}) },
         orderBy: { date: 'desc' },
         take: 10
       }).catch(catchEmpty('systemAlerte.findMany')),
 
-      // 15 - TENDANCES MENSUELLES (Version pour Dates en Entiers/Unix)
+      // 14 - TENDANCES MENSUELLES (Version pour Dates en Entiers/Unix)
       prisma.$queryRaw<any[]>`
         SELECT 
           strftime('%Y-%m', date) as mois,
@@ -213,7 +209,6 @@ export async function GET(request: NextRequest) {
       { _sum: { montantTotal: 0, montantPaye: 0 } }, // 12
       [], // 13
       [], // 14
-      [], // 15
     ]
 
 const result = await Promise.race([
@@ -241,7 +236,6 @@ const result = await Promise.race([
       soldeCompte,
       dettesAgg,
       creancesAgg,
-      detailTresorerieRaw,
       systemAlertesRaw,
       tendancesRaw,
     ] = result
@@ -270,35 +264,24 @@ const result = await Promise.race([
     let tresorerieCaisse = 0
     let tresorerieBanque = 0
     
-    // Essayer de récupérer le détail via les comptes (OHADA: 57=Caisse, 52/51=Banque)
-    if (Array.isArray(detailTresorerieRaw)) {
-      for (const d of detailTresorerieRaw) {
-         const solde = (d._sum?.debit || 0) - (d._sum?.credit || 0)
-         // On récupère le numéro de compte via Prisma (ou on utilise un mapping pré-récupéré)
-         // Pour faire simple ici, on va utiliser le solde total et essayer de différencier si on avait les numéros
-         // Mais soldeCompte agrégé est plus sûr pour le total
-      }
-    }
-
     const tresorerieReelle = toNum(soldeCompte._sum?.debit) - toNum(soldeCompte._sum?.credit)
     
     // Soldes de trésorerie consolidés depuis les mouvements, pour éviter les dérives
     // liées au champ magasin.soldeCaisse historique.
     // FILTRAGE PAR DATE : Caisse = opérations du jour (date), pas date de création (createdAt)
     // Banque = solde actuel (toutes dates)
-    const [soldesPhysiques] = await Promise.all([
-      prisma.$transaction([
+    const soldesPhysiques = await prisma.$transaction([
         prisma.banque.aggregate({ where: entiteCondition, _sum: { soldeActuel: true } }),
         prisma.caisse.aggregate({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'ENTREE' }, _sum: { montant: true } }),
         prisma.caisse.aggregate({ where: { date: { gte: debAuj, lte: finAuj }, ...entiteCondition, type: 'SORTIE' }, _sum: { montant: true } })
       ])
-    ])
 
     tresorerieBanque = toNum(soldesPhysiques[0]._sum?.soldeActuel)
     
     // Calculer la caisse sur toutes les périodes (comme la page Caisse)
     const allCaisse = await prisma.caisse.groupBy({
       by: ['type'],
+      where: { ...entiteCondition as any },
       _sum: { montant: true }
     })
     const entrees = allCaisse.find(c => c.type === 'ENTREE')?._sum?.montant || 0
@@ -395,7 +378,7 @@ const result = await Promise.race([
           by: ['clientId'],
           where: { 
             clientId: { in: clientsWithPlafond.map(c => c.id) },
-            statut: 'VALIDEE'
+            statut: { in: ['VALIDE', 'VALIDEE'] }
           },
           _sum: { montantTotal: true, montantPaye: true }
         })
@@ -440,16 +423,27 @@ const result = await Promise.race([
       mouvementsJour: 0,
       clientsActifs: 0,
       caJour: 0,
-      caHier: 0,
-      soldeCaisse: 0,
-      soldeBanque: 0,
-      achatsJour: 0,
+      caMois: 0,
+      panierMoyen: 0,
+      valeurStockTotal: 0,
+      valeurStockVente: 0,
+      tresorerieReelle: 0,
+      tresorerieCaisse: 0,
+      tresorerieBanque: 0,
+      totalDettes: 0,
+      totalCreances: 0,
+      tauxRupture: 0,
+      topProduits: [],
       lowStock: [],
       recentSales: [],
       repartition: [],
-      _error: msg,
+      systemAlertes: [],
+      creditAlerts: [],
+      totalDepensesCount: 0,
+      totalDepensesAmount: 0,
+      monthlyTrends: [],
       _timeout: false,
-    })
+    }, { status: 500 })
   } finally {
     if (typeof startTime !== 'undefined') {
       console.log(`[API] GET /api/dashboard - Fin (${Date.now() - startTime}ms)`);

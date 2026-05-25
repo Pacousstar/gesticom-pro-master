@@ -97,7 +97,7 @@ export default function DashboardPage() {
           setCreancesFromClients(data.totalCreances)
         }
       })
-      .catch(() => {})
+      .catch((err) => { console.error('Erreur chargement soldes clients:', err) })
     fetch('/api/fournisseurs/soldes', { credentials: 'include' })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -105,7 +105,7 @@ export default function DashboardPage() {
           setDettesFromFournisseurs(data.totalDettes)
         }
       })
-      .catch(() => {})
+      .catch((err) => { console.error('Erreur chargement soldes fournisseurs:', err) })
   }, [])
 
   // Fetcher personnalisé pour gérer le timeout et les erreurs spécifiques

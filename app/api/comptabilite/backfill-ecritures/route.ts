@@ -16,13 +16,13 @@ import {
   comptabiliserReglementAchat,
 } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { requireRole } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 
 export async function POST() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requireRole(session, ['SUPER_ADMIN', 'ADMIN'])
-  if (forbidden) return forbidden
+  const authError = requirePermission(session, 'comptabilite:rapports')
+  if (authError) return authError
 
   const eId = await getEntiteId(session)
   const whereEntite: any = eId > 0 ? { entiteId: eId } : {}

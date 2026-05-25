@@ -1,11 +1,15 @@
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/require-role'
 
 export async function POST(req: Request) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+    const forbidden = requirePermission(session, 'archives:create')
+    if (forbidden) return forbidden
     const currentUser = { id: session.userId, entiteId: session.entiteId, role: session.role }
 
     const data = await req.json()

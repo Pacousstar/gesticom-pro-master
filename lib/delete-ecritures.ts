@@ -16,10 +16,7 @@ export async function deleteEcrituresByReference(
   const result = await client.ecritureComptable.deleteMany({
     where: {
       referenceId,
-      OR: [
-        { referenceType },
-        { referenceType: { startsWith: `${referenceType}_` } }
-      ]
+      referenceType,
     },
   })
   return result.count
@@ -39,10 +36,7 @@ export async function deleteEcrituresByReferenceForIds(
   const result = await client.ecritureComptable.deleteMany({
     where: {
       referenceId: { in: referenceIds },
-      OR: [
-        { referenceType },
-        { referenceType: { startsWith: `${referenceType}_` } }
-      ]
+      referenceType,
     },
   })
   return result.count

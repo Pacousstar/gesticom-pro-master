@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(req: NextRequest) {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const authError = requirePermission(session, 'stocks:view')
+    if (authError) return authError
 
     const entiteId = await getEntiteId(session)
     if (!entiteId || entiteId <= 0) {
@@ -82,7 +85,9 @@ export async function GET(req: NextRequest) {
         }).filter(p => p.joursRestants !== -1 && p.joursRestants <= 14)
             .sort((a, b) => a.joursRestants - b.joursRestants)
 
-        return NextResponse.json(predictions)
+        return NextResponse.json(predictions, {
+          headers: { 'Cache-Control': 'no-store, max-age=0' },
+        })
     } catch (error: any) {
         console.error('❌ Erreur API predictions rupture:', error.message, error.stack)
         return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

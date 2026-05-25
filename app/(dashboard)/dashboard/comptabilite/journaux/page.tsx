@@ -44,6 +44,7 @@ export default function JournauxPage() {
     fetch('/api/journaux?' + params.toString())
       .then((r) => (r.ok ? r.json() : []))
       .then(setJournaux)
+      .catch(() => { setJournaux([]); setLoading(false) })
       .finally(() => setLoading(false))
   }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 /**
  * API pour les statistiques graphiques
@@ -10,6 +11,9 @@ import { getEntiteId } from '@/lib/get-entite-id'
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const forbidden = requirePermission(session, 'rapports:view')
+  if (forbidden) return forbidden
 
   const periode = request.nextUrl.searchParams.get('periode') || '30' // 7, 30, 90, ou 'mois'
   const entiteIdFromSession = await getEntiteId(session)

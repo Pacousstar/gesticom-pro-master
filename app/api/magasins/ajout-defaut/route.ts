@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 const POINTS_DE_VENTE: Array<{ code: string; nom: string; localisation: string }> = [
   { code: 'DANANE', nom: 'Danané', localisation: 'Danané' },
@@ -15,6 +16,8 @@ const POINTS_DE_VENTE: Array<{ code: string; nom: string; localisation: string }
 export async function POST() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'magasins:create')
+  if (authError) return authError
 
   try {
     const user = await prisma.utilisateur.findUnique({

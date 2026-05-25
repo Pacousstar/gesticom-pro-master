@@ -124,9 +124,14 @@ export type Permission =
   | 'commandes:transform'
   | 'commandes:receptionner'
 
+  // Notifications
+  | 'notifications:write'
+
   // Archives
   | 'archives:view'
+  | 'archives:create'
   | 'archives:export'
+  | 'archives:delete'
 
 /**
  * Définition des permissions par rôle
@@ -152,8 +157,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'rapports:view', 'rapports:ventes',
     'clients:view', 'clients:create', 'clients:edit', 'clients:delete',
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit', 'fournisseurs:delete',
-    'archives:view', 'archives:export',
-    'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:transform', 'commandes:receptionner',
+    'archives:view', 'archives:create', 'archives:export', 'archives:delete',
+    'notifications:write',
   ],
 
   ADMIN: [
@@ -166,6 +171,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'depenses:view', 'depenses:create', 'depenses:edit',
     'charges:view', 'charges:create', 'charges:edit',
     'comptabilite:view', 'comptabilite:rapports',
+
     'users:view', 'users:create', 'users:edit',
     'parametres:view', 'parametres:edit',
     'magasins:view', 'magasins:create', 'magasins:edit',
@@ -173,12 +179,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'sauvegardes:view', 'sauvegardes:create',
     'audit:view',
     'rapports:view', 'rapports:ventes',
-    'clients:view', 'clients:create', 'clients:edit',
-    'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit',
-    // RB9: Permissions Banque pour ADMIN
-    'banque:view', 'banque:create',
-    'archives:view', 'archives:export',
+    'clients:view', 'clients:create', 'clients:edit', 'clients:delete',
+    'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit', 'fournisseurs:delete',
+    'archives:view', 'archives:create', 'archives:export', 'archives:delete',
     'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:transform', 'commandes:receptionner',
+    'notifications:write',
   ],
 
   COMPTABLE: [

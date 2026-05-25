@@ -12,6 +12,7 @@ import {
   comptabiliserReglementVente,
   comptabiliserReglementAchat,
 } from '@/lib/comptabilisation'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
   _request: NextRequest,
@@ -19,29 +20,36 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
-  const id = Number((await params).id)
-  if (!Number.isInteger(id) || id < 1) {
-    return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
+  try {
+    const id = Number((await params).id)
+    if (!Number.isInteger(id) || id < 1) {
+      return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
+    }
+
+    const where: any = { id }
+    if (session.role !== 'SUPER_ADMIN') {
+      const eId = await getEntiteId(session)
+      if (eId > 0) where.entiteId = eId
+    }
+
+    const ecriture = await prisma.ecritureComptable.findFirst({
+      where,
+      include: {
+        journal: { select: { code: true, libelle: true } },
+        compte: { select: { numero: true, libelle: true } },
+        utilisateur: { select: { nom: true, login: true } },
+      },
+    })
+
+    if (!ecriture) return NextResponse.json({ error: 'Écriture introuvable.' }, { status: 404 })
+    return NextResponse.json(ecriture)
+  } catch (e) {
+    console.error('GET /api/ecritures/[id]:', e)
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
-
-  const where: any = { id }
-  if (session.role !== 'SUPER_ADMIN') {
-    const eId = await getEntiteId(session)
-    if (eId > 0) where.entiteId = eId
-  }
-
-  const ecriture = await prisma.ecritureComptable.findFirst({
-    where,
-    include: {
-      journal: { select: { code: true, libelle: true } },
-      compte: { select: { numero: true, libelle: true } },
-      utilisateur: { select: { nom: true, login: true } },
-    },
-  })
-
-  if (!ecriture) return NextResponse.json({ error: 'Écriture introuvable.' }, { status: 404 })
-  return NextResponse.json(ecriture)
 }
 
 export async function PATCH(
@@ -50,6 +58,8 @@ export async function PATCH(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -254,6 +264,8 @@ export async function DELETE(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {

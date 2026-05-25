@@ -137,9 +137,6 @@ export async function DELETE(request: NextRequest) {
     if (!existing) {
       return NextResponse.json({ error: 'Template introuvable ou accès refusé.' }, { status: 404 })
     }
-    if (!existing) {
-      return NextResponse.json({ error: 'Template introuvable.' }, { status: 404 })
-    }
 
     await prisma.printTemplate.delete({ where: { id } })
 

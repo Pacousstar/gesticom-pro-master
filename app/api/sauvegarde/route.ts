@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { listBackups, createBackup } from '@/lib/sauvegarde-db'
 import { requirePermission } from '@/lib/require-role'
@@ -19,7 +19,7 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const session = await getSession()
   const authError = requirePermission(session, 'sauvegardes:create')
   if (authError) return authError
@@ -27,7 +27,7 @@ export async function POST() {
 
   try {
     const name = await createBackup()
-    await logModification(session, 'SAUVEGARDE', 0, `Création sauvegarde: ${name}`, {}, { name }, getIpAddress({} as any))
+    await logModification(session, 'SAUVEGARDE', 0, `Création sauvegarde: ${name}`, {}, { name }, getIpAddress(request))
     return NextResponse.json({ success: true, name })
   } catch (e) {
     console.error('POST /api/sauvegarde:', e)

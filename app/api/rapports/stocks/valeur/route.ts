@@ -67,21 +67,25 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Si pas de date fin (stock actuel), récupérer les stocks initiaux pour les produits sans mouvement
-    if (!dateFin) {
-      const stocksActuels = await prisma.stock.findMany({
-        where: {
-          ...(magasinId ? { magasinId: Number(magasinId) } : {}),
-          ...(entiteId ? { entiteId } : {}),
-        },
-        select: { produitId: true, quantite: true }
-      })
+    // Récupérer les stocks comme base de calcul
+    const stocksActuels = await prisma.stock.findMany({
+      where: {
+        ...(magasinId ? { magasinId: Number(magasinId) } : {}),
+        ...(entiteId ? { entiteId } : {}),
+      },
+      select: { produitId: true, quantite: true, quantiteInitiale: true }
+    })
 
-      stocksActuels.forEach(s => {
-        const current = stockMap.get(s.produitId) || 0
+    stocksActuels.forEach(s => {
+      const current = stockMap.get(s.produitId) || 0
+      // Pour une date historique: utiliser la quantité initiale comme base
+      // Pour le stock actuel: utiliser la quantité courante (inchangé)
+      if (dateFin) {
+        stockMap.set(s.produitId, current + s.quantiteInitiale)
+      } else {
         stockMap.set(s.produitId, current + s.quantite)
-      })
-    }
+      }
+    })
 
     const rapportValeur = produits.map(p => {
       const qteADate = stockMap.get(p.id) || 0

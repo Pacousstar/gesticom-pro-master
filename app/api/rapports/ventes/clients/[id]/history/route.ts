@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
     request: NextRequest,
@@ -8,6 +9,9 @@ export async function GET(
 ) {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+    const forbidden = requirePermission(session, 'rapports:view')
+    if (forbidden) return forbidden
 
     try {
         const id = (await params).id

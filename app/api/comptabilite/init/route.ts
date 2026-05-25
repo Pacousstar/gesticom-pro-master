@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
+import { requirePermission } from '@/lib/require-role'
 import { initialiserComptabilite } from '@/lib/comptabilisation'
 
 /**
@@ -8,8 +8,8 @@ import { initialiserComptabilite } from '@/lib/comptabilisation'
  */
 export async function POST() {
   const session = await getSession()
-  const forbidden = requireRole(session, ROLES_ADMIN)
-  if (forbidden) return forbidden
+  const authError = requirePermission(session, 'comptabilite:rapports')
+  if (authError) return authError
 
   try {
     await initialiserComptabilite()

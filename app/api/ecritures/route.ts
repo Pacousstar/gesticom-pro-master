@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
-  const limit = Math.min(500, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 100))
+  try {
+    const limit = Math.min(500, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 100))
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const journalId = request.nextUrl.searchParams.get('journalId')?.trim()
@@ -68,11 +72,17 @@ export async function GET(request: NextRequest) {
   })
 
   return NextResponse.json(ecritures)
+  } catch (e) {
+    console.error('GET /api/ecritures:', e)
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+  }
 }
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   try {
     const body = await request.json()

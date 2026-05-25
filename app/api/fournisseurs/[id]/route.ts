@@ -83,11 +83,8 @@ export async function DELETE(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-
-  // Note: On accepte désormais les ADMIN pour la suppression à souhait
-  if (session!.role !== 'SUPER_ADMIN' && session!.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Droits insuffisants pour supprimer un fournisseur.' }, { status: 403 })
-  }
+  const authError = requirePermission(session, 'fournisseurs:delete')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {

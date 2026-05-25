@@ -13,7 +13,7 @@ export async function POST(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  const authError = requirePermission(session, 'achats:create')
+  const authError = requirePermission(session, 'fournisseurs:edit')
   if (authError) return authError
 
   try {

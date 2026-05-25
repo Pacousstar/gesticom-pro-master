@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 
 export async function PATCH(
     request: NextRequest,
@@ -9,6 +10,9 @@ export async function PATCH(
 ) {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+    const forbidden = requirePermission(session, 'achats:edit')
+    if (forbidden) return forbidden
     const entiteId = await getEntiteId(session)
     if (!entiteId) return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
 

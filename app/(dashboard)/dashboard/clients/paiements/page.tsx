@@ -39,7 +39,7 @@ export default function PaiementsClientsPage() {
     setStartDate(start)
     setEndDate(end)
     fetchData(start, end)
-    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => { })
+    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
   }, [])
 
   const fetchData = async (start: string, end: string) => {

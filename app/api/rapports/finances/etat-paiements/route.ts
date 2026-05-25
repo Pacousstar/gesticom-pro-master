@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
       tier: v.client?.nom || v.clientLibre || 'Divers',
       montantTotal: v.montantTotal,
       montantPaye: Math.max(v.montantPaye || 0, montantPayeParVente.get(v.id) || 0),
-      remaining: (v.montantTotal || 0) - Math.max(v.montantPaye || 0, montantPayeParVente.get(v.id) || 0),
+      solde: Math.max(0, (v.montantTotal || 0) - Math.max(v.montantPaye || 0, montantPayeParVente.get(v.id) || 0)),
       magasinId: v.magasinId,
       clientId: v.clientId,
       statut: v.statutPaiement

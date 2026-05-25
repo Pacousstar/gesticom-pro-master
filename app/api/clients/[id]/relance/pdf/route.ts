@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { getSession } from '@/lib/auth'
+import { requirePermission } from '@/lib/require-role'
 import { generateRelancePDF } from '@/lib/pdf-gen'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'clients:view')
+  if (authError) return authError
+
   const { id } = await params
   const clientId = Number(id)
 

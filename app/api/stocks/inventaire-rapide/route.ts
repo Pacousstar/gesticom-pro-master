@@ -3,10 +3,14 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { verifierCloture } from '@/lib/cloture'
 import { comptabiliserMouvementStock } from '@/lib/comptabilisation'
+import { requirePermission } from '@/lib/require-role'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const forbidden = requirePermission(session, 'stocks:entree')
+  if (forbidden) return forbidden
 
   try {
     const { produitId, magasinId, nouvelleQuantite, observation } = await request.json()

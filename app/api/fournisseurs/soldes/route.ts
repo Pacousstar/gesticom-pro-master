@@ -128,7 +128,9 @@ export async function GET(request: NextRequest) {
     const totalAchats = data.reduce((sum, f) => sum + (f.achats || 0), 0)
     const totalPaiements = data.reduce((sum, f) => sum + (f.paiements || 0), 0)
 
-    return NextResponse.json({ fournisseurs: data, totalDettes, totalAchats, totalPaiements })
+    return NextResponse.json({ fournisseurs: data, totalDettes, totalAchats, totalPaiements }, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    })
   } catch (error) {
     console.error('GET /api/fournisseurs/soldes:', error)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

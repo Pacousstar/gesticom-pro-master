@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   const dateFin = searchParams.get('dateFin') || new Date().toISOString().split('T')[0]
   const magasinId = searchParams.get('magasinId')
   const search = searchParams.get('search')?.trim() || ''
+  const categorie = searchParams.get('categorie')?.trim()
   const page = Math.max(1, Number(searchParams.get('page')) || 1)
   const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || 20))
   const exportAll = searchParams.get('export') === 'all'
@@ -51,6 +52,9 @@ export async function GET(request: NextRequest) {
         { designation: { contains: search, mode: 'insensitive' } },
         { code: { contains: search, mode: 'insensitive' } }
       ]
+    }
+    if (categorie && categorie !== 'TOUTE') {
+      produitWhere.categorie = categorie
     }
 
     // Pour export, pas de limite
@@ -154,7 +158,7 @@ export async function GET(request: NextRequest) {
     let totalQuantite = 0
     if (includeTotals || exportAll) {
       const allProduits = await prisma.produit.findMany({
-        where: { actif: true, entiteId },
+        where: { actif: true, entiteId, ...(categorie && categorie !== 'TOUTE' ? { categorie } : {}) },
         select: { id: true, pamp: true, prixAchat: true }
       })
       allProduits.forEach((p: any) => {

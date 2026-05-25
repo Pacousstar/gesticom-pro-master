@@ -12,6 +12,8 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'clients:view')
+  if (authError) return authError
 
   try {
     const id = (await params).id
@@ -172,7 +174,7 @@ export async function POST(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  const authError = requirePermission(session, 'ventes:create')
+  const authError = requirePermission(session, 'clients:edit')
   if (authError) return authError
 
   try {

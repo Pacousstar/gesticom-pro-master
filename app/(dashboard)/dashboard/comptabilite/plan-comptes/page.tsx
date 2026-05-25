@@ -50,6 +50,7 @@ export default function PlanComptesPage() {
     fetch('/api/plan-comptes?' + params.toString())
       .then((r) => (r.ok ? r.json() : []))
       .then(setComptes)
+      .catch(() => { setComptes([]); setLoading(false) })
       .finally(() => setLoading(false))
   }
 

@@ -40,8 +40,8 @@ export default async function ComptabilitePage({
   const session = await getSession()
   if (!session) redirect('/login')
 
-  const canAccess = session.role === 'SUPER_ADMIN' || session.role === 'COMPTABLE'
-  if (!canAccess) {
+  const { hasPermission } = await import('@/lib/roles-permissions')
+  if (!hasPermission(session.role as any, 'comptabilite:view', session.permissions)) {
     redirect('/dashboard?error=compta_denied')
   }
 
@@ -75,8 +75,8 @@ export default async function ComptabilitePage({
     }).catch(() => catchZero),
     prisma.vente.count({ where: { date: { gte: debMois, lte: finMois }, statut: 'VALIDEE', ...entiteFilter } }).catch(() => 0),
     prisma.vente.count({ where: { date: { gte: debMoisPrec, lte: finMoisPrec }, statut: 'VALIDEE', ...entiteFilter } }).catch(() => 0),
-    prisma.$queryRaw<[{ n: number }]>`SELECT COUNT(*) as n FROM "Client"`.catch(() => [{ n: 0 }]),
-    prisma.$queryRaw<[{ n: number }]>(Prisma.sql`SELECT COUNT(*) as n FROM "Client" WHERE "createdAt" <= ${finMoisPrec}`).catch(() => [{ n: 0 }]),
+    prisma.$queryRaw<[{ n: number }]>(Prisma.sql`SELECT COUNT(*) as n FROM "Client" WHERE "entiteId" = ${entiteId}`).catch(() => [{ n: 0 }]),
+    prisma.$queryRaw<[{ n: number }]>(Prisma.sql`SELECT COUNT(*) as n FROM "Client" WHERE "entiteId" = ${entiteId} AND "createdAt" <= ${finMoisPrec}`).catch(() => [{ n: 0 }]),
     prisma.achat.aggregate({
       where: { date: { gte: debMois, lte: finMois }, statut: 'VALIDEE', ...entiteFilter },
       _sum: { montantTotal: true },
@@ -105,11 +105,11 @@ export default async function ComptabilitePage({
   try {
     const [agg, list] = await Promise.all([
       prisma.depense.aggregate({
-        where: { date: { gte: debMois, lte: finMois } },
+        where: { date: { gte: debMois, lte: finMois }, ...entiteFilter },
         _sum: { montant: true },
       }),
       prisma.depense.findMany({
-        where: { date: { gte: debMois, lte: finMois } },
+        where: { date: { gte: debMois, lte: finMois }, ...entiteFilter },
         take: 15,
         orderBy: { date: 'desc' },
         select: { id: true, date: true, libelle: true, montant: true, categorie: true, magasin: { select: { code: true } } },
@@ -127,11 +127,11 @@ export default async function ComptabilitePage({
   try {
     const [agg, list] = await Promise.all([
       prisma.charge.aggregate({
-        where: { date: { gte: debMois, lte: finMois } },
+        where: { date: { gte: debMois, lte: finMois }, ...entiteFilter },
         _sum: { montant: true },
       }),
       prisma.charge.findMany({
-        where: { date: { gte: debMois, lte: finMois } },
+        where: { date: { gte: debMois, lte: finMois }, ...entiteFilter },
         take: 15,
         orderBy: { date: 'desc' },
         select: { id: true, date: true, rubrique: true, montant: true, type: true, observation: true },
@@ -266,14 +266,14 @@ export default async function ComptabilitePage({
         </div>
         <div className="flex gap-4 relative z-10 w-full md:w-auto">
           <a
-            href={`/api/comptabilite/export-pro?type=SAGE&mois=${mois}&annee=${annee}`}
+            href={`/api/comptabilite/export-pro?type=SAGE&dateDebut=${debMois.toISOString().split('T')[0]}&dateFin=${finMois.toISOString().split('T')[0]}`}
             className="flex-1 md:flex-none flex items-center justify-center gap-3 rounded-2xl bg-blue-600 px-8 py-4 font-black text-white hover:bg-blue-700 shadow-xl shadow-blue-500/20 transition-all uppercase text-xs tracking-widest"
           >
             <Share2 className="h-5 w-5" />
             Export Sage (.txt)
           </a>
           <a
-            href={`/api/comptabilite/export-pro?type=EXCEL&mois=${mois}&annee=${annee}`}
+            href={`/api/comptabilite/export-pro?type=EXCEL&dateDebut=${debMois.toISOString().split('T')[0]}&dateFin=${finMois.toISOString().split('T')[0]}`}
             className="flex-1 md:flex-none flex items-center justify-center gap-3 rounded-2xl border-2 border-emerald-500 bg-white px-8 py-4 font-black text-emerald-600 hover:bg-emerald-50 shadow-xl shadow-emerald-500/10 transition-all uppercase text-xs tracking-widest"
           >
             <FileSpreadsheet className="h-5 w-5" />

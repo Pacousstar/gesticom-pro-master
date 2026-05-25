@@ -47,6 +47,7 @@ export async function GET(request: Request) {
                 ecritures: {
                     where: {
                         date: { gte: debutAnnee, lte: finAnnee },
+                        ...(entiteId > 0 ? { entiteId } : {}),
                     }
                 }
             }

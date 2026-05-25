@@ -52,7 +52,7 @@ export default function ValeurStockPage() {
     const today = new Date().toISOString().split('T')[0]
     setDateFin(today)
     loadMagasins()
-    fetchData(today, 'TOUT', 1, '')
+    fetchData(today, 'TOUT', 1, '', selectedCategorie)
     
     fetch('/api/parametres')
       .then(r => r.ok && r.json())
@@ -69,12 +69,13 @@ export default function ValeurStockPage() {
     }
   }
 
-  const fetchData = async (date: string, mag: string, page: number = 1, searchTerm: string = '') => {
+  const fetchData = async (date: string, mag: string, page: number = 1, searchTerm: string = '', cat: string = 'TOUTE') => {
     setLoading(true)
     try {
       let url = `/api/rapports/inventaire/valeur?dateFin=${date}&page=${page}&limit=${itemsPerPage}&includeTotals=true`
       if (mag !== 'TOUT') url += `&magasinId=${mag}`
       if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`
+      if (cat && cat !== 'TOUTE') url += `&categorie=${encodeURIComponent(cat)}`
       
       const res = await fetch(url)
       if (res.ok) {
@@ -97,26 +98,19 @@ export default function ValeurStockPage() {
     e.preventDefault()
     setCurrentPage(1)
     setSearch('')
-    fetchData(dateFin, selectedMagasin, 1, '')
+    fetchData(dateFin, selectedMagasin, 1, '', selectedCategorie)
   }
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
-    fetchData(dateFin, selectedMagasin, newPage, search)
+    fetchData(dateFin, selectedMagasin, newPage, search, selectedCategorie)
   }
-
-  const filteredData = data.filter(p => {
-    const matchesSearch = !search || p.designation.toLowerCase().includes(search.toLowerCase()) || 
-                          (p.code && p.code.toLowerCase().includes(search.toLowerCase()))
-    const matchesCategorie = selectedCategorie === 'TOUTE' || p.categorie === selectedCategorie
-    return matchesSearch && matchesCategorie
-  })
 
   // Extraire les catégories uniques pour le filtre (depuis toutes les données serveur)
   const categories = Array.from(new Set(data.map(p => p.categorie))).sort()
 
-  const totalValeur = totals?.valeurTotal ?? filteredData.reduce((acc, p) => acc + p.valeurTotal, 0)
-  const totalQuantite = totals?.totalQuantite ?? filteredData.reduce((acc, p) => acc + p.quantite, 0)
+  const totalValeur = totals?.valeurTotal ?? data.reduce((acc, p) => acc + p.valeurTotal, 0)
+  const totalQuantite = totals?.totalQuantite ?? data.reduce((acc, p) => acc + p.quantite, 0)
 
   return (
     <div className="space-y-6">
@@ -204,7 +198,7 @@ export default function ValeurStockPage() {
       {/* ZONE D'IMPRESSION (Masquée à l'écran) */}
       <div className="hidden print:block absolute inset-0 bg-white">
         {(() => {
-          const chunks = paginateForPrint(filteredData)
+          const chunks = paginateForPrint(data)
           const offsetBefore = (pageIndex: number) => chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
           return chunks.map((chunk: ProduitValo[], index: number, allChunks: ProduitValo[][]) => (
             <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
@@ -333,7 +327,7 @@ export default function ValeurStockPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     setCurrentPage(1)
-                    fetchData(dateFin, selectedMagasin, 1, search)
+                    fetchData(dateFin, selectedMagasin, 1, search, selectedCategorie)
                   }
                 }}
                 className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 focus:border-emerald-500 shadow-sm focus:outline-none"
@@ -360,7 +354,7 @@ export default function ValeurStockPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
             </div>
-          ) : filteredData.length === 0 ? (
+          ) : data.length === 0 ? (
             <p className="py-12 text-center text-gray-500 italic font-medium">Aucun stock valorisé pour ces critères.</p>
           ) : (
             <div className="overflow-x-auto">

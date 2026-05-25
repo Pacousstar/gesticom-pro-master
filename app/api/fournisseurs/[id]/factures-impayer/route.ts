@@ -20,7 +20,8 @@ export async function GET(
         const factures = await prisma.achat.findMany({
             where: { 
                 fournisseurId: id, 
-                statutPaiement: { in: ['NON_PAYE', 'PARTIEL'] } 
+                statut: { in: ['VALIDEE', 'VALIDE'] },
+                statutPaiement: { in: ['CREDIT', 'PARTIEL'] } 
             },
             select: { 
                 id: true, 

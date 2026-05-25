@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
   _request: NextRequest,
@@ -8,15 +9,22 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
-  const id = Number((await params).id)
-  if (!Number.isInteger(id) || id < 1) {
-    return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
+  try {
+    const id = Number((await params).id)
+    if (!Number.isInteger(id) || id < 1) {
+      return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
+    }
+
+    const compte = await prisma.planCompte.findUnique({ where: { id } })
+    if (!compte) return NextResponse.json({ error: 'Compte introuvable.' }, { status: 404 })
+    return NextResponse.json(compte)
+  } catch (e) {
+    console.error('GET /api/plan-comptes/[id]:', e)
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
-
-  const compte = await prisma.planCompte.findUnique({ where: { id } })
-  if (!compte) return NextResponse.json({ error: 'Compte introuvable.' }, { status: 404 })
-  return NextResponse.json(compte)
 }
 
 export async function PATCH(
@@ -25,6 +33,8 @@ export async function PATCH(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {
@@ -60,6 +70,8 @@ export async function DELETE(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {

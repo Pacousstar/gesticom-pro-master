@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
-  const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
+  try {
+    const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
   const classe = request.nextUrl.searchParams.get('classe')?.trim()
   const type = request.nextUrl.searchParams.get('type')?.trim()
 
@@ -33,11 +37,17 @@ export async function GET(request: NextRequest) {
   })
 
   return NextResponse.json(comptes)
+  } catch (e) {
+    console.error('GET /api/plan-comptes:', e)
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+  }
 }
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   try {
     const body = await request.json()

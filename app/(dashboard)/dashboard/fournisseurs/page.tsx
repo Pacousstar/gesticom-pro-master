@@ -51,8 +51,8 @@ export default function FournisseursPage() {
   const [entreprise, setEntreprise] = useState<any>(null)
 
   useEffect(() => {
-    fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => { })
-    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => { })
+    fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => {})
+    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
   }, [])
 
   const fetchList = async (page?: number) => {
@@ -231,6 +231,10 @@ export default function FournisseursPage() {
           showError(errorMsg)
         }
       }
+    } catch (e) {
+      const errorMsg = formatApiError(e)
+      setErr(errorMsg)
+      showError(errorMsg)
     } finally {
       setSubmitting(false)
     }

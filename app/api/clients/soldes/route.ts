@@ -140,10 +140,14 @@ export async function GET(request: NextRequest) {
 
     // Si pas de filtre q, retourner aussi les totaux
     if (!q) {
-      return NextResponse.json({ clients: data, totalCreances, totalFactures, totalPaiements })
+      return NextResponse.json({ clients: data, totalCreances, totalFactures, totalPaiements }, {
+        headers: { 'Cache-Control': 'no-store, max-age=0' },
+      })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    })
   } catch (error: any) {
     console.error('❌ ERREUR GET /api/clients/soldes:', error.message, error.stack)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const authError = requirePermission(session, 'archives:create')
+    if (authError) return authError
 
     const data = await req.json()
     const { 

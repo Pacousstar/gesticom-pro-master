@@ -10,6 +10,9 @@ export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
+  const forbidden = requirePermission(session, 'stocks:view')
+  if (forbidden) return forbidden
+
   try {
     const entiteId = await getEntiteId(session)
     const { searchParams } = new URL(request.url)

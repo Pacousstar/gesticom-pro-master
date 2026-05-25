@@ -7,7 +7,7 @@ import { requirePermission } from '@/lib/require-role'
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const authError = requirePermission(session, 'rapports:view')
+  const authError = requirePermission(session, 'comptabilite:view')
   if (authError) return authError
 
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()

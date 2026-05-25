@@ -1232,7 +1232,7 @@ export async function comptabiliserOperationBancaire(data: {
   // Compte bancaire (utiliser le compte lié ou le compte par défaut)
   let compteBanque
   if (data.compteId) {
-    compteBanque = await prisma.planCompte.findUnique({ where: { id: data.compteId } })
+    compteBanque = await p.planCompte.findUnique({ where: { id: data.compteId } })
   }
   if (!compteBanque) {
     compteBanque = await getOrCreateCompte(

@@ -130,7 +130,7 @@ export default function ProduitsPage() {
   }, [currentPage])
 
   useEffect(() => {
-    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) })
+    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
   }, [])
 
   const handlePageChange = (page: number) => {
@@ -139,13 +139,14 @@ export default function ProduitsPage() {
   }
 
   const fetchStats = () => {
-    fetch('/api/produits/stats').then((r) => (r.ok ? r.json() : null)).then((s) => { if (s) setStats(s) })
+    fetch('/api/produits/stats').then((r) => (r.ok ? r.json() : null)).then((s) => { if (s) setStats(s) }).catch(() => {})
   }
 
   const fetchCategories = () => {
     fetch('/api/produits/categories')
       .then((r) => (r.ok ? r.json() : ['DIVERS']))
       .then((cat) => setCategories(Array.isArray(cat) && cat.length ? cat : ['DIVERS']))
+      .catch(() => {})
   }
 
   useEffect(() => {
@@ -161,7 +162,7 @@ export default function ProduitsPage() {
       setMagasins(Array.isArray(mags) ? mags : [])
       setFournisseurs(Array.isArray(fours) ? fours : [])
       setParams(p)
-    })
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -334,6 +335,7 @@ export default function ProduitsPage() {
           setFormData((f) => ({ ...f, code: data.nextCode }))
         }
       })
+      .catch(() => {})
   }
 
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)

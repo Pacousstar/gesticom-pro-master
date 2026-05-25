@@ -1261,8 +1261,9 @@ export default function PedagogiePage() {
                       currentCounter.color === 'blue' ? 'from-blue-600 to-blue-800' :
                       currentCounter.color === 'purple' ? 'from-purple-600 to-purple-800' :
                       currentCounter.color === 'red' ? 'from-red-600 to-red-800' :
-                      currentCounter.color === 'indigo' ? 'from-indigo-600 to-indigo-800' :
-                      'from-slate-700 to-slate-900'
+                       currentCounter.color === 'indigo' ? 'from-indigo-600 to-indigo-800' :
+                       currentCounter.color === 'cyan' ? 'from-cyan-600 to-cyan-800' :
+                       'from-slate-700 to-slate-900'
                   } text-white relative overflow-hidden flex items-center justify-between`}>
                       <div className="relative z-10 space-y-4">
                           <p className="text-[11px] font-black uppercase tracking-[0.5em] text-white/60">Analyse de Compteur : {currentIndex + 1} / {currentCategory.counters.length}</p>

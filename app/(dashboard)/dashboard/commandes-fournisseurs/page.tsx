@@ -297,6 +297,8 @@ export default function CommandesFournisseursPage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors de l\'enregistrement.')
       }
+    } catch {
+      showError('Erreur réseau lors de l\'enregistrement.')
     } finally {
       setSubmitting(false)
     }
@@ -315,6 +317,8 @@ export default function CommandesFournisseursPage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors de la transformation.')
       }
+    } catch {
+      showError('Erreur réseau lors de la transformation.')
     } finally {
       setTransforming(null)
     }
@@ -593,7 +597,7 @@ export default function CommandesFournisseursPage() {
             <option value="TOUT" className="text-gray-900">Tous</option>
             <option value="BROUILLON" className="text-gray-900">Brouillon</option>
             <option value="RECUE" className="text-gray-900">Réceptionnée</option>
-            <option value="ANNULE" className="text-gray-900">Annulée</option>
+            <option value="ANNULEE" className="text-gray-900">Annulée</option>
           </select>
         </div>
         <button 

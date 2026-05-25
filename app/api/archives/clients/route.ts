@@ -30,6 +30,8 @@ export async function POST(req: Request) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const authError = requirePermission(session, 'archives:create')
+    if (authError) return authError
     const currentUser = { id: session.userId, entiteId: session.entiteId, role: session.role }
 
     const body = await req.json()
@@ -61,11 +63,9 @@ export async function DELETE(req: Request) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const authError = requirePermission(session, 'archives:delete')
+    if (authError) return authError
     const currentUser = { id: session.userId, entiteId: session.entiteId, role: session.role }
-
-    if (currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'ADMIN') {
-       return NextResponse.json({ error: 'Permission refusée' }, { status: 403 })
-    }
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
