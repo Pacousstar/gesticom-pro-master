@@ -2350,7 +2350,7 @@ export default function VentesPage() {
                                     remise: l.remise || 0,
                                   })),
                                   // @ts-ignore
-                                  reglements: (v as any).reglements?.map((r: any) => ({ mode: r.mode, montant: String(r.montant) })) || [{ mode: v.modePaiement, montant: String(v.montantPaye || '') }],
+                                  reglements: (v as any).reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode || v.modePaiement, montant: String(r.montant) })) || [{ mode: v.modePaiement, montant: String(v.montantPaye || '') }],
                                   pointsGagnes: 0,
                                 })
                                 setFormClientSearch((v as any).client?.nom || '')
@@ -2461,7 +2461,7 @@ export default function VentesPage() {
                           remise: l.remise || 0,
                         })),
                         // @ts-ignore
-                        reglements: detailVente.reglements?.map((r: any) => ({ mode: r.mode, montant: String(r.montant) })) || [{ mode: detailVente.modePaiement, montant: String(detailVente.montantPaye || '') }],
+                        reglements: detailVente.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode || detailVente.modePaiement, montant: String(r.montant) })) || [{ mode: detailVente.modePaiement, montant: String(detailVente.montantPaye || '') }],
                         pointsGagnes: 0,
                       })
                       setFormClientSearch(detailVente.client?.nom || '')

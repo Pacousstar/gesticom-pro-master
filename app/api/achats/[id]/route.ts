@@ -520,7 +520,7 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
                 fournisseurId: updated.fournisseurId,
                 entiteId: updated.entiteId,
                 montant: mntR,
-                modePaiement: r.mode,
+                modePaiement: r.mode || modePaiement || oldAchat.modePaiement || 'ESPECES',
                 utilisateurId: session!.userId,
                 observation: `Modif Achat ${updated.numero}`,
                 date: updated.date,

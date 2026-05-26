@@ -363,7 +363,7 @@ const result = await Promise.race([
         // Détection automatique des alertes de crédit (90% du plafond)
         const clientsWithPlafond = await prisma.client.findMany({
           where: { ...entiteCondition, plafondCredit: { gt: 0 } },
-          select: { id: true, nom: true, plafondCredit: true }
+          select: { id: true, nom: true, plafondCredit: true, soldeInitial: true, avoirInitial: true }
         })
         
         if (clientsWithPlafond.length === 0) return []
@@ -382,7 +382,7 @@ const result = await Promise.race([
         
         const alerts: any[] = []
         for (const c of clientsWithPlafond) {
-          const dette = debtMap.get(c.id) || 0
+          const dette = (debtMap.get(c.id) || 0) + (c.soldeInitial || 0) - (c.avoirInitial || 0)
           const ratio = dette / (c.plafondCredit || 1)
           
           if (ratio >= 0.9) {

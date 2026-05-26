@@ -68,17 +68,9 @@ export async function GET(request: NextRequest) {
       _sum: { montant: true },
     })
 
-    // CL-01: Totaux globaux respectent le filtre période si spécifié
+    // CL-01: Totaux globaux SANS filtre période (vraies données globales)
     const whereAchatGlobal: any = { ...entiteFilter, fournisseurId: { not: null }, statut: { in: ['VALIDE', 'VALIDEE'] } }
     const whereReglementGlobal: any = { ...entiteFilter, statut: { in: ['VALIDE', 'VALIDEE'] } }
-    if (dateDebut) {
-      whereAchatGlobal.date = { ...whereAchatGlobal.date, gte: new Date(dateDebut) }
-      whereReglementGlobal.date = { ...whereReglementGlobal.date, gte: new Date(dateDebut) }
-    }
-    if (dateFin) {
-      whereAchatGlobal.date = { ...whereAchatGlobal.date, lte: new Date(dateFin) }
-      whereReglementGlobal.date = { ...whereReglementGlobal.date, lte: new Date(dateFin) }
-    }
 
     const achatsGlobaux = await prisma.achat.groupBy({
       by: ['fournisseurId'],
@@ -92,9 +84,9 @@ export async function GET(request: NextRequest) {
       _sum: { montant: true },
     })
 
-    const achatMap = Object.fromEntries(achats.map((a: any) => [a.fournisseurId, (a._sum.montantTotal || 0)]))
+    const achatMap = Object.fromEntries(achats.map((a: any) => [a.fournisseurId, (a._sum.montantTotal || 0) + (a._sum.fraisApproche || 0)]))
     const reglementMap = Object.fromEntries(reglements.map((r: any) => [r.fournisseurId, r._sum.montant || 0]))
-    const achatGlobalMap = Object.fromEntries(achatsGlobaux.map((a: any) => [a.fournisseurId, (a._sum.montantTotal || 0)]))
+    const achatGlobalMap = Object.fromEntries(achatsGlobaux.map((a: any) => [a.fournisseurId, (a._sum.montantTotal || 0) + (a._sum.fraisApproche || 0)]))
     const reglementGlobalMap = Object.fromEntries(reglementsGlobaux.map((r: any) => [r.fournisseurId, r._sum.montant || 0]))
 
     const data = await Promise.all(fournisseurs.map(async (f: any) => {

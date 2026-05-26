@@ -1626,7 +1626,7 @@ export default function AchatsPage() {
                         fournisseurLibre: detailAchat.fournisseurLibre || '',
                         modePaiement: detailAchat.modePaiement,
                         montantPaye: detailAchat.montantPaye ? String(detailAchat.montantPaye) : '',
-                        reglements: (detailAchat as any).reglements?.map((r: any) => ({ mode: r.mode, montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: '' }],
+                        reglements: (detailAchat as any).reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode || 'ESPECES', montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: '' }],
                         banqueId: '',
                         numeroCamion: detailAchat.numeroCamion || '',
                         fraisApproche: String((detailAchat as any).fraisApproche || '0'),

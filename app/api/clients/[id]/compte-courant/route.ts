@@ -322,6 +322,8 @@ export async function POST(
             beneficiaire: client.nom || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
+        } else {
+          console.warn(`[paiement client] Mode de paiement non géré pour trésorerie: ${modePaiement}`)
         }
       }
 

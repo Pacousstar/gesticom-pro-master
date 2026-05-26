@@ -168,6 +168,8 @@ export async function POST(
             beneficiaire: fournisseur.nom || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
+        } else {
+          console.warn(`[paiement fournisseur] Mode de paiement non géré pour trésorerie: ${modePaiement}`)
         }
       }
 
