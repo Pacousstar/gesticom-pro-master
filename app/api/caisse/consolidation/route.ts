@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
       ...whereDate,
       modePaiement: { notIn: MODES_ESPECES },
       statut: { in: ['VALIDE', 'VALIDEE'] },
-      vente: { ...whereMagasin, ...whereEntite }
+      OR: [
+        { vente: { ...whereMagasin, ...whereEntite } },
+        { venteId: null, ...whereEntite }
+      ]
     },
     select: { montant: true, modePaiement: true }
   })
@@ -45,7 +48,10 @@ export async function GET(request: NextRequest) {
       ...whereDate,
       modePaiement: { notIn: MODES_ESPECES },
       statut: { in: ['VALIDE', 'VALIDEE'] },
-      achat: { ...whereMagasin, ...whereEntite }
+      OR: [
+        { achat: { ...whereMagasin, ...whereEntite } },
+        { achatId: null, ...whereEntite }
+      ]
     },
     select: { montant: true, modePaiement: true }
   })
@@ -77,6 +83,7 @@ export async function GET(request: NextRequest) {
     where: {
       ...whereDate,
       modePaiement: { notIn: MODES_ESPECES },
+      statut: { in: ['VALIDE', 'VALIDEE'] },
       ...whereEntite,
     },
     select: { montant: true, modePaiement: true }
@@ -113,7 +120,7 @@ export async function GET(request: NextRequest) {
     
     // Ventes passées (Exclu Espèces) — RC5
     const pastVentes = await prisma.reglementVente.findMany({
-      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, statut: { in: ['VALIDE', 'VALIDEE'] }, vente: { ...whereMagasin, ...whereEntite } },
+      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, statut: { in: ['VALIDE', 'VALIDEE'] }, OR: [ { vente: { ...whereMagasin, ...whereEntite } }, { venteId: null, ...whereEntite } ] },
       select: { montant: true, modePaiement: true }
     })
     pastVentes.forEach(r => {
@@ -123,7 +130,7 @@ export async function GET(request: NextRequest) {
 
     // Achats passés (Exclu Espèces) — RC5
     const pastAchats = await prisma.reglementAchat.findMany({
-      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, statut: { in: ['VALIDE', 'VALIDEE'] }, achat: { ...whereMagasin, ...whereEntite } },
+      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, statut: { in: ['VALIDE', 'VALIDEE'] }, OR: [ { achat: { ...whereMagasin, ...whereEntite } }, { achatId: null, ...whereEntite } ] },
       select: { montant: true, modePaiement: true }
     })
     pastAchats.forEach(r => {
@@ -165,7 +172,7 @@ export async function GET(request: NextRequest) {
 
     // Charges passées — modes bancaires uniquement
     const pastCharges = await prisma.charge.findMany({
-      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, ...whereEntite },
+      where: { ...wherePast, modePaiement: { notIn: MODES_ESPECES }, statut: { in: ['VALIDE', 'VALIDEE'] }, ...whereEntite },
       select: { montant: true, modePaiement: true }
     })
     pastCharges.forEach(c => {
