@@ -46,8 +46,8 @@ export async function DELETE(
         await tx.caisse.deleteMany({
           where: {
             OR: [
-              { motif: `Règlement Vente ${reglement.vente?.numero || ''}` },
-              { motif: `Règlement : ${reglement.vente?.numero || ''}` },
+              { motif: `RÈGLEMENT VENTE ${reglement.vente?.numero || ''}` },
+              { motif: `RÈGLEMENT : ${reglement.vente?.numero || ''}` },
               { id: reglement.id }
             ].filter(Boolean) as any
           }
@@ -155,8 +155,8 @@ export async function PATCH(
         await tx.caisse.deleteMany({
           where: {
             OR: [
-              { motif: `Règlement Vente ${old.vente?.numero || ''}` },
-              { motif: `Règlement : ${old.vente?.numero || ''}` },
+              { motif: `RÈGLEMENT VENTE ${old.vente?.numero || ''}` },
+              { motif: `RÈGLEMENT : ${old.vente?.numero || ''}` },
             ].filter(Boolean)
           }
         })

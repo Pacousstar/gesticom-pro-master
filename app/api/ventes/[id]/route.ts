@@ -38,7 +38,7 @@ export async function GET(
         include: { produit: { select: { id: true, code: true, designation: true } } },
       },
       reglements: true,
-      ReglementVenteLigne: { select: { montant: true } },
+      ReglementVenteLigne: { select: { reglementId: true, montant: true } },
     },
   })
 
@@ -48,10 +48,17 @@ export async function GET(
     return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
   }
 
-  const totalLignePaye = (vente.ReglementVenteLigne || []).reduce((s, l) => s + (l.montant || 0), 0)
+  const creditReglementIds = new Set(
+    (vente.reglements || [])
+      .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+      .map(r => r.id)
+  )
+  const totalLignePaye = (vente.ReglementVenteLigne || [])
+    .filter(l => !creditReglementIds.has(l.reglementId))
+    .reduce((s, l) => s + (l.montant || 0), 0)
   const venteWithRealPaye = {
     ...vente,
-    montantPaye: Math.max(totalLignePaye, vente.montantPaye || 0),
+    montantPaye: totalLignePaye > 0 ? totalLignePaye : (vente.montantPaye || 0),
     reglements: vente.reglements?.map((r: any) => {
       const { ReglementVenteLigne, ...rest } = r
       return rest
@@ -117,11 +124,11 @@ export async function DELETE(
         }
 
        // 4. Nettoyage Trésorerie : CAISSE (y compris écritures d'annulation)
-      await tx.caisse.deleteMany({
+       await tx.caisse.deleteMany({
         where: {
           OR: [
-            { motif: `Vente ${v.numero}` },
-            { motif: `Règlement Vente ${v.numero}` },
+            { motif: `VENTE ${v.numero}` },
+            { motif: `RÈGLEMENT VENTE ${v.numero}` },
             { motif: `ANNULATION VENTE ${v.numero}` }
           ]
         }
@@ -211,7 +218,12 @@ export async function PATCH(
 
       const vente = await prisma.vente.findUnique({
         where: { id },
-        include: { client: { select: { nom: true } }, magasin: true, ReglementVenteLigne: { select: { montant: true } } }
+        include: {
+          client: { select: { nom: true } },
+          magasin: true,
+          reglements: { select: { id: true, modePaiement: true } },
+          ReglementVenteLigne: { select: { reglementId: true, montant: true } }
+        }
       })
 
       if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
@@ -219,8 +231,15 @@ export async function PATCH(
         return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
       }
 
-      const totalFromLignes = (vente.ReglementVenteLigne || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
-      const realMontantPaye = Math.max(totalFromLignes, vente.montantPaye || 0)
+      const creditReglementIds = new Set(
+        (vente.reglements || [])
+          .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+          .map(r => r.id)
+      )
+      const totalFromLignes = (vente.ReglementVenteLigne || [])
+        .filter(l => !creditReglementIds.has(l.reglementId))
+        .reduce((s: number, l: any) => s + (l.montant || 0), 0)
+      const realMontantPaye = totalFromLignes > 0 ? totalFromLignes : (vente.montantPaye || 0)
       const resteAPayer = Math.max(0, (vente.montantTotal || 0) - realMontantPaye)
       if (montantReglement - resteAPayer > 1) {
         return NextResponse.json({
@@ -377,11 +396,12 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
         await tx.caisse.deleteMany({ 
           where: { 
             OR: [
-              { motif: `Vente ${oldVente.numero}` },
-              { motif: `Règlement Vente ${oldVente.numero}` },
+              { motif: `VENTE ${oldVente.numero}` },
+              { motif: `RÈGLEMENT VENTE ${oldVente.numero}` },
             ]
           } 
         })
+        await recalculerSoldeCaisse(oldVente.magasinId, tx)
         // Supprimer les opérations bancaires liées à cette vente (inversion solde + suppression)
         const opsBancairesOld = await tx.operationBancaire.findMany({
           where: { reference: oldVente.numero }
@@ -445,7 +465,10 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
         
         // Gestion Multi-Paiement
         const regsData = Array.isArray(reglements) ? reglements : []
-        const mntPaye = regsData.reduce((acc: number, r: any) => acc + (Number(r.montant) || 0), 0)
+        const mntPaye = regsData.reduce((acc: number, r: any) => {
+          if (String(r.mode).toUpperCase() === 'CREDIT') return acc
+          return acc + (Number(r.montant) || 0)
+        }, 0)
 
         // Gestion de la date : préserver l'heure d'origine si seule la date change
         let dateFinale = oldVente.date
@@ -510,6 +533,8 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
           for (const r of regsData) {
             const mntR = Number(r.montant) || 0
             if (mntR <= 0) continue
+            const modeR = String(r.mode).toUpperCase()
+            if (modeR === 'CREDIT') continue
             const regl = await tx.reglementVente.create({
               data: {
                 venteId: updated.id,
@@ -530,7 +555,6 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
               }
             })
             // Synchro physique trésorerie
-            const modeR = String(r.mode).toUpperCase()
             if (estModeEspeces(modeR)) {
               await enregistrerMouvementCaisse({
                 magasinId: updated.magasinId,

@@ -38,7 +38,7 @@ interface Operation {
 export default function CompteCourantClientPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { error: showError } = useToast()
+  const { success: showSuccess, error: showError } = useToast()
   
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<{ client: any, operations: Operation[], totalDebitGlobal?: number, totalCreditGlobal?: number, globalSolde?: number } | null>(null)
@@ -63,7 +63,7 @@ export default function CompteCourantClientPage() {
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [allVentesDetail, setAllVentesDetail] = useState<any[]>([])
   const [isPreparingPrint, setIsPreparingPrint] = useState(false)
-  const { success: showSuccess } = useToast()
+  const [lettrageError, setLettrageError] = useState('')
 
   const handleLettrage = async (reglement: Operation) => {
     setSelectedReglement(reglement)
@@ -81,6 +81,7 @@ export default function CompteCourantClientPage() {
 
   const confirmLettrage = async (venteId: number) => {
     if (!selectedReglement) return
+    setLettrageError('')
     try {
       const res = await fetch(`/api/reglements/ventes/${selectedReglement.id}/lettrage`, {
         method: 'PATCH',
@@ -90,13 +91,14 @@ export default function CompteCourantClientPage() {
       if (res.ok) {
         showSuccess("Lettrage effectué avec succès !")
         setShowLettrageModal(false)
+        setSelectedReglement(null)
         fetchData()
       } else {
         const error = await res.json()
-        showError(error.error || "Erreur lors du lettrage.")
+        setLettrageError(error.error || "Erreur lors du lettrage.")
       }
     } catch (e) {
-      showError("Erreur réseau.")
+      setLettrageError("Erreur réseau.")
     }
   }
 
@@ -769,10 +771,10 @@ export default function CompteCourantClientPage() {
                     </h2>
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Associer le versement de {(selectedReglement as any)?.montant?.toLocaleString('fr-FR') || 0} F à une facture</p>
                  </div>
-                 <button 
-                   onClick={() => setShowLettrageModal(false)}
-                   className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 text-gray-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all"
-                 >
+                  <button 
+                    onClick={() => { setShowLettrageModal(false); setLettrageError(''); }}
+                    className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 text-gray-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all"
+                  >
                     <X className="h-5 w-5" />
                  </button>
               </div>
@@ -794,10 +796,15 @@ export default function CompteCourantClientPage() {
                          Fermer
                       </button>
                    </div>
-                ) : (
-                  <div className="grid gap-3">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 text-center">Sélectionnez la facture à régler avec ce montant</p>
-                    {unpaidInvoices.map((v) => (
+                 ) : (
+                   <div className="grid gap-3">
+                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 text-center">Sélectionnez la facture à régler avec ce montant</p>
+                     {lettrageError && (
+                       <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-center">
+                         <p className="text-xs font-bold text-red-700">{lettrageError}</p>
+                       </div>
+                     )}
+                     {unpaidInvoices.map((v) => (
                       <button 
                         key={v.id}
                         onClick={() => confirmLettrage(v.id)}

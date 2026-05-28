@@ -33,7 +33,7 @@ const achat = await prisma.achat.findUnique({
       fournisseur: { select: { id: true, nom: true, telephone: true, adresse: true, ncc: true } },
       lignes: true,
       reglements: true,
-      ReglementAchatLigne: { select: { montant: true } },
+      ReglementAchatLigne: { select: { reglementId: true, montant: true } },
     },
   })
 
@@ -43,10 +43,17 @@ const achat = await prisma.achat.findUnique({
     return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
   }
 
-  const totalLignePaye = (achat.ReglementAchatLigne as any[] || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+  const creditReglementIds = new Set(
+    (achat.reglements || [])
+      .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+      .map(r => r.id)
+  )
+  const totalLignePaye = (achat.ReglementAchatLigne as any[] || [])
+    .filter(l => !creditReglementIds.has(l.reglementId))
+    .reduce((s: number, l: any) => s + (l.montant || 0), 0)
   const achatWithRealPaye = {
     ...achat,
-    montantPaye: Math.max(totalLignePaye, achat.montantPaye || 0),
+    montantPaye: totalLignePaye > 0 ? totalLignePaye : (achat.montantPaye || 0),
     ReglementAchatLigne: undefined,
   }
 
@@ -119,8 +126,8 @@ export async function DELETE(
       await tx.caisse.deleteMany({
         where: {
           OR: [
-            { motif: `Achat ${a.numero}` },
-            { motif: `Règlement Achat ${a.numero}` }
+            { motif: `ACHAT ${a.numero}` },
+            { motif: `RÈGLEMENT ACHAT ${a.numero}` }
           ]
         }
       })
@@ -345,18 +352,20 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
         await tx.caisse.deleteMany({ 
           where: { 
             OR: [
-              { motif: `Règlement Achat ${oldAchat.numero}` },
+              { motif: `RÈGLEMENT ACHAT ${oldAchat.numero}` },
             ]
           } 
         })
+        await recalculerSoldeCaisse(oldAchat.magasinId, tx)
         // Supprimer les opérations bancaires liées à cet achat
         const opsBancairesOld = await tx.operationBancaire.findMany({
           where: { reference: oldAchat.numero }
         })
         for (const op of opsBancairesOld) {
+          const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
           await tx.banque.update({
             where: { id: op.banqueId },
-            data: { soldeActuel: { increment: op.montant } }
+            data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
           })
           await tx.operationBancaire.delete({ where: { id: op.id } })
         }
@@ -410,7 +419,10 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
         const fApprocheTotal = Math.max(0, Number(fraisApproche || 0))
         const totalFinal = newTotalTTC + fApprocheTotal
         const regsData = Array.isArray(reglements) ? reglements : []
-        const mntPaye = regsData.reduce((acc: number, r: any) => acc + (Number(r.montant) || 0), 0)
+        const mntPaye = regsData.reduce((acc: number, r: any) => {
+          if (String(r.mode).toUpperCase() === 'CREDIT') return acc
+          return acc + (Number(r.montant) || 0)
+        }, 0)
 
         // Gestion de la date : préserver l'heure d'origine si seule la date change
         let dateFinale = oldAchat.date
@@ -514,6 +526,8 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
           for (const r of regsData) {
             const mntR = Number(r.montant) || 0
             if (mntR <= 0) continue
+            const modeR = String(r.mode).toUpperCase()
+            if (modeR === 'CREDIT') continue
             const reglA = await tx.reglementAchat.create({
               data: {
                 achatId: updated.id,
@@ -534,7 +548,6 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
               }
             })
             // Synchro physique trésorerie
-            const modeR = String(r.mode).toUpperCase()
             if (estModeEspeces(modeR)) {
               await enregistrerMouvementCaisse({
                 magasinId: updated.magasinId,

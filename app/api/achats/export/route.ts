@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
   for (const a of filteredAchats) {
     const dateStr = a.date.toISOString().slice(0, 10)
     const fournisseur = a.fournisseur?.nom ?? a.fournisseurLibre ?? '—'
-    const reste = a.montantTotal - (a.montantPaye || 0)
+    const reste = Math.max(0, a.montantTotal - (a.montantPaye || 0))
 
     totalMontant += a.montantTotal
     totalPaye += a.montantPaye || 0

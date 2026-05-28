@@ -45,10 +45,10 @@ export async function GET(request: NextRequest) {
       }
 
       // Calcul du solde global
-      // Note: Dans cette application, le solde semble être (Engagements - Paiements) + soldeInitial
+      // FORMULE UNIFIÉE : Solde = (Ventes - Paiements) + soldeInitial - avoirInitial
       const engagements = c.ventes.reduce((sum, v) => sum + v.montantTotal, 0)
       const paiements = c.ventes.reduce((sum, v) => sum + (v.montantPaye || 0), 0)
-      const soldeNet = (c.soldeInitial || 0) + (engagements - paiements)
+      const soldeNet = (c.soldeInitial || 0) + (engagements - paiements) - (c.avoirInitial || 0)
 
       totalSolde += soldeNet
 

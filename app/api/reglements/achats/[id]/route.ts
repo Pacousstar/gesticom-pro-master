@@ -49,8 +49,8 @@ export async function DELETE(
         await tx.caisse.deleteMany({
           where: {
             OR: [
-              { motif: `Règlement Achat ${reglement.achat?.numero || ''}` },
-              { motif: `Règlement : ${reglement.achat?.numero || ''}` },
+              { motif: `RÈGLEMENT ACHAT ${reglement.achat?.numero || ''}` },
+              { motif: `RÈGLEMENT : ${reglement.achat?.numero || ''}` },
             ].filter(Boolean)
           }
         })
@@ -148,8 +148,8 @@ export async function PATCH(
         await tx.caisse.deleteMany({
           where: {
             OR: [
-              { motif: `Règlement Achat ${old.achat?.numero || ''}` },
-              { motif: `Règlement : ${old.achat?.numero || ''}` },
+              { motif: `RÈGLEMENT ACHAT ${old.achat?.numero || ''}` },
+              { motif: `RÈGLEMENT : ${old.achat?.numero || ''}` },
             ].filter(Boolean)
           }
         })

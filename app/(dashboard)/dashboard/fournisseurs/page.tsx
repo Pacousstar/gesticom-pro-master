@@ -651,28 +651,32 @@ export default function FournisseursPage() {
       </div>
 
       {selectedHistory && (
-        <div className="fixed inset-y-0 right-0 z-[140] flex h-screen max-h-screen min-h-0 w-full max-w-xl flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300">
-          <div className="flex-shrink-0 p-6 border-b flex items-center justify-between bg-orange-600 text-white print:hidden">
+        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full">
+          {/* Header avec Dégradé Professionnel - Fixed */}
+          <div className="pt-24 flex-none p-4 border-b flex items-center justify-between bg-gradient-to-r from-orange-700 to-orange-900 text-white print:hidden min-h-[100px]">
             <div>
-              <h2 className="text-xl font-bold">{selectedHistory.nom}</h2>
-              <p className="text-orange-100 text-xs">Historique des achats</p>
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                {selectedHistory.nom}
+              </h2>
+              <p className="text-orange-100 text-xs uppercase tracking-widest font-bold">Historique Complet des Achats</p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
+              <button 
                 onClick={() => window.print()}
-                className="flex items-center gap-2 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-bold hover:bg-white/30"
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
               >
-                <Printer className="h-4 w-4" />
+                <Download className="h-4 w-4" />
                 Imprimer
               </button>
-              <button onClick={() => setSelectedHistory(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+              <button onClick={() => { setSelectedHistory(null); setHistoryData([]) }} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                 <X className="h-6 w-6" />
               </button>
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6" id="printable-fournisseur-history">
+          <div className="flex-1 overflow-y-auto p-6 pb-20" id="printable-fournisseur-history">
+            {/* Style d'impression caché à l'écran */}
             <style dangerouslySetInnerHTML={{ __html: `
               @media print {
                 body * { visibility: hidden; }
@@ -681,93 +685,146 @@ export default function FournisseursPage() {
                 .no-print { display: none !important; }
               }
             ` }} />
+
             {loadingHistory ? (
-              <div className="flex flex-col items-center justify-center h-64 gap-3">
+              <div className="flex flex-col items-center justify-center h-64 gap-3 no-print">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-                <p className="text-gray-500 text-sm">Chargement...</p>
+                <p className="text-gray-500 text-sm italic font-medium tracking-tight">Analyse des flux d'achats...</p>
               </div>
             ) : historyData.length === 0 ? (
-              <div className="text-center py-20 text-gray-500">
+              <div className="text-center py-20 text-gray-500 no-print">
                 <Calendar className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                Désolé, aucune opération trouvée.
+                Aucun achat enregistré pour ce fournisseur.
               </div>
             ) : (
-              <div className="space-y-4">
-                {historyData.map((h: any, i: number) => (
-                  <div key={i} className="border rounded-xl p-4 bg-gray-50 hover:bg-white hover:shadow-md transition-all group">
-                    <div className="flex items-center justify-between mb-2">
-                       <span className="font-mono text-sm font-bold text-gray-900">{h.numero}</span>
-                       <span className="text-xs text-gray-500">{new Date(h.date).toLocaleDateString('fr-FR')}</span>
-                    </div>
+              <div className="space-y-6">
+                {/* En-tête Impression (Visible uniquement à l'impression) */}
+                <div className="hidden print:block border-b-2 border-gray-900 pb-4 mb-6">
+                    <h1 className="text-2xl font-bold uppercase">Historique des Achats</h1>
+                    <p className="text-lg font-medium">Fournisseur : {selectedHistory.nom}</p>
+                    <p className="text-sm text-gray-600 italic">Édité le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}</p>
+                </div>
 
-                    <div className="mt-2 mb-4 space-y-2">
-                      {h.lignes && h.lignes.length > 0 && h.lignes.map((l: any, idx: number) => (
-                        <div key={idx} className="flex items-start justify-between text-[11px] text-gray-600 border-b border-gray-100 pb-1 last:border-0">
-                          <div className="flex-1">
-                            <span className="font-bold text-gray-800">{l.quantite}</span>
-                            <span className="mx-1">x</span>
-                            <span>{l.produit?.designation || l.designation}</span>
-                          </div>
-                          <div className="font-medium text-gray-900">
-                            {(l.quantite * l.prixUnitaire).toLocaleString()} F
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                       <p className="text-lg font-bold text-gray-900">{h.montantTotal.toLocaleString()} F</p>
-                       <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
-                         {h.statutPaiement}
-                       </span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between border-t pt-2 text-[10px] text-gray-500">
-                       <span>{h.modePaiement}</span>
-                       <div className="flex gap-2 items-center">
-                         <button
-                           title="Imprimer facture A4 premium"
-                           onClick={async () => {
-                             let entreprise: any = {}
-                            try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch (_) { /* ignore erreur paramètres impression */ }
-                             const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles } = await import('@/lib/print-templates')
-                             const lignesHTML = generateLignesHTML((h.lignes || []).map((l: any) => ({ designation: l.produit?.designation || l.designation, quantite: l.quantite, prixUnitaire: l.prixUnitaire, montant: l.montant })))
-                             const template = getDefaultA4Template('ACHAT')
-                             const logoPath = entreprise.logoLocal || entreprise.logo
-                             const logoHTML = logoPath ? `<img src="${logoPath}" alt="Logo" style="max-width:150px;height:auto;display:block"/>` : ''
-                             const html = replaceTemplateVariables(template, {
-                               ENTREPRISE_NOM: entreprise.nomEntreprise || '', ENTREPRISE_CONTACT: entreprise.contact || '',
-                               ENTREPRISE_LOCALISATION: entreprise.localisation || '', ENTREPRISE_NCC: entreprise.numNCC || '',
-                               ENTREPRISE_RC: entreprise.registreCommerce || '', ENTREPRISE_LOGO: logoHTML,
-                               ENTREPRISE_PIED_DE_PAGE: entreprise.piedDePage || '',
-                               ENTREPRISE_MENTION_SPECIALE: entreprise.mentionSpeciale || 'Les marchandises livrées ne sont pas reprises.',
-                               NUMERO: h.numero, DATE: new Date(h.date).toLocaleDateString('fr-FR'),
-                               HEURE: new Date(h.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-                               FOURNISSEUR_NOM: selectedHistory?.nom || '', LIGNES: lignesHTML,
-                               TOTAL: `${h.montantTotal.toLocaleString()} FCFA`,
-                               MONTANT_PAYE: `${(h.montantPaye || 0).toLocaleString()} FCFA`,
-                               RESTE: `${Math.max(0, h.montantTotal - (h.montantPaye || 0)).toLocaleString()} FCFA`,
-                               MODE_PAIEMENT: h.modePaiement || 'ESPECES', OBSERVATION: h.observation || ''
-                             })
-                             const pw = window.open('', '_blank')
-                             if (!pw) { alert('Autorisez les popups.'); return }
-                             pw.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Facture ${h.numero}</title><style>${getPrintStyles('A4')}</style></head><body><div class="print-document">${html}</div></body></html>`)
-                             pw.document.close()
-                             pw.onload = () => { setTimeout(() => { pw.print(); pw.close() }, 250) }
-                           }}
-                           className="text-orange-600 font-bold flex items-center gap-1 hover:text-orange-800 transition-colors px-2 py-1 rounded hover:bg-orange-50"
-                         >
-                           <FileText className="h-3 w-3" /> Facture A4
-                         </button>
-                         <button
-                          onClick={() => window.location.href = `/dashboard/achats?numero=${h.numero}`}
-                          className="text-orange-600 font-bold flex items-center gap-1"
-                         >
-                          Voir <ChevronRight className="h-3 w-3" />
-                         </button>
-                       </div>
-                    </div>
+                {/* Synthèse Financière (Les Compteurs) */}
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  <div className="bg-gray-900 rounded-xl p-4 text-white shadow-lg border-b-4 border-orange-500">
+                    <p className="text-[10px] uppercase font-bold text-gray-400">Total Achats</p>
+                    <p className="text-xl font-black italic tracking-tighter">
+                      {historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0).toLocaleString()} F
+                    </p>
                   </div>
-                ))}
+                  <div className="bg-emerald-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-emerald-800">
+                    <p className="text-[10px] uppercase font-bold text-emerald-100">Total Payé</p>
+                    <p className="text-xl font-black italic tracking-tighter">
+                      {historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0).toLocaleString()} F
+                    </p>
+                  </div>
+                  <div className="bg-red-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-red-800">
+                    <p className="text-[10px] uppercase font-bold text-red-100">Reste à Payer</p>
+                    <p className="text-xl font-black italic tracking-tighter">
+                      {(historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0) - historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)).toLocaleString()} F
+                    </p>
+                  </div>
+                </div>
+
+                {/* Liste des Achats - Design Professionnel */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest border-l-4 border-orange-600 pl-3">Détail chronologique</h3>
+                  {historyData.map((h: any, i: number) => (
+                    <div key={i} className="border-2 border-gray-100 rounded-2xl p-5 bg-white hover:border-orange-200 hover:shadow-xl transition-all group relative overflow-hidden">
+                      {/* Badge Statut en filigrane */}
+                      <div className="absolute top-2 right-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                         <FileText className="h-16 w-16 -rotate-12" />
+                      </div>
+
+                      <div className="flex items-center justify-between mb-4 relative z-10">
+                         <div>
+                            <span className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter mb-1 inline-block">ACHAT {h.numero}</span>
+                            <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+                               <Calendar className="h-3 w-3" />
+                               {new Date(h.date).toLocaleDateString('fr-FR')}
+                            </div>
+                         </div>
+                         <div className="text-right">
+                            <p className="text-xl font-black text-gray-900 tracking-tighter italic">{h.montantTotal.toLocaleString()} F</p>
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800 border-green-200 border' : 'bg-orange-100 text-orange-800 border-orange-200 border'}`}>
+                              {h.statutPaiement === 'PAYE' ? 'SÉCURISÉ ✅' : 'IMPAYÉ ⏳'}
+                            </span>
+                         </div>
+                      </div>
+
+                      {/* Lignes de Détail (Micro-design) */}
+                      <div className="space-y-2 mt-4 bg-gray-50/50 p-3 rounded-xl border border-dashed border-gray-200">
+                        {h.lignes && h.lignes.length > 0 ? h.lignes.map((l: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between text-[11px] font-medium text-gray-700">
+                            <span className="flex-1">
+                               <span className="bg-gray-200 text-gray-800 px-1.5 py-0.5 rounded font-black mr-2 italic">{l.quantite}</span>
+                               {l.produit?.designation || l.designation}
+                            </span>
+                            <span className="text-gray-900 font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</span>
+                          </div>
+                        )) : (
+                          <p className="text-[10px] text-gray-400 italic">Détails indisponibles</p>
+                        )}
+                      </div>
+
+                      {/* Footer de Facture */}
+                      <div className="mt-4 pt-3 flex items-center justify-between text-[10px] border-t border-gray-100 no-print">
+                         <div className="flex items-center gap-4">
+                            <span className="text-gray-400 italic">Paiement : <span className="text-gray-700 font-bold uppercase">{h.modePaiement}</span></span>
+                            <span className="text-gray-400 italic">Réglé : <span className="text-emerald-700 font-bold">{(h.montantPaye || 0).toLocaleString()} F</span></span>
+                         </div>
+                         <div className="flex items-center gap-2">
+                           <button
+                             title="Imprimer facture A4 premium"
+                             onClick={async () => {
+                               let entreprise: any = {}
+                              try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch (_) {}
+                               const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles } = await import('@/lib/print-templates')
+                               const lignesHTML = generateLignesHTML((h.lignes || []).map((l: any) => ({ designation: l.produit?.designation || l.designation, quantite: l.quantite, prixUnitaire: l.prixUnitaire, montant: l.montant })))
+                               const template = getDefaultA4Template('ACHAT')
+                               const logoPath = entreprise.logoLocal || entreprise.logo
+                               const logoHTML = logoPath ? `<img src="${logoPath}" alt="Logo" style="max-width:150px;height:auto;display:block"/>` : ''
+                               const html = replaceTemplateVariables(template, {
+                                 ENTREPRISE_NOM: entreprise.nomEntreprise || '', ENTREPRISE_CONTACT: entreprise.contact || '',
+                                 ENTREPRISE_LOCALISATION: entreprise.localisation || '', ENTREPRISE_NCC: entreprise.numNCC || '',
+                                 ENTREPRISE_RC: entreprise.registreCommerce || '', ENTREPRISE_LOGO: logoHTML,
+                                 ENTREPRISE_PIED_DE_PAGE: entreprise.piedDePage || '',
+                                 ENTREPRISE_MENTION_SPECIALE: entreprise.mentionSpeciale || 'Les marchandises livrées ne sont pas reprises.',
+                                 NUMERO: h.numero, DATE: new Date(h.date).toLocaleDateString('fr-FR'),
+                                 HEURE: new Date(h.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                                 FOURNISSEUR_NOM: selectedHistory?.nom || '', LIGNES: lignesHTML,
+                                 TOTAL: `${h.montantTotal.toLocaleString()} FCFA`,
+                                 MONTANT_PAYE: `${(h.montantPaye || 0).toLocaleString()} FCFA`,
+                                 RESTE: `${Math.max(0, h.montantTotal - (h.montantPaye || 0)).toLocaleString()} FCFA`,
+                                 MODE_PAIEMENT: h.modePaiement || 'ESPECES', OBSERVATION: h.observation || ''
+                               })
+                               const pw = window.open('', '_blank')
+                               if (!pw) { alert('Autorisez les popups.'); return }
+                               pw.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Facture ${h.numero}</title><style>${getPrintStyles('A4')}</style></head><body><div class="print-document">${html}</div></body></html>`)
+                               pw.document.close()
+                               pw.onload = () => { setTimeout(() => { pw.print(); pw.close() }, 250) }
+                             }}
+                             className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-2.5 py-1.5 rounded-lg hover:bg-orange-50 hover:text-orange-700 transition-all font-bold tracking-tighter"
+                           >
+                             <FileText className="h-3 w-3" /> A4
+                           </button>
+                           <button 
+                            onClick={() => window.location.href = `/dashboard/achats?numero=${h.numero}`}
+                            className="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all font-bold tracking-tighter uppercase"
+                           >
+                            Visualiser <ChevronRight className="h-3 w-3" />
+                           </button>
+                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pied de page Impression */}
+                <div className="hidden print:block mt-12 border-t pt-4 text-center text-[10px] text-gray-500 italic">
+                    Généré par GestiCom Pro - Logiciel de Gestion Commerciale Expert.
+                </div>
               </div>
             )}
           </div>

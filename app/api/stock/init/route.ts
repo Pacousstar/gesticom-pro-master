@@ -75,20 +75,8 @@ const [produits, magazines] = await Promise.all([
       }
     }
 
-    for (const p of produits) {
-      // Vérifier si le produit a déjà un stock (peu importe le magasin)
-      const stockExistant = await prisma.stock.findFirst({
-        where: { produitId: p.id }
-      })
-      
-      if (!stockExistant) {
-        // Le produit n'a pas de stock, créer un stock dans le premier magasin
-        await prisma.stock.create({
-          data: { produitId: p.id, magasinId: premierMagasinId, quantite: 0, quantiteInitiale: 0 },
-        })
-        created++
-      }
-    }
+    // La seconde boucle est supprimée : la première boucle (avec filtre entiteId) est suffisante
+    // Note: L'ancien code créait des doublons car il ne filtrait pas par entiteId
 
     return NextResponse.json({ created })
   } catch (e) {

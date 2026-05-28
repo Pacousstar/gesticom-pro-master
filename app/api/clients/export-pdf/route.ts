@@ -32,20 +32,31 @@ export async function GET(request: NextRequest) {
         )
       : list
 
-    const creditIds = filtered.filter((c) => c.type === 'CREDIT').map((c) => c.id)
+    const clientIds = filtered.map((c) => c.id)
     let detteByClient: Record<number, number> = {}
-    if (creditIds.length > 0) {
-      const sums = await prisma.vente.groupBy({
+    if (clientIds.length > 0) {
+      const ventesSums = await prisma.vente.groupBy({
         by: ['clientId'],
         where: {
-          clientId: { in: creditIds },
+          clientId: { in: clientIds },
           statut: 'VALIDEE',
-          modePaiement: 'CREDIT',
         },
         _sum: { montantTotal: true },
       })
-      for (const r of sums) {
-        if (r.clientId != null) detteByClient[r.clientId] = r._sum.montantTotal ?? 0
+      const paieSums = await prisma.reglementVente.groupBy({
+        by: ['clientId'],
+        where: {
+          clientId: { in: clientIds },
+          statut: { in: ['VALIDE', 'VALIDEE'] },
+        },
+        _sum: { montant: true },
+      })
+      const venteMap = Object.fromEntries(ventesSums.map(r => [r.clientId, r._sum.montantTotal ?? 0]))
+      const paieMap = Object.fromEntries(paieSums.map(r => [r.clientId, r._sum.montant ?? 0]))
+      for (const c of filtered) {
+        const totalVentes = venteMap[c.id] || 0
+        const totalPaiements = paieMap[c.id] || 0
+        detteByClient[c.id] = totalVentes - totalPaiements + (c.plafondCredit ? 0 : 0)
       }
     }
 

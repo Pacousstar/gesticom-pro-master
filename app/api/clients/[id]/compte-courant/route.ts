@@ -82,7 +82,8 @@ export async function GET(
         select: {
           id: true, numero: true, date: true, montantTotal: true,
           montantPaye: true, modePaiement: true, statutPaiement: true, magasin: { select: { nom: true } },
-          ReglementVenteLigne: { select: { montant: true } }
+          reglements: { select: { id: true, modePaiement: true } },
+          ReglementVenteLigne: { select: { reglementId: true, montant: true } }
         }
       }),
       prisma.reglementVente.findMany({
@@ -97,8 +98,15 @@ export async function GET(
     ])
 
     const dataWithRealPaye = ventes.map((v: any) => {
-      const totalLignePaye = (v.ReglementVenteLigne || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
-      return { ...v, montantPaye: Math.max(totalLignePaye, v.montantPaye || 0), ReglementVenteLigne: undefined }
+      const creditReglementIds = new Set(
+        (v.reglements || [])
+          .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+          .map(r => r.id)
+      )
+      const totalLignePaye = (v.ReglementVenteLigne || [])
+        .filter(l => !creditReglementIds.has(l.reglementId))
+        .reduce((s: number, l: any) => s + (l.montant || 0), 0)
+      return { ...v, montantPaye: totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0), ReglementVenteLigne: undefined, reglements: undefined }
     })
 
     // Construire les opérations
@@ -232,7 +240,7 @@ export async function POST(
           statutPaiement: { in: ['CREDIT', 'PARTIEL'] },
         },
         orderBy: { date: 'asc' },
-        select: { id: true, montantTotal: true, montantPaye: true, ReglementVenteLigne: { select: { montant: true } } },
+        select: { id: true, montantTotal: true, montantPaye: true, ReglementVenteLigne: { select: { reglementId: true, montant: true } } },
       })
 
       let resteAPayer = montant
@@ -240,8 +248,9 @@ export async function POST(
       for (const vente of ventesNonSoldees) {
         if (resteAPayer <= 0) break
 
-        const totalLignePaye = (vente.ReglementVenteLigne as any[] || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
-        const realMontantPaye = Math.max(totalLignePaye, vente.montantPaye || 0)
+        const totalLignePaye = (vente.ReglementVenteLigne as any[] || [])
+          .reduce((s: number, l: any) => s + (l.montant || 0), 0)
+        const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (vente.montantPaye || 0)
         const montantDu = (vente.montantTotal || 0) - realMontantPaye
         const montantARegler = Math.min(montantDu, resteAPayer)
 

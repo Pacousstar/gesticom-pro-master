@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/require-role'
+import { montantLigneTTC, montantTotalVenteDocument } from '@/lib/calculs-commerciaux'
 
 export async function POST(req: Request) {
   try {
@@ -28,8 +29,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Données incomplètes (magasin, lignes manquants)' }, { status: 400 })
     }
 
-    // Calcul du total
-    const montantTotal = lignes.reduce((acc: any, l: any) => acc + (l.quantite * l.prixUnitaire), 0)
+    // Calcul du total avec TVA et remises
+    let sommeLignesTTC = 0
+    const lignesData = lignes.map((l: any) => {
+      const qte = Number(l.quantite) || 0
+      const pu = Number(l.prixUnitaire) || 0
+      const tva = Number(l.tva) || 0
+      const remise = Number(l.remise) || 0
+      const montant = montantLigneTTC({ quantite: qte, prixUnitaire: pu, remiseLigne: remise, tvaPourcent: tva })
+      sommeLignesTTC += montant
+      return { designation: l.designation || ("Produit ID: " + l.produitId), quantite: qte, prixUnitaire: pu, montant }
+    })
+
+    const montantTotal = montantTotalVenteDocument(sommeLignesTTC, Number(data.remiseGlobale || 0), Number(data.fraisApproche || 0))
 
     const nouvelleArchive = await prisma.archiveVente.create({
       data: {
@@ -42,12 +54,7 @@ export async function POST(req: Request) {
         clientLibre: clientLibre || (!clientId ? 'Client de passage' : null),
         montantTotal,
         lignes: {
-          create: lignes.map((l: any) => ({
-            designation: l.designation || ("Produit ID: " + l.produitId),
-            quantite: Number(l.quantite),
-            prixUnitaire: Number(l.prixUnitaire),
-            montant: Number(l.quantite) * Number(l.prixUnitaire)
-          }))
+          create: lignesData
         }
       }
     })

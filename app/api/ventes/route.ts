@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
         client: { select: { code: true, nom: true } },
         lignes: { include: { produit: { select: { code: true, designation: true } } } },
         reglements: true,
-        ReglementVenteLigne: { select: { montant: true } },
+        ReglementVenteLigne: { select: { reglementId: true, montant: true } },
       },
     }),
     prisma.vente.count({ where }),
@@ -99,11 +99,19 @@ export async function GET(request: NextRequest) {
   ])
 
   const dataWithRealPaye = ventes.map(v => {
-    const totalLignePaye = (v.ReglementVenteLigne || []).reduce((s, l) => s + (l.montant || 0), 0)
+    const creditReglementIds = new Set(
+      (v.reglements || [])
+        .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+        .map(r => r.id)
+    )
+    const totalLignePaye = (v.ReglementVenteLigne || [])
+      .filter(l => !creditReglementIds.has(l.reglementId))
+      .reduce((s, l) => s + (l.montant || 0), 0)
     return {
       ...v,
-      montantPaye: Math.max(totalLignePaye, v.montantPaye || 0),
+      montantPaye: totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0),
       ReglementVenteLigne: undefined,
+      reglements: undefined,
     }
   })
 

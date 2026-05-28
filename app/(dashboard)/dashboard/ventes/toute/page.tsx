@@ -501,7 +501,7 @@ export default function ToutesLesVentesPage() {
                     <td className="px-8 py-6">
                        <p className="font-mono text-xs font-black text-orange-600">{v.numero}</p>
                        <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-tighter">
-                          {new Date(v.date).toLocaleDateString('fr-FR', {day: '2-digit', month: 'long', year: 'numeric'})}
+                          {new Date(v.date).toLocaleDateString('fr-FR', {day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'})}
                        </p>
                     </td>
                     <td className="px-8 py-6">

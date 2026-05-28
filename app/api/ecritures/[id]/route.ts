@@ -145,10 +145,21 @@ export async function PATCH(
       if (refType === 'VENTE' || refType === 'VENTE_REGLEMENT') {
         const vente = await prisma.vente.findUnique({
           where: { id: refId },
-          select: { numero: true, date: true, montantTotal: true, modePaiement: true, clientId: true, utilisateurId: true, entiteId: true, magasinId: true },
+          select: {
+            numero: true, date: true, montantTotal: true, modePaiement: true,
+            clientId: true, utilisateurId: true, entiteId: true, magasinId: true,
+            fraisApproche: true,
+            lignes: { select: { produitId: true, designation: true, quantite: true, prixUnitaire: true, coutUnitaire: true, tva: true, remise: true } },
+            reglements: { select: { modePaiement: true, montant: true } },
+          },
         })
         if (vente) {
           if (refType === 'VENTE') {
+            const lignesData = vente.lignes.map((l: any) => ({
+              produitId: l.produitId, designation: l.designation, quantite: l.quantite,
+              prixUnitaire: l.prixUnitaire, coutUnitaire: l.coutUnitaire, tva: l.tva, remise: l.remise,
+            }))
+            const regsData = vente.reglements.map((r: any) => ({ mode: r.modePaiement, montant: r.montant }))
             await comptabiliserVente({
               venteId: refId,
               numeroVente: vente.numero,
@@ -159,6 +170,9 @@ export async function PATCH(
               utilisateurId: vente.utilisateurId,
               entiteId: vente.entiteId,
               magasinId: vente.magasinId,
+              fraisApproche: Number(vente.fraisApproche || 0),
+              reglements: regsData,
+              lignes: lignesData,
             })
           } else {
             await comptabiliserReglementVente({
@@ -175,10 +189,21 @@ export async function PATCH(
       } else if (refType === 'ACHAT' || refType === 'ACHAT_REGLEMENT') {
         const achat = await prisma.achat.findUnique({
           where: { id: refId },
-          select: { numero: true, date: true, montantTotal: true, modePaiement: true, fournisseurId: true, utilisateurId: true, entiteId: true, magasinId: true },
+          select: {
+            numero: true, date: true, montantTotal: true, modePaiement: true,
+            fournisseurId: true, utilisateurId: true, entiteId: true, magasinId: true,
+            fraisApproche: true,
+            lignes: { select: { produitId: true, designation: true, quantite: true, prixUnitaire: true, tva: true, remise: true } },
+            reglements: { select: { modePaiement: true, montant: true } },
+          },
         })
         if (achat) {
           if (refType === 'ACHAT') {
+            const lignesData = achat.lignes.map((l: any) => ({
+              produitId: l.produitId, designation: l.designation, quantite: l.quantite,
+              prixUnitaire: l.prixUnitaire, tva: l.tva, remise: l.remise,
+            }))
+            const regsData = achat.reglements.map((r: any) => ({ mode: r.modePaiement, montant: r.montant }))
             await comptabiliserAchat({
               achatId: refId,
               numeroAchat: achat.numero,
@@ -189,6 +214,9 @@ export async function PATCH(
               utilisateurId: achat.utilisateurId,
               entiteId: achat.entiteId,
               magasinId: achat.magasinId,
+              fraisApproche: Number(achat.fraisApproche || 0),
+              reglements: regsData,
+              lignes: lignesData,
             })
           } else {
             await comptabiliserReglementAchat({
@@ -292,14 +320,42 @@ export async function DELETE(
       await deleteEcrituresByReference(refType, refId)
 
       if (refType === 'VENTE') {
-        const vente = await prisma.vente.findUnique({ where: { id: refId }, select: { numero: true, date: true, montantTotal: true, modePaiement: true, clientId: true, utilisateurId: true, entiteId: true, magasinId: true } })
+        const vente = await prisma.vente.findUnique({
+          where: { id: refId },
+          select: {
+            numero: true, date: true, montantTotal: true, modePaiement: true,
+            clientId: true, utilisateurId: true, entiteId: true, magasinId: true,
+            fraisApproche: true,
+            lignes: { select: { produitId: true, designation: true, quantite: true, prixUnitaire: true, coutUnitaire: true, tva: true, remise: true } },
+            reglements: { select: { modePaiement: true, montant: true } },
+          },
+        })
         if (vente) {
-          await comptabiliserVente({ venteId: refId, numeroVente: vente.numero, date: vente.date, montantTotal: Number(vente.montantTotal), modePaiement: vente.modePaiement || 'ESPECES', clientId: vente.clientId ?? undefined, utilisateurId: vente.utilisateurId, entiteId: vente.entiteId, magasinId: vente.magasinId })
+          const lignesData = vente.lignes.map((l: any) => ({
+            produitId: l.produitId, designation: l.designation, quantite: l.quantite,
+            prixUnitaire: l.prixUnitaire, coutUnitaire: l.coutUnitaire, tva: l.tva, remise: l.remise,
+          }))
+          const regsData = vente.reglements.map((r: any) => ({ mode: r.modePaiement, montant: r.montant }))
+          await comptabiliserVente({ venteId: refId, numeroVente: vente.numero, date: vente.date, montantTotal: Number(vente.montantTotal), modePaiement: vente.modePaiement || 'ESPECES', clientId: vente.clientId ?? undefined, utilisateurId: vente.utilisateurId, entiteId: vente.entiteId, magasinId: vente.magasinId, fraisApproche: Number(vente.fraisApproche || 0), reglements: regsData, lignes: lignesData })
         }
       } else if (refType === 'ACHAT') {
-        const achat = await prisma.achat.findUnique({ where: { id: refId }, select: { numero: true, date: true, montantTotal: true, modePaiement: true, fournisseurId: true, utilisateurId: true, entiteId: true, magasinId: true } })
+        const achat = await prisma.achat.findUnique({
+          where: { id: refId },
+          select: {
+            numero: true, date: true, montantTotal: true, modePaiement: true,
+            fournisseurId: true, utilisateurId: true, entiteId: true, magasinId: true,
+            fraisApproche: true,
+            lignes: { select: { produitId: true, designation: true, quantite: true, prixUnitaire: true, tva: true, remise: true } },
+            reglements: { select: { modePaiement: true, montant: true } },
+          },
+        })
         if (achat) {
-          await comptabiliserAchat({ achatId: refId, numeroAchat: achat.numero, date: achat.date, montantTotal: Number(achat.montantTotal), modePaiement: achat.modePaiement || 'ESPECES', fournisseurId: achat.fournisseurId ?? undefined, utilisateurId: achat.utilisateurId, entiteId: achat.entiteId, magasinId: achat.magasinId })
+          const lignesData = achat.lignes.map((l: any) => ({
+            produitId: l.produitId, designation: l.designation, quantite: l.quantite,
+            prixUnitaire: l.prixUnitaire, tva: l.tva, remise: l.remise,
+          }))
+          const regsData = achat.reglements.map((r: any) => ({ mode: r.modePaiement, montant: r.montant }))
+          await comptabiliserAchat({ achatId: refId, numeroAchat: achat.numero, date: achat.date, montantTotal: Number(achat.montantTotal), modePaiement: achat.modePaiement || 'ESPECES', fournisseurId: achat.fournisseurId ?? undefined, utilisateurId: achat.utilisateurId, entiteId: achat.entiteId, magasinId: achat.magasinId, fraisApproche: Number(achat.fraisApproche || 0), reglements: regsData, lignes: lignesData })
         }
       } else if (refType === 'DEPENSE') {
         const depense = await prisma.depense.findUnique({ where: { id: refId }, select: { date: true, montant: true, montantPaye: true, categorie: true, libelle: true, modePaiement: true, utilisateurId: true, entiteId: true } })

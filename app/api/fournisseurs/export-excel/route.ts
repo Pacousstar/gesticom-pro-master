@@ -44,9 +44,10 @@ export async function GET(request: NextRequest) {
       }
 
       // Calcul de la dette totale
+      // FORMULE UNIFIÉE : Dette = (Achats - Paiements) + soldeInitial - avoirInitial
       const engagements = f.achats.reduce((sum, a) => sum + a.montantTotal, 0)
       const paiements = f.achats.reduce((sum, a) => sum + (a.montantPaye || 0), 0)
-      const detteNet = (f.soldeInitial || 0) + (engagements - paiements)
+      const detteNet = (f.soldeInitial || 0) + (engagements - paiements) - (f.avoirInitial || 0)
 
       totalDette += detteNet
 

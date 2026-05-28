@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     const dateStr = v.date.toISOString().slice(0, 10)
     const clientNom = v.client?.nom || v.clientLibre || '—'
     const clientCode = v.client?.code || '—'
-    const reste = v.montantTotal - (v.montantPaye || 0)
+    const reste = Math.max(0, v.montantTotal - (v.montantPaye || 0))
 
     totalMontant += v.montantTotal
     totalPaye += v.montantPaye || 0

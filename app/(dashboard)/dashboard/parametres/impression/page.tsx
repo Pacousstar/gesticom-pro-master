@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Printer, Plus, Edit2, Trash2, Loader2, X, Upload, Eye } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
-import { getPrintStyles } from '@/lib/print-templates'
+import { getPrintStyles, replaceTemplateVariables } from '@/lib/print-templates'
 
 type PrintTemplate = {
   id: number
@@ -158,7 +158,20 @@ export default function ImpressionPage() {
 
   const handlePreview = (template: PrintTemplate) => {
     const content = template.enTete || DEFAULT_TEMPLATE
-    setPreviewTemplate(content)
+    setPreviewTemplate(replaceTemplateVariables(content, {
+      ENTREPRISE_NOM: 'GESTICOM PRO',
+      ENTREPRISE_CONTACT: '+226 XX XX XX XX',
+      ENTREPRISE_LOCALISATION: 'Ouagadougou, Burkina Faso',
+      NUMERO: 'FACT-001',
+      DATE: new Date().toLocaleDateString('fr-FR'),
+      HEURE: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      MAGASIN_CODE: 'MAG-01',
+      MAGASIN_NOM: 'Magasin Principal',
+      CLIENT_NOM: 'Client Test',
+      LIGNES: '<tr><td>1</td><td>Produit exemple</td><td>1</td><td>10 000</td><td>10 000 FCFA</td></tr>',
+      TOTAL: '10 000 FCFA',
+      MODE_PAIEMENT: 'ESPECES',
+    }))
     setPreviewOpen(true)
   }
 
