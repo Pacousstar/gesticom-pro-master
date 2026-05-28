@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
           },
           reglements: {
             where: {
+              statut: { in: ['VALIDE'] },
               ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
                 utilisateur: { entiteId }
               } : {}),
@@ -75,12 +76,14 @@ export async function GET(request: NextRequest) {
           avoirInitial: true,
           achats: {
             where: {
+              statut: { in: ['VALIDE', 'VALIDEE'] },
               ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
             },
             select: { montantTotal: true, montantPaye: true }
           },
           reglements: {
             where: {
+              statut: { in: ['VALIDE'] },
               ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
                 utilisateur: { entiteId }
               } : {}),

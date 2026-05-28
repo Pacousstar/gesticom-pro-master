@@ -210,6 +210,7 @@ export async function POST(request: NextRequest) {
         utilisateurId: session.userId,
         magasinId,
         entiteId,
+        modePaiement,
       }, tx)
 
       // ✅ SYNCHRO TRÉSORERIE (Caisse ou Banque)
