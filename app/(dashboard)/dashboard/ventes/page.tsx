@@ -1018,9 +1018,6 @@ export default function VentesPage() {
           .screen-only {
             display: none !important;
           }
-          .print-only { 
-            display: none !important; 
-          }
           .print-section { 
             display: block !important; 
           }

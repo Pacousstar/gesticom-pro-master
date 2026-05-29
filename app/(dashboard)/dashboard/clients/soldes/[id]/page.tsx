@@ -353,16 +353,16 @@ export default function CompteCourantClientPage() {
 
         <div className="print-summary">
            <div className="print-card">
-              <p className="text-[8px] font-black uppercase">Total Facturé (Débit)</p>
-               <p className="text-lg font-black">{ops.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F</p>
+               <p className="text-[11px] font-black uppercase">Total Facturé (Débit)</p>
+                <p className="text-lg font-black">{ops.reduce((acc, op) => acc + op.debit, 0).toLocaleString('fr-FR')} F</p>
            </div>
            <div className="print-card">
-              <p className="text-[8px] font-black uppercase">Total Encaissé (Crédit)</p>
-               <p className="text-lg font-black text-emerald-800">{ops.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F</p>
+               <p className="text-[11px] font-black uppercase">Total Encaissé (Crédit)</p>
+                <p className="text-lg font-black text-emerald-800">{ops.reduce((acc, op) => acc + op.credit, 0).toLocaleString('fr-FR')} F</p>
            </div>
            <div className="print-card bg-gray-100">
-              <p className="text-[8px] font-black uppercase">Solde Net à Payer</p>
-              <p className="text-xl font-black text-orange-800">{soldeTotal.toLocaleString('fr-FR')} F</p>
+               <p className="text-[11px] font-black uppercase">Solde Net à Payer</p>
+               <p className="text-xl font-black text-orange-800">{soldeTotal.toLocaleString('fr-FR')} F</p>
            </div>
         </div>
       </div>

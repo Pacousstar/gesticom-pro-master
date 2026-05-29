@@ -287,6 +287,7 @@ export default function ChargesPage() {
 
   return (
     <div className="space-y-6">
+      <div className="no-print">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -577,6 +578,7 @@ export default function ChargesPage() {
           />
         </div>
       )}
+      </div>
 
       {/* Modale d'Aperçu Impression */}
       {isPreviewOpen && (
@@ -661,7 +663,7 @@ export default function ChargesPage() {
       )}
 
       {/* Zone cachée pour l'impression système (Browser Print) */}
-      <div className="hidden print:block fixed inset-0 z-0 bg-white p-0 m-0">
+      <div className="hidden print:block bg-white">
           {paginateForPrint(allChargesForPrint).map((chunk, index, allChunks) => (
             <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
               <ListPrintWrapper

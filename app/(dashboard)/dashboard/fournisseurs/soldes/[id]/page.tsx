@@ -330,16 +330,16 @@ export default function CompteCourantFournisseurPage() {
 
         <div className="print-summary">
            <div className="print-card">
-              <p className="text-[8px] font-black uppercase">Total Achats (Débit)</p>
-               <p className="text-lg font-black">{totalDebit.toLocaleString('fr-FR')} F</p>
+               <p className="text-[11px] font-black uppercase">Total Achats (Débit)</p>
+                <p className="text-lg font-black">{totalDebit.toLocaleString('fr-FR')} F</p>
            </div>
            <div className="print-card">
-              <p className="text-[8px] font-black uppercase">Total Payé (Crédit)</p>
-               <p className="text-lg font-black text-emerald-800">{totalCredit.toLocaleString('fr-FR')} F</p>
+               <p className="text-[11px] font-black uppercase">Total Payé (Crédit)</p>
+                <p className="text-lg font-black text-emerald-800">{totalCredit.toLocaleString('fr-FR')} F</p>
            </div>
            <div className="print-card bg-gray-100">
-              <p className="text-[8px] font-black uppercase">Solde Net à Payer</p>
-              <p className="text-xl font-black text-orange-800">{soldeTotal.toLocaleString('fr-FR')} F</p>
+               <p className="text-[11px] font-black uppercase">Solde Net à Payer</p>
+               <p className="text-xl font-black text-orange-800">{soldeTotal.toLocaleString('fr-FR')} F</p>
            </div>
         </div>
       </div>

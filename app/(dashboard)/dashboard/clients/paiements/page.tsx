@@ -86,7 +86,8 @@ export default function PaiementsClientsPage() {
   }, [filteredData])
 
   return (
-    <div className="space-y-6">
+    <div>
+      <div className="space-y-6 no-print">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white uppercase tracking-tight">Récapitulatif des Paiements</h1>
@@ -226,6 +227,7 @@ export default function PaiementsClientsPage() {
             onPageChange={setCurrentPage}
           />
         )}
+      </div>
       </div>
       {/* Zone d'impression des Paiements Clients */}
       <div className="hidden print:block font-sans text-black bg-white p-4">

@@ -673,7 +673,7 @@ export default function ClientsPage() {
       </div>
 
       {selectedHistory && (
-        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full">
+        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full no-print">
           {/* Header avec Dégradé Professionnel - Fixed */}
           <div className="pt-24 flex-none p-4 border-b flex items-center justify-between bg-gradient-to-r from-blue-700 to-blue-900 text-white print:hidden min-h-[100px]">
             <div>
