@@ -1,6 +1,6 @@
 {
   "name": "gesticom",
-  "version": "3.0.16",
+  "version": "3.1.3",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -19,6 +19,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:reset-admin": "node scripts/reset-admin-password.js",
+    "deploy": "npx tsx scripts/deploy.ts",
+    "deploy:reset": "npx tsx scripts/deploy.ts --reset",
     "db:fix-schema": "node scripts/ajouter-colonnes-manquantes-bd.js",
     "db:use-recent": "node scripts/utiliser-base-recente.js",
     "db:activer-produits-stock": "node scripts/activer-produits-et-stock.js",
@@ -49,7 +51,7 @@
     "jose": "^5.9.6",
     "jspdf": "^4.1.0",
     "lucide-react": "^0.563.0",
-    "next": "^16.2.2",
+    "next": "^16.2.3",
     "node-cron": "^4.2.1",
     "node-windows": "^1.0.0-beta.8",
     "nodemailer": "^8.0.1",
