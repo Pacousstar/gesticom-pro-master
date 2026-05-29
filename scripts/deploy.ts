@@ -76,7 +76,7 @@ async function main() {
 
   // 3. Seed (crée admin/magasin/entité si absents)
   console.log('\n--- Étape 3 : Seed ---')
-  run('npx prisma db seed')
+  run('node scripts/seed.js')
 
   console.log('\n========================================')
   console.log('✅ Déploiement terminé avec succès !')

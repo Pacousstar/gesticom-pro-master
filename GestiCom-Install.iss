@@ -1,7 +1,7 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
 ; Version 2.5.0 - Production Finale
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "3.0.16"
+#define MyAppVersion "3.1.3"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "GestiComService.exe"
@@ -88,6 +88,7 @@ Source: "prisma\gesticom.db"; DestDir: "C:\gesticom"; Flags: ignoreversion onlyi
 ; Scripts VITAUX uniquement
 Source: "scripts\standalone-launcher.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\maintenance-runner.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "scripts\seed.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\sauvegarde-bd.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "LANCER-SILENCIEUX.vbs"; DestDir: "{app}"; Flags: ignoreversion
 

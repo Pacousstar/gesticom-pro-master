@@ -136,6 +136,19 @@ async function migrateDatabase() {
                     console.warn('[GestiCom] Note : Erreur mineure lors de la maintenance automatique.');
                 }
             }
+
+            // --- AUTO-SEED (création admin/entité/magasin si base vierge) ---
+            const seedScript = path.join(projectRoot, 'scripts', 'seed.js');
+            if (fs.existsSync(seedScript)) {
+                try {
+                    execSync(`"${process.execPath}" "${seedScript}"`, {
+                        env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
+                        stdio: 'inherit'
+                    });
+                } catch (seedError) {
+                    console.warn('[GestiCom] Note : Erreur mineure lors du seed automatique.');
+                }
+            }
         } catch (error) {
             console.warn('[GestiCom] Note : La base de données est déjà à jour ou une intervention manuelle est requise.');
         }
