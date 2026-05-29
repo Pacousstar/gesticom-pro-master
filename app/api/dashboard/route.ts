@@ -27,7 +27,6 @@ export async function GET(request: NextRequest) {
       if (authError) return authError
   
       startTime = Date.now();
-    console.log('[API] GET /api/dashboard - Début');
 
     const now = new Date()
     const debAuj = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -449,7 +448,7 @@ const result = await Promise.race([
     }, { status: 500 })
   } finally {
     if (typeof startTime !== 'undefined') {
-      console.log(`[API] GET /api/dashboard - Fin (${Date.now() - startTime}ms)`);
+    
     }
   }
 }

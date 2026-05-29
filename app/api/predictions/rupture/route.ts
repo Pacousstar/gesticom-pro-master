@@ -17,8 +17,6 @@ export async function GET(req: NextRequest) {
     }
     const entiteCondition = { entiteId }
 
-    const startTime = Date.now();
-    console.log('[API] GET /api/predictions/rupture - Début');
     try {
         const thirtyDaysAgo = new Date()
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
@@ -91,7 +89,5 @@ export async function GET(req: NextRequest) {
     } catch (error: any) {
         console.error('❌ Erreur API predictions rupture:', error.message, error.stack)
         return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
-    } finally {
-        console.log(`[API] GET /api/predictions/rupture - Fin (${Date.now() - startTime}ms)`);
     }
 }

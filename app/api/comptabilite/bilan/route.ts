@@ -37,8 +37,6 @@ export async function GET(request: Request) {
             entiteId = firstEntite?.id || 1
         }
 
-        console.log(`[BILAN-API] User=${session.login}, Role=${session.role}, Entite=${entiteId}, Annee=${annee}`)
-
         // 2. Récupérer tous les comptes actifs avec les écritures
         // Simplification: on filtre uniquement par date, pas par entité (le Bilan est global)
         const comptes = await prisma.planCompte.findMany({
@@ -54,22 +52,9 @@ export async function GET(request: Request) {
         })
 
         const totalEcritures = comptes.reduce((sum, c) => sum + (c.ecritures?.length || 0), 0)
-        console.log(`[BILAN-API] ${comptes.length} comptes actifs, ${totalEcritures} écritures trouvé pour ${annee}`)
 
-        // Debug: Show first few ecritures if any
         if (totalEcritures === 0) {
-            // Check if there are any ecritures at all in DB
             const anyEcritures = await prisma.ecritureComptable.count()
-            console.log(`[BILAN-API] Aucune écriture pour ${annee}. Total en base: ${anyEcritures}`)
-            
-            // Get sample ecritures to help debug
-            if (anyEcritures > 0) {
-                const samples = await prisma.ecritureComptable.findMany({
-                    take: 5,
-                    select: { date: true, entiteId: true, libelle: true }
-                })
-                console.log(`[BILAN-API] Exemples d'écritures en base:`, samples)
-            }
         }
 
         // 3. Calculer les soldes
@@ -168,8 +153,6 @@ export async function GET(request: Request) {
             // Ajouter valeur absolue du résultat
             bilan.passif.total += Math.abs(resultatNet)
         }
-
-        console.log(`[BILAN-API] Actif: ${bilan.actif.total}, Passif: ${bilan.passif.total}, Résultat: ${resultatNet}`)
 
         const [params, entite] = await Promise.all([
             prisma.parametre.findFirst(),

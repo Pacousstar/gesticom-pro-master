@@ -512,7 +512,6 @@ export default function DashboardLayoutClient({
                     
                     if (!hasRole || !hasPermission) {
                       // Log de diagnostic pour le client PACO
-                      console.log(`[Diagnostic Menu] Élement "${navItem.name}" masqué. Raison : ${!hasRole ? 'Rôle ' + user?.role + ' non autorisé' : 'Permission ' + navItem.permission + ' manquante'}`)
                     }
                     
                     return hasRole && hasPermission

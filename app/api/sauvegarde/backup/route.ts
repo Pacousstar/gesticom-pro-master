@@ -74,7 +74,7 @@ export async function POST() {
       fs.copyFileSync(dbPath, destPath)
       const size = fs.statSync(destPath).size
       
-      console.log('[backup] Sauvegarde créée avec succès:', destPath, `(${Math.round(size / 1024)} Ko)`)
+    
       
       return NextResponse.json({
         success: true,

@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
 
   const logs: string[] = []
   const addLog = (msg: string) => {
-    console.log(`[MIGRATION-MASTER] ${msg}`)
     logs.push(msg)
   }
 

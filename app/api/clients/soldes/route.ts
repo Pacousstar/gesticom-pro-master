@@ -21,7 +21,6 @@ export async function GET(request: NextRequest) {
     : (searchParams.get('entiteId')?.trim() ? Number(searchParams.get('entiteId')?.trim()) : undefined)
 
   try {
-    console.log('[API] GET /api/clients/soldes - Start');
     const clients = await prisma.client.findMany({
       where: { actif: true, ...(entiteId != null ? { entiteId } : {}) },
       select: {

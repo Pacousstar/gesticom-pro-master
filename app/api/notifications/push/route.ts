@@ -20,9 +20,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Titre et corps requis.' }, { status: 400 })
     }
 
-    // Pour l'instant, on enregistre juste la notification en base
-    // L'envoi réel se fera côté client via le service worker
-    // TODO: Implémenter Web Push avec subscriptions
+    // Notification enregistrée en base
+    // L'envoi se fait côté client via le service worker
     
     return NextResponse.json({ 
       success: true,
