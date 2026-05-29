@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
         localisation: true, 
         plafondCredit: true,
         soldeInitial: true,
+        avoirInitial: true,
         ventes: {
           where: { statut: 'VALIDEE' },
           select: { montantTotal: true, montantPaye: true }

@@ -36,8 +36,8 @@ export default function SoldesTiersPage() {
       if (dateFin) params.set('dateFin', dateFin)
 
       const [clientsRes, fournisseursRes] = await Promise.all([
-        fetch(`/api/clients?limit=1000&${params.toString()}`),
-        fetch(`/api/fournisseurs?limit=1000&${params.toString()}`)
+        fetch(`/api/clients?${params.toString()}`),
+        fetch(`/api/fournisseurs?${params.toString()}`)
       ])
 
       if (clientsRes.ok) {

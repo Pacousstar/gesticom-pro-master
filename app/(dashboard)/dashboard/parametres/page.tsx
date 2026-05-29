@@ -377,7 +377,7 @@ export default function ParametresPage() {
           <div className="grid gap-6 md:grid-cols-2 text-left">
             <div className="space-y-4">
               <div>
-                <label className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-1.5 ml-1">Nom commercial</label>
+                <label className="block text-xs font-black text-orange-400 uppercase tracking-wider mb-1.5 ml-1">Nom commercial</label>
                 <input
                   type="text"
                   value={form.nomEntreprise}
@@ -387,7 +387,7 @@ export default function ParametresPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-1.5 ml-1">Slogan / Devise</label>
+                <label className="block text-xs font-black text-orange-400 uppercase tracking-wider mb-1.5 ml-1">Slogan / Devise</label>
                 <input
                   type="text"
                   value={form.slogan || ''}
@@ -399,7 +399,7 @@ export default function ParametresPage() {
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-1.5 ml-1">Logo de l'entreprise</label>
+                <label className="block text-xs font-black text-indigo-400 uppercase tracking-wider mb-1.5 ml-1">Logo de l'entreprise</label>
                 <div className="flex flex-col gap-4">
                   <div className="relative group overflow-hidden rounded-xl border-2 border-dashed border-white/20 bg-gray-900/50 p-4 transition-all hover:border-indigo-500/50">
                     <input
@@ -438,9 +438,9 @@ export default function ParametresPage() {
 
           <div className="mt-8 grid gap-8 md:grid-cols-2 pt-8 border-t border-white/5 text-left">
             <div className="space-y-4">
-              <h3 className="text-[11px] font-black text-white/40 uppercase tracking-[0.3em] mb-4">Coordonnées & Contact</h3>
+              <h3 className="text-xs font-black text-white/60 uppercase tracking-wider mb-4">Coordonnées & Contact</h3>
               <div>
-                <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-1.5 ml-1">Contact Téléphonique</label>
+                <label className="block text-xs font-black text-emerald-400 uppercase tracking-wider mb-1.5 ml-1">Contact Téléphonique</label>
                 <input
                   type="text"
                   value={form.contact}
@@ -449,7 +449,7 @@ export default function ParametresPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-1.5 ml-1">Adresse Email</label>
+                <label className="block text-xs font-black text-emerald-400 uppercase tracking-wider mb-1.5 ml-1">Adresse Email</label>
                 <input
                   type="email"
                   value={form.email || ''}
@@ -458,7 +458,7 @@ export default function ParametresPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-1.5 ml-1">Localisation Physique (Siège)</label>
+                <label className="block text-xs font-black text-blue-400 uppercase tracking-wider mb-1.5 ml-1">Localisation Physique (Siège)</label>
                 <input
                   type="text"
                   value={form.localisation || ''}
@@ -469,9 +469,9 @@ export default function ParametresPage() {
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-[11px] font-black text-white/40 uppercase tracking-[0.3em] mb-4">Identifiants Légaux</h3>
+              <h3 className="text-xs font-black text-white/60 uppercase tracking-wider mb-4">Identifiants Légaux</h3>
               <div>
-                <label className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-1.5 ml-1">N° NCC (Compte Contribuable)</label>
+                <label className="block text-xs font-black text-orange-400 uppercase tracking-wider mb-1.5 ml-1">N° NCC (Compte Contribuable)</label>
                 <input
                   type="text"
                   value={form.numNCC || ''}
@@ -480,7 +480,7 @@ export default function ParametresPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-1.5 ml-1">Registre de Commerce (RC)</label>
+                <label className="block text-xs font-black text-orange-400 uppercase tracking-wider mb-1.5 ml-1">Registre de Commerce (RC)</label>
                 <input
                   type="text"
                   value={form.registreCommerce || ''}
@@ -510,7 +510,7 @@ export default function ParametresPage() {
             {form.fideliteActive && (
               <div className="mt-8 grid gap-6 sm:grid-cols-2 animate-in fade-in slide-in-from-top-2">
                 <div>
-                  <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1.5 ml-1">Seuil de points (pour déclencher remise)</label>
+                  <label className="block text-xs font-black text-purple-400 uppercase tracking-wider mb-1.5 ml-1">Seuil de points (pour déclencher remise)</label>
                   <input 
                     type="number" 
                     value={form.fideliteSeuilPoints} 
@@ -519,7 +519,7 @@ export default function ParametresPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1.5 ml-1">Taux de remise (%)</label>
+                  <label className="block text-xs font-black text-purple-400 uppercase tracking-wider mb-1.5 ml-1">Taux de remise (%)</label>
                   <input 
                     type="number" 
                     step="0.1" 
@@ -540,7 +540,7 @@ export default function ParametresPage() {
           </h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-1.5 ml-1">Mention Spéciale (Bas de Facture)</label>
+              <label className="block text-xs font-black text-pink-400 uppercase tracking-wider mb-1.5 ml-1">Mention Spéciale (Bas de Facture)</label>
               <textarea
                 value={form.mentionSpeciale}
                 onChange={(e) => setForm({ ...form, mentionSpeciale: e.target.value })}
@@ -571,7 +571,7 @@ export default function ParametresPage() {
             {form.backupAuto && (
                <div className="mt-8 grid gap-6 sm:grid-cols-2 animate-in fade-in slide-in-from-top-2">
                   <div>
-                    <label className="block text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1.5 ml-1">Fréquence de sauvegarde</label>
+                    <label className="block text-xs font-black text-orange-400 uppercase tracking-wider mb-1.5 ml-1">Fréquence de sauvegarde</label>
                     <select 
                       value={form.backupFrequence} 
                       onChange={(e) => setForm({ ...form, backupFrequence: e.target.value })} 
@@ -582,7 +582,7 @@ export default function ParametresPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1.5 ml-1">Base de stockage</label>
+                    <label className="block text-xs font-black text-orange-400 uppercase tracking-wider mb-1.5 ml-1">Base de stockage</label>
                     <select 
                       value={form.backupDestination} 
                       onChange={(e) => setForm({ ...form, backupDestination: e.target.value })} 
@@ -641,7 +641,7 @@ export default function ParametresPage() {
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-gray-900/20">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-[10px] font-black text-white uppercase tracking-[0.2em] border-b border-white/10 bg-white/5">
+              <tr className="text-left text-xs font-black text-white uppercase tracking-wider border-b border-white/10 bg-white/5">
                 <th className="px-6 py-4">Code</th>
                 <th className="px-6 py-4">Désignation Magasin</th>
                 <th className="px-6 py-4">Statut</th>

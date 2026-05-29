@@ -32,7 +32,7 @@ export default function AuditPage() {
   const [pageSize, setPageSize] = useState(25)
   const [totalPages, setTotalPages] = useState(1)
   const [totalLogs, setTotalLogs] = useState(0)
-  const [showFilters, setShowFilters] = useState(true)
+  const [showFilters, setShowFilters] = useState(false)
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set())
   const [searchTerm, setSearchTerm] = useState('')
   const [filters, setFilters] = useState({
@@ -150,9 +150,9 @@ export default function AuditPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Journal d'audit</h1>
-          <p className="text-white/80 mt-1 text-[10px] font-bold uppercase tracking-widest">Traçabilité des actions des utilisateurs</p>
+          <p className="text-white/80 mt-1 text-xs font-bold uppercase tracking-wider">Traçabilité des actions des utilisateurs</p>
           {totalLogs > 0 && (
-            <p className="text-white/60 mt-1 text-[9px] font-black uppercase tracking-tighter">
+            <p className="text-white/70 mt-1 text-[11px] font-black uppercase tracking-tight">
               {totalLogs} TRANSACTION{totalLogs > 1 ? 'S' : ''} RÉPERTORIÉE{totalLogs > 1 ? 'S' : ''}
             </p>
           )}
@@ -192,6 +192,16 @@ export default function AuditPage() {
             <FileText className="h-4 w-4" />
             PDF
           </button>
+          <button
+            onClick={() => setIsPreviewOpen(true)}
+            className="flex items-center gap-2 rounded-lg border-2 border-slate-800 bg-slate-100 px-4 py-2 text-sm font-black text-slate-900 hover:bg-slate-200 shadow-lg no-print uppercase transition-all active:scale-95"
+            title="Aperçu avant impression"
+          >
+            <Printer className="h-4 w-4" />
+            Aperçu Impression
+          </button>
+        </div>
+      </div>
                 <div className="hidden print:block absolute inset-0 bg-white">
                     {paginateForPrint(logs).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
                         <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
@@ -322,16 +332,6 @@ export default function AuditPage() {
                     </div>
                   </div>
                 )}
-          <button
-            onClick={() => setIsPreviewOpen(true)}
-            className="flex items-center gap-2 rounded-lg border-2 border-slate-800 bg-slate-100 px-4 py-2 text-sm font-black text-slate-900 hover:bg-slate-200 shadow-lg no-print uppercase transition-all active:scale-95"
-            title="Aperçu avant impression"
-          >
-            <Printer className="h-4 w-4" />
-            Aperçu Impression
-          </button>
-        </div>
-      </div>
 
       {/* Recherche et Filtres */}
       <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">

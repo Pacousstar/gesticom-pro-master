@@ -33,51 +33,67 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const stats = await prisma.vente.groupBy({
-      by: ['clientId', 'clientLibre'],
+    const ventes = await prisma.vente.findMany({
       where,
-      _sum: {
-        montantTotal: true,
-        montantPaye: true,
-      },
-      _count: {
-        id: true
-      },
-      orderBy: {
-        _sum: {
-          montantTotal: 'desc'
-        }
+      include: {
+        client: { select: { nom: true, telephone: true, pointsFidelite: true } },
+        reglements: { select: { id: true, modePaiement: true } },
+        ReglementVenteLigne: { select: { reglementId: true, montant: true } },
       }
     })
 
-    const detailedStats = await Promise.all(stats.map(async (item) => {
-      let nom = item.clientLibre || 'Client Divers'
-      let telephone = ''
-      let pointsFidelite = 0
-      
-      if (item.clientId) {
-        const client = await prisma.client.findUnique({
-          where: { id: item.clientId },
-          select: { nom: true, telephone: true, pointsFidelite: true }
-        })
-        if (client) {
-          nom = client.nom
-          telephone = client.telephone || ''
-          pointsFidelite = client.pointsFidelite || 0
-        }
-      }
+    const groupMap = new Map<string, {
+      clientId: number | null
+      clientLibre: string | null
+      nom: string
+      telephone: string
+      pointsFidelite: number
+      nombreVentes: number
+      caTotal: number
+      totalPaye: number
+    }>()
 
-      return {
-        clientId: item.clientId,
-        nom,
-        telephone,
-        pointsFidelite,
-        nombreVentes: item._count.id,
-        caTotal: item._sum.montantTotal || 0,
-        totalPaye: item._sum.montantPaye || 0,
-        soldeDu: (item._sum.montantTotal || 0) - (item._sum.montantPaye || 0)
+    for (const v of ventes) {
+      const creditReglementIds = new Set(
+        (v.reglements || [])
+          .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+          .map(r => r.id)
+      )
+      const totalLignePaye = (v.ReglementVenteLigne || [])
+        .filter(l => !creditReglementIds.has(l.reglementId))
+        .reduce((s, l) => s + (l.montant || 0), 0)
+      const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0)
+
+      const key = v.clientId ? `c${v.clientId}` : `l${v.clientLibre || ''}`
+      if (!groupMap.has(key)) {
+        let nom = v.clientLibre || 'Client Divers'
+        let telephone = ''
+        let pointsFidelite = 0
+        if (v.client) {
+          nom = v.client.nom
+          telephone = v.client.telephone || ''
+          pointsFidelite = v.client.pointsFidelite || 0
+        }
+        groupMap.set(key, { clientId: v.clientId, clientLibre: v.clientLibre, nom, telephone, pointsFidelite, nombreVentes: 0, caTotal: 0, totalPaye: 0 })
       }
-    }))
+      const g = groupMap.get(key)!
+      g.nombreVentes++
+      g.caTotal += v.montantTotal || 0
+      g.totalPaye += realMontantPaye
+    }
+
+    const detailedStats = Array.from(groupMap.values())
+      .map(item => ({
+        clientId: item.clientId,
+        nom: item.nom,
+        telephone: item.telephone,
+        pointsFidelite: item.pointsFidelite,
+        nombreVentes: item.nombreVentes,
+        caTotal: item.caTotal,
+        totalPaye: item.totalPaye,
+        soldeDu: item.caTotal - item.totalPaye
+      }))
+      .sort((a, b) => b.caTotal - a.caTotal)
 
     return NextResponse.json(detailedStats)
   } catch (error) {

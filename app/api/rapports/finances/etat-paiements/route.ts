@@ -38,27 +38,42 @@ export async function GET(request: NextRequest) {
     })
 
     const achatIds = achats.map(a => a.id)
+    const achatReglements = await prisma.reglementAchat.findMany({
+      where: { achatId: { in: achatIds } },
+      select: { id: true, modePaiement: true }
+    })
+    const creditReglementIds = new Set(
+      achatReglements
+        .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+        .map(r => r.id)
+    )
     const achatLignes = await prisma.reglementAchatLigne.findMany({
       where: { achatId: { in: achatIds } },
-      select: { achatId: true, montant: true }
+      select: { achatId: true, reglementId: true, montant: true }
     })
     const montantPayeParAchat = new Map<number, number>()
     for (const l of achatLignes) {
-      montantPayeParAchat.set(l.achatId, (montantPayeParAchat.get(l.achatId) || 0) + l.montant)
+      if (!creditReglementIds.has(l.reglementId)) {
+        montantPayeParAchat.set(l.achatId, (montantPayeParAchat.get(l.achatId) || 0) + l.montant)
+      }
     }
     
-    return NextResponse.json(achats.map(a => ({
-      id: a.id,
-      numero: a.numero,
-      date: a.date,
-      tier: a.fournisseur?.nom || a.fournisseurLibre || 'Divers',
-      montantTotal: a.montantTotal,
-      montantPaye: Math.max(a.montantPaye || 0, montantPayeParAchat.get(a.id) || 0),
-      solde: Math.max(0, (a.montantTotal || 0) - Math.max(a.montantPaye || 0, montantPayeParAchat.get(a.id) || 0)),
-      statut: a.statutPaiement,
-      magasinId: a.magasinId,
-      fournisseurId: a.fournisseurId,
-    })))
+    return NextResponse.json(achats.map(a => {
+      const ligneSum = montantPayeParAchat.get(a.id) || 0
+      const realMontantPaye = ligneSum > 0 ? ligneSum : (a.montantPaye || 0)
+      return {
+        id: a.id,
+        numero: a.numero,
+        date: a.date,
+        tier: a.fournisseur?.nom || a.fournisseurLibre || 'Divers',
+        montantTotal: a.montantTotal,
+        montantPaye: realMontantPaye,
+        solde: Math.max(0, (a.montantTotal || 0) - realMontantPaye),
+        statut: a.statutPaiement,
+        magasinId: a.magasinId,
+        fournisseurId: a.fournisseurId,
+      }
+    }))
   } else {
     // VENTES par défaut
     const forbidden = requirePermission(session, 'rapports:view')
@@ -79,27 +94,42 @@ export async function GET(request: NextRequest) {
     })
 
     const venteIds = ventes.map(v => v.id)
+    const venteReglements = await prisma.reglementVente.findMany({
+      where: { venteId: { in: venteIds } },
+      select: { id: true, modePaiement: true }
+    })
+    const creditReglementIds = new Set(
+      venteReglements
+        .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+        .map(r => r.id)
+    )
     const venteLignes = await prisma.reglementVenteLigne.findMany({
       where: { venteId: { in: venteIds } },
-      select: { venteId: true, montant: true }
+      select: { venteId: true, reglementId: true, montant: true }
     })
     const montantPayeParVente = new Map<number, number>()
     for (const l of venteLignes) {
-      montantPayeParVente.set(l.venteId, (montantPayeParVente.get(l.venteId) || 0) + l.montant)
+      if (!creditReglementIds.has(l.reglementId)) {
+        montantPayeParVente.set(l.venteId, (montantPayeParVente.get(l.venteId) || 0) + l.montant)
+      }
     }
 
- const response = NextResponse.json(ventes.map(v => ({
-      id: v.id,
-      numero: v.numero,
-      date: v.date,
-      tier: v.client?.nom || v.clientLibre || 'Divers',
-      montantTotal: v.montantTotal,
-      montantPaye: Math.max(v.montantPaye || 0, montantPayeParVente.get(v.id) || 0),
-      solde: Math.max(0, (v.montantTotal || 0) - Math.max(v.montantPaye || 0, montantPayeParVente.get(v.id) || 0)),
-      magasinId: v.magasinId,
-      clientId: v.clientId,
-      statut: v.statutPaiement
-    })))
+    const response = NextResponse.json(ventes.map(v => {
+      const ligneSum = montantPayeParVente.get(v.id) || 0
+      const realMontantPaye = ligneSum > 0 ? ligneSum : (v.montantPaye || 0)
+      return {
+        id: v.id,
+        numero: v.numero,
+        date: v.date,
+        tier: v.client?.nom || v.clientLibre || 'Divers',
+        montantTotal: v.montantTotal,
+        montantPaye: realMontantPaye,
+        solde: Math.max(0, (v.montantTotal || 0) - realMontantPaye),
+        magasinId: v.magasinId,
+        clientId: v.clientId,
+        statut: v.statutPaiement
+      }
+    }))
     response.headers.set('Cache-Control', 'no-store, max-age=0')
     return response
   }

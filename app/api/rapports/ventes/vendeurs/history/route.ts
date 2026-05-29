@@ -20,7 +20,11 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Paramètre vendeur requis' }, { status: 400 })
         }
 
+        const entiteId = session.entiteId
         const where: any = { statut: { in: ['VALIDEE', 'VALIDE'] } }
+        if (entiteId && session.role !== 'SUPER_ADMIN') {
+            where.entiteId = entiteId
+        }
 
         if (vendeur === 'Inconnu') {
             where.utilisateurId = null
@@ -55,10 +59,37 @@ export async function GET(request: NextRequest) {
                 client: { select: { nom: true } },
                 clientLibre: true,
                 magasin: { select: { nom: true } },
+                reglements: { select: { id: true, modePaiement: true } },
+                ReglementVenteLigne: { select: { reglementId: true, montant: true } },
             }
         })
 
-        return NextResponse.json(ventes, {
+        const formatted = ventes.map(v => {
+            const creditReglementIds = new Set(
+                (v.reglements || [])
+                    .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+                    .map(r => r.id)
+            )
+            const totalLignePaye = (v.ReglementVenteLigne || [])
+                .filter(l => !creditReglementIds.has(l.reglementId))
+                .reduce((s, l) => s + (l.montant || 0), 0)
+            const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0)
+
+            return {
+                id: v.id,
+                numero: v.numero,
+                date: v.date,
+                montantTotal: v.montantTotal,
+                montantPaye: realMontantPaye,
+                statutPaiement: v.statutPaiement,
+                modePaiement: v.modePaiement,
+                client: v.client,
+                clientLibre: v.clientLibre,
+                magasin: v.magasin,
+            }
+        })
+
+        return NextResponse.json(formatted, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0',
             },

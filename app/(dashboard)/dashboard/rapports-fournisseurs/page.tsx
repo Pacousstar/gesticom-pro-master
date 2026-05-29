@@ -275,7 +275,7 @@ export default function RapportFournisseursPage() {
                                                     {h.statutPaiement === 'PAYE' ? (
                                                         <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 rounded font-bold uppercase">Payé</span>
                                                     ) : (
-                                                        <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 rounded font-bold uppercase">Dette: {(h.montantTotal - h.montantPaye).toLocaleString()} F</span>
+                                                        <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 rounded font-bold uppercase">Dette: {Math.max(0, h.montantTotal - (h.montantPaye || 0)).toLocaleString()} F</span>
                                                     )}
                                                 </div>
                                             </div>

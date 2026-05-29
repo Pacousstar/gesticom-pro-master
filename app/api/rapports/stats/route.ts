@@ -38,7 +38,10 @@ export async function GET(request: NextRequest) {
       // Derniers 12 mois
       dateDebut = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0)
     } else {
-      const jours = Number(periode) || 30
+      const jours = Number(periode)
+      if (isNaN(jours) || jours <= 0) {
+        return NextResponse.json({ error: 'Paramètre période invalide.' }, { status: 400 })
+      }
       dateDebut = new Date(now.getFullYear(), now.getMonth(), now.getDate() - jours, 0, 0, 0)
     }
 
@@ -57,18 +60,24 @@ export async function GET(request: NextRequest) {
     const whereFinance: any = {
       date: { gte: dateDebut, lte: dateFin },
     }
+    const whereCharges: any = {
+      date: { gte: dateDebut, lte: dateFin },
+      statut: { in: ['VALIDE', 'VALIDEE'] },
+    }
 
     if (entiteId) {
       whereVentes.entiteId = entiteId
       whereAchats.entiteId = entiteId
       whereMouvements.entiteId = entiteId
       whereFinance.entiteId = entiteId
+      whereCharges.entiteId = entiteId
     }
     if (magasinId) {
       whereVentes.magasinId = Number(magasinId)
       whereAchats.magasinId = Number(magasinId)
       whereMouvements.magasinId = Number(magasinId)
       whereFinance.magasinId = Number(magasinId)
+      whereCharges.magasinId = Number(magasinId)
     }
 
     // CA par période (Agrégation au lieu de fetch massif)
@@ -91,7 +100,7 @@ export async function GET(request: NextRequest) {
     // Charges et Dépenses (Sommes globales par jour)
     const statsCharges = await prisma.charge.groupBy({
       by: ['date'],
-      where: whereFinance,
+      where: whereCharges,
       _sum: { montant: true },
     })
 
@@ -198,8 +207,16 @@ export async function GET(request: NextRequest) {
         const existing = stockMap.get(key) || { entrees: 0, sorties: 0 }
         if (m.type === 'ENTREE') {
           existing.entrees += m.quantite
-        } else {
+        } else if (m.type === 'SORTIE') {
           existing.sorties += m.quantite
+        } else if (m.type === 'TRANSFERT_IN' || m.type === 'TRANSFERT_OUT') {
+          // skip transfers - internal movement, not real entree/sortie
+        } else if (m.type === 'AJUSTEMENT') {
+          if (m.quantite > 0) {
+            existing.entrees += m.quantite
+          } else {
+            existing.sorties += Math.abs(m.quantite)
+          }
         }
         stockMap.set(key, existing)
       })
@@ -261,8 +278,16 @@ export async function GET(request: NextRequest) {
         const existing = stockMap.get(key) || { entrees: 0, sorties: 0 }
         if (m.type === 'ENTREE') {
           existing.entrees += m.quantite
-        } else {
+        } else if (m.type === 'SORTIE') {
           existing.sorties += m.quantite
+        } else if (m.type === 'TRANSFERT_IN' || m.type === 'TRANSFERT_OUT') {
+          // skip transfers - internal movement, not real entree/sortie
+        } else if (m.type === 'AJUSTEMENT') {
+          if (m.quantite > 0) {
+            existing.entrees += m.quantite
+          } else {
+            existing.sorties += Math.abs(m.quantite)
+          }
         }
         stockMap.set(key, existing)
       })

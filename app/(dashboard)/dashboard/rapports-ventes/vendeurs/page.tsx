@@ -36,7 +36,6 @@ export default function ParVendeurPage() {
         const end = now.toISOString().split('T')[0]
         setStartDate(start)
         setEndDate(end)
-        fetchData(start, end)
     }, [])
 
     const fetchData = async (start: string, end: string) => {

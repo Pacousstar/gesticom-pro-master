@@ -56,23 +56,37 @@ export async function GET(request: NextRequest) {
         utilisateur: { select: { nom: true } },
         magasin: { select: { nom: true } },
         lignes: { select: { designation: true } },
+        reglements: { select: { id: true, modePaiement: true } },
+        ReglementAchatLigne: { select: { reglementId: true, montant: true } },
       },
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
     })
 
-    const formatted = achats.map(a => ({
-      id: a.id,
-      numero: a.numero,
-      date: a.date,
-      fournisseur: a.fournisseur?.nom || a.fournisseurLibre || 'Fournisseur Inconnu',
-      montantTotal: a.montantTotal,
-      montantPaye: a.montantPaye,
-      statutPaiement: a.statutPaiement,
-      modePaiement: a.modePaiement,
-      acheteur: a.utilisateur?.nom || 'Inconnu',
-      magasin: a.magasin.nom,
-      produits: a.lignes.map(l => l.designation).join(', ')
-    }))
+    const formatted = achats.map(a => {
+      const creditReglementIds = new Set(
+        (a.reglements || [])
+          .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+          .map(r => r.id)
+      )
+      const totalLignePaye = (a.ReglementAchatLigne || [])
+        .filter(l => !creditReglementIds.has(l.reglementId))
+        .reduce((s, l) => s + (l.montant || 0), 0)
+      const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (a.montantPaye || 0)
+
+      return {
+        id: a.id,
+        numero: a.numero,
+        date: a.date,
+        fournisseur: a.fournisseur?.nom || a.fournisseurLibre || 'Fournisseur Inconnu',
+        montantTotal: a.montantTotal,
+        montantPaye: realMontantPaye,
+        statutPaiement: a.statutPaiement,
+        modePaiement: a.modePaiement,
+        acheteur: a.utilisateur?.nom || 'Inconnu',
+        magasin: a.magasin.nom,
+        produits: a.lignes.map(l => l.designation).join(', ')
+      }
+    })
 
     return NextResponse.json(formatted)
   } catch (error) {

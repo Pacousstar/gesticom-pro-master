@@ -120,19 +120,14 @@ export async function GET(request: NextRequest) {
     })
 
     // Ajustement inverse pour remonter dans le temps
-    // Les transferts sont stockés comme ENTREE (destination) ou SORTIE (origine) avec referenceTransfertId
     mouvementsPost.forEach((m: any) => {
       // Pour les mouvements postérieurs à la date:
-      // - ENTREE augmente le stock → Pour revenir en arrière, on soustrait
-      // - SORTIE diminue le stock → Pour revenir en arrière, on ajoute
-      // Les transferts sont déjà inclus dans ces types (pas de TRANSFERT_IN/TRANSFERT_OUT dans le modèle)
-      if (m.type === 'ENTREE') {
+      // - ENTREE / TRANSFERT_IN augmente le stock → Pour revenir en arrière, on soustrait
+      // - SORTIE / TRANSFERT_OUT diminue le stock → Pour revenir en arrière, on ajoute
+      // - AJUSTEMENT: quantite>0 augmente le stock → on soustrait; quantite<0 diminue → on ajoute
+      if (m.type === 'ENTREE' || m.type === 'TRANSFERT_IN' || (m.type === 'AJUSTEMENT' && m.quantite > 0)) {
         stockMap[m.produitId] = (stockMap[m.produitId] || 0) - m.quantite
-      } else if (m.type === 'SORTIE') {
-        stockMap[m.produitId] = (stockMap[m.produitId] || 0) + m.quantite
-      } else if (m.type === 'AJUSTEMENT' && m.quantite > 0) {
-        stockMap[m.produitId] = (stockMap[m.produitId] || 0) - m.quantite
-      } else if (m.type === 'AJUSTEMENT' && m.quantite < 0) {
+      } else if (m.type === 'SORTIE' || m.type === 'TRANSFERT_OUT' || (m.type === 'AJUSTEMENT' && m.quantite < 0)) {
         stockMap[m.produitId] = (stockMap[m.produitId] || 0) + Math.abs(m.quantite)
       }
     })

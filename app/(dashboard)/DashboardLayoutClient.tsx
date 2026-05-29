@@ -366,15 +366,16 @@ export default function DashboardLayoutClient({
   async function loadNotifications() {
     setLoadingNotifications(true)
     try {
-      const res = await fetch('/api/notifications')
+      const res = await fetch('/api/notifications', { signal: AbortSignal.timeout(8000) })
       if (res.ok) {
         const data = await res.json()
         setNotifications(data.notifications || [])
         setNonLues(data.nonLues || 0)
-        setToutesLues(false) // Réinitialiser à chaque rechargement
+        setToutesLues(false)
       }
     } catch (e) {
-      console.error('Erreur chargement notifications:', e)
+      if (e instanceof DOMException && e.name === 'TimeoutError') return
+      if ((e as any)?.message !== 'Failed to fetch') console.error('Erreur chargement notifications:', e)
     } finally {
       setLoadingNotifications(false)
     }

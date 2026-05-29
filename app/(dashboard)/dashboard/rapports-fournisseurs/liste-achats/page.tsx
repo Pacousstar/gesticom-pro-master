@@ -67,7 +67,7 @@ export default function ListeAchatsPage() {
 
   const totalAchats = filteredData.reduce((acc, a) => acc + a.montantTotal, 0)
   const totalPaye = filteredData.reduce((acc, a) => acc + a.montantPaye, 0)
-  const totalReste = totalAchats - totalPaye
+  const totalReste = Math.max(0, totalAchats - totalPaye)
 
   return (
     <div className="space-y-6">
@@ -206,8 +206,8 @@ export default function ListeAchatsPage() {
                     <td className="whitespace-nowrap px-6 py-4 text-right">
                        <div className="flex flex-col">
                           <span className="text-sm font-bold text-emerald-600">{a.montantPaye.toLocaleString('fr-FR')} F</span>
-                          <span className={`text-[10px] font-bold ${a.montantTotal - a.montantPaye > 0 ? 'text-rose-500' : 'text-gray-300'}`}>
-                            {(a.montantTotal - a.montantPaye).toLocaleString('fr-FR')} F
+                          <span className={`text-[10px] font-bold ${Math.max(0, a.montantTotal - a.montantPaye) > 0 ? 'text-rose-500' : 'text-gray-300'}`}>
+                            {Math.max(0, a.montantTotal - a.montantPaye).toLocaleString('fr-FR')} F
                           </span>
                        </div>
                     </td>

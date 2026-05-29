@@ -16,7 +16,11 @@ export async function GET(request: NextRequest) {
         const end = searchParams.get('end') ?? searchParams.get('dateFin')
         const clientId = searchParams.get('clientId')
 
+        const entiteId = session.entiteId
         const where: any = { vente: { statut: { in: ['VALIDE', 'VALIDEE'] } } }
+        if (entiteId && session.role !== 'SUPER_ADMIN') {
+            where.vente.entiteId = entiteId
+        }
         if (start && end) {
             const endDate = new Date(end)
             endDate.setHours(23, 59, 59, 999)

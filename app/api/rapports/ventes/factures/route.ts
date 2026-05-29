@@ -19,7 +19,11 @@ export async function GET(request: NextRequest) {
         const limit = parseInt(searchParams.get('limit') || '10')
         const skip = (page - 1) * limit
 
+        const entiteId = session.entiteId
         const where: any = { statut: { in: ['VALIDE', 'VALIDEE'] } }
+        if (entiteId && session.role !== 'SUPER_ADMIN') {
+            where.entiteId = entiteId
+        }
         if (start && end) {
             const endDate = new Date(end)
             endDate.setHours(23, 59, 59, 999)
@@ -32,7 +36,11 @@ export async function GET(request: NextRequest) {
         const [ventes, total] = await Promise.all([
             prisma.vente.findMany({
                 where,
-                include: { client: { select: { nom: true, code: true } } },
+                include: {
+                    client: { select: { nom: true, code: true } },
+                    reglements: { select: { id: true, modePaiement: true } },
+                    ReglementVenteLigne: { select: { reglementId: true, montant: true } },
+                },
                 orderBy: { date: 'desc' },
                 skip,
                 take: limit
@@ -40,17 +48,29 @@ export async function GET(request: NextRequest) {
             prisma.vente.count({ where })
         ])
 
-        const data = ventes.map(v => ({
-            id: v.id,
-            numero: v.numero,
-            date: v.date,
-            client: v.client?.nom || v.clientLibre || 'Client Comptoir',
-            clientCode: v.client?.code || null,
-            montantTotal: v.montantTotal,
-            montantPaye: v.montantPaye,
-            resteAPayer: Math.max(0, (v.montantTotal || 0) - (v.montantPaye || 0)),
-            statutPaiement: v.statutPaiement
-        }))
+        const data = ventes.map(v => {
+            const creditReglementIds = new Set(
+                (v.reglements || [])
+                    .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+                    .map(r => r.id)
+            )
+            const totalLignePaye = (v.ReglementVenteLigne || [])
+                .filter(l => !creditReglementIds.has(l.reglementId))
+                .reduce((s, l) => s + (l.montant || 0), 0)
+            const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0)
+
+            return {
+                id: v.id,
+                numero: v.numero,
+                date: v.date,
+                client: v.client?.nom || v.clientLibre || 'Client Comptoir',
+                clientCode: v.client?.code || null,
+                montantTotal: v.montantTotal,
+                montantPaye: realMontantPaye,
+                resteAPayer: Math.max(0, (v.montantTotal || 0) - realMontantPaye),
+                statutPaiement: v.statutPaiement
+            }
+        })
 
         return NextResponse.json({
             data,

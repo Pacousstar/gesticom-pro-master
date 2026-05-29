@@ -109,6 +109,8 @@ export default function UtilisateursPage() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [currentSession, setCurrentSession] = useState<{ role: string; userId: number } | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [page, setPage] = useState(1)
+  const ITEMS_PER_PAGE = 20
 
   const handleExportCSV = async () => {
     setExporting(true)
@@ -222,6 +224,8 @@ export default function UtilisateursPage() {
     return sortDir === 'asc' ? <ChevronUp className="h-3 w-3 inline ml-1" /> : <ChevronDown className="h-3 w-3 inline ml-1" />
   }
 
+  useEffect(() => { setPage(1) }, [searchQuery, filterRole, filterEntite, filterActif, sortField, sortDir])
+
   const filteredUtilisateurs = utilisateurs
     .filter(u => {
       if (searchQuery) {
@@ -246,6 +250,8 @@ export default function UtilisateursPage() {
       }
       return sortDir === 'asc' ? cmp : -cmp
     })
+  const totalPages = Math.ceil(filteredUtilisateurs.length / ITEMS_PER_PAGE)
+  const paginatedUtilisateurs = filteredUtilisateurs.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
 
   const handleEdit = (user: Utilisateur) => {
     setEditingUser(user)
@@ -551,7 +557,7 @@ export default function UtilisateursPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredUtilisateurs.map((user) => (
+                {paginatedUtilisateurs.map((user) => (
                   <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${!user.actif ? 'opacity-60' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
@@ -635,6 +641,29 @@ export default function UtilisateursPage() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex flex-wrap items-center justify-between gap-4">
+              <span className="text-sm text-gray-700">
+                {filteredUtilisateurs.length} utilisateur{filteredUtilisateurs.length > 1 ? 's' : ''} — Page {page} sur {totalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPage(1)} disabled={page === 1} className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm">Première</button>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm">Précédent</button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let p: number
+                  if (totalPages <= 5) p = i + 1
+                  else if (page <= 3) p = i + 1
+                  else if (page >= totalPages - 2) p = totalPages - 4 + i
+                  else p = page - 2 + i
+                  return (
+                    <button key={p} onClick={() => setPage(p)} className={`min-w-[2.25rem] px-2 py-2 rounded-lg border text-sm transition-colors ${page === p ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>{p}</button>
+                  )
+                })}
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm">Suivant</button>
+                <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm">Dernière</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

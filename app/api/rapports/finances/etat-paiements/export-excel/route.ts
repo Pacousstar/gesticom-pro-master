@@ -39,19 +39,23 @@ export async function GET(request: NextRequest) {
 
       const achats = await prisma.achat.findMany({
         where,
-        include: { fournisseur: { select: { nom: true } } },
+        include: { 
+          fournisseur: { select: { nom: true } },
+          ReglementAchatLigne: { select: { montant: true } }
+        },
         orderBy: { date: 'desc' }
       })
 
       for (const a of achats) {
+        const paye = a.ReglementAchatLigne.reduce((sum, l) => sum + l.montant, 0)
         rows.push({
           Type: 'ACHAT',
           Date: a.date.toISOString().slice(0, 10),
           Numéro: a.numero,
           Tiers: a.fournisseur?.nom || a.fournisseurLibre || 'Divers',
           'Montant Total': a.montantTotal,
-          'Montant Payé': a.montantPaye || 0,
-          Solde: Math.max(0, (a.montantTotal || 0) - (a.montantPaye || 0)),
+          'Montant Payé': paye,
+          Solde: Math.max(0, (a.montantTotal || 0) - paye),
           Statut: a.statutPaiement,
         })
       }
@@ -67,19 +71,23 @@ export async function GET(request: NextRequest) {
 
       const ventes = await prisma.vente.findMany({
         where,
-        include: { client: { select: { nom: true } } },
+        include: { 
+          client: { select: { nom: true } },
+          ReglementVenteLigne: { select: { montant: true } }
+        },
         orderBy: { date: 'desc' }
       })
 
       for (const v of ventes) {
+        const paye = v.ReglementVenteLigne.reduce((sum, l) => sum + l.montant, 0)
         rows.push({
           Type: 'VENTE',
           Date: v.date.toISOString().slice(0, 10),
           Numéro: v.numero,
           Tiers: v.client?.nom || v.clientLibre || 'Divers',
           'Montant Total': v.montantTotal,
-          'Montant Payé': v.montantPaye || 0,
-          Solde: Math.max(0, (v.montantTotal || 0) - (v.montantPaye || 0)),
+          'Montant Payé': paye,
+          Solde: Math.max(0, (v.montantTotal || 0) - paye),
           Statut: v.statutPaiement,
         })
       }

@@ -16,9 +16,12 @@ export async function GET(
   const id = Number((await params).id)
   if (!id) return NextResponse.json({ error: 'ID Produit requis' }, { status: 400 })
 
-  try {
-    // 1. Infos de base du produit
-    const produit = await prisma.produit.findUnique({
+    try {
+        const entiteId = session.entiteId
+        const entiteFilter = entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}
+
+        // 1. Infos de base du produit
+        const produit = await prisma.produit.findUnique({
       where: { id },
       select: { 
         id: true, 
@@ -37,7 +40,7 @@ export async function GET(
     const venteLignes = await prisma.venteLigne.findMany({
       where: { 
         produitId: id,
-        vente: { statut: { in: ['VALIDE', 'VALIDEE'] } }
+        vente: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter }
       },
       include: {
         vente: {
@@ -53,7 +56,7 @@ export async function GET(
     const achatLignes = await prisma.achatLigne.findMany({
       where: { 
         produitId: id,
-        achat: { statut: { in: ['VALIDE', 'VALIDEE'] } } 
+        achat: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteFilter } 
       },
       include: {
         achat: {

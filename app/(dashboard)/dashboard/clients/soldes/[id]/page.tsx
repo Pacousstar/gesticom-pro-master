@@ -366,6 +366,7 @@ export default function CompteCourantClientPage() {
            </div>
         </div>
       </div>
+      <div className="no-print">
       {/* HEADER PREMIUM */}
       <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-gray-800 to-gray-950 p-8 shadow-2xl">
         <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-orange-500/10 blur-3xl opacity-50" />
@@ -449,6 +450,7 @@ export default function CompteCourantClientPage() {
             </div>
             <DollarSign className="h-12 w-12 text-white/20 group-hover:scale-110 transition-transform" />
         </div>
+      </div>
       </div>
 
       {/* TABLEAU CHRONOLOGIQUE */}
@@ -827,7 +829,7 @@ export default function CompteCourantClientPage() {
               </div>
            </div>
         </div>
-      )}
-    </div>
-  )
-}
+       )}
+      </div>
+    )
+  }

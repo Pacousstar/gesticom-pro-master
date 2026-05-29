@@ -35,7 +35,9 @@ export async function GET(
 
         const entiteCur = await getEntiteId(session)
 
-        const conditions: any[] = []
+        const conditions: any[] = [
+          { statut: { in: ['VALIDE', 'VALIDEE'] } }
+        ]
 
         // Condition fournisseur
         if (tier.nom) {
@@ -82,11 +84,38 @@ export async function GET(
                         quantite: true,
                         prixUnitaire: true,
                     }
-                }
+                },
+                reglements: { select: { id: true, modePaiement: true } },
+                ReglementAchatLigne: { select: { reglementId: true, montant: true } },
             }
         })
 
-        return NextResponse.json(achats, {
+        const formatted = achats.map(a => {
+            const creditReglementIds = new Set(
+                (a.reglements || [])
+                    .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+                    .map(r => r.id)
+            )
+            const totalLignePaye = (a.ReglementAchatLigne || [])
+                .filter(l => !creditReglementIds.has(l.reglementId))
+                .reduce((s, l) => s + (l.montant || 0), 0)
+            const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (a.montantPaye || 0)
+
+            return {
+                id: a.id,
+                numero: a.numero,
+                date: a.date,
+                montantTotal: a.montantTotal,
+                montantPaye: realMontantPaye,
+                modePaiement: a.modePaiement,
+                statut: a.statut,
+                statutPaiement: a.statutPaiement,
+                magasin: a.magasin,
+                lignes: a.lignes,
+            }
+        })
+
+        return NextResponse.json(formatted, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0',
             },

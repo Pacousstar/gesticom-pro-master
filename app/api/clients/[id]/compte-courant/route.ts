@@ -100,11 +100,11 @@ export async function GET(
     const dataWithRealPaye = ventes.map((v: any) => {
       const creditReglementIds = new Set(
         (v.reglements || [])
-          .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
-          .map(r => r.id)
+          .filter((r: { modePaiement: string; id: number }) => String(r.modePaiement).toUpperCase() === 'CREDIT')
+          .map((r: { id: number }) => r.id)
       )
       const totalLignePaye = (v.ReglementVenteLigne || [])
-        .filter(l => !creditReglementIds.has(l.reglementId))
+        .filter((l: any) => !creditReglementIds.has(l.reglementId))
         .reduce((s: number, l: any) => s + (l.montant || 0), 0)
       return { ...v, montantPaye: totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0), ReglementVenteLigne: undefined, reglements: undefined }
     })

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import RapportsNav from '../RapportsNav'
 import { Filter, Package, Loader2, Printer } from 'lucide-react'
+import { useToast } from '@/hooks/useToast'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
 
@@ -27,6 +28,7 @@ export default function ParProduitPage() {
     const [endDate, setEndDate] = useState('')
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [isPrinting, setIsPrinting] = useState(false)
+    const { error: showError } = useToast()
 
     useEffect(() => {
         const now = new Date()
@@ -44,9 +46,12 @@ export default function ParProduitPage() {
             if (res.ok) {
                 const json = await res.json()
                 setData(json)
+            } else {
+                showError('Erreur lors du chargement des données')
             }
         } catch (e) {
             console.error(e)
+            showError('Erreur de connexion')
         } finally {
             setLoading(false)
         }

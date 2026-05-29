@@ -54,18 +54,22 @@ export async function GET(request: NextRequest) {
 
       const achats = await prisma.achat.findMany({
         where,
-        include: { fournisseur: { select: { nom: true } } },
+        include: { 
+          fournisseur: { select: { nom: true } },
+          ReglementAchatLigne: { select: { montant: true } }
+        },
         orderBy: { date: 'desc' }
       })
 
       for (const a of achats) {
+        const paye = a.ReglementAchatLigne.reduce((sum, l) => sum + l.montant, 0)
         rows.push({
           date: a.date.toISOString().slice(0, 10),
           numero: a.numero,
           tier: a.fournisseur?.nom || a.fournisseurLibre || 'Divers',
           total: a.montantTotal,
-          paye: a.montantPaye || 0,
-          solde: Math.max(0, (a.montantTotal || 0) - (a.montantPaye || 0)),
+          paye,
+          solde: Math.max(0, (a.montantTotal || 0) - paye),
           statut: a.statutPaiement,
         })
       }
@@ -81,18 +85,22 @@ export async function GET(request: NextRequest) {
 
       const ventes = await prisma.vente.findMany({
         where,
-        include: { client: { select: { nom: true } } },
+        include: { 
+          client: { select: { nom: true } },
+          ReglementVenteLigne: { select: { montant: true } }
+        },
         orderBy: { date: 'desc' }
       })
 
       for (const v of ventes) {
+        const paye = v.ReglementVenteLigne.reduce((sum, l) => sum + l.montant, 0)
         rows.push({
           date: v.date.toISOString().slice(0, 10),
           numero: v.numero,
           tier: v.client?.nom || v.clientLibre || 'Divers',
           total: v.montantTotal,
-          paye: v.montantPaye || 0,
-          solde: Math.max(0, (v.montantTotal || 0) - (v.montantPaye || 0)),
+          paye,
+          solde: Math.max(0, (v.montantTotal || 0) - paye),
           statut: v.statutPaiement,
         })
       }

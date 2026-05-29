@@ -29,9 +29,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gte: deb, lte: fin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
-          ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
-            utilisateur: { entiteId }
-          } : {}),
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
         },
         _sum: { montant: true },
         _count: { id: true }
@@ -41,9 +39,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gte: deb, lte: fin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
-          ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
-            utilisateur: { entiteId }
-          } : {}),
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
         },
         include: { 
           client: { select: { nom: true } },
@@ -76,9 +72,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gte: deb, lte: fin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
-          ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
-            utilisateur: { entiteId }
-          } : {}),
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
         },
         _sum: { montant: true },
         _count: { id: true }
@@ -88,9 +82,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gte: deb, lte: fin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
-          ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
-            utilisateur: { entiteId }
-          } : {}),
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
         },
         include: { 
           fournisseur: { select: { nom: true } },

@@ -19,7 +19,11 @@ export async function GET(
         const start = searchParams.get('start')
         const end = searchParams.get('end')
 
+        const entiteId = session.entiteId
         const where: any = { statut: { in: ['VALIDEE', 'VALIDE'] } }
+        if (entiteId && session.role !== 'SUPER_ADMIN') {
+            where.entiteId = entiteId
+        }
         if (id !== 'null' && id !== 'undefined') {
             where.clientId = Number(id)
         } else {
@@ -46,11 +50,32 @@ export async function GET(
                             }
                         }
                     }
-                }
+                },
+                reglements: { select: { id: true, modePaiement: true } },
+                ReglementVenteLigne: { select: { reglementId: true, montant: true } },
             }
         })
 
-        return NextResponse.json(ventes, {
+        const formatted = ventes.map(v => {
+            const creditReglementIds = new Set(
+                (v.reglements || [])
+                    .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+                    .map(r => r.id)
+            )
+            const totalLignePaye = (v.ReglementVenteLigne || [])
+                .filter(l => !creditReglementIds.has(l.reglementId))
+                .reduce((s, l) => s + (l.montant || 0), 0)
+            const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0)
+
+            return {
+                ...v,
+                montantPaye: realMontantPaye,
+                reglements: undefined,
+                ReglementVenteLigne: undefined,
+            }
+        })
+
+        return NextResponse.json(formatted, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0',
             },

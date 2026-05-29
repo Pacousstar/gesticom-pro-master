@@ -16,14 +16,19 @@ export async function GET(request: NextRequest) {
         const end = searchParams.get('end') ?? searchParams.get('dateFin')
         const fournisseurId = searchParams.get('fournisseurId')
 
+        const entiteId = session.entiteId
         const where: any = { achat: { statut: { in: ['VALIDE', 'VALIDEE'] } } }
+        if (entiteId && session.role !== 'SUPER_ADMIN') {
+            where.achat.entiteId = entiteId
+        }
         if (start && end) {
             const endDate = new Date(end)
             endDate.setHours(23, 59, 59, 999)
             where.achat.date = { gte: new Date(start), lte: endDate }
         }
         if (fournisseurId) {
-            where.achat.fournisseurId = parseInt(fournisseurId)
+            const parsed = parseInt(fournisseurId)
+            if (!isNaN(parsed)) where.achat.fournisseurId = parsed
         }
 
         const achatsLignes = await prisma.achatLigne.groupBy({

@@ -78,7 +78,7 @@ type DashboardData = {
 }
 
 function calcTrend(current: number, previous: number): { trend: 'up' | 'down' | 'neutral'; value: number } {
-  if (previous === 0) return { trend: 'neutral', value: 0 }
+  if (previous === 0) return { trend: current > 0 ? 'up' : 'neutral', value: current > 0 ? 100 : 0 }
   const pct = Math.round(((current - previous) / previous) * 100)
   return { trend: pct > 0 ? 'up' : pct < 0 ? 'down' : 'neutral', value: Math.abs(pct) }
 }

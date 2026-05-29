@@ -403,7 +403,7 @@ export default function RapportsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-white font-mono tracking-tighter uppercase italic">PILOTAGE & RAPPORTS</h1>
-          <p className="mt-1 text-white font-bold uppercase text-[10px] tracking-[0.2em] opacity-80">Analyses approfondies des stocks, flux financiers et tiers</p>
+           <p className="mt-1 text-white font-bold uppercase text-xs tracking-wider opacity-90">Analyses approfondies des stocks, flux financiers et tiers</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -429,7 +429,7 @@ export default function RapportsPage() {
         <div className="flex flex-wrap items-center gap-6 relative z-10">
           <div className="flex items-center gap-3 bg-gray-50/50 p-2 rounded-2xl border border-gray-100 shadow-inner">
             <div className="flex flex-col px-3">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Date de Début</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-wider">Date de Début</label>
                 <input
                     type="date"
                     value={dateDebut}
@@ -439,7 +439,7 @@ export default function RapportsPage() {
             </div>
             <div className="h-8 w-px bg-gray-200" />
             <div className="flex flex-col px-3">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Date de Fin</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-wider">Date de Fin</label>
                 <input
                     type="date"
                     value={dateFin}
@@ -450,7 +450,7 @@ export default function RapportsPage() {
           </div>
 
           <div className="flex flex-col gap-1">
-             <label className="text-[9px] font-black text-slate-400 ml-1 uppercase tracking-widest">Point de Vente</label>
+             <label className="text-[11px] font-black text-slate-500 ml-1 uppercase tracking-wider">Point de Vente</label>
              <select 
                 value={filtreMagasin} 
                 onChange={e => setFiltreMagasin(e.target.value)}
@@ -497,12 +497,12 @@ export default function RapportsPage() {
                 color="green" 
             />
             <div className="relative group overflow-hidden rounded-[2.5rem] border border-gray-100 bg-slate-900 p-7 shadow-xl">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Performance Recouvrement</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Performance Recouvrement</p>
                 <div className="mt-4 flex items-baseline gap-2">
                     <span className="text-3xl font-black text-white tracking-tighter italic">
                         {comparaison.periodeActuelle.ca > 0 ? ((comparaison.periodeActuelle.caEncaisse / comparaison.periodeActuelle.ca) * 100).toFixed(1) : 'N/A'}
                     </span>
-                    {comparaison.periodeActuelle.ca > 0 && <span className="text-xl font-bold text-slate-500 uppercase italic opacity-60">%</span>}
+                    {comparaison.periodeActuelle.ca > 0 && <span className="text-xl font-bold text-slate-500 uppercase italic opacity-80">%</span>}
                 </div>
                 <div className="mt-7 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
                     <div 
@@ -531,14 +531,14 @@ export default function RapportsPage() {
                         <Package className="h-40 w-40 text-orange-600" />
                     </div>
                     <div className="relative z-10">
-                        <p className="text-orange-600 text-[10px] font-black uppercase tracking-[0.3em]">Valeur Inventaire Globale</p>
+                        <p className="text-orange-600 text-xs font-black uppercase tracking-[0.15em]">Valeur Inventaire Globale</p>
                         <div className="mt-5 flex items-baseline gap-2">
                             <span className="text-5xl font-black tabular-nums tracking-tighter italic">
                                 {(valeurStock?.totalValeur || 0).toLocaleString()}
                             </span>
-                            <span className="text-xl font-bold text-slate-300 uppercase italic opacity-60">FCFA</span>
+                            <span className="text-xl font-bold text-slate-400 uppercase italic opacity-80">FCFA</span>
                         </div>
-                        <p className="mt-5 text-slate-400 text-[10px] font-bold uppercase tracking-widest opacity-60 italic">
+                        <p className="mt-5 text-slate-500 text-xs font-bold uppercase tracking-wider opacity-80 italic">
                             Estimation stock au {dateFin ? new Date(dateFin).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'jour-j'}
                         </p>
                     </div>
@@ -548,7 +548,7 @@ export default function RapportsPage() {
                 <div className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-xl flex flex-col justify-between transition-all hover:shadow-2xl hover:-translate-y-1">
                     <div>
                         <div className="flex items-center justify-between mb-2">
-                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-none">Alertes Rupture</p>
+                            <p className="text-slate-500 text-xs font-black uppercase tracking-wider leading-none">Alertes Rupture</p>
                             <AlertTriangle className="h-4 w-4 text-orange-500" />
                         </div>
                         <div className="text-4xl font-black text-slate-900 tracking-tighter">{Array.isArray(alertes) ? alertes.length : 0}</div>
@@ -557,24 +557,24 @@ export default function RapportsPage() {
                         <div className="h-2 flex-1 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
                             <div className="h-full bg-orange-500 transition-all duration-1000 ease-out" style={{ width: `${Math.min(100, ((Array.isArray(alertes) ? alertes.length : 0) / 20) * 100)}%` }} />
                         </div>
-                        <span className="text-[10px] font-black text-slate-400">CRITIQUE</span>
+                        <span className="text-xs font-black text-slate-500">CRITIQUE</span>
                     </div>
                 </div>
 
                 <div className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-xl flex flex-col justify-between transition-all hover:shadow-2xl hover:-translate-y-1">
                     <div>
                         <div className="flex items-center justify-between mb-2">
-                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-none">Flux Période</p>
+                            <p className="text-slate-500 text-xs font-black uppercase tracking-wider leading-none">Flux Période</p>
                             <ArrowRightLeft className="h-4 w-4 text-blue-500" />
                         </div>
                         <div className="text-4xl font-black text-slate-900 tracking-tighter">{mouvementsTotals.entree + mouvementsTotals.sortie}</div>
                     </div>
                     <div className="mt-6 flex items-center gap-2">
                         <div className="flex -space-x-2">
-                            <div className="h-6 w-6 rounded-full border-2 border-white bg-emerald-100 flex items-center justify-center text-[8px] font-black text-emerald-600">IN</div>
-                            <div className="h-6 w-6 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[8px] font-black text-blue-600">OUT</div>
+                            <div className="h-7 w-7 rounded-full border-2 border-white bg-emerald-100 flex items-center justify-center text-[10px] font-black text-emerald-600">IN</div>
+                            <div className="h-7 w-7 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[10px] font-black text-blue-600">OUT</div>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter ml-2 italic">Transactions actives</span>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-tight ml-2 italic">Transactions actives</span>
                     </div>
                 </div>
             </div>
@@ -594,14 +594,14 @@ export default function RapportsPage() {
                             Valorisation Détaillée par Référence
                         </h3>
                         <div className="text-right">
-                            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic">Valeur Totale Calculée</p>
+                            <p className="text-xs font-black text-white/60 uppercase tracking-wider italic">Valeur Totale Calculée</p>
                             <p className="text-2xl font-black text-orange-500 tabular-nums">{(valeurStock?.totalValeur || 0).toLocaleString()} <span className="text-xs">F</span></p>
                         </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
-                                <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-gray-50/50 border-b border-gray-100 italic">
+                                <tr className="text-left text-xs font-black text-slate-500 uppercase tracking-[0.1em] bg-gray-50/50 border-b border-gray-100 italic">
                                     <th className="px-8 py-5">Article</th>
                                     <th className="px-8 py-5 text-right">Stock</th>
                                     <th className="px-8 py-5 text-right">P.U (Moyen)</th>
@@ -616,7 +616,7 @@ export default function RapportsPage() {
                                     <tr key={i} className="hover:bg-gray-50 transition-all duration-300 group">
                                         <td className="px-8 py-5">
                                             <p className="text-sm font-black text-slate-900 uppercase tracking-tight italic group-hover:text-orange-600 transition-colors">{p.designation}</p>
-                                            <p className="text-[9px] font-mono text-slate-400">REF: {p.code}</p>
+                                            <p className="text-[11px] font-mono text-slate-500">REF: {p.code}</p>
                                         </td>
                                         <td className="px-8 py-5 text-right font-bold text-slate-900 tabular-nums">{p.quantite.toLocaleString()}</td>
                                         <td className="px-8 py-5 text-right text-slate-400 tabular-nums">{p.prixUnitaire.toLocaleString()} F</td>
@@ -650,11 +650,11 @@ export default function RapportsPage() {
                         </h3>
                         <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-xl border border-emerald-100 italic">
-                                <span className="text-[10px] font-black text-emerald-600 uppercase">Entrées:</span>
+                                <span className="text-xs font-black text-emerald-600 uppercase">Entrées:</span>
                                 <span className="font-black text-emerald-700">{mouvementsTotals.entree}</span>
                             </div>
                             <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 italic">
-                                <span className="text-[10px] font-black text-blue-600 uppercase">Sorties:</span>
+                                <span className="text-xs font-black text-blue-600 uppercase">Sorties:</span>
                                 <span className="font-black text-blue-700">{mouvementsTotals.sortie}</span>
                             </div>
                         </div>
@@ -662,7 +662,7 @@ export default function RapportsPage() {
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
-                                <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-gray-50/50 border-b border-gray-100 italic">
+                                <tr className="text-left text-xs font-black text-slate-500 uppercase tracking-[0.1em] bg-gray-50/50 border-b border-gray-100 italic">
                                     <th className="px-8 py-5">Date & Heure</th>
                                     <th className="px-8 py-5">Référence Article</th>
                                     <th className="px-8 py-5">Magasin</th>
@@ -687,7 +687,7 @@ export default function RapportsPage() {
                                         <td className="px-8 py-5 text-xs text-slate-600 font-bold uppercase">{m.magasin.nom}</td>
                                         <td className="px-8 py-5">
                                             <div className="flex justify-center">
-                                                <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest italic ${m.type === 'ENTREE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
+                                                <span className={`px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider italic ${m.type === 'ENTREE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
                                                     {m.type}
                                                 </span>
                                             </div>
@@ -737,15 +737,15 @@ export default function RapportsPage() {
                       <div className="flex justify-between items-center">
                         <div>
                             <span className={`font-black text-sm italic uppercase tracking-tighter ${selectedClientId === c.clientId ? 'text-white' : 'text-slate-900 group-hover:text-blue-600'}`}>{c.nom || 'Client Divers'}</span>
-                            <div className={`text-[9px] font-mono italic opacity-60 ${selectedClientId === c.clientId ? 'text-blue-100' : 'text-slate-400'}`}>REF: {c.clientId || '---'}</div>
+                            <div className={`text-[11px] font-mono italic opacity-70 ${selectedClientId === c.clientId ? 'text-blue-100' : 'text-slate-500'}`}>REF: {c.clientId || '---'}</div>
                         </div>
-                        <span className={`text-[9px] px-3 py-1 rounded-full font-black uppercase tracking-widest ${selectedClientId === c.clientId ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                        <span className={`text-[11px] px-3 py-1 rounded-full font-black uppercase tracking-wider ${selectedClientId === c.clientId ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
                             {c.nombreVentes} Actes
                         </span>
                       </div>
                       <div className="mt-4 flex items-baseline gap-1">
                         <span className={`text-2xl font-black tabular-nums tracking-tighter ${selectedClientId === c.clientId ? 'text-white' : 'text-blue-600'}`}>{(c.caTotal || 0).toLocaleString()}</span>
-                        <span className={`text-[10px] font-bold opacity-40 ${selectedClientId === c.clientId ? 'text-white' : 'text-slate-400'}`}>FCFA</span>
+                        <span className={`text-xs font-bold opacity-60 ${selectedClientId === c.clientId ? 'text-white' : 'text-slate-500'}`}>FCFA</span>
                       </div>
                     </button>
                   ))}
@@ -759,7 +759,7 @@ export default function RapportsPage() {
                         Composition du panier d'achat
                     </h3>
                     {selectedClientId && (
-                        <span className="text-[10px] font-black bg-slate-900 text-white px-4 py-1.5 rounded-full uppercase tracking-widest italic shadow-lg">
+                        <span className="text-xs font-black bg-slate-900 text-white px-4 py-1.5 rounded-full uppercase tracking-wider italic shadow-lg">
                             Analyse Détail
                         </span>
                     )}
@@ -768,7 +768,7 @@ export default function RapportsPage() {
                   <div className="overflow-x-auto rounded-3xl border border-gray-50 shadow-inner bg-gray-50/20">
                     <table className="min-w-full">
                       <thead>
-                        <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-white border-b border-gray-50 italic">
+                        <tr className="text-left text-xs font-black text-slate-500 uppercase tracking-[0.1em] bg-white border-b border-gray-50 italic">
                           <th className="px-8 py-6">Désignation Article</th>
                           <th className="px-8 py-6 text-right">Unités</th>
                           <th className="px-8 py-6 text-right">CA Engendré</th>
@@ -785,13 +785,13 @@ export default function RapportsPage() {
                             </td>
                             <td className="px-8 py-7 text-right">
                                 <span className="text-xl font-black text-blue-600 tabular-nums">{(p.chiffreAffaires || 0).toLocaleString()}</span>
-                                <span className="text-[10px] font-bold text-slate-300 ml-1 opacity-50 italic">FCFA</span>
+                                <span className="text-xs font-bold text-slate-400 ml-1 opacity-70 italic">FCFA</span>
                             </td>
                           </tr>
                         ))}
                         {produitsParClient.length === 0 && (
                             <tr>
-                                <td colSpan={3} className="px-8 py-20 text-center text-slate-200 font-black uppercase italic tracking-[0.4em] text-xs">Aucun article enregistré</td>
+                                <td colSpan={3} className="px-8 py-20 text-center text-slate-400 font-black uppercase italic tracking-[0.15em] text-sm">Aucun article enregistré</td>
                             </tr>
                         )}
                       </tbody>
@@ -803,7 +803,7 @@ export default function RapportsPage() {
                         <PieChart className="h-32 w-32 mb-8 opacity-5 animate-pulse" />
                         <Users className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-12 w-12 text-slate-100" />
                     </div>
-                    <p className="text-xs font-black uppercase tracking-[0.4em] text-slate-200 italic">Veuillez sélectionner un partenaire client</p>
+                    <p className="text-sm font-black uppercase tracking-[0.15em] text-slate-400 italic">Veuillez sélectionner un partenaire client</p>
                   </div>
                 )}
               </div>
@@ -839,7 +839,7 @@ export default function RapportsPage() {
                   Composition du panier d'achat (Fournisseur)
                 </h3>
                 {selectedFournisseurId && (
-                  <span className="text-[10px] font-black bg-blue-600 text-white px-4 py-1.5 rounded-full uppercase tracking-widest italic">
+                    <span className="text-xs font-black bg-blue-600 text-white px-4 py-1.5 rounded-full uppercase tracking-wider italic">
                     Détail Articles
                   </span>
                 )}
@@ -849,7 +849,7 @@ export default function RapportsPage() {
                 <div className="overflow-x-auto rounded-3xl border border-gray-50 bg-gray-50/20">
                   <table className="min-w-full">
                     <thead>
-                      <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-white border-b border-gray-50 italic">
+                      <tr className="text-left text-xs font-black text-slate-500 uppercase tracking-[0.1em] bg-white border-b border-gray-50 italic">
                         <th className="px-8 py-6">Désignation</th>
                         <th className="px-8 py-6 text-right">Unités</th>
                         <th className="px-8 py-6 text-right">Montant</th>
@@ -866,22 +866,22 @@ export default function RapportsPage() {
                           </td>
                           <td className="px-8 py-7 text-right">
                             <span className="text-xl font-black text-emerald-600 tabular-nums">{p.montantAchat.toLocaleString()}</span>
-                            <span className="text-[10px] font-bold text-slate-300 ml-1 opacity-50 italic">F</span>
+                            <span className="text-xs font-bold text-slate-400 ml-1 opacity-70 italic">F</span>
                           </td>
                         </tr>
                       ))}
                       {produitsParFournisseur.length === 0 && (
                         <tr>
-                          <td colSpan={3} className="px-8 py-20 text-center text-slate-200 font-black uppercase italic tracking-[0.4em] text-xs font-mono">Aucun article enregistré pour la période</td>
+                          <td colSpan={3} className="px-8 py-20 text-center text-slate-400 font-black uppercase italic tracking-[0.15em] text-sm">Aucun article enregistré pour la période</td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-40 text-slate-200">
-                  <CreditCard className="h-20 w-20 mb-6 opacity-20 animate-pulse" />
-                  <p className="text-xs font-black uppercase tracking-[0.3em] italic">Sélectionnez un fournisseur pour voir sa composition panier</p>
+                  <div className="flex flex-col items-center justify-center py-40 text-slate-400">
+                  <CreditCard className="h-20 w-20 mb-6 opacity-30 animate-pulse" />
+                  <p className="text-sm font-black uppercase tracking-[0.15em] italic">Sélectionnez un fournisseur pour voir sa composition panier</p>
                 </div>
               )}
             </div>
@@ -905,13 +905,13 @@ function StatCard({ label, value, prev, evol, unit, color }: any) {
   return (
     <div className="relative group overflow-hidden rounded-[2.5rem] border border-gray-100 bg-white p-7 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
       <div className={`absolute top-0 right-0 h-24 w-24 -mr-12 -mt-12 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-1000 ${colors[color].split(' ')[0]}`} />
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
+      <p className="text-xs font-black text-slate-500 uppercase tracking-wider">{label}</p>
       <div className="mt-4 flex items-baseline gap-2">
         <span className="text-3xl font-black text-slate-900 tracking-tighter tabular-nums italic">{value.toLocaleString()}</span>
-        <span className="text-[10px] font-bold text-slate-300 uppercase italic opacity-60">{unit}</span>
+        <span className="text-xs font-bold text-slate-400 uppercase italic opacity-80">{unit}</span>
       </div>
       <div className="mt-7 flex items-center justify-between border-t border-gray-50 pt-5">
-        <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter italic opacity-60">Prev: {prev.toLocaleString()}</span>
+        <span className="text-[11px] font-black text-slate-500 uppercase tracking-tight italic opacity-80">Prev: {prev.toLocaleString()}</span>
         <span className={`px-4 py-1 rounded-full text-[10px] font-black tracking-widest border shadow-sm ${isUp ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
           {isUp ? '↑' : '↓'} {Math.abs(evol).toFixed(1)}%
         </span>
@@ -954,7 +954,7 @@ function LogistiqueAlertes({ alertes, searchTerm }: any) {
             </div>
           </div>
         ))}
-        {alertes.length === 0 && <div className="py-10 text-center text-slate-200 font-black uppercase tracking-widest">Aucune alerte de stock</div>}
+        {alertes.length === 0 && <div className="py-10 text-center text-slate-400 font-black uppercase tracking-wider">Aucune alerte de stock</div>}
       </div>
     </div>
   )
@@ -979,14 +979,14 @@ function LogistiqueTop({ top, searchTerm }: { top: any[], searchTerm: string }) 
                             </div>
                             <div>
                                 <div className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase italic">{t.designation || 'Produit inconnu'}</div>
-                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest opacity-60">Référence: {t.code || '---'}</div>
+                                <div className="text-xs text-slate-500 font-bold uppercase tracking-wider opacity-80">Référence: {t.code || '---'}</div>
                             </div>
                         </div>
                         <div className="text-right">
                             <div className="text-2xl font-black text-slate-900 tracking-tighter italic">
-                                {(t._sum?.quantite || 0)} <span className="text-[10px] opacity-40 uppercase">Unites</span>
+                                {(t._sum?.quantite || 0)} <span className="text-xs opacity-60 uppercase">Unites</span>
                             </div>
-                            <div className="text-[8px] font-black text-emerald-500 uppercase tracking-widest italic leading-none">Rotation Optimale</div>
+                            <div className="text-[10px] font-black text-emerald-500 uppercase tracking-wider italic leading-none">Rotation Optimale</div>
                         </div>
                     </div>
                 ))}
@@ -1012,14 +1012,14 @@ function PaiementTable({ title, data, type, searchTerm, onSelect, selectedId }: 
     <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden mb-8">
       <div className="p-8 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
         <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter italic">{title}</h3>
-        <span className="text-[9px] font-black bg-blue-50 text-blue-600 border border-blue-100 px-5 py-1.5 rounded-full uppercase tracking-widest italic shadow-sm">
+        <span className="text-[11px] font-black bg-blue-50 text-blue-600 border border-blue-100 px-5 py-1.5 rounded-full uppercase tracking-wider italic shadow-sm">
             {filteredData.length} entités analysées
         </span>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-left">
           <thead>
-            <tr className="bg-white border-b border-gray-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] italic">
+            <tr className="bg-white border-b border-gray-50 text-xs font-black text-slate-500 uppercase tracking-[0.1em] italic">
               <th className="px-8 py-6">{type === 'achats' ? 'Partenaire Fournisseur' : 'Bénéficiaire Client'}</th>
               <th className="px-8 py-6 text-center">Volume Actes</th>
               <th className="px-8 py-6 text-right">Chiffre Affaire</th>
@@ -1043,7 +1043,7 @@ function PaiementTable({ title, data, type, searchTerm, onSelect, selectedId }: 
                         <div className={`text-sm font-black uppercase tracking-tighter italic transition-colors ${
                             (d.fournisseurId || d.clientId) === selectedId ? 'text-white' : 'text-slate-900 group-hover:text-blue-600'
                         }`}>{d.client || d.fournisseur || d.nom}</div>
-                        <div className={`text-[10px] font-mono tracking-tighter uppercase italic opacity-60 ${
+                        <div className={`text-xs font-mono tracking-tight uppercase italic opacity-70 ${
                             (d.fournisseurId || d.clientId) === selectedId ? 'text-blue-100' : 'text-slate-300'
                         }`}>ID: {d.clientId || d.fournisseurId || '---'}</div>
                     </td>
@@ -1070,7 +1070,7 @@ function PaiementTable({ title, data, type, searchTerm, onSelect, selectedId }: 
             ))}
             {paginatedData.length === 0 && (
                 <tr>
-                    <td colSpan={6} className="px-8 py-20 text-center text-slate-200 font-black uppercase italic tracking-[0.5em] text-xs">Aucune donnée disponible</td>
+                    <td colSpan={6} className="px-8 py-20 text-center text-slate-400 font-black uppercase italic tracking-[0.15em] text-sm">Aucune donnée disponible</td>
                 </tr>
             )}
           </tbody>

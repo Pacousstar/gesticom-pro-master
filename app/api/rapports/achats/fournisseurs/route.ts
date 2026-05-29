@@ -30,23 +30,51 @@ export async function GET(request: NextRequest) {
             where.date = { gte: new Date(start), lte: endDate }
         }
 
-        const fournisseurs = await prisma.fournisseur.findMany({ select: { id: true, code: true, nom: true, telephone: true } })
+        const fournisseurWhere: any = session.role !== 'SUPER_ADMIN' && entiteId ? { entiteId } : {}
+        const fournisseurs = await prisma.fournisseur.findMany({
+            where: fournisseurWhere,
+            select: { id: true, code: true, nom: true, telephone: true }
+        })
         const fournisseurMap = new Map(fournisseurs.map(f => [f.id, f]))
 
-        const achatsFournisseurInfo = await prisma.achat.groupBy({
-            by: ['fournisseurId', 'fournisseurLibre'],
+        const achats = await prisma.achat.findMany({
             where,
-            _sum: { montantTotal: true, montantPaye: true },
-            _count: { id: true }
+            include: {
+                reglements: { select: { id: true, modePaiement: true } },
+                ReglementAchatLigne: { select: { reglementId: true, montant: true } },
+            }
         })
 
-        const data = achatsFournisseurInfo.map(a => {
+        const groupMap = new Map<string, { fournisseurId: number | null; fournisseurLibre: string | null; montantTotal: number; montantPaye: number; nombreAchats: number }>()
+
+        for (const a of achats) {
+            const creditReglementIds = new Set(
+                (a.reglements || [])
+                    .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+                    .map(r => r.id)
+            )
+            const totalLignePaye = (a.ReglementAchatLigne || [])
+                .filter(l => !creditReglementIds.has(l.reglementId))
+                .reduce((s, l) => s + (l.montant || 0), 0)
+            const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (a.montantPaye || 0)
+
+            const key = a.fournisseurId ? `f${a.fournisseurId}` : `l${a.fournisseurLibre || ''}`
+            if (!groupMap.has(key)) {
+                groupMap.set(key, { fournisseurId: a.fournisseurId, fournisseurLibre: a.fournisseurLibre, montantTotal: 0, montantPaye: 0, nombreAchats: 0 })
+            }
+            const g = groupMap.get(key)!
+            g.montantTotal += a.montantTotal || 0
+            g.montantPaye += realMontantPaye
+            g.nombreAchats++
+        }
+
+        const data = Array.from(groupMap.values()).map(a => {
             let nom = a.fournisseurLibre || 'Fournisseur Divers'
             if (a.fournisseurId && fournisseurMap.has(a.fournisseurId)) {
                 nom = fournisseurMap.get(a.fournisseurId)!.nom
             }
-            const total = a._sum.montantTotal || 0
-            const paye = a._sum.montantPaye || 0
+            const total = a.montantTotal
+            const paye = a.montantPaye
             return {
                 fournisseurId: a.fournisseurId,
                 fournisseur: nom,
@@ -54,7 +82,7 @@ export async function GET(request: NextRequest) {
                 montantTotal: total,
                 montantPaye: paye,
                 resteAPayer: total - paye,
-                nombreAchats: a._count.id,
+                nombreAchats: a.nombreAchats,
             }
         })
 

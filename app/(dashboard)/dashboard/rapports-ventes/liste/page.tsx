@@ -69,7 +69,7 @@ export default function ListeVentesPage() {
 
   const caTotal = filteredData.reduce((acc, v) => acc + v.montantTotal, 0)
   const encaisseTotal = filteredData.reduce((acc, v) => acc + v.montantPaye, 0)
-  const resteTotal = caTotal - encaisseTotal
+  const resteTotal = Math.max(0, caTotal - encaisseTotal)
 
   const itemsPerPage = 20
   const totalPages = Math.ceil(filteredData.length / itemsPerPage)
@@ -92,7 +92,7 @@ export default function ListeVentesPage() {
           </button>
           <button 
             onClick={() => {/* Logique Excel */}}
-            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm no-print"
+            className="hidden no-print"
           >
             <Download className="h-4 w-4" /> Excel
           </button>

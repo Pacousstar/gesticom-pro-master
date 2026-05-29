@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
       prisma.produit.groupBy({ by: ['categorie'], where: { actif: true, ...entiteCondition }, _count: { id: true } }).catch(catchEmpty('produit.groupBy')),
       // 7 - Top 5 Produits (CA)
       prisma.venteLigne.groupBy({
-        by: ['produitId', 'designation'],
+        by: ['produitId'],
         where: { vente: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition } },
         _sum: { montant: true, quantite: true },
         orderBy: { _sum: { montant: 'desc' } },
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
 
       // 12 - Créances Clients (Ventes non soldées - exclure ANNULEE et BROUILLON)
       prisma.vente.aggregate({
-        where: { statut: { in: ['VALIDE', 'VALIDEE'] }, NOT: { statut: 'ANNULEE' }, ...entiteCondition as any },
+        where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
         _sum: { montantTotal: true, montantPaye: true }
       }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0 } })),
 
@@ -293,8 +293,16 @@ const result = await Promise.race([
       : []
 
     // Formattage Top Produits
+    const topProduitIds = topProduitsRaw.map((t: any) => t.produitId)
+    const topProduitsDetails = topProduitIds.length > 0
+      ? await prisma.produit.findMany({
+          where: { id: { in: topProduitIds } },
+          select: { id: true, designation: true }
+        })
+      : []
+    const topProduitsMap = new Map(topProduitsDetails.map((p: any) => [p.id, p.designation]))
     const topProduits = topProduitsRaw.map((t: any) => ({
-      name: t.designation || 'Inconnu',
+      name: topProduitsMap.get(t.produitId) || 'Inconnu',
       ca: toNum(t._sum?.montant),
       qte: toNum(t._sum?.quantite)
     }))

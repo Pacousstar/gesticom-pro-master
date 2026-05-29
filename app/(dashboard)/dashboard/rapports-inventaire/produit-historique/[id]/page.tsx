@@ -65,6 +65,9 @@ export default function ProduitHistoriquePage() {
 
   const totalVendu = data.stats.totalVendu || 0
   const totalAchete = data.stats.totalAchete || 0
+  const revenuReel = data.allMoves
+    .filter((m: any) => m.nature === 'VENTE')
+    .reduce((sum: number, m: any) => sum + (m.quantite * m.prixUnitaire), 0)
 
   return (
     <div className="space-y-8 pb-12">
@@ -268,7 +271,7 @@ export default function ProduitHistoriquePage() {
                                 <tr className="bg-gray-50 font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
                                     <td colSpan={2} className="border-r-2 border-black px-3 py-4 text-right underline decoration-double shadow-inner">EXTRACT TOTAL PERFORMANCE</td>
                                     <td className="border-r-2 border-black px-3 py-4 text-right bg-white">{totalVendu.toLocaleString()} Unités</td>
-                                    <td className="px-3 py-4 text-right bg-white text-blue-900 underline decoration-double">{(totalVendu * (data.allMoves[0]?.prixUnitaire || 0)).toLocaleString()} F CA EST.</td>
+                                    <td className="px-3 py-4 text-right bg-white text-blue-900 underline decoration-double">{revenuReel.toLocaleString()} F CA RÉEL</td>
                                 </tr>
                             </tfoot>
                         )}
@@ -331,7 +334,7 @@ export default function ProduitHistoriquePage() {
                                   </div>
                                   <div className="flex flex-col gap-1 text-right">
                                       <span className="text-[9px] opacity-60">Chiffre d'Affaires Généré :</span>
-                                      <span className="text-sm text-blue-900">{(totalVendu * (data.allMoves[0]?.prixUnitaire || 0)).toLocaleString()} F EST.</span>
+                                      <span className="text-sm text-blue-900">{revenuReel.toLocaleString()} F RÉEL</span>
                                   </div>
                               </div>
 
@@ -372,7 +375,7 @@ export default function ProduitHistoriquePage() {
                                           <tr className="bg-black text-white font-black text-[16px] border-t-4 border-black uppercase italic shadow-2xl">
                                               <td colSpan={2} className="px-4 py-5 text-right tracking-[0.2em] underline decoration-orange-500">BILAN PERFORMANCE ARTICLE</td>
                                               <td className="px-4 py-5 text-right tabular-nums text-xl">{totalVendu.toLocaleString()}</td>
-                                              <td className="px-4 py-5 text-right tabular-nums text-emerald-400 bg-slate-900">{(totalVendu * (data.allMoves[0]?.prixUnitaire || 0)).toLocaleString()} F</td>
+                                              <td className="px-4 py-5 text-right tabular-nums text-emerald-400 bg-slate-900">{revenuReel.toLocaleString()} F</td>
                                           </tr>
                                       </tfoot>
                                   )}

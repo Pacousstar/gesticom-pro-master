@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       whereBase.entiteId = entiteId
     }
 
-    const [stocks, topData, mouvements] = await Promise.all([
+    const [stocks, topData, mouvements, allProduits] = await Promise.all([
       prisma.stock.findMany({
         where: { ...whereBase, produit: { actif: true } },
         include: {
@@ -70,6 +70,10 @@ export async function GET(request: NextRequest) {
           magasin: { select: { code: true, nom: true } },
         },
       }),
+      prisma.produit.findMany({
+        where: { actif: true },
+        select: { id: true, code: true, designation: true },
+      }),
     ])
 
     const alertes = stocks
@@ -90,6 +94,7 @@ export async function GET(request: NextRequest) {
     const topProduitsList = Object.entries(topProduits)
       .map(([produitId, total]) => {
         const p = stocks.find((s) => s.produit.id === Number(produitId))?.produit
+          || allProduits.find((p) => p.id === Number(produitId))
         return { produit: p ? `${p.code} - ${p.designation}` : `ID ${produitId}`, total: total as number }
       })
       .sort((a, b) => b.total - a.total)

@@ -183,11 +183,7 @@ export default function ParClientPage() {
                                             <td className="px-8 py-7 text-right text-slate-500 font-bold tabular-nums font-mono text-xs">
                                                 {formatCurrency(row.nombreVentes > 0 ? row.caTotal / row.nombreVentes : 0)}
                                             </td>
-                                            <td className="px-8 py-7 text-right">
-                                                <button className="bg-orange-600 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/10 border border-orange-500">
-                                                    HISTORIQUE
-                                                </button>
-                                            </td>
+                                            <td className="px-8 py-7 text-right"></td>
                                         </tr>
                                     ))}
                                     {data.length === 0 && (

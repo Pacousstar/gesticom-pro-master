@@ -46,23 +46,37 @@ export async function GET(request: NextRequest) {
         utilisateur: { select: { nom: true } },
         magasin: { select: { nom: true } },
         lignes: { select: { designation: true } },
+        reglements: { select: { id: true, modePaiement: true } },
+        ReglementVenteLigne: { select: { reglementId: true, montant: true } },
       },
       orderBy: { date: 'desc' },
     })
 
-    const formatted = ventes.map(v => ({
-      id: v.id,
-      numero: v.numero,
-      date: v.date,
-      client: v.client?.nom || v.clientLibre || 'Client Comptant',
-      montantTotal: v.montantTotal,
-      montantPaye: v.montantPaye,
-      statutPaiement: v.statutPaiement,
-      modePaiement: v.modePaiement,
-      vendeur: v.utilisateur?.nom || 'Inconnu',
-      magasin: v.magasin.nom,
-      produits: v.lignes.map(l => l.designation).join(', ')
-    }))
+    const formatted = ventes.map(v => {
+      const creditReglementIds = new Set(
+        (v.reglements || [])
+          .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+          .map(r => r.id)
+      )
+      const totalLignePaye = (v.ReglementVenteLigne || [])
+        .filter(l => !creditReglementIds.has(l.reglementId))
+        .reduce((s, l) => s + (l.montant || 0), 0)
+      const realMontantPaye = totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0)
+
+      return {
+        id: v.id,
+        numero: v.numero,
+        date: v.date,
+        client: v.client?.nom || v.clientLibre || 'Client Comptant',
+        montantTotal: v.montantTotal,
+        montantPaye: realMontantPaye,
+        statutPaiement: v.statutPaiement,
+        modePaiement: v.modePaiement,
+        vendeur: v.utilisateur?.nom || 'Inconnu',
+        magasin: v.magasin.nom,
+        produits: v.lignes.map(l => l.designation).join(', ')
+      }
+    })
 
     return NextResponse.json(formatted)
   } catch (error) {

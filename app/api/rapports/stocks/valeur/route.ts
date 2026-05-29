@@ -60,10 +60,12 @@ export async function GET(request: NextRequest) {
     const stockMap = new Map<number, number>()
     mouvements.forEach(m => {
       const current = stockMap.get(m.produitId) || 0
-      if (m.type === 'ENTREE') {
+      if (m.type === 'ENTREE' || m.type === 'TRANSFERT_IN') {
         stockMap.set(m.produitId, current + m.quantite)
-      } else {
+      } else if (m.type === 'SORTIE' || m.type === 'TRANSFERT_OUT') {
         stockMap.set(m.produitId, current - m.quantite)
+      } else if (m.type === 'AJUSTEMENT') {
+        stockMap.set(m.produitId, current + m.quantite)
       }
     })
 
