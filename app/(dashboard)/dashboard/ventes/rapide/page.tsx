@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, Loader2, Building2 } from 'lucide-react'
+import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, Loader2, Building2, Percent } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { estModeBanque } from '@/lib/banque'
+import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
 
 type Produit = { 
   id: number; 
@@ -16,7 +17,7 @@ type Produit = {
   stocks?: Array<{ magasinId: number; quantite: number }>
   categorie?: string
 }
-type Ligne = { produitId: number; designation: string; quantite: number; prixUnitaire: number; montant: number }
+type Ligne = { produitId: number; designation: string; quantite: number; prixUnitaire: number; remise: number; remiseType: 'MONTANT' | 'POURCENT'; remiseInput: string; montant: number }
 
 export default function VenteRapidePage() {
   const [produits, setProduits] = useState<Produit[]>([])
@@ -39,6 +40,8 @@ export default function VenteRapidePage() {
   const [selectedCategorie, setSelectedCategorie] = useState<string>('TOUS')
   const [categories, setCategories] = useState<string[]>([])
   const { success: showSuccess, error: showError } = useToast()
+  const [lastSale, setLastSale] = useState<any>(null)
+  const printFrameRef = useRef<HTMLIFrameElement>(null)
   
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -97,9 +100,28 @@ export default function VenteRapidePage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [cart, showPayment])
 
-  const totalBrut = cart.reduce((acc, l) => acc + l.montant, 0)
-  const remiseVal = Math.max(0, Math.min(Number(remise) || 0, totalBrut))
-  const total = totalBrut - remiseVal
+  const sousTotal = cart.reduce((acc, l) => acc + l.quantite * l.prixUnitaire, 0)
+  const totalRemisesLignes = cart.reduce((acc, l) => acc + l.remise, 0)
+  const remiseVal = Math.max(0, Math.min(Number(remise) || 0, sousTotal - totalRemisesLignes))
+  const total = sousTotal - totalRemisesLignes - remiseVal
+
+  const montantEffectifPaye = modePaiement === 'CREDIT' ? (Number(montantPaye) || 0) : (Number(montantPaye) || total)
+  const pointsGagnes = pointsFideliteDepuisEncaissement(montantEffectifPaye)
+
+  const selectedClient = clients.find(c => String(c.id) === clientId)
+
+  const creditAlerte = (() => {
+    if (modePaiement !== 'CREDIT' || !selectedClient || selectedClient.type !== 'CREDIT') return null
+    const plafond = selectedClient.plafondCredit || 0
+    const detteReelle = (selectedClient.dette || 0)
+    const nouveauCredit = total - (Number(montantPaye) || 0)
+    const totalApres = detteReelle + Math.max(0, nouveauCredit)
+    if (plafond <= 0) return { niveau: 'error', msg: 'Aucun plafond crédit défini pour ce client.' }
+    if (totalApres > plafond) return { niveau: 'error', msg: `Plafond dépassé ! (${totalApres.toLocaleString()} F / ${plafond.toLocaleString()} F)` }
+    const ratio = totalApres / plafond
+    if (ratio >= 0.9) return { niveau: 'warning', msg: `Attention : ${Math.round(ratio * 100)}% du plafond atteint (${plafond.toLocaleString()} F)` }
+    return null
+  })()
 
   const handleSearch = (val: string) => {
     setSearch(val)
@@ -142,10 +164,10 @@ export default function VenteRapidePage() {
 
     setCart(prev => {
       if (existing) {
-        return prev.map(l => l.produitId === p.id ? { ...l, quantite: l.quantite + 1, montant: (l.quantite + 1) * l.prixUnitaire } : l)
+        return prev.map(l => l.produitId === p.id ? { ...l, quantite: l.quantite + 1, montant: (l.quantite + 1) * l.prixUnitaire - l.remise } : l)
       }
       const pu = p.prixVente || p.prixAchat || 0
-      return [...prev, { produitId: p.id, designation: p.designation, quantite: 1, prixUnitaire: pu, montant: pu }]
+      return [...prev, { produitId: p.id, designation: p.designation, quantite: 1, prixUnitaire: pu, remise: 0, remiseType: 'MONTANT' as const, remiseInput: '', montant: pu }]
     })
     showSuccess(`Ajouté : ${p.designation}`)
   }
@@ -176,7 +198,7 @@ export default function VenteRapidePage() {
       }
     }
     
-    setCart(prev => prev.map(l => l.produitId === id ? { ...l, quantite: newQte, montant: newQte * l.prixUnitaire } : l))
+    setCart(prev => prev.map(l => l.produitId === id ? { ...l, quantite: newQte, montant: newQte * l.prixUnitaire - l.remise } : l))
   }
 
   const removeItem = (id: number) => {
@@ -191,6 +213,11 @@ export default function VenteRapidePage() {
       return
     }
 
+    if (creditAlerte?.niveau === 'error') {
+      showError(creditAlerte.msg)
+      return
+    }
+
     setSubmitting(true)
     try {
       const payload: any = {
@@ -202,10 +229,12 @@ export default function VenteRapidePage() {
         numeroBon: numeroBon || null,
         observation: observation || null,
         estVenteRapide: true,
+        pointsGagnes,
         lignes: cart.map(l => ({
           produitId: l.produitId,
           quantite: l.quantite,
-          prixUnitaire: l.prixUnitaire
+          prixUnitaire: l.prixUnitaire,
+          remise: l.remise
         }))
       }
       if (estModeBanque(modePaiement) && banqueId) {
@@ -219,6 +248,8 @@ export default function VenteRapidePage() {
       })
 
       if (res.ok) {
+        const saleData = await res.json()
+        setLastSale(saleData)
         showSuccess('Vente validée avec succès !')
         setCart([])
         setShowPayment(false)
@@ -229,6 +260,7 @@ export default function VenteRapidePage() {
         setObservation('')
         setBanqueId('')
         setModePaiement('ESPECES')
+        setTimeout(() => imprimerTicket(saleData), 500)
       } else {
         const d = await res.json()
         showError(formatApiError(d.error))
@@ -240,7 +272,80 @@ export default function VenteRapidePage() {
     }
   }
 
-  const selectedClient = clients.find(c => String(c.id) === clientId)
+  function imprimerTicket(sale: any) {
+    const iframe = printFrameRef.current
+    if (!iframe) return
+    const doc = iframe.contentDocument || iframe.contentWindow!.document
+    doc.open()
+    doc.write(`
+      <html>
+      <head>
+        <style>
+          @page { margin: 0; size: 80mm auto; }
+          body { font-family: 'Courier New', monospace; font-size: 12px; color: #000; padding: 10px; margin: 0; }
+          .header { text-align: center; margin-bottom: 8px; }
+          .header h1 { font-size: 16px; font-weight: bold; margin: 0; text-transform: uppercase; }
+          .header p { font-size: 10px; margin: 2px 0; color: #555; }
+          .separator { border-top: 1px dashed #000; margin: 8px 0; }
+          .ligne { display: flex; justify-content: space-between; font-size: 11px; margin: 2px 0; }
+          .ligne .qte { width: 30px; text-align: left; }
+          .ligne .des { flex: 1; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .ligne .pu { width: 70px; text-align: right; }
+          .ligne .mt { width: 80px; text-align: right; font-weight: bold; }
+          .total { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; border-top: 2px solid #000; padding-top: 4px; margin-top: 4px; }
+          .footer { text-align: center; font-size: 10px; color: #555; margin-top: 8px; }
+          .infos { font-size: 10px; margin: 4px 0; }
+          .infos span { display: block; }
+          .merci { text-align: center; font-size: 14px; font-weight: bold; margin-top: 10px; letter-spacing: 2px; }
+          .btn-print { display: none; }
+          @media screen { .btn-print { display: block; margin: 20px auto; padding: 12px 24px; font-size: 16px; background: #f97316; color: #fff; border: none; border-radius: 8px; cursor: pointer; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${sale.entreprise?.nom || 'GestiCom Pro'}</h1>
+          <p>${sale.entreprise?.localisation || ''}</p>
+          <p>${sale.entreprise?.contact || ''}</p>
+        </div>
+        <div class="separator"></div>
+        <div class="infos">
+          <span>N° ${sale.numero || sale.numeroFacture || ''}</span>
+          <span>Date: ${new Date().toLocaleDateString('fr-FR')} ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+          ${sale.clientLibre ? `<span>Client: ${sale.clientLibre}</span>` : ''}
+        </div>
+        <div class="separator"></div>
+        ${(sale.lignes || []).map((l: any) => `
+          <div class="ligne">
+            <span class="qte">${l.quantite}x</span>
+            <span class="des">${l.designation}</span>
+            <span class="pu">${(l.prixUnitaire || 0).toLocaleString('fr-FR')} F</span>
+            <span class="mt">${(l.montant || ((l.quantite || 0) * (l.prixUnitaire || 0))).toLocaleString('fr-FR')} F</span>
+          </div>
+          ${(l.remise || 0) > 0 ? `<div class="ligne" style="font-size:9px;color:#888;"><span></span><span class="des">remise</span><span></span><span class="mt">-${(l.remise || 0).toLocaleString('fr-FR')} F</span></div>` : ''}
+        `).join('')}
+        <div class="total">
+          <span>TOTAL</span>
+          <span>${(sale.montantTotal || 0).toLocaleString('fr-FR')} F</span>
+        </div>
+        ${sale.remiseGlobale > 0 ? `<div class="ligne"><span>Remise globale</span><span class="mt">-${sale.remiseGlobale.toLocaleString('fr-FR')} F</span></div>` : ''}
+        ${sale.montantPaye > 0 ? `
+          <div class="separator"></div>
+          <div class="ligne"><span>Payé</span><span class="mt">${(sale.montantPaye || 0).toLocaleString('fr-FR')} F</span></div>
+          <div class="ligne"><span>Rendu</span><span class="mt">${Math.max(0, (sale.montantPaye || 0) - (sale.montantTotal || 0)).toLocaleString('fr-FR')} F</span></div>
+        ` : ''}
+        <div class="separator"></div>
+        <div class="merci">MERCI DE VOTRE VISITE !</div>
+        <div class="footer">
+          <p>Document généré par GestiCom Pro</p>
+        </div>
+        <button class="btn-print" onclick="window.print();window.close()">Imprimer le ticket</button>
+        <script>window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 2000); }</script>
+      </body>
+      </html>
+    `)
+    doc.close()
+  }
+
   const filteredProduits = selectedCategorie === 'TOUS' 
     ? produits.filter(p => p.designation.toLowerCase().includes(search.toLowerCase()) || p.code.toLowerCase().includes(search.toLowerCase()))
     : produits.filter(p => p.categorie === selectedCategorie && (p.designation.toLowerCase().includes(search.toLowerCase()) || p.code.toLowerCase().includes(search.toLowerCase())))
@@ -262,11 +367,26 @@ export default function VenteRapidePage() {
         </div>
         <div className="flex items-center gap-4">
           {selectedClient && (
-            <div className={`flex flex-col items-end px-4 py-1 rounded-xl border ${selectedClient.dette > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
-              <span className="text-[10px] font-black uppercase opacity-60">Solde {selectedClient.nom}</span>
-              <span className={`text-xl font-black ${selectedClient.dette > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                {selectedClient.dette?.toLocaleString('fr-FR')} F
-              </span>
+            <div className="flex items-center gap-3">
+              <div className={`flex flex-col items-end px-4 py-1 rounded-xl border ${selectedClient.dette > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
+                <span className="text-[10px] font-black uppercase opacity-60">{selectedClient.nom}</span>
+                <span className="text-xs font-black opacity-60">{selectedClient.type === 'CREDIT' ? 'CRÉDIT' : 'COMPTANT'}</span>
+                <span className={`text-lg font-black ${selectedClient.dette > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {selectedClient.dette?.toLocaleString('fr-FR')} F
+                </span>
+              </div>
+              <div className="flex flex-col items-start px-4 py-1 rounded-xl bg-blue-500/10 border border-blue-500/30">
+                <span className="text-[10px] font-black uppercase opacity-60">Points</span>
+                <span className="text-lg font-black text-blue-400">{selectedClient.pointsFidelite || 0}</span>
+              </div>
+              {selectedClient.type === 'CREDIT' && selectedClient.plafondCredit > 0 && (
+                <div className={`flex flex-col items-start px-4 py-1 rounded-xl border ${((selectedClient.dette || 0) / selectedClient.plafondCredit) >= 0.9 ? 'bg-red-500/10 border-red-500/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
+                  <span className="text-[10px] font-black uppercase opacity-60">Plafond</span>
+                  <span className={`text-lg font-black ${((selectedClient.dette || 0) / selectedClient.plafondCredit) >= 0.9 ? 'text-red-400' : 'text-amber-400'}`}>
+                    {Math.round(((selectedClient.dette || 0) / selectedClient.plafondCredit) * 100)}%
+                  </span>
+                </div>
+              )}
             </div>
           )}
           <select 
@@ -348,25 +468,69 @@ export default function VenteRapidePage() {
                       <p className="mt-4 text-2xl font-bold">Panier vide</p>
                   </div>
               ) : (
-                  cart.map(l => (
+                  cart.map(l => {
+                    const qte = l.quantite
+                    const baseMontant = qte * l.prixUnitaire
+                    const handleRemise = (val: string) => {
+                      const raw = val.replace(/[^0-9.,]/g, '').replace(',', '.')
+                      const num = Number(raw) || 0
+                      if (l.remiseType === 'POURCENT') {
+                        const pct = Math.min(num, 100)
+                        const rem = Math.round(baseMontant * pct / 100)
+                        setCart(prev => prev.map(x => x.produitId === l.produitId ? { ...x, remiseInput: raw, remise: rem, montant: baseMontant - rem } : x))
+                      } else {
+                        const rem = Math.min(num, baseMontant)
+                        setCart(prev => prev.map(x => x.produitId === l.produitId ? { ...x, remiseInput: raw, remise: rem, montant: baseMontant - rem } : x))
+                      }
+                    }
+                    const toggleRemiseType = () => {
+                      setCart(prev => prev.map(x => {
+                        if (x.produitId !== l.produitId) return x
+                        const newType = x.remiseType === 'MONTANT' ? 'POURCENT' : 'MONTANT'
+                        if (newType === 'POURCENT') {
+                          const pct = baseMontant > 0 ? Math.round(x.remise / baseMontant * 100) : 0
+                          return { ...x, remiseType: newType, remiseInput: String(pct), remise: Math.round(baseMontant * pct / 100), montant: baseMontant - Math.round(baseMontant * pct / 100) }
+                        } else {
+                          return { ...x, remiseType: newType, remiseInput: String(x.remise), montant: baseMontant - x.remise }
+                        }
+                      }))
+                    }
+                    return (
                       <div key={l.produitId} className="flex items-center justify-between rounded-2xl bg-slate-900 p-4 border border-slate-700/50 hover:border-slate-500 transition-colors animate-in slide-in-from-right-4 duration-200">
-                          <div className="flex-1">
-                              <p className="text-xl font-bold leading-none">{l.designation}</p>
+                          <div className="flex-1 min-w-0 mr-2">
+                              <p className="text-xl font-bold leading-none truncate">{l.designation}</p>
                               <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">{l.prixUnitaire.toLocaleString('fr-FR')} FCFA / UNITÉ</p>
                           </div>
-                          <div className="flex items-center gap-6">
+                          <div className="flex items-center gap-3">
                               <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
                                   <button onClick={() => updateQty(l.produitId, -1)} className="rounded-lg bg-slate-900 p-2 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"><Minus className="h-4 w-4" /></button>
                                   <span className="w-10 text-center text-xl font-black">{l.quantite}</span>
                                   <button onClick={() => updateQty(l.produitId, 1)} className="rounded-lg bg-slate-900 p-2 hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-400 transition-colors"><Plus className="h-4 w-4" /></button>
                               </div>
-                              <p className="w-28 text-right text-xl font-black text-orange-400">{l.montant.toLocaleString('fr-FR')} F</p>
+                              <div className="flex items-center bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={l.remiseInput}
+                                  onChange={e => handleRemise(e.target.value)}
+                                  className="w-14 bg-transparent text-center text-sm font-bold text-orange-400 outline-none px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  placeholder="0"
+                                />
+                                <button
+                                  onClick={toggleRemiseType}
+                                  className={`px-2 py-2 text-[10px] font-black border-l border-slate-700 transition-colors ${l.remiseType === 'POURCENT' ? 'bg-orange-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
+                                >
+                                  {l.remiseType === 'MONTANT' ? 'F' : '%'}
+                                </button>
+                              </div>
+                              <p className="w-24 text-right text-xl font-black text-orange-400">{l.montant.toLocaleString('fr-FR')} F</p>
                               <button onClick={() => removeItem(l.produitId)} className="text-slate-600 hover:text-red-500 p-2 transition-colors"><Trash2 className="h-6 w-6" /></button>
                           </div>
                       </div>
-                  ))
-              )}
-            </div>
+                    )
+                  })
+               )}
+             </div>
            </div>
         </div>
 
@@ -395,16 +559,24 @@ export default function VenteRapidePage() {
                         />
                     </div>
 
-                    <div className="space-y-3 pt-2">
+                    <div className="space-y-2 pt-2">
                         <div className="flex justify-between items-center text-slate-400">
                             <span className="font-medium text-sm">Sous-total</span>
-                            <span className="font-bold text-slate-200">{totalBrut.toLocaleString('fr-FR')} F</span>
+                            <span className="font-bold text-slate-200">{sousTotal.toLocaleString('fr-FR')} F</span>
                         </div>
-                        <div className="flex justify-between items-center text-slate-400">
-                            <span className="font-medium text-sm">Remise</span>
-                            <span className="font-bold text-red-400">-{remiseVal.toLocaleString('fr-FR')} F</span>
-                        </div>
-                        <div className="flex justify-between items-center text-slate-400 border-t border-slate-700 pt-2">
+                        {totalRemisesLignes > 0 && (
+                          <div className="flex justify-between items-center text-slate-400">
+                              <span className="font-medium text-sm">Remises lignes</span>
+                              <span className="font-bold text-red-400">-{totalRemisesLignes.toLocaleString('fr-FR')} F</span>
+                          </div>
+                        )}
+                        {remiseVal > 0 && (
+                          <div className="flex justify-between items-center text-slate-400">
+                              <span className="font-medium text-sm">Remise globale</span>
+                              <span className="font-bold text-red-400">-{remiseVal.toLocaleString('fr-FR')} F</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-slate-400 border-t border-slate-700 pt-3">
                             <span className="font-black text-sm text-white uppercase">Net à payer</span>
                             <span className="font-black text-xl text-orange-500">{total.toLocaleString('fr-FR')} F</span>
                         </div>
@@ -561,9 +733,30 @@ export default function VenteRapidePage() {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-3 gap-3 mb-6">
+                    <div className="p-4 rounded-2xl bg-slate-800/50 border border-slate-700 text-center">
+                      <p className="text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest">Sous-total</p>
+                      <p className="text-xl font-black text-white tabular-nums">{sousTotal.toLocaleString('fr-FR')} F</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-800/50 border border-slate-700 text-center">
+                      <p className="text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest">Remises</p>
+                      <p className="text-xl font-black text-red-400 tabular-nums">-{(totalRemisesLignes + remiseVal).toLocaleString('fr-FR')} F</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-center">
+                      <p className="text-[10px] font-black text-orange-400 uppercase mb-1 tracking-widest">Points offerts</p>
+                      <p className="text-xl font-black text-orange-400 tabular-nums">+{pointsGagnes} pts</p>
+                    </div>
+                  </div>
+
+                  {creditAlerte && (
+                    <div className={`mb-6 rounded-2xl p-4 text-sm font-bold uppercase tracking-widest text-center ${creditAlerte.niveau === 'error' ? 'bg-red-500/20 border border-red-500/40 text-red-400' : 'bg-amber-500/20 border border-amber-500/40 text-amber-400'}`}>
+                      ⚠️ {creditAlerte.msg}
+                    </div>
+                  )}
+
                   <button 
                     onClick={handleValidate}
-                    disabled={submitting || (modePaiement === 'CREDIT' && !clientId) || (estModeBanque(modePaiement) && !banqueId)}
+                    disabled={submitting || creditAlerte?.niveau === 'error' || (modePaiement === 'CREDIT' && !clientId) || (estModeBanque(modePaiement) && !banqueId)}
                     className="w-full flex items-center justify-center gap-4 rounded-[30px] bg-emerald-600 py-8 text-4xl font-black shadow-2xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale"
                   >
                       {submitting ? <Loader2 className="h-12 w-12 animate-spin" /> : (
@@ -577,6 +770,7 @@ export default function VenteRapidePage() {
               </div>
           </div>
       )}
+      <iframe ref={printFrameRef} style={{ position: 'absolute', width: 0, height: 0, border: 'none', top: '-9999px' }} title="impression-ticket" />
     </div>
   )
 }

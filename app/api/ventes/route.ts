@@ -10,6 +10,7 @@ import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
+import { unauthorized, badRequest, conflict, forbidden, handleApiError } from '@/lib/api-error'
 import {
   montantLigneTTC,
   montantTotalVenteDocument,
@@ -18,9 +19,9 @@ import {
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'ventes:view')
-  if (forbidden) return forbidden
+  if (!session) return unauthorized()
+  const permError = requirePermission(session, 'ventes:view')
+  if (permError) return permError
 
   const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
   const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
@@ -138,9 +139,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'ventes:create')
-  if (forbidden) return forbidden
+  if (!session) return unauthorized()
+  const permError = requirePermission(session, 'ventes:create')
+  if (permError) return permError
 
   try {
     const body = await request.json()
@@ -151,6 +152,7 @@ export async function POST(request: NextRequest) {
     const fraisApproche = Math.max(0, Number(body?.fraisApproche) || 0)
     const observation = body?.observation != null ? String(body.observation).trim() || null : null
     const numeroBon = body?.numeroBon != null ? String(body.numeroBon).trim() || null : null
+    const estVenteRapide = body?.estVenteRapide === true
     
     // --- SUPPORT MULTI-PAIEMENT ---
     const reglementsPayload = Array.isArray(body?.reglements) ? body.reglements : []
@@ -189,40 +191,40 @@ export async function POST(request: NextRequest) {
       const now = new Date()
       const parts = dateStr.split('-')
       if (parts.length !== 3) {
-        return NextResponse.json({ error: 'Format de date invalide. Utilisez YYYY-MM-DD.' }, { status: 400 })
+        return badRequest('Format de date invalide. Utilisez YYYY-MM-DD.')
       }
       const [yStr, mStr, dStr] = parts
       const y = Number(yStr)
       const m = Number(mStr)
       const d = Number(dStr)
       if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) {
-        return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
+        return badRequest('Date invalide.')
       }
       const candidate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
       if (candidate.getFullYear() !== y || candidate.getMonth() !== m - 1 || candidate.getDate() !== d) {
-        return NextResponse.json({ error: 'Date invalide (jour inexistant).' }, { status: 400 })
+        return badRequest('Date invalide (jour inexistant).')
       }
       dateVente = candidate
     }
     
     if (isNaN(dateVente.getTime())) {
-      return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
+      return badRequest('Date invalide.')
     }
     const lignes = Array.isArray(body?.lignes) ? body.lignes : []
 
     if (!Number.isInteger(magasinId) || magasinId < 1) {
-      return NextResponse.json({ error: 'Magasin requis.' }, { status: 400 })
+      return badRequest('Magasin requis.')
     }
     if (!lignes.length) {
-      return NextResponse.json({ error: 'Au moins une ligne de vente requise.' }, { status: 400 })
+      return badRequest('Au moins une ligne de vente requise.')
     }
 
     const entiteId = await getEntiteId(session)
-    if (!entiteId) return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    if (!entiteId) return badRequest('Entité non identifiée.')
 
     const magasin = await prisma.magasin.findUnique({ where: { id: magasinId } })
-    if (!magasin) return NextResponse.json({ error: 'Magasin introuvable.' }, { status: 400 })
-    if (magasin.entiteId !== entiteId) return NextResponse.json({ error: 'Accès au magasin refusé (Entité différente).' }, { status: 403 })
+    if (!magasin) return badRequest('Magasin introuvable.')
+    if (magasin.entiteId !== entiteId) return forbidden('Accès au magasin refusé (Entité différente).')
 
     let montantTotalAVantRemise = 0
     const lignesValides: any[] = []
@@ -247,9 +249,7 @@ export async function POST(request: NextRequest) {
           `TENTATIVE PRIX BAS : ${session.nom} a tenté de vendre ${produit.designation} à ${prixUnitaire} F (Prix Mini: ${prixMin} F)`,
           produit.id, { prixSaisi: prixUnitaire, prixMini: prixMin }, ip
         )
-        return NextResponse.json({ 
-          error: `Action interdite : Le prix pour ${produit.designation} (${prixUnitaire.toLocaleString('fr-FR')} F) est inférieur au prix minimum de sécurité (${prixMin.toLocaleString('fr-FR')} F).` 
-        }, { status: 400 })
+        return badRequest(`Action interdite : Le prix pour ${produit.designation} (${prixUnitaire.toLocaleString('fr-FR')} F) est inférieur au prix minimum de sécurité (${prixMin.toLocaleString('fr-FR')} F).`)
       }
 
       const designation = produit.designation
@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!lignesValides.length) {
-      return NextResponse.json({ error: 'Lignes de vente invalides.' }, { status: 400 })
+      return badRequest('Lignes de vente invalides.')
     }
 
     const montantTotal = montantTotalVenteDocument(
@@ -293,14 +293,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (montantPaye > montantTotal + 1) {
-      return NextResponse.json({
-        error: `Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse la facture (${montantTotal.toLocaleString()} F).`
-      }, { status: 400 })
+      return badRequest(`Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse la facture (${montantTotal.toLocaleString()} F).`)
     }
 
     const needsBanque = listReglements.some((r) => estModeBanque(r.mode))
     if (needsBanque && !Number(body?.banqueId)) {
-      return NextResponse.json({ error: 'Banque requise pour les règlements non espèces.' }, { status: 400 })
+      return badRequest('Banque requise pour les règlements non espèces.')
     }
     
     const statutPaiement = montantPaye >= montantTotal ? 'PAYE' : montantPaye > 0 ? 'PARTIEL' : 'CREDIT'
@@ -312,12 +310,12 @@ export async function POST(request: NextRequest) {
     let clientExtId: number | null = null
 
     if (statutPaiement === 'CREDIT' || statutPaiement === 'PARTIEL') {
-      if (clientId == null) return NextResponse.json({ error: 'Vente à crédit : un client doit être sélectionné.' }, { status: 400 })
+      if (clientId == null) return badRequest('Vente à crédit : un client doit être sélectionné.')
       const client = await prisma.client.findUnique({ where: { id: clientId } })
-      if (!client) return NextResponse.json({ error: 'Client introuvable.' }, { status: 400 })
-      if (client.entiteId !== entiteId) return NextResponse.json({ error: 'Accès client refusé (Entité différente).' }, { status: 403 })
-      if (client.type !== 'CREDIT') return NextResponse.json({ error: 'Le client doit être de type CREDIT.' }, { status: 400 })
-      if (client.plafondCredit == null) return NextResponse.json({ error: 'Le client doit avoir un plafond de crédit.' }, { status: 400 })
+      if (!client) return badRequest('Client introuvable.')
+      if (client.entiteId !== entiteId) return forbidden('Accès client refusé (Entité différente).')
+      if (client.type !== 'CREDIT') return badRequest('Le client doit être de type CREDIT.')
+      if (client.plafondCredit == null) return badRequest('Le client doit avoir un plafond de crédit.')
       
       const ventesClient = await prisma.vente.findMany({ where: { clientId, statut: 'VALIDEE', entiteId } })
       const detteFactures = ventesClient.reduce((s: number, v: any) => s + (v.montantTotal - (v.montantPaye ?? 0)), 0)
@@ -329,7 +327,7 @@ export async function POST(request: NextRequest) {
       const detteReelle = (detteFactures + (client.soldeInitial || 0)) - (totalRegsLibres + (client.avoirInitial || 0))
       
       if (detteReelle + (montantTotal - montantPaye) > client.plafondCredit) {
-         return NextResponse.json({ error: 'Plafond crédit dépassé.' }, { status: 400 })
+         return conflict('Plafond crédit dépassé.', 'CREDIT_LIMIT_EXCEEDED')
       }
 
       const totalApresVente = detteReelle + (montantTotal - montantPaye)
@@ -386,6 +384,7 @@ const st = await tx.stock.findUnique({
           montantPaye,
           pointsGagnes,
           statutPaiement,
+          estVenteRapide,
           modePaiement: listReglements.length > 1 ? 'MULTI' : (listReglements[0]?.mode || modePaiementPrincipal),
           observation,
           numeroBon,
@@ -506,23 +505,7 @@ await tx.stock.update({
     revalidatePath('/api/ventes')
 
     return NextResponse.json(vente)
-  } catch (e: any) {
-    console.error('[API VENTES ERROR]', e)
-    
-    if (e.message?.includes('DOUBLE_TRANSACTION')) {
-      return NextResponse.json({ 
-        error: 'Cette vente a déjà été enregistrée (Doublon bloqué).', 
-        code: 'IDEMPOTENCY_CONFLICT' 
-      }, { status: 409 })
-    }
-
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-      return NextResponse.json({ 
-        error: 'Cette vente a déjà été enregistrée.', 
-        code: 'IDEMPOTENCY_CONFLICT' 
-      }, { status: 409 })
-    }
-
-    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+  } catch (e) {
+    return handleApiError(e)
   }
 }

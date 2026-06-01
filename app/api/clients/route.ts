@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     prisma.client.findMany({
       where,
       orderBy: { nom: 'asc' },
-      select: { id: true, code: true, nom: true, telephone: true, type: true, plafondCredit: true, ncc: true, localisation: true, soldeInitial: true, avoirInitial: true },
+      select: { id: true, code: true, nom: true, telephone: true, type: true, plafondCredit: true, ncc: true, localisation: true, soldeInitial: true, avoirInitial: true, pointsFidelite: true, actif: true },
       skip,
       take: limit,
     })

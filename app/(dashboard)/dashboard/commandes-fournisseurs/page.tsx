@@ -58,6 +58,7 @@ export default function CommandesFournisseursPage() {
   const [detailCommande, setDetailCommande] = useState<any | null>(null)
   const [loadingDetail, setLoadingDetail] = useState<number | null>(null)
   const [transforming, setTransforming] = useState<number | null>(null)
+  const [actionLoading, setActionLoading] = useState<{ id: number; type: string } | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
 
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
@@ -322,6 +323,47 @@ export default function CommandesFournisseursPage() {
     } finally {
       setTransforming(null)
     }
+  }
+
+  const handleEnvoyer = async (id: number) => {
+    if (!confirm('Confirmer l\'envoi de ce bon de commande au fournisseur ?')) return
+    setActionLoading({ id, type: 'ENVOYER' })
+    try {
+      const res = await fetch(`/api/commandes-fournisseurs/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: 'ENVOYEE' })
+      })
+      if (res.ok) { showSuccess('Commande envoyée au fournisseur.'); fetchCommandes(); setDetailCommande(null) }
+      else { const d = await res.json(); showError(d.error || 'Erreur.') }
+    } catch { showError('Erreur réseau.') }
+    finally { setActionLoading(null) }
+  }
+
+  const handleAnnuler = async (id: number) => {
+    if (!confirm('Voulez-vous annuler ce bon de commande ?')) return
+    setActionLoading({ id, type: 'ANNULER' })
+    try {
+      const res = await fetch(`/api/commandes-fournisseurs/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: 'ANNULEE' })
+      })
+      if (res.ok) { showSuccess('Commande annulée.'); fetchCommandes(); setDetailCommande(null) }
+      else { const d = await res.json(); showError(d.error || 'Erreur.') }
+    } catch { showError('Erreur réseau.') }
+    finally { setActionLoading(null) }
+  }
+
+  const handleSupprimer = async (id: number) => {
+    if (!confirm('Voulez-vous supprimer définitivement ce bon de commande (BROUILLON) ?')) return
+    setActionLoading({ id, type: 'SUPPRIMER' })
+    try {
+      const res = await fetch(`/api/commandes-fournisseurs/${id}`, { method: 'DELETE' })
+      if (res.ok) { showSuccess('Commande supprimée.'); fetchCommandes(); setDetailCommande(null) }
+      else { const d = await res.json(); showError(d.error || 'Erreur.') }
+    } catch { showError('Erreur réseau.') }
+    finally { setActionLoading(null) }
   }
 
   const getStatutColor = (statut: string) => {
@@ -695,7 +737,7 @@ export default function CommandesFournisseursPage() {
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
-                        {c.statut !== 'RECUE' && c.statut !== 'ANNULEE' && (
+                        {(c.statut === 'ENVOYEE' || c.statut === 'BROUILLON') && (
                           <button
                             onClick={() => handleTransformer(c.id)}
                             disabled={transforming === c.id}
@@ -703,7 +745,40 @@ export default function CommandesFournisseursPage() {
                             title="Réceptionner la marchandise"
                           >
                             {transforming === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                            RÉCEPTIONNER
+                            RECEVOIR
+                          </button>
+                        )}
+                        {c.statut === 'BROUILLON' && (
+                          <button
+                            onClick={() => handleEnvoyer(c.id)}
+                            disabled={actionLoading?.id === c.id && actionLoading?.type === 'ENVOYER'}
+                            className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 transition-all shadow-lg"
+                            title="Envoyer au fournisseur"
+                          >
+                            {actionLoading?.id === c.id && actionLoading?.type === 'ENVOYER' ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRightLeft className="h-3 w-3" />}
+                            ENVOYER
+                          </button>
+                        )}
+                        {(c.statut === 'ENVOYEE' || c.statut === 'BROUILLON') && (
+                          <button
+                            onClick={() => handleAnnuler(c.id)}
+                            disabled={actionLoading?.id === c.id && actionLoading?.type === 'ANNULER'}
+                            className="flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600 transition-all shadow-lg"
+                            title="Annuler la commande"
+                          >
+                            {actionLoading?.id === c.id && actionLoading?.type === 'ANNULER' ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
+                            ANNULER
+                          </button>
+                        )}
+                        {c.statut === 'BROUILLON' && (
+                          <button
+                            onClick={() => handleSupprimer(c.id)}
+                            disabled={actionLoading?.id === c.id && actionLoading?.type === 'SUPPRIMER'}
+                            className="flex items-center gap-2 rounded-lg bg-gray-600 px-3 py-2 text-xs font-bold text-white hover:bg-gray-700 transition-all shadow-lg"
+                            title="Supprimer définitivement"
+                          >
+                            {actionLoading?.id === c.id && actionLoading?.type === 'SUPPRIMER' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                            SUPPRIMER
                           </button>
                         )}
                       </div>
@@ -782,29 +857,60 @@ export default function CommandesFournisseursPage() {
                   </div>
                </div>
 
-               <div className="flex gap-3 pt-4">
-                  {detailCommande.statut !== 'RECUE' && (
+               <div className="flex flex-wrap gap-3 pt-4">
+                  {(detailCommande.statut === 'ENVOYEE' || detailCommande.statut === 'BROUILLON') && (
                     <button
                       onClick={() => handleTransformer(detailCommande.id)}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-4 text-sm font-black text-white hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-700/20 uppercase tracking-widest"
+                      disabled={transforming === detailCommande.id}
+                      className="flex-1 min-w-[200px] flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-4 text-sm font-black text-white hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-700/20 uppercase tracking-widest disabled:opacity-40"
                     >
-                      <CheckCircle2 className="h-5 w-5" />
-                      Confirmer la Réception physique
+                      {transforming === detailCommande.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
+                      RECEVOIR LA MARCHANDISE
+                    </button>
+                  )}
+                  {detailCommande.statut === 'BROUILLON' && (
+                    <button
+                      onClick={() => handleEnvoyer(detailCommande.id)}
+                      disabled={actionLoading?.id === detailCommande.id && actionLoading?.type === 'ENVOYER'}
+                      className="flex-1 min-w-[150px] flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 text-sm font-black text-white hover:bg-blue-700 transition-all shadow-xl uppercase tracking-widest disabled:opacity-40"
+                    >
+                      {actionLoading?.id === detailCommande.id && actionLoading?.type === 'ENVOYER' ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRightLeft className="h-5 w-5" />}
+                      ENVOYER AU FOURNISSEUR
+                    </button>
+                  )}
+                  {(detailCommande.statut === 'BROUILLON' || detailCommande.statut === 'ENVOYEE') && (
+                    <button
+                      onClick={() => handleAnnuler(detailCommande.id)}
+                      disabled={actionLoading?.id === detailCommande.id && actionLoading?.type === 'ANNULER'}
+                      className="min-w-[130px] flex items-center justify-center gap-2 rounded-xl bg-red-500 px-6 py-4 text-sm font-black text-white hover:bg-red-600 transition-all uppercase tracking-widest disabled:opacity-40"
+                    >
+                      {actionLoading?.id === detailCommande.id && actionLoading?.type === 'ANNULER' ? <Loader2 className="h-5 w-5 animate-spin" /> : <XCircle className="h-5 w-5" />}
+                      ANNULER
+                    </button>
+                  )}
+                  {detailCommande.statut === 'BROUILLON' && (
+                    <button
+                      onClick={() => handleSupprimer(detailCommande.id)}
+                      disabled={actionLoading?.id === detailCommande.id && actionLoading?.type === 'SUPPRIMER'}
+                      className="min-w-[130px] flex items-center justify-center gap-2 rounded-xl bg-gray-600 px-6 py-4 text-sm font-black text-white hover:bg-gray-700 transition-all uppercase tracking-widest disabled:opacity-40"
+                    >
+                      {actionLoading?.id === detailCommande.id && actionLoading?.type === 'SUPPRIMER' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
+                      SUPPRIMER
                     </button>
                   )}
                   <button
                     onClick={() => handleEdit(detailCommande)}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-xl border-2 border-orange-200 bg-orange-50 px-6 py-4 text-sm font-black text-orange-600 hover:bg-orange-100 transition-all uppercase tracking-widest"
+                    className="min-w-[120px] flex items-center justify-center gap-2 rounded-xl border-2 border-orange-200 bg-orange-50 px-6 py-4 text-sm font-black text-orange-600 hover:bg-orange-100 transition-all uppercase tracking-widest"
                   >
                     <Pencil className="h-5 w-5" />
-                    MODIFIER CETTE COMMANDE
+                    MODIFIER
                   </button>
                   <button
                     onClick={() => imprimerCommande(detailCommande)}
-                    className="flex items-center gap-2 rounded-xl border-2 border-gray-200 px-6 py-4 text-sm font-black text-gray-600 hover:bg-gray-50 uppercase tracking-widest"
+                    className="min-w-[120px] flex items-center justify-center gap-2 rounded-xl border-2 border-gray-200 px-6 py-4 text-sm font-black text-gray-600 hover:bg-gray-50 uppercase tracking-widest"
                   >
                     <Printer className="h-5 w-5" />
-                    IMPRIMER BC
+                    IMPRIMER
                   </button>
                </div>
             </div>

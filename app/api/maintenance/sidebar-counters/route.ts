@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
 
     const [
       ventes,
+      ventesRapides,
       achats,
       produits,
       stocks,
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
       ecritures,
     ] = await Promise.all([
       prisma.vente.count({ where }),
+      prisma.vente.count({ where: { ...where, estVenteRapide: true } }),
       prisma.achat.count({ where }),
       prisma.produit.count({ where }),
       prisma.stock.count({ where: whereStock }),
@@ -57,7 +59,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       ventes,
-      ventesRapides: 0, // Défini à 0 car l'utilisateur confirme ne pas en avoir fait
+      ventesRapides,
       achats,
       produits,
       stocks,

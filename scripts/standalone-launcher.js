@@ -97,9 +97,9 @@ async function migrateDatabase() {
     if (fs.existsSync(prismaCliPath)) {
         try {
             console.log('[GestiCom] Analyse et synchronisation de la base de données...');
-            // On utilise db push pour garantir que les index de performance sont appliqués 
-            // SANS risque de perte de données (flag --accept-data-loss omis = safe par défaut)
-            const cmd = `"${process.execPath}" "${prismaCliPath}" db push --schema="${path.join(projectRoot, 'prisma', 'schema.prisma')}"`;
+            // On utilise db push --accept-data-loss pour garantir que les index et contraintes sont appliqués
+            // (les colonnes manquantes, unique constraints, etc. sont créés automatiquement)
+            const cmd = `"${process.execPath}" "${prismaCliPath}" db push --accept-data-loss --schema="${path.join(projectRoot, 'prisma', 'schema.prisma')}"`;
             const schemaEngineCandidates = [
                 path.join(projectRoot, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe'),
                 path.join(projectRoot, '.next', 'standalone', 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe'),
@@ -168,9 +168,27 @@ console.log(`[GestiCom Pro] Base de données : ${dbPath}`);
 const cssDir = path.join(projectRoot, '.next', 'static', 'css');
 if (fs.existsSync(cssDir)) {
     const files = fs.readdirSync(cssDir);
-    console.log(`[Launcher] CSS détectés (${files.length}) : ${files.slice(0, 3).join(', ')}...`);
+    console.log(`[Launcher] CSS détectés dans css/ (${files.length}) : ${files.slice(0, 3).join(', ')}...`);
 } else {
-    console.warn(`[Launcher] ATTENTION : Dossier CSS introuvable dans ${cssDir}`);
+    console.warn(`[Launcher] ATTENTION : Dossier css/ introuvable dans ${cssDir}`);
+}
+const chunksDir = path.join(projectRoot, '.next', 'static', 'chunks');
+if (fs.existsSync(chunksDir)) {
+    const cssInChunks = fs.readdirSync(chunksDir).filter(f => f.endsWith('.css'));
+    if (cssInChunks.length > 0) {
+        console.log(`[Launcher] CSS détectés dans chunks/ (${cssInChunks.length}) : ${cssInChunks[0]}`);
+    } else {
+        console.warn(`[Launcher] ATTENTION : Aucun fichier .css dans chunks/`);
+    }
+} else {
+    console.warn(`[Launcher] ATTENTION : Dossier chunks/ introuvable`);
+}
+// Vérification des dépendances Prisma CLI
+const PrismaDebugPath = path.join(projectRoot, 'node_modules', '@prisma', 'debug');
+if (fs.existsSync(PrismaDebugPath)) {
+    console.log(`[Launcher] @prisma/debug présent ✓`);
+} else {
+    console.warn(`[Launcher] ATTENTION : @prisma/debug manquant (prisma db push ne fonctionnera pas)`);
 }
 // ---------------------------------------------------
 

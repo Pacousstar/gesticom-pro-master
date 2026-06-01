@@ -4,18 +4,19 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { unauthorized, forbidden, notFound, badRequest, handleApiError } from '@/lib/api-error'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return unauthorized()
   const authError = requirePermission(session, 'commandes:view')
   if (authError) return authError
   const { id: idStr } = await params
   const id = Number(idStr)
-  if (!id) return NextResponse.json({ error: 'ID invalide' }, { status: 400 })
+  if (!id) return badRequest('ID invalide')
 
   const commande = await prisma.commandeFournisseur.findUnique({
     where: { id },
@@ -26,7 +27,7 @@ export async function GET(
     }
   })
 
-  if (!commande) return NextResponse.json({ error: 'Commande introuvable' }, { status: 404 })
+  if (!commande) return notFound('Commande introuvable')
   return NextResponse.json(commande)
 }
 
@@ -35,12 +36,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return unauthorized()
   const authError = requirePermission(session, 'commandes:edit')
   if (authError) return authError
   const { id: idStr } = await params
   const id = Number(idStr)
-  if (!id) return NextResponse.json({ error: 'ID invalide' }, { status: 400 })
+  if (!id) return badRequest('ID invalide')
 
   try {
     const body = await request.json()
@@ -88,8 +89,7 @@ export async function PATCH(
     revalidatePath('/dashboard/commandes-fournisseurs')
     return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('PATCH /api/commandes-fournisseurs:', e)
-    return NextResponse.json({ error: 'Erreur lors de la modification.' }, { status: 500 })
+    return handleApiError(e)
   }
 }
 
@@ -98,14 +98,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session) return unauthorized()
 
-  const forbidden = requirePermission(session, 'commandes:delete')
-  if (forbidden) return NextResponse.json({ error: 'Droits insuffisants pour cette action.' }, { status: 403 })
+  const forbiddenResp = requirePermission(session, 'commandes:delete')
+  if (forbiddenResp) return forbiddenResp
 
   const { id: idStr } = await params
   const id = Number(idStr)
-  if (!id) return NextResponse.json({ error: 'ID invalide' }, { status: 400 })
+  if (!id) return badRequest('ID invalide')
 
   try {
     // Vérifier que la commande est en brouillon
@@ -115,13 +115,11 @@ export async function DELETE(
     })
 
     if (!commande) {
-      return NextResponse.json({ error: 'Commande introuvable' }, { status: 404 })
+      return notFound('Commande introuvable')
     }
 
     if (commande.statut !== 'BROUILLON') {
-      return NextResponse.json({ 
-        error: 'Seules les commandes en brouillon peuvent être supprimées' 
-      }, { status: 400 })
+      return badRequest('Seules les commandes en brouillon peuvent être supprimées')
     }
 
     await prisma.commandeFournisseurLigne.deleteMany({ where: { commandeId: id } })
@@ -129,6 +127,6 @@ export async function DELETE(
     revalidatePath('/dashboard/commandes-fournisseurs')
     return NextResponse.json({ success: true })
   } catch (e) {
-    return NextResponse.json({ error: 'Erreur suppression.' }, { status: 500 })
+    return handleApiError(e)
   }
 }
