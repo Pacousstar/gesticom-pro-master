@@ -48,6 +48,7 @@ export default function CaissePage() {
   const [stats, setStats] = useState({ 
     stats: { ESPECES: 0, MOBILE_MONEY: 0, VIREMENT: 0, CHEQUE: 0 },
     ouvertures: { ESPECES: 0, MOBILE_MONEY: 0, VIREMENT: 0, CHEQUE: 0 },
+    mouvements: { ESPECES: { entrees: 0, sorties: 0 }, MOBILE_MONEY: { entrees: 0, sorties: 0 }, VIREMENT: { entrees: 0, sorties: 0 }, CHEQUE: { entrees: 0, sorties: 0 } },
     credits: {
       client: { total: 0, count: 0 },
       fournisseur: { total: 0, count: 0 }
@@ -61,6 +62,7 @@ export default function CaissePage() {
   const itemsPerPage = 20
   const [isPrinting, setIsPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [caissePhysique, setCaissePhysique] = useState('')
   const [allOperationsForPrint, setAllOperationsForPrint] = useState<OperationCaisse[]>([])
 
   useEffect(() => {
@@ -91,10 +93,10 @@ export default function CaissePage() {
     if (searchTerm) params.set('search', searchTerm)
 
     fetch('/api/caisse?' + params.toString())
-      .then((r) => (r.ok ? r.json() : { data: [], total: 0, stats: { totalEntrees: 0, totalSorties: 0, solde: 0 } }))
+      .then((r) => (r.ok ? r.json() : { data: [], total: 0, totalGlobal: 0, stats: { totalEntrees: 0, totalSorties: 0, solde: 0 } }))
       .then((res) => {
         setOperations(res.data || [])
-        setTotalEntries(res.total || 0)
+        setTotalEntries(res.totalGlobal ?? res.total ?? 0)
         setTotalPages(Math.ceil((res.total || 0) / itemsPerPage))
         // Utiliser les stats de la page pour la cohérence visuelle, mais garder les stats globales si pas de filtre
         setStatsPeriod(res.stats || { totalEntrees: 0, totalSorties: 0, solde: 0 })
@@ -112,6 +114,7 @@ export default function CaissePage() {
       .then((r) => (r.ok ? r.json() : { 
         stats: { ESPECES: 0, MOBILE_MONEY: 0, VIREMENT: 0, CHEQUE: 0 },
         ouvertures: { ESPECES: 0, MOBILE_MONEY: 0, VIREMENT: 0, CHEQUE: 0 },
+        mouvements: { ESPECES: { entrees: 0, sorties: 0 }, MOBILE_MONEY: { entrees: 0, sorties: 0 }, VIREMENT: { entrees: 0, sorties: 0 }, CHEQUE: { entrees: 0, sorties: 0 } },
         credits: { client: { total: 0, count: 0 }, fournisseur: { total: 0, count: 0 } }
       }))
       .then(setStats)
@@ -453,7 +456,98 @@ export default function CaissePage() {
         })}
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      {/* Arrêté de Caisse du Jour — comparaison avec caisse physique */}
+      <div className="rounded-xl bg-gradient-to-br from-purple-700 via-purple-600 to-indigo-700 p-6 shadow-xl ring-2 ring-purple-300/30 transition-all hover:shadow-2xl">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-lg font-black uppercase tracking-wider text-white flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-purple-200" />
+              Arrêté de Caisse du Jour
+            </h2>
+            <p className="text-[11px] font-medium text-purple-200/80 mt-0.5">
+              {new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).replace(/^\w/, c => c.toUpperCase())}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <div className="space-y-1 border-r border-purple-400/30 pr-5">
+            <span className="text-[10px] text-purple-200 uppercase font-black tracking-wider">Report (J-1)</span>
+            <p className="text-2xl font-black text-white">{statsLoading ? '...' : (stats.ouvertures.ESPECES || 0).toLocaleString('fr-FR')} F</p>
+          </div>
+          <div className="space-y-1 border-r border-purple-400/30 pr-5">
+            <span className="text-[10px] text-purple-200 uppercase font-black tracking-wider">+ Encaissements</span>
+            <p className="text-2xl font-black text-emerald-300">+{(stats.mouvements?.ESPECES?.entrees || 0).toLocaleString('fr-FR')} F</p>
+          </div>
+          <div className="space-y-1">
+            <span className="text-[10px] text-purple-200 uppercase font-black tracking-wider">− Décaissements</span>
+            <p className="text-2xl font-black text-rose-300">−{(stats.mouvements?.ESPECES?.sorties || 0).toLocaleString('fr-FR')} F</p>
+          </div>
+        </div>
+
+        <div className="mt-6 h-px bg-gradient-to-r from-purple-400/0 via-purple-300/50 to-purple-400/0" />
+
+        <div className="mt-6 grid grid-cols-1 gap-8 sm:grid-cols-3 items-end">
+          <div className="space-y-1">
+            <span className="text-[11px] text-purple-200 uppercase font-black tracking-wider">Solde Attendu</span>
+            <p className="text-4xl font-black text-white drop-shadow-lg">
+              {statsLoading ? '...' : `${((stats.ouvertures.ESPECES || 0) + (stats.stats.ESPECES || 0)).toLocaleString('fr-FR')} F`}
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-[11px] text-purple-200 uppercase font-black tracking-wider">Caisse Physique Comptée</span>
+            <input
+              type="number"
+              value={caissePhysique}
+              onChange={(e) => setCaissePhysique(e.target.value)}
+              placeholder="Saisir le montant compté..."
+              className="w-full rounded-xl border-2 border-purple-300/40 bg-white/10 px-4 py-3 text-2xl font-black text-white placeholder-purple-200/50 backdrop-blur-sm transition-all focus:border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400/50"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-[11px] text-purple-200 uppercase font-black tracking-wider">Écart</span>
+            {caissePhysique ? (() => {
+              const attendu = (stats.ouvertures.ESPECES || 0) + (stats.stats.ESPECES || 0)
+              const physique = Number(caissePhysique) || 0
+              const ecart = physique - attendu
+              const absEcart = Math.abs(ecart)
+              return (
+                <p className={`text-4xl font-black drop-shadow-lg ${ecart === 0 ? 'text-emerald-300' : ecart > 0 ? 'text-yellow-300' : 'text-rose-300'}`}>
+                  {ecart >= 0 ? '+' : ''}{absEcart.toLocaleString('fr-FR')} F
+                </p>
+              )
+            })() : (
+              <p className="text-xl font-bold text-purple-200/60">—</p>
+            )}
+          </div>
+        </div>
+
+        {caissePhysique && (() => {
+          const attendu = (stats.ouvertures.ESPECES || 0) + (stats.stats.ESPECES || 0)
+          const physique = Number(caissePhysique) || 0
+          const ecart = physique - attendu
+          const absEcart = Math.abs(ecart)
+          if (ecart !== 0) {
+            return (
+              <div className={`mt-5 rounded-xl px-5 py-3 text-sm font-bold uppercase tracking-wider ${ecart > 0 ? 'bg-yellow-500/20 text-yellow-200' : 'bg-rose-500/20 text-rose-200'}`}>
+                ⚠ {ecart > 0
+                  ? `Excédent de ${ecart.toLocaleString('fr-FR')} F — la caisse physique est supérieure au solde attendu`
+                  : `Déficit de ${absEcart.toLocaleString('fr-FR')} F — la caisse physique est inférieure au solde attendu`
+                }
+              </div>
+            )
+          }
+          return (
+            <div className="mt-5 rounded-xl bg-emerald-500/20 px-5 py-3 text-sm font-bold uppercase tracking-wider text-emerald-200">
+              ✓ Écart nul — la caisse physique correspond exactement au solde attendu
+            </div>
+          )
+        })()}
+      </div>
+
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm no-print">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-orange-500" />

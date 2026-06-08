@@ -14,6 +14,7 @@ import {
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
+import { verifierCloture } from '@/lib/cloture'
 
 export async function GET(
   _request: NextRequest,
@@ -77,9 +78,8 @@ export async function DELETE(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
-  // VERROU DE SÉCURITÉ : Seul le SUPER_ADMIN peut supprimer définitivement une trace de vente.
-  if (session!.role !== 'SUPER_ADMIN') {
-    return NextResponse.json({ error: 'Action interdite : Seul le Super Administrateur peut supprimer une vente définitivement pour garantir la traçabilité.' }, { status: 403 })
+  if (session!.role !== 'SUPER_ADMIN' && session!.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Action interdite : Seul le Super Administrateur ou l\'Administrateur peut supprimer une vente.' }, { status: 403 })
   }
 
   const id = Number((await params).id)
@@ -95,9 +95,13 @@ export async function DELETE(
       })
       if (!v) throw new Error('Vente introuvable.')
 
+      await verifierCloture(v.date, session, tx)
+
       // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('VENTE', id, tx)
-      // VENTE_REGLEMENT entries use reglementId as referenceId, not venteId
+      // VENTE_REGLEMENT : les écritures sont stockées avec referenceId = venteId (et non reglementId)
+      // On nettoie par venteId en plus des reglementIds pour être sûr
+      await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
       if (v.reglements.length > 0) {
         await deleteEcrituresByReferenceForIds('VENTE_REGLEMENT', v.reglements.map((r: any) => r.id), tx)
       }
@@ -123,26 +127,38 @@ export async function DELETE(
           }
         }
 
-       // 4. Nettoyage Trésorerie : CAISSE (y compris écritures d'annulation)
-       await tx.caisse.deleteMany({
-        where: {
-          OR: [
-            { motif: `VENTE ${v.numero}` },
-            { motif: `RÈGLEMENT VENTE ${v.numero}` },
-            { motif: `ANNULATION VENTE ${v.numero}` }
-          ]
-        }
+      // 4. Supprimer retours associés (inverser leur effet stock avant)
+      const retours = await tx.retour.findMany({
+        where: { venteId: id },
+        include: { lignes: true },
       })
-
-      // 5. Nettoyage Trésorerie : BANQUE (y compris opérations d'annulation)
-      const allBanqueRefs = [
-        v.numero,
-        `ANN-${v.numero}`
-      ]
-      const opsBancaires = await tx.operationBancaire.findMany({
-        where: {
-          reference: { in: allBanqueRefs }
+      for (const r of retours) {
+        for (const l of r.lignes) {
+          await tx.stock.updateMany({
+            where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
+            data: { quantite: { decrement: l.quantite } },
+          })
         }
+      }
+
+      const retourRefs = retours.map((r: any) => r.numero)
+
+      // 5. Nettoyage Trésorerie : CAISSE (y compris écritures retour)
+      const caissesSupprimees = await tx.caisse.findMany({
+        where: { OR: [{ motif: `VENTE ${v.numero}` }, { motif: `RÈGLEMENT VENTE ${v.numero}` }, { motif: `ANNULATION VENTE ${v.numero}` }, { motif: { contains: `sur vente ${v.numero}` } }] },
+        select: { id: true }
+      })
+      const caisseIds = caissesSupprimees.map((c: any) => c.id)
+      if (caisseIds.length > 0) {
+        await tx.ecritureComptable.deleteMany({ where: { referenceType: 'CAISSE', referenceId: { in: caisseIds } } })
+      }
+      await tx.caisse.deleteMany({ where: { id: { in: caisseIds } } })
+
+      // 6. Nettoyage Trésorerie : BANQUE (y compris opérations retour)
+      const allBanqueRefs = [v.numero, `ANN-${v.numero}`, ...retourRefs]
+      const opsBancaires = await tx.operationBancaire.findMany({
+        where: { reference: { in: allBanqueRefs } },
+        select: { id: true, banqueId: true, montant: true, type: true }
       })
       for (const op of opsBancaires) {
         const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
@@ -151,18 +167,21 @@ export async function DELETE(
           data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
         })
       }
-      await tx.operationBancaire.deleteMany({
-        where: {
-          reference: { in: allBanqueRefs }
-        }
-      })
+      const banqueOpIds = opsBancaires.map((op: any) => op.id)
+      if (banqueOpIds.length > 0) {
+        await tx.ecritureComptable.deleteMany({ where: { referenceType: 'BANQUE_OPERATION', referenceId: { in: banqueOpIds } } })
+      }
+      await tx.operationBancaire.deleteMany({ where: { id: { in: banqueOpIds } } })
 
-      // 6. Supprimer règlements et vente
+      // 7. Supprimer retours
+      await tx.retour.deleteMany({ where: { venteId: id } })
+
+      // 7. Supprimer règlements et vente
       await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
       await tx.reglementVente.deleteMany({ where: { venteId: id } })
       await tx.vente.delete({ where: { id: id } })
 
-// 7. LOG D'AUDIT : Mouchard de suppression (Capture intégrale pour restauration)
+// 8. LOG D'AUDIT : Mouchard de suppression (Capture intégrale pour restauration)
       await logSuppression(
         session, 
         'VENTE', 
@@ -172,7 +191,7 @@ export async function DELETE(
         getIpAddress(_request)
       )
 
-      // 8. Recalculer le solde caisse après suppression
+      // 9. Recalculer le solde caisse après suppression
       await recalculerSoldeCaisse(v.magasinId, tx)
     }, { timeout: 30000 })
     
@@ -183,7 +202,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/ventes/[id]:', e)
-    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+    return NextResponse.json({ error: (e as Error).message || 'Erreur serveur.' }, { status: 500 })
   }
 }
 
@@ -385,19 +404,28 @@ export async function PATCH(
 
         // 2. Nettoyer compta, règlements auto et caisse
         await deleteEcrituresByReference('VENTE', id, tx)
+        await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
         if (oldVente.reglements.length > 0) {
           await deleteEcrituresByReferenceForIds('VENTE_REGLEMENT', oldVente.reglements.map((r: any) => r.id), tx)
         }
         await deleteEcrituresByReference('VENTE_STOCK', id, tx)
         await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
-await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
-        await tx.reglementVente.deleteMany({ where: { venteId: id } })
+
+        const regsData = Array.isArray(reglements) && reglements.length > 0
+          ? reglements
+          : oldVente.reglements.map((r: any) => ({ mode: r.modePaiement, montant: r.montant, banqueId: r.banqueId }))
+
+        if (regsData.length > 0) {
+          await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
+          await tx.reglementVente.deleteMany({ where: { venteId: id } })
+        }
         // On supprime les mouvements de caisse liés exactement à ce numéro
         await tx.caisse.deleteMany({ 
           where: { 
             OR: [
               { motif: `VENTE ${oldVente.numero}` },
               { motif: `RÈGLEMENT VENTE ${oldVente.numero}` },
+              { motif: `FRAIS LOGISTIQUES VENTE ${oldVente.numero}` },
             ]
           } 
         })
@@ -421,6 +449,11 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
         let newTotalHT = 0
         const lignesAcreer: any[] = []
         const currentMagasinId = Number(magasinId || oldVente.magasinId)
+
+        const oldQtys: Record<number, number> = {}
+        for (const ol of oldVente.lignes) {
+          oldQtys[ol.produitId] = (oldQtys[ol.produitId] || 0) + ol.quantite
+        }
 
         for (const l of lignes) {
           const p = await tx.produit.findUnique({ where: { id: Number(l.produitId) } })
@@ -455,8 +488,12 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
             montant: mnt
           })
 
-          const st = await tx.stock.findUnique({ where: { produitId_magasinId_entiteId: { produitId: p.id, magasinId: currentMagasinId, entiteId: oldVente.entiteId } } })
-          if ((st?.quantite ?? 0) < q) throw new Error(`Stock insuffisant pour ${p.designation}`)
+          const oldQty = oldQtys[Number(l.produitId)] || 0
+          if (q > oldQty && session!.role !== 'SUPER_ADMIN') {
+            const besoinSupplementaire = q - oldQty
+            const st = await tx.stock.findUnique({ where: { produitId_magasinId_entiteId: { produitId: p.id, magasinId: currentMagasinId, entiteId: oldVente.entiteId } } })
+            if ((st?.quantite ?? 0) < besoinSupplementaire) throw new Error(`Stock insuffisant pour ${p.designation}`)
+          }
         }
 
         const globalRem = Math.max(0, Number(remiseGlobale || 0))
@@ -464,7 +501,6 @@ await tx.reglementVenteLigne.deleteMany({ where: { venteId: id } })
         const totalFinal = montantTotalVenteDocument(newTotalHT, globalRem, finalFrais)
         
         // Gestion Multi-Paiement
-        const regsData = Array.isArray(reglements) ? reglements : []
         const mntPaye = regsData.reduce((acc: number, r: any) => {
           if (String(r.mode).toUpperCase() === 'CREDIT') return acc
           return acc + (Number(r.montant) || 0)

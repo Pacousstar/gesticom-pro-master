@@ -26,17 +26,9 @@ function LoginForm() {
     setHwid(null)
   }, [])
 
-  // Limiter les tentatives de connexion
+  // Limiter les tentatives de connexion (mémoire seule — pas de sessionStorage)
   useEffect(() => {
-    const stored = sessionStorage.getItem('loginAttempts')
     const storedLockTime = sessionStorage.getItem('lockTime')
-    
-    if (stored) {
-      const parsed = parseInt(stored, 10)
-      if (!isNaN(parsed)) {
-        setAttempts(parsed)
-      }
-    }
     
     if (storedLockTime) {
       const lockTimestamp = parseInt(storedLockTime, 10)
@@ -48,10 +40,7 @@ function LoginForm() {
         setLockTime(lockTimestamp)
         setTimeRemaining(Math.ceil((lockDuration - elapsed) / 1000))
       } else {
-        // Le verrouillage a expiré
-        sessionStorage.removeItem('loginAttempts')
         sessionStorage.removeItem('lockTime')
-        setAttempts(0)
         setLockTime(null)
       }
     }
@@ -63,8 +52,6 @@ function LoginForm() {
       const timer = setInterval(() => {
         setTimeRemaining((prev) => {
           if (prev <= 1) {
-            // Le verrouillage a expiré
-            sessionStorage.removeItem('loginAttempts')
             sessionStorage.removeItem('lockTime')
             setAttempts(0)
             setLockTime(null)
@@ -78,7 +65,6 @@ function LoginForm() {
   }, [timeRemaining])
 
   const resetLock = () => {
-    sessionStorage.removeItem('loginAttempts')
     sessionStorage.removeItem('lockTime')
     setAttempts(0)
     setLockTime(null)
@@ -109,11 +95,14 @@ function LoginForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login, motDePasse, redirect: from }),
       })
-      const data = await res.json().catch(() => ({}))
+      const data = await res.json().catch(() => {
+        const ct = res.headers.get('content-type') || ''
+        if (!ct.includes('application/json')) return { error: 'Erreur serveur (' + res.status + ').' }
+        return {}
+      })
       if (!res.ok) {
         const newAttempts = attempts + 1
         setAttempts(newAttempts)
-        sessionStorage.setItem('loginAttempts', newAttempts.toString())
         
         // Si on atteint 5 tentatives, enregistrer l'heure du verrouillage
         if (newAttempts >= 5) {
@@ -128,7 +117,6 @@ function LoginForm() {
       }
       
       // Réinitialiser les tentatives en cas de succès
-      sessionStorage.removeItem('loginAttempts')
       setAttempts(0)
       
       router.push(data.redirect || from)
@@ -136,7 +124,6 @@ function LoginForm() {
     } catch {
       const newAttempts = attempts + 1
       setAttempts(newAttempts)
-      sessionStorage.setItem('loginAttempts', newAttempts.toString())
       
       // Si on atteint 5 tentatives, enregistrer l'heure du verrouillage
       if (newAttempts >= 5) {

@@ -61,12 +61,12 @@ export async function GET(request: NextRequest) {
 
   // Recherche texte sur désignation ou code produit
   if (search) {
-    where.produit = {
-      OR: [
-        { designation: { contains: search, mode: 'insensitive' } },
-        { code: { contains: search, mode: 'insensitive' } }
-      ]
-    }
+      where.produit = {
+        OR: [
+          { designation: { contains: search } },
+          { code: { contains: search } }
+        ]
+      }
   }
 
   try {

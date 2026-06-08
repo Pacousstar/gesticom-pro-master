@@ -718,7 +718,7 @@ export default function BanquePage() {
       </div>
 
       {/* Journal des Flux Digitaux Détaillés (Ventes, Achats, Dépenses) */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm no-print">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Derniers Flux Virtuels (MoMo, Virement, Chèque)</h2>
@@ -876,7 +876,7 @@ export default function BanquePage() {
           ) : operations.length === 0 ? (
             <div className="py-12 text-center text-gray-500">Aucune opération sur la période. Utilisez les boutons Dépôt, Retrait ou Autre opération pour enregistrer des mouvements.</div>
           ) : (
-            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden no-print">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">

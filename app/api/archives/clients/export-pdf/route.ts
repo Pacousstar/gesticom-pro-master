@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
@@ -15,10 +16,17 @@ export async function GET(request: NextRequest) {
   const authError = requirePermission(session, 'archives:view')
   if (authError) return authError
 
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
+
   try {
     const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
     
     const list = await prisma.archiveSoldeClient.findMany({
+      where: { entiteId },
+      take: 10000,
       orderBy: { dateArchive: 'desc' },
       include: {
         client: { select: { nom: true } },
@@ -54,6 +62,7 @@ export async function GET(request: NextRequest) {
       doc.line(15, y, 195, y)
 
       doc.setFont(undefined, 'normal')
+      let totalMontant = 0
       for (const a of filtered) {
         if (y > 270) {
           doc.addPage()
@@ -72,12 +81,18 @@ export async function GET(request: NextRequest) {
         y += 7
         const clientNom = (a.client?.nom || a.clientLibre || '—')
         const nomTrim = clientNom.length > 35 ? clientNom.substring(0, 32) + '...' : clientNom
+        totalMontant += a.montant
         
         doc.text(new Date(a.dateArchive).toLocaleDateString('fr-FR'), 15, y)
         doc.text(nomTrim, 40, y)
         doc.text(`${formatMontant(a.montant)} F`, 120, y)
         doc.text(a.utilisateur?.nom || '—', 150, y)
       }
+      y += 10
+      doc.line(15, y, 195, y)
+      y += 5
+      doc.setFont(undefined, 'bold')
+      doc.text(`Total: ${formatMontant(totalMontant)} F`, 120, y)
     }
 
     const buffer = Buffer.from(doc.output('arraybuffer'))

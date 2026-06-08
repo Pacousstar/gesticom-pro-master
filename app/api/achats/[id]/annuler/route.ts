@@ -9,6 +9,7 @@ import { requireRole } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque, estTypeOperationBanqueEntree } from '@/lib/banque'
+import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 
 export async function POST(
   _request: NextRequest,
@@ -97,10 +98,10 @@ export async function POST(
         data: { statut: 'ANNULE' }
       })
 
-      const reglements = (a.reglements || []) as any[]
-      const totalEspeces = reglements.filter((r: any) => estModeEspeces(r.modePaiement)).reduce((s: number, r: any) => s + (r.montant || 0), 0)
+      const reglements = a.reglements || []
+      const totalEspeces = reglements.filter((r) => estModeEspeces(r.modePaiement)).reduce((s, r) => s + (r.montant || 0), 0)
         || (estModeEspeces(a.modePaiement) ? (a.montantPaye || 0) : 0)
-      const totalBanque = reglements.filter((r: any) => estModeBanque(r.modePaiement)).reduce((s: number, r: any) => s + (r.montant || 0), 0)
+      const totalBanque = reglements.filter((r) => estModeBanque(r.modePaiement)).reduce((s, r) => s + (r.montant || 0), 0)
         || (estModeBanque(a.modePaiement) ? (a.montantPaye || 0) : 0)
 
       if (totalEspeces > 0) {
@@ -149,7 +150,6 @@ export async function POST(
         }
       }
 
-      const { deleteEcrituresByReference } = await import('@/lib/delete-ecritures')
       await deleteEcrituresByReference('ACHAT', id, tx)
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
       await deleteEcrituresByReference('ACHAT_STOCK', id, tx)

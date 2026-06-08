@@ -25,7 +25,27 @@ export function validateImportData(entity: ImportEntity, data: any[]): { valid: 
   const valid: any[] = []
   const errors: Array<{ row: number; error: string }> = []
 
-  data.forEach((row, index) => {
+  // Normaliser les clés de chaque ligne
+  const normalizeKey = (k: string) => {
+    const map: Record<string, string> = {
+      'designation': 'designation', 'désignation': 'designation', 'libellé': 'designation', 'libelle': 'designation', 'nom': 'designation', 'produit': 'designation', 'article': 'designation',
+      'prix_achat': 'prixAchat', 'prix achat': 'prixAchat', 'prixachat': 'prixAchat', 'coût': 'prixAchat', 'cout': 'prixAchat',
+      'prix_vente': 'prixVente', 'prix vente': 'prixVente', 'prixvente': 'prixVente',
+      'categorie': 'categorie', 'catégorie': 'categorie', 'category': 'categorie',
+      'seuil_min': 'seuilMin', 'seuil min': 'seuilMin', 'seuilmin': 'seuilMin', 'stock min': 'seuilMin',
+      'plafond_credit': 'plafondCredit', 'plafond crédit': 'plafondCredit', 'plafondcredit': 'plafondCredit', 'plafond': 'plafondCredit',
+      'telephone': 'telephone', 'téléphone': 'telephone', 'tel': 'telephone', 'phone': 'telephone',
+    }
+    const clean = k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_-]+/g, '_').trim()
+    return map[clean] || clean
+  }
+  const normalized = data.map((row: any) => {
+    const r: any = {}
+    Object.keys(row).forEach(k => r[normalizeKey(k)] = row[k])
+    return r
+  })
+
+  normalized.forEach((row, index) => {
     try {
       switch (entity) {
         case 'PRODUITS':

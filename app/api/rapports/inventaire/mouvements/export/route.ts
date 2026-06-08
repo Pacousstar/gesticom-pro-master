@@ -61,13 +61,13 @@ export async function GET(request: NextRequest) {
   try {
     const mouvements = await prisma.mouvement.findMany({
       where,
+      take: 20000,
       include: {
         produit: { select: { designation: true, code: true, unite: true } },
         magasin: { select: { nom: true } },
         utilisateur: { select: { nom: true } },
       },
       orderBy: { createdAt: 'desc' },
-      // Aucune limite pour l'export
     })
 
     const rows = mouvements.map((m, index) => ({
@@ -83,7 +83,13 @@ export async function GET(request: NextRequest) {
       'Observations': m.observation || '—',
     }))
 
+    const totalQte = mouvements.reduce((s, m) => s + m.quantite, 0)
     const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'N°': '', 'Date Opération': '', 'Code Produit': '', 'Désignation': '', 'Magasin': '', 'Type': '', 'Quantité': '', 'Unité': '', 'Utilisateur': '', 'Observations': '' }])
+
+    if (rows.length > 0) {
+      XLSX.utils.sheet_add_aoa(worksheet, [['', '', '', '', '', 'TOTAL', totalQte, '', '', '']], { origin: rows.length + 1 })
+    }
+
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Mouvements Stock')
 

@@ -113,8 +113,8 @@ export async function GET(request: NextRequest) {
     doc.text('Date', 15, y)
     doc.text('N°', 35, y)
     doc.text('Tiers', 60, y)
-    doc.text('Total', 135, y)
-    doc.text('Payé', 155, y)
+    doc.text('Total', 125, y)
+    doc.text('Payé', 150, y)
     doc.text('Solde', 175, y)
     y += 4
     doc.line(15, y, 195, y)
@@ -133,8 +133,8 @@ export async function GET(request: NextRequest) {
         doc.text('Date', 15, y)
         doc.text('N°', 35, y)
         doc.text('Tiers', 60, y)
-        doc.text('Total', 135, y)
-        doc.text('Payé', 155, y)
+        doc.text('Total', 125, y)
+        doc.text('Payé', 150, y)
         doc.text('Solde', 175, y)
         y += 4
         doc.line(15, y, 195, y)
@@ -150,9 +150,9 @@ export async function GET(request: NextRequest) {
       doc.text(new Date(r.date).toLocaleDateString('fr-FR'), 15, y)
       doc.text(r.numero, 35, y)
       doc.text(tierShort, 60, y)
-      doc.text(formatMontant(r.total), 135, y, { align: 'right' })
-      doc.text(formatMontant(r.paye), 155, y, { align: 'right' })
-      doc.text(formatMontant(r.solde), 175, y, { align: 'right' })
+      doc.text(`${formatMontant(r.total)} F`, 125, y, { align: 'right' })
+      doc.text(`${formatMontant(r.paye)} F`, 150, y, { align: 'right' })
+      doc.text(`${formatMontant(r.solde)} F`, 175, y, { align: 'right' })
       y += 7
     }
 
@@ -161,9 +161,9 @@ export async function GET(request: NextRequest) {
     y += 6
     doc.setFont(undefined, 'bold')
     doc.text('TOTAL', 60, y)
-    doc.text(formatMontant(totalTotal), 135, y, { align: 'right' })
-    doc.text(formatMontant(totalPaye), 155, y, { align: 'right' })
-    doc.text(formatMontant(totalSolde), 175, y, { align: 'right' })
+    doc.text(`${formatMontant(totalTotal)} F`, 125, y, { align: 'right' })
+    doc.text(`${formatMontant(totalPaye)} F`, 150, y, { align: 'right' })
+    doc.text(`${formatMontant(totalSolde)} F`, 175, y, { align: 'right' })
 
     const buffer = Buffer.from(doc.output('arraybuffer'))
     const filename = `etat_paiements_${type || 'VENTE'}_${new Date().toISOString().split('T')[0]}.pdf`

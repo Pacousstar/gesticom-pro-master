@@ -5,6 +5,7 @@ import {
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X,
   Search, Edit2, Pencil, Wallet, AlertTriangle, Calculator, FileText,
 } from 'lucide-react'
+import SuppressionConfirmModal from '@/components/SuppressionConfirmModal'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
@@ -51,6 +52,7 @@ export default function AchatsPage() {
     fournisseurLibre: string | null
     numeroCamion?: string | null
     lignes: Array<{ quantite: number; prixUnitaire: number; designation: string }>
+    reglements?: Array<{ id: number; modePaiement: string }>
   }>>([])
   const [detailAchat, setDetailAchat] = useState<{
     id: number
@@ -116,6 +118,7 @@ export default function AchatsPage() {
   const [savingFournisseur, setSavingFournisseur] = useState(false)
   const [userRole, setUserRole] = useState<string>('')
   const [supprimant, setSupprimant] = useState<number | null>(null)
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
   const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
   const [submitting, setSubmitting] = useState(false)
@@ -641,6 +644,28 @@ export default function AchatsPage() {
     }
   }
 
+  const handleConfirmSuppression = async () => {
+    const target = deleteConfirmTarget
+    if (!target) return
+    setSupprimant(target.id)
+    setDeleteConfirmTarget(null)
+    try {
+      const res = await fetch(`/api/achats/${target.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setAchats((list) => list.filter((x) => x.id !== target.id))
+        if (detailAchat?.id === target.id) setDetailAchat(null)
+        showSuccess(MESSAGES.ACHAT_SUPPRIME)
+      } else {
+        const d = await res.json()
+        showError(res.status === 403 ? (d.error || MESSAGES.RESERVE_SUPER_ADMIN) : formatApiError(d.error || 'Erreur suppression.'))
+      }
+    } catch (e) {
+      showError(formatApiError(e))
+    } finally {
+      setSupprimant(null)
+    }
+  }
+
   const handleReglement = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!showReglement || savingReglement) return
@@ -748,7 +773,7 @@ export default function AchatsPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 rounded-[2rem] bg-slate-800/50 border border-slate-700 p-4 backdrop-blur-sm shadow-xl">
+      <div className="flex flex-wrap items-center gap-4 rounded-[2rem] bg-slate-800/50 border border-slate-700 p-4 backdrop-blur-sm shadow-xl no-print">
         <div className="relative flex-1 min-w-[250px]">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
@@ -1535,27 +1560,14 @@ export default function AchatsPage() {
                         >
                           {loadingDetail === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                         </button>
-{userRole === 'SUPER_ADMIN' && (
+{(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                           <button
-                            onClick={async () => {
-                            if (!confirm(`Supprimer définitivement l'achat ${a.numero} ? Toutes les données liées (lignes, écritures, règlements) seront supprimées. Cette action est irréversible.`)) return
-                              setSupprimant(a.id)
-                              try {
-                                const res = await fetch(`/api/achats/${a.id}`, { method: 'DELETE' })
-                                if (res.ok) {
-                                  setAchats((list) => list.filter((x) => x.id !== a.id))
-                                  if (detailAchat?.id === a.id) setDetailAchat(null)
-                                  showSuccess(MESSAGES.ACHAT_SUPPRIME)
-                                } else {
-                                  const d = await res.json()
-                                  showError(res.status === 403 ? (d.error || MESSAGES.RESERVE_SUPER_ADMIN) : formatApiError(d.error || 'Erreur suppression.'))
-                                }
-                              } catch (e) {
-                                showError(formatApiError(e))
-                              } finally {
-                                setSupprimant(null)
-                              }
-                            }}
+                            onClick={() => setDeleteConfirmTarget({
+                              id: a.id,
+                              numero: a.numero,
+                              lignesCount: a.lignes?.length ?? 0,
+                              reglementsCount: a.reglements?.length ?? 0,
+                            })}
                             disabled={supprimant === a.id}
                             className="rounded p-1.5 text-red-700 hover:bg-red-100 disabled:opacity-50"
                             title="Supprimer définitivement"
@@ -1703,6 +1715,9 @@ export default function AchatsPage() {
                 </table>
               </div>
               <p className="text-right font-semibold text-gray-900 mt-4">Montant total : {Number(detailAchat.montantTotal).toLocaleString('fr-FR')} FCFA</p>
+              {Number((detailAchat as any).remiseGlobale) > 0 && (
+                <p className="text-right text-sm text-red-600 font-medium">Remise globale : -{Number((detailAchat as any).remiseGlobale).toLocaleString('fr-FR')} FCFA</p>
+              )}
             </div>
           </div>
         </div>
@@ -2059,6 +2074,22 @@ export default function AchatsPage() {
           defaultTemplateId={defaultTemplateId}
         />
       )}
+
+      <SuppressionConfirmModal
+        isOpen={deleteConfirmTarget !== null}
+        onClose={() => setDeleteConfirmTarget(null)}
+        onConfirm={handleConfirmSuppression}
+        titre={`Supprimer l'achat ${deleteConfirmTarget?.numero ?? ''} ?`}
+        message="Vous êtes sur le point de supprimer définitivement cet achat. Toutes les données associées seront effacées irréversiblement."
+        details={[
+          { label: 'Lignes d\'achat', count: deleteConfirmTarget?.lignesCount, description: 'produits et quantités achetés' },
+          { label: 'Règlements', count: deleteConfirmTarget?.reglementsCount, description: 'paiements enregistrés' },
+          { label: 'Écritures comptables', description: 'Grand Livre (AC, OD) — TVA, dettes, trésorerie' },
+          { label: 'Mouvements caisse', description: 'entrées/sorties de caisse liées' },
+          { label: 'Opérations bancaires', description: 'dépôts, virements avec inversion du solde' },
+          { label: 'Mouvements de stock', description: 'entrées en stock annulées, PAMP recalculé' },
+        ]}
+      />
     </div>
   )
 }

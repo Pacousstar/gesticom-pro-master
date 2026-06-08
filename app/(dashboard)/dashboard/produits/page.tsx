@@ -473,7 +473,7 @@ export default function ProduitsPage() {
                 let totalStock = 0
                 
                 const rows = list.map((p, idx) => {
-                  const stock = p.stocks && p.stocks.length > 0 ? p.stocks[0].quantite : 0
+                  const stock = p.stocks && p.stocks.length > 0 ? p.stocks.reduce((sum: number, s: any) => sum + (s.quantite || 0), 0) : 0
                   const prixVente = Number(p.prixVente) || 0
                   const prixAchat = Number(p.pamp) || Number(p.prixAchat) || 0
                   const valeurVente = stock * prixVente
@@ -496,8 +496,8 @@ export default function ProduitsPage() {
                     '<td>' + stock + '</td>' +
                     '<td>' + (p.seuilMin || '—') + '</td>' +
                     '<td>' + (p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '—') + '</td>' +
-                    '<td>' + (valeurVente > 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
-                    '<td>' + (valeurAchat > 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
+                    '<td>' + (valeurVente !== 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
+                    '<td>' + (valeurAchat !== 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
                   '</tr>'
                 }).join('')
                 
@@ -787,6 +787,7 @@ export default function ProduitsPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Désignation</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Catégorie</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Magasin</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Prix achat</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">PAMP</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Prix vente</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-red-800 bg-red-50 italic">Prix Min.</th>
@@ -811,6 +812,9 @@ export default function ProduitsPage() {
                       ) : (
                         <span className="text-gray-400 text-xs">—</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-gray-600">
+                      {p.prixAchat != null && p.prixAchat > 0 ? `${Number(p.prixAchat).toLocaleString('fr-FR')} F` : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-gray-600">
                       {p.pamp && p.pamp > 0 ? `${Number(p.pamp).toLocaleString('fr-FR')} F` : '—'}

@@ -110,8 +110,8 @@ export default function FournisseurRelevesPage() {
   const handlePrint = () => {
     setIsPrinting(true)
     setTimeout(() => {
-      setIsPreviewOpen(true)
       setIsPrinting(false)
+      window.print()
     }, 500)
   }
 
@@ -472,6 +472,12 @@ export default function FournisseurRelevesPage() {
                           </tfoot>
                         )}
                       </table>
+                      {index === allChunks.length - 1 && (
+                        <div className="mt-6 p-4 border-2 border-black bg-gray-50">
+                          <p className="text-[15px] font-black uppercase text-gray-900 italic">Dette de clôture globale du fournisseur au {formatDate(dateFin)} :</p>
+                          <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedFournisseur?.dette || 0).toLocaleString()} FCFA</p>
+                        </div>
+                      )}
                     </ListPrintWrapper>
                   </div>
                 ));

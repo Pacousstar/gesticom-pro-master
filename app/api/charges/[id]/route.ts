@@ -102,7 +102,12 @@ export async function PATCH(
     if (body.rubrique != null) updateData.rubrique = String(body.rubrique).trim()
     if (body.montant != null) updateData.montant = Math.max(0, Number(body.montant))
     if (body.observation !== undefined) updateData.observation = body.observation ? String(body.observation).trim() : null
-    if (body.modePaiement !== undefined) updateData.modePaiement = String(body.modePaiement).toUpperCase()
+    if (body.modePaiement !== undefined) {
+      const modeNormalise = String(body.modePaiement).toUpperCase().trim()
+      if (['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE', 'CREDIT'].includes(modeNormalise)) {
+        updateData.modePaiement = modeNormalise
+      }
+    }
     if (body.banqueId !== undefined) updateData.banqueId = body.banqueId != null ? Number(body.banqueId) : null
 
     if (Object.keys(updateData).length === 0) {
@@ -202,8 +207,11 @@ export async function PATCH(
     }, { timeout: 20000 })
 
     // Recalculer le solde de la caisse après modification
-    if (charge.magasinId) {
-      await recalculerSoldeCaisse(charge.magasinId)
+    const magasinsAReCalculer = new Set<number>()
+    if (oldCharge.magasinId) magasinsAReCalculer.add(oldCharge.magasinId)
+    if (charge.magasinId) magasinsAReCalculer.add(charge.magasinId)
+    for (const mId of magasinsAReCalculer) {
+      await recalculerSoldeCaisse(mId)
     }
 
     return NextResponse.json(charge)

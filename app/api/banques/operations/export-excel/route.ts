@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
 
     const operations = await prisma.operationBancaire.findMany({
       where,
+      take: 10000,
       orderBy: { date: 'desc' },
       include: {
         banque: { select: { numero: true, nomBanque: true, libelle: true } },
@@ -92,6 +93,23 @@ export async function GET(request: NextRequest) {
       { wch: 20 }, // Utilisateur
     ]
     worksheet['!cols'] = colWidths
+
+    const totalDepots = operations
+      .filter(op => ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(op.type))
+      .reduce((s, op) => s + op.montant, 0)
+    const totalRetraits = operations
+      .filter(op => ['RETRAIT', 'VIREMENT_SORTANT', 'FRAIS'].includes(op.type))
+      .reduce((s, op) => s + op.montant, 0)
+    const totalMontant = operations.reduce((s, op) => s + op.montant, 0)
+    const totalSoldeAvant = operations.reduce((s, op) => s + op.soldeAvant, 0)
+    const totalSoldeApres = operations.reduce((s, op) => s + op.soldeApres, 0)
+
+    XLSX.utils.sheet_add_aoa(worksheet, [
+      ['TOTAL DÉPÔTS', '', '', '', '', '', totalDepots, '', '', ''],
+      ['TOTAL RETRAITS', '', '', '', '', '', totalRetraits, '', '', ''],
+      ['', '', '', '', '', '', '', '', '', ''],
+      ['TOTAL GÉNÉRAL', '', '', '', '', '', totalMontant, totalSoldeAvant, totalSoldeApres, ''],
+    ], { origin: data.length + 3 })
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     const filename = `operations-bancaires-${new Date().toISOString().split('T')[0]}.xlsx`

@@ -1,350 +1,342 @@
-/**
- * scripts/standalone-launcher.js
- * Version ULTRA-LÉGÈRE : Zéro dépendance native (Supprime better-sqlite3)
- * Indispensable pour le mode standalone sur Windows sans Nginx.
- */
-
-const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const { fork, execSync } = require('child_process');
 
-// Détection robuste du dossier racine
-const findProjectRoot = () => {
-    // 1. Essayer le dossier actuel
-    if (fs.existsSync(path.join(process.cwd(), '.next'))) return process.cwd();
-    // 2. Essayer le dossier parent si on est dans /scripts
-    const parentDir = path.dirname(__dirname);
-    if (fs.existsSync(path.join(parentDir, '.next'))) return parentDir;
-    // 3. Fallback sur le dossier actuel par défaut
-    return process.cwd();
-};
-const projectRoot = findProjectRoot();
-console.log(`[Launcher] Dossier racine détecté : ${projectRoot}`);
+const projectRoot = path.resolve(__dirname, '..');
+const logFile = path.join(projectRoot, 'GestiComService.out');
+const errFile = path.join(projectRoot, 'GestiComService.err');
+const PORT = parseInt(process.env.PORT || '3001', 10);
+const prismaCli = path.join(projectRoot, 'node_modules', 'prisma', 'build', 'index.js');
+const dbPath = 'C:/gesticom/gesticom.db';
+const flagFile = path.join(projectRoot, '.migrated');
+const tmpFile = path.join(projectRoot, '_mig.sql');
 
-// Configuration des variables d'environnement depuis le .env
-const envPath = path.join(projectRoot, '.env');
-if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    envContent.split('\n').forEach(line => {
-        const [key, ...valueParts] = line.split('=');
-        if (key && valueParts.length > 0) {
-            const value = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
-            process.env[key.trim()] = value;
-        }
-    });
+function l(msg) {
+  try { fs.appendFileSync(logFile, new Date().toISOString() + ' [launcher] ' + msg + '\n'); } catch {}
+}
+function e(msg) {
+  try { fs.appendFileSync(errFile, new Date().toISOString() + ' [launcher] ' + msg + '\n'); } catch {}
 }
 
-// --- INITIALISATION BASE DE DONNÉES (DYNAMIQUE) ---
-// On tente d'abord un chemin RELATIF au projet pour la portabilité (clé USB, etc.)
-const localDbPath = path.join(projectRoot, 'database', 'gesticom.db');
-const legacyDbPath = "C:/gesticom/gesticom.db";
+l('Démarrage...');
+l(`PORT=${PORT}, root=${projectRoot}`);
+l(`DATABASE_URL défini`);
 
-let centralDbPath = localDbPath;
-
-// Si le dossier C:/gesticom existe déjà mais pas le local, on peut garder l'ancien par compatibilité
-if (!fs.existsSync(path.dirname(localDbPath)) && fs.existsSync(legacyDbPath)) {
-    centralDbPath = legacyDbPath;
-}
-
-const centralDbDir = path.dirname(centralDbPath);
-if (!fs.existsSync(centralDbDir)) {
-    console.log(`[Launcher] Création du dossier base : ${centralDbDir}`);
-    fs.mkdirSync(centralDbDir, { recursive: true });
-}
-
-// Pour forcer Prisma à utiliser le nouveau chemin standard
-const dbPath = centralDbPath.replace(/\\/g, '/');
-process.env.DATABASE_URL = `file:${dbPath}`;
-
-// --- MIGRATION AUTOMATIQUE DE LA BASE DE DONNÉES ---
-async function migrateDatabase() {
-    console.log('[GestiCom] Vérification des mises à jour de la base de données...');
-    
-    // 1. SAUVEGARDE DE SÉCURITÉ PRÉ-MIGRATION
-    if (fs.existsSync(centralDbPath)) {
-        try {
-            const backupDir = path.join(centralDbDir, 'backups-automatiques');
-            if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
-            
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const backupName = `gesticom-pre-maj-${timestamp}.db.bak`;
-            const backupPath = path.join(backupDir, backupName);
-            
-            fs.copyFileSync(centralDbPath, backupPath);
-            console.log(`[GestiCom] Sauvegarde de sécurité créée : ${backupName}`);
-            
-            // Nettoyage : Garder seulement les 5 dernières sauvegardes auto
-            const oldBackups = fs.readdirSync(backupDir)
-                .filter(f => f.startsWith('gesticom-pre-maj-'))
-                .sort((a, b) => fs.statSync(path.join(backupDir, b)).mtimeMs - fs.statSync(path.join(backupDir, a)).mtimeMs);
-            
-            if (oldBackups.length > 5) {
-                oldBackups.slice(5).forEach(f => fs.unlinkSync(path.join(backupDir, f)));
-            }
-        } catch (backupErr) {
-            console.warn('[GestiCom] Attention : Échec de la sauvegarde pré-migration (non bloquant).', backupErr.message);
-        }
-    }
-
-    const { execSync } = require('child_process');
-    
-    // Localiser le CLI Prisma (dans node_modules du standalone ou racine)
-    let prismaCliPath = path.join(projectRoot, 'node_modules', 'prisma', 'build', 'index.js');
-    if (!fs.existsSync(prismaCliPath)) {
-        prismaCliPath = path.join(projectRoot, '.next', 'standalone', 'node_modules', 'prisma', 'build', 'index.js');
-    }
-
-    if (fs.existsSync(prismaCliPath)) {
-        try {
-            console.log('[GestiCom] Analyse et synchronisation de la base de données...');
-            // On utilise db push --accept-data-loss pour garantir que les index et contraintes sont appliqués
-            // (les colonnes manquantes, unique constraints, etc. sont créés automatiquement)
-            const cmd = `"${process.execPath}" "${prismaCliPath}" db push --accept-data-loss --schema="${path.join(projectRoot, 'prisma', 'schema.prisma')}"`;
-            const schemaEngineCandidates = [
-                path.join(projectRoot, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe'),
-                path.join(projectRoot, '.next', 'standalone', 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe'),
-            ];
-            const schemaEnginePath = schemaEngineCandidates.find((p) => fs.existsSync(p));
-            
-            execSync(cmd, { 
-                env: { 
-                    ...process.env, 
-                    DATABASE_URL: `file:${dbPath}`, 
-                    PRISMA_SKIP_POSTINSTALL_GENERATE: 'true',
-                    ...(schemaEnginePath ? { PRISMA_SCHEMA_ENGINE_BINARY: schemaEnginePath } : {})
-                },
-                stdio: 'inherit' 
-            });
-            console.log('[GestiCom] Base de données et structure à jour.');
-
-            // --- AUTO-MAINTENANCE ---
-            console.log('[GestiCom] Exécution de la maintenance automatique...');
-            const maintenanceScript = path.join(projectRoot, 'scripts', 'maintenance-runner.js');
-            if (fs.existsSync(maintenanceScript)) {
-                try {
-                    const maintenanceEnv = {
-                        ...process.env,
-                        DATABASE_URL: `file:${dbPath}`,
-                        // Par défaut: maintenance non destructive pour préserver les données clients en prod.
-                        ALLOW_AGGRESSIVE_AUTO_REPAIR: process.env.ALLOW_AGGRESSIVE_AUTO_REPAIR || 'false'
-                    };
-                    execSync(`"${process.execPath}" "${maintenanceScript}"`, {
-                        env: maintenanceEnv,
-                        stdio: 'inherit'
-                    });
-                } catch (maintError) {
-                    console.warn('[GestiCom] Note : Erreur mineure lors de la maintenance automatique.');
-                }
-            }
-
-            // --- AUTO-SEED (création admin/entité/magasin si base vierge) ---
-            const seedScript = path.join(projectRoot, 'scripts', 'seed.js');
-            if (fs.existsSync(seedScript)) {
-                try {
-                    execSync(`"${process.execPath}" "${seedScript}"`, {
-                        env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
-                        stdio: 'inherit'
-                    });
-                } catch (seedError) {
-                    console.warn('[GestiCom] Note : Erreur mineure lors du seed automatique.');
-                }
-            }
-        } catch (error) {
-            console.warn('[GestiCom] Note : La base de données est déjà à jour ou une intervention manuelle est requise.');
-        }
-    } else {
-        console.warn('[GestiCom] CLI Prisma introuvable. La mise à jour du schéma sera ignorée.');
-    }
-}
-
-// Lancer la migration avant de démarrer le reste
-migrateDatabase().then(() => {
-    console.log(`[GestiCom Pro] Prêt à démarrer.`);
-});
-
-console.log(`[GestiCom Pro] Base de données : ${dbPath}`);
-
-// --- AUDIT DES FICHIERS STATIQUES (Diagnostic) ---
-const cssDir = path.join(projectRoot, '.next', 'static', 'css');
-if (fs.existsSync(cssDir)) {
-    const files = fs.readdirSync(cssDir);
-    console.log(`[Launcher] CSS détectés dans css/ (${files.length}) : ${files.slice(0, 3).join(', ')}...`);
-} else {
-    console.warn(`[Launcher] ATTENTION : Dossier css/ introuvable dans ${cssDir}`);
-}
-const chunksDir = path.join(projectRoot, '.next', 'static', 'chunks');
-if (fs.existsSync(chunksDir)) {
-    const cssInChunks = fs.readdirSync(chunksDir).filter(f => f.endsWith('.css'));
-    if (cssInChunks.length > 0) {
-        console.log(`[Launcher] CSS détectés dans chunks/ (${cssInChunks.length}) : ${cssInChunks[0]}`);
-    } else {
-        console.warn(`[Launcher] ATTENTION : Aucun fichier .css dans chunks/`);
-    }
-} else {
-    console.warn(`[Launcher] ATTENTION : Dossier chunks/ introuvable`);
-}
-// Vérification des dépendances Prisma CLI
-const PrismaDebugPath = path.join(projectRoot, 'node_modules', '@prisma', 'debug');
-if (fs.existsSync(PrismaDebugPath)) {
-    console.log(`[Launcher] @prisma/debug présent ✓`);
-} else {
-    console.warn(`[Launcher] ATTENTION : @prisma/debug manquant (prisma db push ne fonctionnera pas)`);
-}
-// ---------------------------------------------------
-
-const BASE_PORT = parseInt(process.env.PORT || '3001', 10);
-// Compat : des sections du launcher utilisent encore PORT
-const PORT = BASE_PORT;
-const HOST = '0.0.0.0';
-
-// On cherche le serveur Next.js (server.js)
-let serverPath = path.join(projectRoot, 'server.js'); 
-if (!fs.existsSync(serverPath)) {
-    serverPath = path.join(projectRoot, '.next', 'standalone', 'server.js');
-}
-
-if (!fs.existsSync(serverPath)) {
-    console.error('Erreur: server.js introuvable (tenté: ' + serverPath + '). Effectuez un "npm run build" d\'abord.');
-    process.exit(1);
-}
-
-const serverDir = path.dirname(serverPath);
-console.log('[Launcher] Serveur détecté dans : ' + serverPath);
-
-// Configuration Next.js
+process.env.DATABASE_URL = 'file:C:/gesticom/gesticom.db';
 process.env.NODE_ENV = 'production';
-process.chdir(serverDir);
+process.env.PORT = String(PORT);
 
-const NEXT_INTERNAL_PORT = PORT + 1;
-process.env.PORT = NEXT_INTERNAL_PORT.toString();
-
-// Lancement de Next.js en arrière-plan
-const { fork } = require('child_process');
-const nextProcess = fork(serverPath, [], {
-    env: process.env,
-    cwd: serverDir,
-    stdio: 'inherit'
-});
-
-// Serveur Proxy + Static (Servir static et public manuellement car standalone le fait pas bien pour les fichiers statiques)
-const mimeTypes = {
-    '.html': 'text/html',
-    '.js': 'text/javascript',
-    '.css': 'text/css',
-    '.json': 'application/json',
-    '.png': 'image/png',
-    '.jpg': 'image/jpg',
-    '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-    '.wav': 'audio/wav',
-    '.mp4': 'video/mp4',
-    '.woff': 'application/font-woff',
-    '.ttf': 'application/font-ttf',
-    '.eot': 'application/vnd.ms-fontobject',
-    '.otf': 'application/font-otf',
-    '.wasm': 'application/wasm',
-    '.ico': 'image/x-icon'
-};
-
-const proxyServer = http.createServer((req, res) => {
-    const rawUrl = req.url;
-    const parsedUrl = rawUrl.split('?')[0]; 
-    console.log(`[Proxy] ${req.method} ${rawUrl}`);
-
-    // 1. Tenter de servir les fichiers statiques (CSS, JS, Images)
-    let filePath = null;
-    if (parsedUrl.startsWith('/_next/static/')) {
-        const relativePath = parsedUrl.replace('/_next/static/', '');
-        // Tentative 1 : Racine du projet (Standard Inno Setup)
-        const path1 = path.join(projectRoot, '.next', 'static', relativePath);
-        // Tentative 2 : Dans le dossier standalone (Standard Next.js)
-        const path2 = path.join(projectRoot, '.next', 'standalone', '.next', 'static', relativePath);
-        
-        if (fs.existsSync(path1)) filePath = path1;
-        else if (fs.existsSync(path2)) filePath = path2;
-    } else {
-        // Tenter dans public (Favicon, Logo, etc.)
-        const fileName = (parsedUrl === '/' || parsedUrl === '') ? 'index.html' : parsedUrl;
-        const publicPath = path.join(projectRoot, 'public', fileName);
-        if (fs.existsSync(publicPath) && !fs.statSync(publicPath).isDirectory()) {
-            filePath = publicPath;
-        }
-    }
-
-    if (filePath && fs.existsSync(filePath)) {
-        const extname = String(path.extname(filePath)).toLowerCase();
-        const contentType = mimeTypes[extname] || 'application/octet-stream';
-        
-        fs.readFile(filePath, (error, content) => {
-            if (error) {
-                console.error(`[Proxy] Erreur 500 sur ${parsedUrl} : ${error.message}`);
-                res.writeHead(500);
-                res.end('Erreur Interne');
-            } else {
-                res.writeHead(200, { 
-                    'Content-Type': contentType, 
-                    'Cache-Control': 'public, max-age=31536000, immutable',
-                    'Access-Control-Allow-Origin': '*' 
-                });
-                res.end(content);
-            }
-        });
-        return;
-    } else if (parsedUrl.startsWith('/_next/static/')) {
-        console.warn(`[Proxy 404] STATIQUE INTROUVABLE : ${parsedUrl}`);
-        console.warn(`   - Tente dans : ${path.join(projectRoot, '.next', 'static', parsedUrl.replace('/_next/static/', ''))}`);
-    }
-
-    // 2. Sinon, proxy vers le serveur Next.js
-    const proxyReq = http.request({
-        host: '127.0.0.1',
-        port: NEXT_INTERNAL_PORT,
-        path: req.url,
-        method: req.method,
-        headers: req.headers
-    }, (proxyRes) => {
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res, { end: true });
-    });
-
-    proxyReq.on('error', (err) => {
-        console.error(`[Proxy Error] 127.0.0.1:${NEXT_INTERNAL_PORT} - ${err.message}`);
-        res.writeHead(502);
-        res.end('Serveur Next.js en cours de démarrage ou non accessible...');
-    });
-
-    req.pipe(proxyReq, { end: true });
-});
-
-function startProxyServer(port, attempt = 0) {
-    proxyServer.once('error', (err) => {
-        if (err && err.code === 'EADDRINUSE' && attempt < 5) {
-            const nextPort = port + 1;
-            console.warn(`[Launcher] Port ${port} déjà utilisé. Tentative sur ${nextPort}...`);
-            // IMPORTANT: il faut recréer un serveur car l'instance est en erreur
-            process.env.PORT = String(nextPort);
-            process.exitCode = 0;
-            // Relancer le process proprement sur un nouveau port
-            const { spawn } = require('child_process');
-            spawn(process.execPath, [__filename], {
-                env: { ...process.env, PORT: String(nextPort) },
-                cwd: projectRoot,
-                stdio: 'inherit'
-            });
-            return;
-        }
-        console.error('[Launcher] Erreur serveur proxy:', err?.message || err);
-        process.exit(1);
-    });
-
-    proxyServer.listen(port, HOST, () => {
-        console.log(`[GestiCom] Serveur PROXY + STATIC prêt sur http://localhost:${port}`);
-    });
+const serverPath = path.join(projectRoot, 'server.js');
+if (!fs.existsSync(serverPath)) {
+  e(`server.js introuvable dans ${projectRoot}`);
+  process.exit(1);
 }
 
-startProxyServer(BASE_PORT);
+l('Migration automatique de la base de donnees...');
 
-process.on('SIGINT', () => {
-    nextProcess.kill();
-    process.exit();
+// ═══════════════════════════════════════════════════════════════════
+//  SÉCURITÉ : prisma db push est DÉSACTIVÉ car il peut recréer
+//  les tables avec --accept-data-loss et corrompre les données
+//  (notamment Stock, en mélangeant les colonnes).
+//  On utilise uniquement les ALTER TABLE + CREATE TABLE ci-dessous,
+//  qui sont 100% sûrs (ils n'affectent que la structure, pas les données).
+// ═══════════════════════════════════════════════════════════════════
+
+function execOne(sql) {
+  try {
+    fs.writeFileSync(tmpFile, sql.trim(), 'utf-8');
+    execSync(`node "${prismaCli}" db execute --url="file:${dbPath}" --file="${tmpFile}"`, {
+      cwd: projectRoot, stdio: 'pipe', timeout: 30000,
+    });
+    return true;
+  } catch (err) {
+    const msg = (err.stderr || err.message || '').toString().toLowerCase();
+    if (msg.includes('duplicate column') || msg.includes('already exists')) return 'exists';
+    return false;
+  }
+}
+
+function execBatch(sqlList) {
+  for (const stmt of sqlList) execOne(stmt);
+}
+
+// Build all ALTER TABLE + CREATE TABLE + UPDATE statements
+const addStmts = [
+  // --- Utilisateur ---
+  'ALTER TABLE "Utilisateur" ADD COLUMN "rolesSupplementaires" TEXT;',
+  'ALTER TABLE "Utilisateur" ADD COLUMN "tokenVersion" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Utilisateur" ADD COLUMN "lastLoginAt" DATETIME;',
+  'ALTER TABLE "Utilisateur" ADD COLUMN "loginCount" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Utilisateur" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Magasin ---
+  'ALTER TABLE "Magasin" ADD COLUMN "estDepotPrincipal" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Magasin" ADD COLUMN "soldeCaisse" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Magasin" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Produit ---
+  'ALTER TABLE "Produit" ADD COLUMN "codeBarres" TEXT;',
+  'ALTER TABLE "Produit" ADD COLUMN "unite" TEXT NOT NULL DEFAULT \'unite\';',
+  'ALTER TABLE "Produit" ADD COLUMN "pamp" REAL DEFAULT 0;',
+  'ALTER TABLE "Produit" ADD COLUMN "fournisseurId" INTEGER;',
+  'ALTER TABLE "Produit" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Produit" ADD COLUMN "prixMinimum" REAL DEFAULT 0;',
+  'ALTER TABLE "Produit" ADD COLUMN "actif" INTEGER NOT NULL DEFAULT 1;',
+  // --- Stock ---
+  'ALTER TABLE "Stock" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Mouvement ---
+  'ALTER TABLE "Mouvement" ADD COLUMN "dateOperation" DATETIME;',
+  'ALTER TABLE "Mouvement" ADD COLUMN "updatedAt" DATETIME;',
+  'ALTER TABLE "Mouvement" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Client ---
+  'ALTER TABLE "Client" ADD COLUMN "code" TEXT;',
+  'ALTER TABLE "Client" ADD COLUMN "email" TEXT;',
+  'ALTER TABLE "Client" ADD COLUMN "adresse" TEXT;',
+  'ALTER TABLE "Client" ADD COLUMN "localisation" TEXT;',
+  'ALTER TABLE "Client" ADD COLUMN "soldeInitial" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Client" ADD COLUMN "avoirInitial" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Client" ADD COLUMN "pointsFidelite" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Client" ADD COLUMN "type" TEXT NOT NULL DEFAULT \'CASH\';',
+  'ALTER TABLE "Client" ADD COLUMN "plafondCredit" REAL;',
+  'ALTER TABLE "Client" ADD COLUMN "ncc" TEXT;',
+  'ALTER TABLE "Client" ADD COLUMN "actif" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Client" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Fournisseur ---
+  'ALTER TABLE "Fournisseur" ADD COLUMN "code" TEXT;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "adresse" TEXT;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "localisation" TEXT;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "soldeInitial" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "avoirInitial" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "numeroCamion" TEXT;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "email" TEXT;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "ncc" TEXT;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "actif" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "entiteId" INTEGER DEFAULT 1;',
+  // --- Vente ---
+  'ALTER TABLE "Vente" ADD COLUMN "fraisApproche" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Vente" ADD COLUMN "remiseGlobale" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Vente" ADD COLUMN "pointsGagnes" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Vente" ADD COLUMN "estVenteRapide" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Vente" ADD COLUMN "numeroBon" TEXT;',
+  'ALTER TABLE "Vente" ADD COLUMN "dateOperation" DATETIME;',
+  'ALTER TABLE "Vente" ADD COLUMN "estHistorique" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Vente" ADD COLUMN "statut" TEXT NOT NULL DEFAULT \'VALIDEE\';',
+  'ALTER TABLE "Vente" ADD COLUMN "montantPaye" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Vente" ADD COLUMN "statutPaiement" TEXT NOT NULL DEFAULT \'CREDIT\';',
+  'ALTER TABLE "Vente" ADD COLUMN "modePaiement" TEXT NOT NULL DEFAULT \'ESPECES\';',
+  'ALTER TABLE "Vente" ADD COLUMN "observation" TEXT;',
+  'ALTER TABLE "Vente" ADD COLUMN "createdAt" DATETIME;',
+  'ALTER TABLE "Vente" ADD COLUMN "updatedAt" DATETIME;',
+  'ALTER TABLE "Vente" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- VenteLigne ---
+  'ALTER TABLE "VenteLigne" ADD COLUMN "coutUnitaire" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "createdAt" DATETIME;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "updatedAt" DATETIME;',
+  // --- Achat ---
+  'ALTER TABLE "Achat" ADD COLUMN "fraisApproche" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Achat" ADD COLUMN "statut" TEXT NOT NULL DEFAULT \'VALIDEE\';',
+  'ALTER TABLE "Achat" ADD COLUMN "numeroCamion" TEXT;',
+  'ALTER TABLE "Achat" ADD COLUMN "dateOperation" DATETIME;',
+  'ALTER TABLE "Achat" ADD COLUMN "montantPaye" REAL DEFAULT 0;',
+  'ALTER TABLE "Achat" ADD COLUMN "statutPaiement" TEXT NOT NULL DEFAULT \'CREDIT\';',
+  'ALTER TABLE "Achat" ADD COLUMN "modePaiement" TEXT NOT NULL DEFAULT \'ESPECES\';',
+  'ALTER TABLE "Achat" ADD COLUMN "observation" TEXT;',
+  'ALTER TABLE "Achat" ADD COLUMN "createdAt" DATETIME;',
+  'ALTER TABLE "Achat" ADD COLUMN "updatedAt" DATETIME;',
+  'ALTER TABLE "Achat" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- AchatLigne ---
+  'ALTER TABLE "AchatLigne" ADD COLUMN "coutUnitaire" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "AchatLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "AchatLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "AchatLigne" ADD COLUMN "createdAt" DATETIME;',
+  'ALTER TABLE "AchatLigne" ADD COLUMN "updatedAt" DATETIME;',
+  // --- Charge ---
+  'ALTER TABLE "Charge" ADD COLUMN "statut" TEXT DEFAULT \'VALIDE\';',
+  'ALTER TABLE "Charge" ADD COLUMN "beneficiaire" TEXT;',
+  'ALTER TABLE "Charge" ADD COLUMN "modePaiement" TEXT NOT NULL DEFAULT \'ESPECES\';',
+  'ALTER TABLE "Charge" ADD COLUMN "pieceJustificative" TEXT;',
+  'ALTER TABLE "Charge" ADD COLUMN "banqueId" INTEGER;',
+  'ALTER TABLE "Charge" ADD COLUMN "updatedAt" DATETIME;',
+  'ALTER TABLE "Charge" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Depense ---
+  'ALTER TABLE "Depense" ADD COLUMN "banqueId" INTEGER;',
+  'ALTER TABLE "Depense" ADD COLUMN "updatedAt" DATETIME;',
+  'ALTER TABLE "Depense" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Banque ---
+  'ALTER TABLE "Banque" ADD COLUMN "compteId" INTEGER;',
+  'ALTER TABLE "Banque" ADD COLUMN "actif" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Banque" ADD COLUMN "updatedAt" DATETIME;',
+  'ALTER TABLE "Banque" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Caisse ---
+  'ALTER TABLE "Caisse" ADD COLUMN "dateOperation" DATETIME;',
+  'ALTER TABLE "Caisse" ADD COLUMN "observation" TEXT;',
+  'ALTER TABLE "Caisse" ADD COLUMN "sousType" TEXT NOT NULL DEFAULT \'MANUEL\';',
+  'ALTER TABLE "Caisse" ADD COLUMN "updatedAt" DATETIME;',
+  'ALTER TABLE "Caisse" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- Parametre ---
+  'ALTER TABLE "Parametre" ADD COLUMN "slogan" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "email" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "siteWeb" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "numNCC" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "typeCommerce" TEXT NOT NULL DEFAULT \'GENERAL\';',
+  'ALTER TABLE "Parametre" ADD COLUMN "piedDePage" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "smtpHost" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "smtpPort" INTEGER;',
+  'ALTER TABLE "Parametre" ADD COLUMN "smtpUser" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "smtpPass" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "backupAuto" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Parametre" ADD COLUMN "backupFrequence" TEXT NOT NULL DEFAULT \'QUOTIDIEN\';',
+  'ALTER TABLE "Parametre" ADD COLUMN "backupDestination" TEXT NOT NULL DEFAULT \'LOCAL\';',
+  'ALTER TABLE "Parametre" ADD COLUMN "backupEmailDest" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "fideliteActive" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Parametre" ADD COLUMN "fideliteSeuilPoints" INTEGER NOT NULL DEFAULT 100;',
+  'ALTER TABLE "Parametre" ADD COLUMN "fideliteTauxRemise" REAL NOT NULL DEFAULT 5;',
+  'ALTER TABLE "Parametre" ADD COLUMN "logoLocal" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "registreCommerce" TEXT;',
+  'ALTER TABLE "Parametre" ADD COLUMN "mentionSpeciale" TEXT DEFAULT \'...\';',
+  'ALTER TABLE "Parametre" ADD COLUMN "dateCloture" DATETIME;',
+  'ALTER TABLE "Parametre" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- OperationBancaire ---
+  'ALTER TABLE "OperationBancaire" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "OperationBancaire" ADD COLUMN "updatedAt" DATETIME;',
+  // --- EcritureComptable ---
+  'ALTER TABLE "EcritureComptable" ADD COLUMN "updatedAt" DATETIME;',
+  'ALTER TABLE "EcritureComptable" ADD COLUMN "entiteId" INTEGER DEFAULT 1;',
+  // --- PrintTemplate ---
+  'ALTER TABLE "PrintTemplate" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // --- ReglementVente ---
+  'ALTER TABLE "ReglementVente" ADD COLUMN "rapproche" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "ReglementVente" ADD COLUMN "banqueId" INTEGER;',
+  // --- ReglementAchat ---
+  'ALTER TABLE "ReglementAchat" ADD COLUMN "rapproche" INTEGER NOT NULL DEFAULT 0;',
+  'ALTER TABLE "ReglementAchat" ADD COLUMN "banqueId" INTEGER;',
+  'ALTER TABLE "ReglementAchat" ADD COLUMN "updatedAt" DATETIME;',
+  // --- New tables ---
+  'CREATE TABLE IF NOT EXISTS "PrintTemplate" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "type" TEXT NOT NULL, "nom" TEXT NOT NULL, "logo" TEXT, "enTete" TEXT, "piedDePage" TEXT, "variables" TEXT, "actif" INTEGER NOT NULL DEFAULT 1, "entiteId" INTEGER NOT NULL DEFAULT 1, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME);',
+  'CREATE TABLE IF NOT EXISTS "ReglementVente" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "montant" REAL NOT NULL, "modePaiement" TEXT NOT NULL, "statut" TEXT NOT NULL DEFAULT \'VALIDE\', "rapproche" INTEGER NOT NULL DEFAULT 0, "banqueId" INTEGER, "venteId" INTEGER, "clientId" INTEGER, "utilisateurId" INTEGER NOT NULL, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "entiteId" INTEGER DEFAULT 1);',
+  'CREATE TABLE IF NOT EXISTS "ReglementVenteLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "reglementId" INTEGER NOT NULL, "venteId" INTEGER NOT NULL, "montant" REAL NOT NULL);',
+  'CREATE TABLE IF NOT EXISTS "ReglementAchat" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "montant" REAL NOT NULL, "modePaiement" TEXT NOT NULL, "statut" TEXT NOT NULL DEFAULT \'VALIDE\', "rapproche" INTEGER NOT NULL DEFAULT 0, "achatId" INTEGER, "fournisseurId" INTEGER, "utilisateurId" INTEGER NOT NULL, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME, "entiteId" INTEGER DEFAULT 1);',
+  'CREATE TABLE IF NOT EXISTS "ReglementAchatLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "reglementId" INTEGER NOT NULL, "achatId" INTEGER NOT NULL, "montant" REAL NOT NULL);',
+  'CREATE TABLE IF NOT EXISTS "ArchiveVente" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "numeroFactureOrigine" TEXT NOT NULL, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "magasinId" INTEGER NOT NULL, "entiteId" INTEGER NOT NULL, "utilisateurId" INTEGER NOT NULL, "clientId" INTEGER, "clientLibre" TEXT, "montantTotal" REAL NOT NULL, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);',
+  'CREATE TABLE IF NOT EXISTS "ArchiveVenteLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "venteId" INTEGER NOT NULL, "produitId" INTEGER, "designation" TEXT NOT NULL, "quantite" REAL NOT NULL, "prixUnitaire" REAL NOT NULL, "montant" REAL NOT NULL);',
+  'CREATE TABLE IF NOT EXISTS "ArchiveSoldeClient" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "entiteId" INTEGER NOT NULL, "utilisateurId" INTEGER NOT NULL, "clientId" INTEGER, "clientLibre" TEXT, "montant" REAL NOT NULL, "dateArchive" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);',
+  'CREATE TABLE IF NOT EXISTS "CommandeFournisseur" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "numero" TEXT NOT NULL UNIQUE, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "fournisseurId" INTEGER, "fournisseurLibre" TEXT, "magasinId" INTEGER NOT NULL, "entiteId" INTEGER NOT NULL, "utilisateurId" INTEGER NOT NULL, "montantTotal" REAL NOT NULL DEFAULT 0, "fraisApproche" REAL NOT NULL DEFAULT 0, "observation" TEXT, "statut" TEXT NOT NULL DEFAULT \'BROUILLON\', "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME);',
+  'CREATE TABLE IF NOT EXISTS "CommandeFournisseurLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "commandeId" INTEGER NOT NULL, "produitId" INTEGER NOT NULL, "designation" TEXT NOT NULL, "quantite" REAL NOT NULL, "prixUnitaire" REAL NOT NULL, "tva" REAL NOT NULL DEFAULT 0, "remise" REAL NOT NULL DEFAULT 0, "montant" REAL NOT NULL);',
+  'CREATE TABLE IF NOT EXISTS "SystemAlerte" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "type" TEXT NOT NULL DEFAULT \'INFO\', "categorie" TEXT NOT NULL DEFAULT \'AUTRE\', "message" TEXT NOT NULL, "referenceId" INTEGER, "lu" INTEGER NOT NULL DEFAULT 0, "entiteId" INTEGER DEFAULT 1, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);',
+  'CREATE TABLE IF NOT EXISTS "Licence" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "cle" TEXT NOT NULL, "clientNom" TEXT, "debutValidite" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "finValidite" DATETIME, "statut" TEXT NOT NULL DEFAULT \'ACTIVE\', "features" TEXT NOT NULL DEFAULT \'[]\', "typeEssai" INTEGER NOT NULL DEFAULT 0, "debutEssai" DATETIME, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME);',
+];
+
+const fixEntiteId = '(SELECT id FROM "Entite" ORDER BY id ASC LIMIT 1)';
+
+// ═══════════════════════════════════════════════════════════════════
+//  SÉCURITÉ : les corrections ci-dessous ne corrigent que les
+//  valeurs NULL ou 0. Elles ne modifient JAMAIS les entiteId
+//  existants et valides (≠ 0), pour ne pas écraser les données
+//  réelles du client (multi-entités).
+// ═══════════════════════════════════════════════════════════════════
+const fixNullStmts = [
+  'UPDATE "Vente" SET "dateOperation" = "date" WHERE "dateOperation" IS NULL;',
+  'UPDATE "Vente" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;',
+  'UPDATE "VenteLigne" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;',
+  'UPDATE "AchatLigne" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;',
+  'UPDATE "Achat" SET "dateOperation" = "date" WHERE "dateOperation" IS NULL;',
+  'UPDATE "Achat" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;',
+  'UPDATE "Caisse" SET "dateOperation" = "date" WHERE "dateOperation" IS NULL;',
+  'UPDATE "Caisse" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "Charge" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "ReglementAchat" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "Achat" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "AchatLigne" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "Depense" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "EcritureComptable" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "Mouvement" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "PrintTemplate" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "Vente" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "VenteLigne" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  `UPDATE "Produit" SET "actif" = 1 WHERE "actif" IS NULL;`,
+  // entiteId: seulement NULL ou 0 → jamais d'écrasement des valeurs existantes
+  `UPDATE "Produit" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Client" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Fournisseur" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Stock" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Utilisateur" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Magasin" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Caisse" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Vente" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Achat" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Mouvement" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Banque" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Charge" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "Depense" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "OperationBancaire" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+  `UPDATE "EcritureComptable" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
+];
+
+const flagPath = path.join(projectRoot, '.migrated');
+const isFirstLaunch = !fs.existsSync(flagPath);
+
+// Étape 1: ALTER TABLE sécurisé (ne touche qu'aux colonnes, jamais aux données)
+// S'exécute à chaque démarrage pour rattraper les colonnes manquantes.
+l('Ajout des colonnes et tables manquantes...');
+const batchSql = addStmts.join('\n');
+let batchOk = false;
+try {
+  fs.writeFileSync(tmpFile, batchSql, 'utf-8');
+  execSync(`node "${prismaCli}" db execute --url="file:${dbPath}" --file="${tmpFile}"`, {
+    cwd: projectRoot, stdio: 'pipe', timeout: 60000,
+  });
+  l('  Batch SQL exécuté avec succès');
+  batchOk = true;
+} catch {
+  l('  Batch SQL échoué — exécution individuelle...');
+}
+
+if (!batchOk) {
+  let added = 0, exists = 0, failed = 0;
+  for (const stmt of addStmts) {
+    const r = execOne(stmt);
+    if (r === true) added++;
+    else if (r === 'exists') exists++;
+    else failed++;
+  }
+  l(`  ALTER: ${added} ajoutés, ${exists} déjà présents, ${failed} échecs`);
+}
+
+// Étape 3: TOUJOURS corriger les données (actif, entiteId, updatedAt)
+l('Correction des données...');
+let fixed = 0;
+for (const stmt of fixNullStmts) {
+  if (execOne(stmt)) fixed++;
+}
+l(`  ${fixed} corrections appliquées`);
+
+// Marquer la migration comme terminée
+if (isFirstLaunch) {
+  try { fs.writeFileSync(flagPath, new Date().toISOString(), 'utf-8'); l('Migration initiale marquée comme terminée'); } catch {}
+}
+
+// Cleanup temp file
+try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch {}
+
+l('Fork de server.js...');
+
+const outStream = fs.createWriteStream(logFile, { flags: 'a' });
+const errStream = fs.createWriteStream(errFile, { flags: 'a' });
+
+const nextServer = fork(serverPath, [], {
+  env: process.env,
+  cwd: projectRoot,
+  silent: true,
 });
+nextServer.stdout.pipe(outStream);
+nextServer.stderr.pipe(errStream);
+
+nextServer.on('error', (er) => e(`Erreur fork: ${er.message}`));
+nextServer.on('exit', (code, signal) => {
+  l(`Serveur arrêté (code: ${code}, signal: ${signal})`);
+  process.exit(code || 0);
+});
+
+l(`Fork réussi, PID: ${nextServer.pid}`);
+
+l('Le VBS launcher surveille le serveur et ouvrira le navigateur.');

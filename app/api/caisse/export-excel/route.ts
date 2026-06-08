@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
 
     const operations = await prisma.caisse.findMany({
       where,
+      take: 10000,
       orderBy: { date: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },
@@ -79,6 +80,18 @@ export async function GET(request: NextRequest) {
       { wch: 20 },
     ]
     worksheet['!cols'] = colWidths
+
+    const totalEntree = operations
+      .filter(op => op.type === 'ENTREE')
+      .reduce((s, op) => s + op.montant, 0)
+    const totalSortie = operations
+      .filter(op => op.type === 'SORTIE')
+      .reduce((s, op) => s + op.montant, 0)
+
+    XLSX.utils.sheet_add_aoa(worksheet, [
+      ['', 'Total entrées', '', '', totalEntree, ''],
+      ['', 'Total sorties', '', '', totalSortie, ''],
+    ], { origin: data.length + 3 })
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     const filename = `operations-caisse-${new Date().toISOString().split('T')[0]}.xlsx`

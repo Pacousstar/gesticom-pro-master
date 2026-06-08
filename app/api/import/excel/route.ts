@@ -35,7 +35,25 @@ export async function POST(request: NextRequest) {
     const worksheet = workbook.Sheets[sheetName]
     const data = XLSX.utils.sheet_to_json(worksheet, { raw: false }) as any[]
 
-    if (data.length === 0) {
+    // Normaliser les clés : ôter accents, lowercase, remplacer espaces par _
+    const normalizeKey = (k: string) => {
+      const map: Record<string, string> = {
+        'designation': 'designation', 'désignation': 'designation', 'libellé': 'designation', 'libelle': 'designation', 'nom': 'designation', 'produit': 'designation', 'article': 'designation', 'description': 'designation',
+        'prix_achat': 'prix_achat', 'prix achat': 'prix_achat', 'prixachat': 'prix_achat', 'coût': 'prix_achat', 'cout': 'prix_achat',
+        'prix_vente': 'prix_vente', 'prix vente': 'prix_vente', 'prixvente': 'prix_vente',
+        'categorie': 'categorie', 'catégorie': 'categorie', 'category': 'categorie',
+        'seuil_min': 'seuil_min', 'seuil min': 'seuil_min', 'seuilmin': 'seuil_min', 'stock min': 'seuil_min'
+      }
+      const clean = k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_-]+/g, '_').trim()
+      return map[clean] || clean
+    }
+    const normalized = data.map((row: any) => {
+      const r: any = {}
+      Object.keys(row).forEach(k => r[normalizeKey(k)] = row[k])
+      return r
+    })
+
+    if (normalized.length === 0) {
       return NextResponse.json({ error: 'Fichier Excel vide.' }, { status: 400 })
     }
 
@@ -48,23 +66,19 @@ export async function POST(request: NextRequest) {
       })
       const magasinByCode = new Map(magasinList.map((m) => [m.code.trim().toUpperCase(), m.id]))
 
-      for (const row of data) {
+      for (const row of normalized) {
         try {
-          const code = String(row?.Code || row?.code || '').trim().toUpperCase()
-          const designation = String(row?.Designation || row?.designation || '').trim()
+          const code = String(row?.code || '').trim().toUpperCase()
+          const designation = String(row?.designation || '').trim()
           if (!code || !designation) {
             result.errors.push(`Ligne ignorée: Code ou Désignation manquant`)
             continue
           }
 
-          const prixAchat = row?.PrixAchat != null || row?.prix_achat != null
-            ? Number(row.PrixAchat || row.prix_achat)
-            : null
-          const prixVente = row?.PrixVente != null || row?.prix_vente != null
-            ? Number(row.PrixVente || row.prix_vente)
-            : null
-          const categorie = String(row?.Categorie || row?.categorie || 'DIVERS').trim() || 'DIVERS'
-          const seuilMin = Math.max(0, Number(row?.SeuilMin || row?.seuil_min) || 5)
+          const prixAchat = row?.prix_achat != null ? Number(row.prix_achat) : null
+          const prixVente = row?.prix_vente != null ? Number(row.prix_vente) : null
+          const categorie = String(row?.categorie || 'DIVERS').trim() || 'DIVERS'
+          const seuilMin = Math.max(0, Number(row?.seuil_min) || 5)
 
           const existing = await prisma.produit.findFirst({ where: { code, entiteId } })
           if (existing) {

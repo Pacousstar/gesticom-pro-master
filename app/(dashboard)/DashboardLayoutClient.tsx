@@ -22,6 +22,7 @@ import {
   Calculator,
   DollarSign,
   Wallet,
+  LifeBuoy,
   TrendingUp,
   Activity,
   UserPlus,
@@ -37,10 +38,19 @@ import {
   Archive,
   BookOpen,
   ArrowRightLeft,
+  Shield,
+  Timer,
+  Lock,
+  Key,
+  Smartphone,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import type { Session } from '@/lib/auth'
 import { ToastContainer } from '@/components/ui/Toast'
 import { useToast } from '@/hooks/useToast'
+import SupportModal from '@/components/SupportModal'
+import { ThemeProvider, useTheme } from '@/components/ThemeProvider'
 
 // Diagnostic DB banner
 type DbInfo = { nodeEnv?: string; databaseUrl?: string }
@@ -52,6 +62,7 @@ const navigation = [
       { name: 'Ventes', href: '/dashboard/ventes', icon: ShoppingCart, permission: 'ventes:view', key: 'ventes' },
       { name: 'Toutes les Ventes', href: '/dashboard/ventes/toute', icon: History, permission: 'ventes:view' },
       { name: 'Vente Rapide (PRO)', href: '/dashboard/ventes/rapide', icon: CreditCard, permission: 'ventes:view', key: 'ventesRapides' },
+      { name: 'Dashboard Mobile', href: '/dashboard/mobile', icon: Smartphone, permission: 'dashboard:view' },
       { name: 'Achats', href: '/dashboard/achats', icon: ShoppingBag, permission: 'achats:view', key: 'achats' },
       { name: 'Tous les Achats', href: '/dashboard/achats/toute', icon: History, permission: 'achats:view' },
     ]
@@ -64,6 +75,7 @@ const navigation = [
       { name: 'Valeur de Stock', href: '/dashboard/rapports-inventaire/valeur', icon: TrendingUp, permission: 'stocks:view', key: 'valeur-stock' },
       { name: 'Bons de Commande', href: '/dashboard/commandes-fournisseurs', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'commandes:view', key: 'commandes' },
       { name: 'Stocks', href: '/dashboard/stock', icon: Warehouse, permission: 'stocks:view', key: 'stocks' },
+      { name: 'Magasins', href: '/dashboard/magasins', icon: Building2, permission: 'magasins:view' },
     ]
   },
   {
@@ -112,6 +124,7 @@ const navigation = [
     items: [
       { name: 'Utilisateurs', href: '/dashboard/utilisateurs', icon: UserPlus, permission: 'users:view' },
       { name: 'Journal d\'audit', href: '/dashboard/audit', icon: Activity, permission: 'audit:view' },
+      { name: 'Licence', href: '/dashboard/licence', icon: Shield, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'parametres:view' },
       { name: 'Paramètres', href: '/dashboard/parametres', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'parametres:view' },
     ]
   }
@@ -155,13 +168,29 @@ export default function DashboardLayoutClient({
   const [switchingEntite, setSwitchingEntite] = useState(false)
   const entiteSelectRef = useRef<HTMLDivElement>(null)
   const { toasts, removeToast, success: showSuccess, error: showError } = useToast()
+  const { theme, toggle: toggleTheme } = useTheme()
   const pathname = usePathname()
   const router = useRouter()
   const [isServerConnected, setIsServerConnected] = useState(true)
   const [toutesLues, setToutesLues] = useState(false)
   const [expandedSections, setExpandedSections] = useState<string[]>(['🛒 COMMERCE']) // Commerce ouvert par défaut
   const [dailyPerformance, setDailyPerformance] = useState({ ca: 0, count: 0 })
+  const [supportOpen, setSupportOpen] = useState(false)
   const [sidebarCounters, setSidebarCounters] = useState<Record<string, any>>({})
+  const [licenceCheck, setLicenceCheck] = useState<{
+    bloquant: boolean
+    statut: string
+    joursRestants?: number
+    finValidite?: string
+  } | null>(null)
+
+  // Vérification licence au démarrage
+  useEffect(() => {
+    fetch('/api/license/check')
+      .then(r => r.json())
+      .then(setLicenceCheck)
+      .catch(() => setLicenceCheck({ bloquant: false, statut: 'ERROR' }))
+  }, [])
 
   // Fetch sidebar counters for reassurance in UI
   const fetchSidebarCounters = async () => {
@@ -422,6 +451,7 @@ export default function DashboardLayoutClient({
   // if (!mounted) return null;
 
   return (
+    <ThemeProvider>
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700">
       {/* Animations de fond */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -626,7 +656,15 @@ export default function DashboardLayoutClient({
                 <p className="text-[10px] text-emerald-50/90 truncate font-black uppercase tracking-[0.15em]">{user.role === 'ADMIN' ? 'Administrateur admin' : user.login}</p>
               </div>
             </div>
-            <form action="/api/auth/logout" method="POST" className="mt-4">
+            <button
+              type="button"
+              onClick={() => setSupportOpen(true)}
+              className="mt-3 flex w-full items-center justify-center gap-3 rounded-xl bg-[#FF7518]/10 hover:bg-[#FF7518]/20 px-4 py-2.5 text-[11px] font-black text-[#FF7518] transition-all duration-300 uppercase tracking-[0.15em]"
+            >
+              <Image src="/icon-512x512.png" alt="GestiCom Pro" width={16} height={16} className="h-4 w-4 object-contain" />
+              SUPPORT
+            </button>
+            <form action="/api/auth/logout" method="POST" className="mt-2">
               <button
                 type="submit"
                 className="flex w-full items-center justify-center gap-3 rounded-xl bg-[#FF4500] hover:bg-[#FF4500] px-4 py-3 text-[11px] font-black text-white transition-all duration-300 shadow-lg hover:shadow-[#FF4500]/30 uppercase tracking-[0.2em]"
@@ -640,15 +678,15 @@ export default function DashboardLayoutClient({
       </aside>
 
       <div className="relative z-10 lg:pl-72 print:pl-0">
-        <header className="sticky top-0 z-30 border-b bg-white/90 backdrop-blur-xl shadow-sm no-print">
+        <header className="sticky top-0 z-30 border-b border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl shadow-sm no-print">
           <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
               <button className="lg:hidden" onClick={() => setSidebarOpen(true)}>
                 <Menu className="h-6 w-6 text-gray-600" />
               </button>
-              <Link href="/dashboard" className="hidden sm:flex items-center gap-2 pr-4 border-r border-gray-100">
+              <Link href="/dashboard" className="hidden sm:flex items-center gap-2 pr-4 border-r border-gray-200 dark:border-gray-700">
                 <Image src="/icon-512x512.png" alt="GestiCom Pro" width={40} height={40} className="h-10 w-10 object-contain drop-shadow-sm rounded-md" />
-                <span className="font-bold text-gray-900 text-sm tracking-tight">GestiCom <span className="text-orange-500">Pro</span></span>
+                <span className="font-bold text-gray-900 dark:text-white text-sm tracking-tight">GestiCom <span className="text-orange-500">Pro</span></span>
               </Link>
 
               {/* Breadcrumb Entité (Contextuel) */}
@@ -722,10 +760,10 @@ export default function DashboardLayoutClient({
             </div>
 
             {/* MESSAGE DÉFILANT (Point 2) */}
-            <div className="hidden xl:flex flex-1 mx-8 overflow-hidden bg-gray-50 border border-gray-100 rounded-lg py-1 shadow-inner relative group">
-              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-gray-50 to-transparent z-10" />
-              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-gray-50 to-transparent z-10" />
-              <div className="animate-marquee inline-block text-sm font-black text-emerald-800 uppercase tracking-widest py-1 px-4">
+            <div className="hidden xl:flex flex-1 mx-8 overflow-hidden bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg py-1 shadow-inner relative group">
+              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-gray-50 dark:from-gray-800 to-transparent z-10" />
+              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-gray-50 dark:from-gray-800 to-transparent z-10" />
+              <div className="animate-marquee inline-block text-sm font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-widest py-1 px-4">
                 <span className="text-orange-500">◆</span> GestiCom Pro votre Gestionnaire de Commerce Professionnel <span className="text-orange-500">◆</span>
                 <span className="mx-12"></span>
                 <span className="text-orange-500">◆</span> GestiCom Pro votre Gestionnaire de Commerce Professionnel <span className="text-orange-500">◆</span>
@@ -735,7 +773,7 @@ export default function DashboardLayoutClient({
             <div className="flex items-center gap-2">
               {/* Indicateur de statut du serveur local */}
               {!isServerConnected && (
-                <div className="flex items-center gap-2 rounded-lg bg-red-100 px-3 py-1.5 text-sm text-red-800">
+                <div className="flex items-center gap-2 rounded-lg bg-red-100 dark:bg-red-900/50 px-3 py-1.5 text-sm text-red-800 dark:text-red-300">
                   <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse"></div>
                   <span>Serveur Déconnecté</span>
                 </div>
@@ -752,7 +790,7 @@ export default function DashboardLayoutClient({
                       }
                     }}
                     disabled={switchingEntite}
-                    className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
                     title="Changer d'entité"
                   >
                     <Building2 className="h-4 w-4" />
@@ -764,9 +802,9 @@ export default function DashboardLayoutClient({
 
                   {/* Dropdown Entités */}
                   {entiteSelectOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-gray-200 bg-white shadow-2xl z-50 max-h-96 overflow-hidden">
-                      <div className="border-b border-gray-200 bg-gradient-to-r from-orange-50 to-orange-100 px-4 py-3">
-                        <h3 className="font-semibold text-gray-900">Sélectionner une entité</h3>
+                    <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl z-50 max-h-96 overflow-hidden">
+                      <div className="border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-orange-50 dark:from-gray-700 to-orange-100 dark:to-gray-700 px-4 py-3">
+                        <h3 className="font-semibold text-gray-900 dark:text-white">Sélectionner une entité</h3>
                       </div>
                       <div className="max-h-80 overflow-y-auto">
                         {entites.length === 0 ? (
@@ -836,10 +874,10 @@ export default function DashboardLayoutClient({
 
                 {/* Dropdown Notifications */}
                 {notificationsOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-gray-200 bg-white shadow-2xl z-50 max-h-96 overflow-hidden">
-                    <div className="border-b border-gray-200 bg-gradient-to-r from-orange-50 to-orange-100 px-4 py-3">
+                  <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl z-50 max-h-96 overflow-hidden">
+                    <div className="border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-orange-50 dark:from-gray-700 to-orange-100 dark:to-gray-700 px-4 py-3">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">Notifications</h3>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
                         <div className="flex items-center gap-2">
                           {nonLues > 0 && !toutesLues && (
                             <span className="rounded-full bg-orange-600 px-2 py-0.5 text-xs font-bold text-white">
@@ -919,6 +957,11 @@ export default function DashboardLayoutClient({
                 )}
               </div>
 
+              {/* Thème */}
+              <button onClick={toggleTheme} className="rounded-lg p-2 hover:bg-gray-100 transition-colors" title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}>
+                {theme === 'dark' ? <Sun className="h-5 w-5 text-gray-600" /> : <Moon className="h-5 w-5 text-gray-600" />}
+              </button>
+
               {/* Paramètres */}
               <button
                 onClick={() => {
@@ -936,17 +979,58 @@ export default function DashboardLayoutClient({
           </div>
         </header>
 
+        {licenceCheck?.statut === 'ESSAI' && (
+          <div className="mx-4 sm:mx-6 lg:mx-8 mt-4 rounded-xl bg-orange-500/20 border border-orange-500/30 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <Timer className="h-4 w-4 text-orange-400" />
+              <span className="font-bold text-orange-300">
+                Essai gratuit — {licenceCheck.joursRestants} jour{licenceCheck.joursRestants !== 1 ? 's' : ''} restant{licenceCheck.joursRestants !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <Link
+              href="/dashboard/licence"
+              className="text-xs font-bold text-orange-400 hover:text-orange-300 underline"
+            >
+              Activer une licence
+            </Link>
+          </div>
+        )}
+
         <main className="flex-1 p-4 sm:p-6 lg:px-8 relative z-10 w-full overflow-y-auto">
-          {children}
+          {licenceCheck?.bloquant ? (
+            <div className="flex items-center justify-center min-h-[calc(100vh-12rem)]">
+                <div className="max-w-lg w-full rounded-2xl border border-red-500/30 bg-gray-900/60 dark:bg-gray-900/80 p-10 text-center backdrop-blur-xl shadow-2xl">
+                <div className="mx-auto h-16 w-16 rounded-full bg-red-500/20 flex items-center justify-center mb-6">
+                  <Lock className="h-8 w-8 text-red-400" />
+                </div>
+                <h1 className="text-2xl font-black text-white mb-3">Licence expirée</h1>
+                <p className="text-gray-300 mb-2">Votre période d&apos;essai de 7 jours est terminée.</p>
+                <p className="text-gray-300 mb-6">Pour continuer à utiliser GestiCom Pro, veuillez activer une licence.</p>
+                <div className="border-t border-white/10 pt-6 mt-6">
+                  <p className="text-sm text-orange-400 font-bold mb-1">Veuillez contacter l&apos;Administrateur GestiCom Pro</p>
+                  <p className="text-lg font-black text-white">+225 05 44 81 49 24</p>
+                </div>
+                <Link
+                  href="/dashboard/licence"
+                  className="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-orange-500 text-white font-black text-xs uppercase hover:bg-orange-600 transition-all"
+                >
+                  <Key className="h-4 w-4" />
+                  Activer une licence
+                </Link>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
         </main>
 
         {/* Footer GestiCom App - Affiché uniquement sur Dashboard et Paramètres */}
         {pathname === '/dashboard' && (
-          <footer className="h-10 border-t border-gray-200 bg-white flex items-center justify-center relative z-10 w-full shrink-0 no-print">
+          <footer className="h-10 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-center relative z-10 w-full shrink-0 no-print">
             <p className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1">
               <span className="text-orange-500">GestiCom — tous droits réservés</span>
-              <span className="text-gray-300 mx-1">—</span>
-              <span className="text-emerald-600">Pacousstar 05 44 81 49 24</span>
+              <span className="text-gray-300 dark:text-gray-600 mx-1">—</span>
+              <span className="text-emerald-600 dark:text-emerald-400">Pacousstar 05 44 81 49 24</span>
             </p>
           </footer>
         )}
@@ -965,13 +1049,34 @@ export default function DashboardLayoutClient({
             padding: 0 !important;
             margin: 0 !important;
             width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
           }
           .lg\\:pl-72 {
             padding-left: 0 !important;
           }
         }
+        .mode-caisse aside, .mode-caisse header {
+          display: none !important;
+        }
+        .mode-caisse main {
+          padding: 0 !important;
+          margin: 0 !important;
+          max-width: 100% !important;
+        }
+        .mode-caisse .lg\\:pl-72 {
+          padding-left: 0 !important;
+        }
+        .touch-target {
+          min-height: 48px;
+          min-width: 48px;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
+      <SupportModal isOpen={supportOpen} onClose={() => setSupportOpen(false)} />
       <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
+    </ThemeProvider>
   )
 }

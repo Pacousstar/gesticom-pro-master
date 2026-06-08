@@ -10,7 +10,7 @@ import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
-import { unauthorized, badRequest, conflict, forbidden, handleApiError } from '@/lib/api-error'
+import { ApiError, unauthorized, badRequest, conflict, forbidden, handleApiError } from '@/lib/api-error'
 import {
   montantLigneTTC,
   montantTotalVenteDocument,
@@ -116,15 +116,16 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  const totalRealPaye = dataWithRealPaye.reduce((s, v) => s + (v.montantPaye || 0), 0)
-  const totalMontant = dataWithRealPaye.reduce((s, v) => s + (v.montantTotal || 0), 0)
+  // Utiliser l'agrégat SQL pour les totaux (couvre TOUTES les ventes filtrées, pas seulement la page)
+  const totalMontant = aggregates._sum.montantTotal || 0
+  const totalPaye = aggregates._sum.montantPaye || 0
 
   const res = NextResponse.json({
     data: dataWithRealPaye,
     totals: {
       montantTotal: totalMontant,
-      montantPaye: totalRealPaye,
-      resteAPayer: Math.max(0, totalMontant - totalRealPaye),
+      montantPaye: totalPaye,
+      resteAPayer: Math.max(0, totalMontant - totalPaye),
     },
     pagination: {
       page,
@@ -346,7 +347,7 @@ export async function POST(request: NextRequest) {
         select: { id: true }
       })
       if (existing) {
-        throw new Error('DOUBLE_TRANSACTION: Cette vente a déjà été enregistrée.')
+        throw new ApiError('Cette vente a déjà été enregistrée.', 409, 'IDEMPOTENCY_CONFLICT')
       }
       if (needCreditAlerte && clientExtId) {
         await tx.systemAlerte.create({
@@ -361,11 +362,11 @@ export async function POST(request: NextRequest) {
       }
 
       for (const l of lignesValides) {
-const st = await tx.stock.findUnique({ 
-           where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } } 
-         })
+        const st = await tx.stock.findUnique({ 
+          where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } } 
+        })
         if ((st?.quantite ?? 0) < l.quantite) {
-          throw new Error(`Stock insuffisant pour ${l.designation} (${st?.quantite || 0} dispo, ${l.quantite} requis).`)
+          throw new ApiError(`Stock insuffisant pour ${l.designation} (${st?.quantite || 0} dispo, ${l.quantite} requis).`, 409, 'INSUFFICIENT_STOCK')
         }
       }
 
@@ -406,8 +407,8 @@ const st = await tx.stock.findUnique({
       })
 
       for (const l of lignesValides) {
-await tx.stock.update({
-           where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } },
+        await tx.stock.update({
+          where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } },
           data: { quantite: { decrement: l.quantite } },
         })
         await tx.mouvement.create({

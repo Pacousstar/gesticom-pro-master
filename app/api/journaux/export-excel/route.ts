@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx-prototype-pollution-fixed')
@@ -11,9 +12,14 @@ export async function GET(request: NextRequest) {
   const authError = requirePermission(session, 'comptabilite:export')
   if (authError) return authError
 
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
+
   try {
     const typeParam = request.nextUrl.searchParams.get('type')?.trim()
-    const where: { type?: string } = {}
+    const where: { type?: string; entiteId?: number } = { entiteId }
     if (typeParam && ['ACHATS', 'VENTES', 'BANQUE', 'CAISSE', 'OD'].includes(typeParam)) {
       where.type = typeParam
     }
@@ -38,6 +44,11 @@ export async function GET(request: NextRequest) {
     }))
 
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Code: '', Libellé: '', Type: '', Statut: '' }])
+
+    if (rows.length > 0) {
+      XLSX.utils.sheet_add_aoa(ws, [['', '', 'Total journaux', rows.length]], { origin: rows.length + 1 })
+    }
+
     const colWidths = [
       { wch: 12 }, // Code
       { wch: 40 }, // Libellé

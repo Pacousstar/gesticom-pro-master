@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     // 1. Récupérer les produits actifs
     const produits = await prisma.produit.findMany({
       where: { actif: true, entiteId: where.entiteId },
+      take: 10000,
       select: {
         id: true,
         designation: true,
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
     // 2. Récupérer les stocks actuels
     const stocks = await prisma.stock.findMany({
       where: parsedMagasinId ? { magasinId: parsedMagasinId } : { entiteId: where.entiteId },
+      take: 10000,
       select: {
         produitId: true,
         quantite: true,
@@ -81,6 +83,7 @@ export async function GET(request: NextRequest) {
         date: { gt: dateLimit },
         ...(parsedMagasinId ? { magasinId: parsedMagasinId } : {})
       },
+      take: 10000,
       select: {
         produitId: true,
         type: true,

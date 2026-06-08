@@ -270,6 +270,9 @@ export default function FournisseursPage() {
           return inv.tier === f.nom || inv.tier === f.nom?.trim()
         })
         setPaymentModal({ fournisseur: f, invoices: providerInvoices })
+      } else {
+        const errData = await res.json().catch(() => ({ error: 'Erreur serveur' }))
+        showError(errData.error || `Erreur ${res.status}`)
       }
     } catch (e) {
       showError("Erreur lors de la récupération des factures.")
@@ -651,7 +654,7 @@ export default function FournisseursPage() {
       </div>
 
       {selectedHistory && (
-        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full no-print">
+        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full">
           {/* Header avec Dégradé Professionnel - Fixed */}
           <div className="pt-24 flex-none p-4 border-b flex items-center justify-between bg-gradient-to-r from-orange-700 to-orange-900 text-white print:hidden min-h-[100px]">
             <div>
@@ -681,7 +684,7 @@ export default function FournisseursPage() {
               @media print {
                 body * { visibility: hidden; }
                 #printable-fournisseur-history, #printable-fournisseur-history * { visibility: visible; }
-                #printable-fournisseur-history { position: absolute; left: 0; top: 0; width: 100%; }
+                #printable-fournisseur-history { position: absolute; left: 0; top: 0; width: 100%; height: auto; overflow: visible !important; }
                 .no-print { display: none !important; }
               }
             ` }} />

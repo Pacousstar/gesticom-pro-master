@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     ]
   }
 
-  const [operations, total, aggregates] = await Promise.all([
+  const [operations, total, totalGlobal, aggregates] = await Promise.all([
     prisma.caisse.findMany({
       where,
       skip,
@@ -73,6 +73,10 @@ export async function GET(request: NextRequest) {
       },
     }),
     prisma.caisse.count({ where }),
+    // Compteur global (sans filtre de date) pour l'affichage dans le badge
+    prisma.caisse.count({
+      where: { magasin: where.magasin, magasinId: where.magasinId },
+    }),
     prisma.caisse.groupBy({
       by: ['type'],
       where,
@@ -86,6 +90,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ 
     data: operations, 
     total,
+    totalGlobal,
     stats: {
       totalEntrees,
       totalSorties,

@@ -76,8 +76,8 @@ export default function LicencePage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-emerald-900">Licence</h1>
-          <p className="text-sm text-gray-500">Gérez votre licence GestiCom Pro</p>
+          <h1 className="text-2xl font-bold text-white">Licence</h1>
+          <p className="text-sm text-white/70">Gérez votre licence GestiCom Pro</p>
         </div>
         <Shield className="h-8 w-8 text-gray-400" />
       </div>
@@ -105,23 +105,23 @@ export default function LicencePage() {
           {licence?.clientNom && (
             <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-white/10">
               <div>
-                <span className="text-gray-400">Client :</span>
-                <p className="font-bold text-white">{licence.clientNom}</p>
-              </div>
+                  <span className="text-white/60">Client :</span>
+                  <p className="font-bold text-white">{licence.clientNom}</p>
+                </div>
               {licence.finValidite && (
                 <div>
-                  <span className="text-gray-400">Expire le :</span>
+                  <span className="text-white/60">Expire le :</span>
                   <p className="font-bold text-white">{new Date(licence.finValidite).toLocaleDateString('fr-FR')}</p>
                 </div>
               )}
               {!licence.finValidite && licence.active && (
                 <div>
-                  <span className="text-gray-400">Validité :</span>
+                  <span className="text-white/60">Validité :</span>
                   <p className="font-bold text-blue-400">Perpétuelle</p>
                 </div>
               )}
               <div>
-                <span className="text-gray-400">Installée le :</span>
+                <span className="text-white/60">Installée le :</span>
                 <p className="font-bold text-white">
                   {licence.debutValidite ? new Date(licence.debutValidite).toLocaleDateString('fr-FR') : '-'}
                 </p>
@@ -131,7 +131,7 @@ export default function LicencePage() {
 
           {licence?.features?.length > 0 && licence.features[0] !== 'all' && (
             <div className="pt-4 border-t border-white/10">
-              <span className="text-sm text-gray-400">Fonctionnalités :</span>
+              <span className="text-sm text-white/60">Fonctionnalités :</span>
               <div className="flex flex-wrap gap-2 mt-2">
                 {licence.features.map((f: string) => (
                   <span key={f} className="px-2 py-1 rounded-md bg-orange-500/20 text-orange-400 text-xs font-bold border border-orange-500/30">
@@ -158,7 +158,7 @@ export default function LicencePage() {
           <h2 className="font-black text-white uppercase tracking-wider text-sm">Activer une licence</h2>
         </div>
 
-        <p className="text-sm text-gray-400 mb-4">
+        <p className="text-sm text-white/60 mb-4">
           Saisissez votre clé de licence pour activer GestiCom Pro
         </p>
 

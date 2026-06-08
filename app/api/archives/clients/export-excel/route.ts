@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx-prototype-pollution-fixed')
@@ -11,10 +12,17 @@ export async function GET(request: NextRequest) {
   const authError = requirePermission(session, 'archives:view')
   if (authError) return authError
 
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
+
   try {
     const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
     
     const list = await prisma.archiveSoldeClient.findMany({
+      where: { entiteId },
+      take: 10000,
       orderBy: { dateArchive: 'desc' },
       include: {
         client: { select: { nom: true } },
@@ -46,6 +54,9 @@ export async function GET(request: NextRequest) {
       { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 40 }
     ]
     worksheet['!cols'] = colWidths
+
+    const totalMontant = filtered.reduce((s, a) => s + a.montant, 0)
+    XLSX.utils.sheet_add_aoa(worksheet, [['', '', totalMontant, '', '']], { origin: data.length + 3 })
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     const filename = `archives-soldes-${new Date().toISOString().split('T')[0]}.xlsx`

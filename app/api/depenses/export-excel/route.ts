@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
 
     const depenses = await prisma.depense.findMany({
       where,
+      take: 10000,
       orderBy: { date: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },
@@ -70,6 +71,16 @@ export async function GET(request: NextRequest) {
       { wch: 12 }, { wch: 20 }, { wch: 30 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 20 },
     ]
     worksheet['!cols'] = colWidths
+
+    const totalMontant = depenses.reduce((s, d) => s + d.montant, 0)
+    const totalMontantPaye = depenses.reduce((s, d) => s + (d.montantPaye || 0), 0)
+    XLSX.utils.sheet_add_aoa(worksheet, [
+      ['Total', '', '', '', totalMontant, totalMontantPaye, '', '', ''],
+      ['', '', '', '', '', '', '', '', ''],
+      ['Récapitulatif', '', '', '', '', '', '', '', ''],
+      ['Total Montant', '', '', '', totalMontant, '', '', '', ''],
+      ['Total Montant payé', '', '', '', '', totalMontantPaye, '', '', ''],
+    ], { origin: data.length + 3 })
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     const filename = `depenses-${new Date().toISOString().split('T')[0]}.xlsx`

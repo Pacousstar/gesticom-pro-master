@@ -532,7 +532,7 @@ export default function TousLesAchatsPage() {
              <p className="text-sm font-black uppercase tracking-widest italic">Aucun mouvement</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto no-print">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-left">

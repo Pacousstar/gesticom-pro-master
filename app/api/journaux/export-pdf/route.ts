@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
@@ -11,15 +12,21 @@ export async function GET(request: NextRequest) {
   const authError = requirePermission(session, 'comptabilite:export')
   if (authError) return authError
 
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
+
   try {
     const typeParam = request.nextUrl.searchParams.get('type')?.trim()
-    const where: { type?: string } = {}
+    const where: { type?: string; entiteId?: number } = { entiteId }
     if (typeParam && ['ACHATS', 'VENTES', 'BANQUE', 'CAISSE', 'OD'].includes(typeParam)) {
       where.type = typeParam
     }
 
     const journaux = await prisma.journal.findMany({
       where,
+      take: 10000,
       orderBy: [{ type: 'asc' }, { code: 'asc' }],
       select: {
         id: true,
@@ -67,6 +74,14 @@ export async function GET(request: NextRequest) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
+        doc.setFont(undefined, 'bold')
+        doc.text('Code', margin, currentY)
+        doc.text('Libellé', margin + 30, currentY)
+        doc.text('Type', margin + 100, currentY)
+        doc.text('Statut', margin + 130, currentY)
+        currentY += lineHeight
+        doc.line(margin, currentY - 2, 190, currentY - 2)
+        doc.setFont(undefined, 'normal')
       }
 
       const libelle = j.libelle.length > 30 ? j.libelle.substring(0, 30) + '...' : j.libelle

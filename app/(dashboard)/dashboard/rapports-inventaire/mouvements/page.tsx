@@ -71,6 +71,15 @@ useEffect(() => {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => { })
   }, [])
 
+  // Recherche temps réel : mise à jour à chaque frappe avec debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1)
+      fetchData(startDate, endDate, selectedProduct, selectedMagasin, selectedType, 1, search)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const loadFilters = async () => {
     try {
       const [prodRes, magRes] = await Promise.all([
@@ -119,8 +128,7 @@ useEffect(() => {
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1)
-    setSearch('')
-    fetchData(startDate, endDate, selectedProduct, selectedMagasin, selectedType, 1, '')
+    fetchData(startDate, endDate, selectedProduct, selectedMagasin, selectedType, 1, search)
   }
 
   const handlePageChange = (newPage: number) => {
@@ -213,7 +221,8 @@ useEffect(() => {
                       m.observation || ''
                     ].join(';'))
                   ].join('\n')
-                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                  const bom = '\uFEFF'
+                  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' })
                   const blobUrl = window.URL.createObjectURL(blob)
                   const a = document.createElement('a')
                   a.href = blobUrl
@@ -397,10 +406,7 @@ useEffect(() => {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              setCurrentPage(1)
-              fetchData(startDate, endDate, selectedProduct, selectedMagasin, selectedType, 1, search)
-            }
+            if (e.key === 'Enter') e.preventDefault()
           }}
           className="w-full rounded-lg border border-gray-200 py-3 pl-10 pr-4 focus:border-blue-500 focus:outline-none shadow-sm"
         />

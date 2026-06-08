@@ -127,15 +127,16 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  const totalRealPaye = dataWithRealPaye.reduce((s, a) => s + (a.montantPaye || 0), 0)
-  const totalMontant = dataWithRealPaye.reduce((s, a) => s + (a.montantTotal || 0), 0)
+  // Utiliser l'agrégat SQL pour les totaux (couvre TOUS les achats filtrés, pas seulement la page)
+  const totalMontant = aggregates._sum.montantTotal || 0
+  const totalPaye = aggregates._sum.montantPaye || 0
 
   const res = NextResponse.json({
     data: dataWithRealPaye,
     totals: {
       montantTotal: totalMontant,
-      montantPaye: totalRealPaye,
-      resteAPayer: Math.max(0, totalMontant - totalRealPaye),
+      montantPaye: totalPaye,
+      resteAPayer: Math.max(0, totalMontant - totalPaye),
     },
     pagination: {
       page,

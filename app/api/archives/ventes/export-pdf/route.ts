@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
@@ -21,10 +22,11 @@ export async function GET(request: NextRequest) {
         lte: new Date(dateFin + 'T23:59:59'),
       }
     }
-    where.entiteId = session.entiteId
+    where.entiteId = await getEntiteId(session)
 
     const archives = await prisma.archiveVente.findMany({
       where,
+      take: 10000,
       orderBy: { date: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest) {
     doc.setFont(undefined, 'bold')
     doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
     doc.text('TOTAUX', colPositions.numero, currentY)
-    doc.text(totalMontant.toLocaleString('fr-FR') + ' F', colPositions.montant, currentY, { align: 'right' })
+    doc.text(`${totalMontant.toLocaleString('fr-FR')} F`, colPositions.montant, currentY, { align: 'right' })
 
     const totalPages = doc.internal.pages.length - 1
     for (let i = 1; i <= totalPages; i++) {

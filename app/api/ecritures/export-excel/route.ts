@@ -96,6 +96,10 @@ export async function GET(request: NextRequest) {
     ]
     ws['!cols'] = colWidths
 
+    const totalDebit = ecritures.reduce((s, e) => s + e.debit, 0)
+    const totalCredit = ecritures.reduce((s, e) => s + e.credit, 0)
+    XLSX.utils.sheet_add_aoa(ws, [['', '', '', '', '', '', totalDebit, totalCredit, '', '', '']], { origin: rows.length + 3 })
+
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Écritures')
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })

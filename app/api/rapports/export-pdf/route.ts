@@ -143,6 +143,14 @@ export async function GET(request: NextRequest) {
         if (y > pageHeight - 30) {
           doc.addPage()
           y = 20
+          doc.setFont(undefined, 'bold')
+          doc.text('Produit', margin, y)
+          doc.text('Magasin', margin + 80, y)
+          doc.text('Stock', margin + 130, y, { align: 'right' })
+          doc.text('Seuil', margin + 160, y, { align: 'right' })
+          y += lineHeight
+          doc.line(margin, y - 2, 190, y - 2)
+          doc.setFont(undefined, 'normal')
         }
         doc.text(a.produit.length > 30 ? a.produit.substring(0, 30) + '...' : a.produit, margin, y)
         doc.text(a.magasin.length > 20 ? a.magasin.substring(0, 20) + '...' : a.magasin, margin + 80, y)
@@ -182,6 +190,12 @@ export async function GET(request: NextRequest) {
         if (y > pageHeight - 30) {
           doc.addPage()
           y = 20
+          doc.setFont(undefined, 'bold')
+          doc.text('Produit', margin, y)
+          doc.text('Quantité vendue', margin + 130, y, { align: 'right' })
+          y += lineHeight
+          doc.line(margin, y - 2, 190, y - 2)
+          doc.setFont(undefined, 'normal')
         }
         doc.text(t.produit.length > 50 ? t.produit.substring(0, 50) + '...' : t.produit, margin, y)
         doc.text(String(t.total), margin + 130, y, { align: 'right' })

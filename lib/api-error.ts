@@ -55,6 +55,21 @@ export function handleApiError(error: unknown): NextResponse {
     }, { status: 400 })
   }
 
+  if (error instanceof Error) {
+    if (error.message.includes('Stock insuffisant')) {
+      return NextResponse.json({
+        error: error.message,
+        code: 'INSUFFICIENT_STOCK'
+      }, { status: 409 })
+    }
+    if (error.message.includes('DOUBLE_TRANSACTION')) {
+      return NextResponse.json({
+        error: 'Cette opération a déjà été enregistrée.',
+        code: 'IDEMPOTENCY_CONFLICT'
+      }, { status: 409 })
+    }
+  }
+
   console.error('[ApiError] Unhandled:', error)
   return NextResponse.json({
     error: 'Erreur serveur. Veuillez réessayer plus tard.',

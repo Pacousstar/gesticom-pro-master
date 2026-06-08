@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
 
   const stats = { ESPECES: 0, MOBILE_MONEY: 0, VIREMENT: 0, CHEQUE: 0 }
   const ouvertures = { ESPECES: 0, MOBILE_MONEY: 0, VIREMENT: 0, CHEQUE: 0 }
+  const mouvements = { ESPECES: { entrees: 0, sorties: 0 }, MOBILE_MONEY: { entrees: 0, sorties: 0 }, VIREMENT: { entrees: 0, sorties: 0 }, CHEQUE: { entrees: 0, sorties: 0 } }
 
   // --- 5. CALCUL DU SOLDE D'OUVERTURE (Avant dateDebut) ---
   if (dateDebut) {
@@ -184,39 +185,61 @@ export async function GET(request: NextRequest) {
   // Agrégation Ventes (Période)
   reglementsVente.forEach(r => {
     const mode = mapMode(r.modePaiement) as keyof typeof stats
-    if (stats[mode] !== undefined) stats[mode] += r.montant
+    if (stats[mode] !== undefined) {
+      stats[mode] += r.montant
+      mouvements[mode].entrees += r.montant
+    }
   })
 
   // Agrégation Achats (Période)
   reglementsAchat.forEach(r => {
     const mode = mapMode(r.modePaiement) as keyof typeof stats
-    if (stats[mode] !== undefined) stats[mode] -= r.montant
+    if (stats[mode] !== undefined) {
+      stats[mode] -= r.montant
+      mouvements[mode].sorties += r.montant
+    }
   })
 
   // Agrégation Caisse (Manuelle - Période)
   caisseMouvements.forEach(c => {
-    if (c.type === 'ENTREE') stats.ESPECES += c.montant
-    else stats.ESPECES -= c.montant
+    if (c.type === 'ENTREE') {
+      stats.ESPECES += c.montant
+      mouvements.ESPECES.entrees += c.montant
+    } else {
+      stats.ESPECES -= c.montant
+      mouvements.ESPECES.sorties += c.montant
+    }
   })
 
   // Agrégation OP BANQUE (Période) — on exclut les types déjà comptés via reglements, depenses et charges
   opsBancaires.forEach(o => {
     if (['REGLEMENT_CLIENT', 'REGLEMENT_FOURNISSEUR', 'VENTE', 'ACHAT', 'DEPENSE', 'CHARGE'].includes(o.type)) return
     const isEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(o.type)
-    if (isEntree) stats.VIREMENT += o.montant
-    else stats.VIREMENT -= o.montant
+    if (isEntree) {
+      stats.VIREMENT += o.montant
+      mouvements.VIREMENT.entrees += o.montant
+    } else {
+      stats.VIREMENT -= o.montant
+      mouvements.VIREMENT.sorties += o.montant
+    }
   })
 
   // Agrégation Depenses (Période) — montantPaye payé uniquement
   depenses.forEach(d => {
     const mode = mapMode(d.modePaiement) as keyof typeof stats
-    if (stats[mode] !== undefined) stats[mode] -= d.montantPaye
+    if (stats[mode] !== undefined) {
+      stats[mode] -= d.montantPaye
+      mouvements[mode].sorties += d.montantPaye
+    }
   })
 
   // Agrégation Charges (Période)
   charges.forEach(c => {
     const mode = mapMode(c.modePaiement) as keyof typeof stats
-    if (stats[mode] !== undefined) stats[mode] -= c.montant
+    if (stats[mode] !== undefined) {
+      stats[mode] -= c.montant
+      mouvements[mode].sorties += c.montant
+    }
   })
 
   // RC7 : Crédits fournisseurs — filtrer aussi les achats annulés
@@ -238,6 +261,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ 
     stats, 
     ouvertures,
+    mouvements,
     credits: {
       client: { total: creditClientTotal, count: creditsClients.length },
       fournisseur: { total: creditFournisseurTotal, count: creditsFournisseurs.length }

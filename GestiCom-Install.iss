@@ -1,10 +1,10 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
 ; Version 2.5.0 - Production Finale
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "3.4.4"
+#define MyAppVersion "3.23.1"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
-#define MyAppExeName "GestiComService.exe"
+#define MyAppExeName "node.exe"
 
 [Setup]
 AppId={{D37E7A1C-8A9E-4C2B-A6D2-B9E08B7A1C2B}}
@@ -56,10 +56,8 @@ Source: "public\*"; DestDir: "{app}\public"; Flags: ignoreversion recursesubdirs
 ; Prisma : indispensable pour la base de données
 Source: "prisma\schema.prisma"; DestDir: "{app}\prisma"; Flags: ignoreversion
 
-; Moteur Node.js et Service Windows (WinSW)
+; Moteur Node.js
 Source: "node.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "GestiComService.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "GestiComService.xml"; DestDir: "{app}"; Flags: ignoreversion
 
 ; IMPORTANT: Tous les packages Prisma nécessaires pour la CLI (migration, seed, debug)
 ; Ces packages ne sont PAS inclus dans le standalone Next.js, ils sont copiés depuis le projet.
@@ -73,16 +71,18 @@ Source: ".env"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist uninsne
 Source: "prisma\gesticom.db"; DestDir: "C:\gesticom"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall
 
 ; Scripts VITAUX uniquement
+Source: "start.js"; DestDir: "{app}"; Flags: ignoreversion
 Source: "scripts\standalone-launcher.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\maintenance-runner.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\seed.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\sauvegarde-bd.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "scripts\demarrer-serveur.vbs"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "LANCER-SILENCIEUX.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "http://127.0.0.1:3001"; IconFilename: "{app}\public\gesticom.ico"
+Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\scripts\demarrer-serveur.vbs"""; IconFilename: "{app}\public\gesticom.ico"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "http://127.0.0.1:3001"; IconFilename: "{app}\public\gesticom.ico"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\scripts\demarrer-serveur.vbs"""; IconFilename: "{app}\public\gesticom.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 ; Supprimer le verrou "rebuild-ecritures" pour relance automatique lors de chaque MAJ
@@ -92,16 +92,8 @@ Filename: "cmd"; Parameters: "/C if exist ""C:\gesticom\maintenance\rebuild-ecri
 ; Optimisation et Recalcul automatique de la base de données (MAJ)
 Filename: "{app}\node.exe"; Parameters: "{app}\scripts\maintenance-runner.js"; Flags: runhidden; StatusMsg: "Optimisation des données et calcul des soldes..."
 
-; Installation et démarrage du service silencieux en fin d'install
-Filename: "{app}\{#MyAppExeName}"; Parameters: "install"; Flags: runhidden
-Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Flags: runhidden
-; Lancement automatique du navigateur vers l'application
-Filename: "explorer"; Parameters: "http://127.0.0.1:3001"; Flags: postinstall shellexec; Description: "Lancer GestiCom Pro"
-
-[UninstallRun]
-; Nettoyage propre lors de la suppression du logiciel
-Filename: "{app}\{#MyAppExeName}"; Parameters: "stop"; Flags: runhidden; RunOnceId: "StopService"
-Filename: "{app}\{#MyAppExeName}"; Parameters: "uninstall"; Flags: runhidden; RunOnceId: "UninstallService"
+; Lancement totalement invisible (via wscript.exe qui n'ouvre AUCUNE console)
+Filename: "wscript.exe"; Parameters: "{app}\scripts\demarrer-serveur.vbs"; Flags: postinstall nowait skipifsilent; StatusMsg: "Démarrage du serveur GestiCom..."; Description: "Lancer GestiCom Pro"
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;

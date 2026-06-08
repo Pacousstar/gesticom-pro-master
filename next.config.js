@@ -12,10 +12,26 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkgVersion,
   },
+  outputFileTracingIncludes: {
+    '/api/**': ['./node_modules/jspdf/**/*'],
+  },
   outputFileTracingExcludes: {
     '*': [
       '**/api/sauvegarde/**/*',
       '**/backups/**/*',
+      '**/GestiCom-Pro-*-Setup.exe',
+      '**/*.iss',
+      '**/node.exe',
+      '**/*.vbs',
+      '**/*.bat',
+      '**/*.db',
+      '**/*.db-*',
+      '**/*.xlsx',
+      '**/*.sql',
+      '**/*.md',
+      '**/*.pem',
+      '**/*.rtf',
+      '**/*.disabled',
     ],
   },
 };

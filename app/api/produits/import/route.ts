@@ -45,8 +45,9 @@ export async function POST(req: NextRequest) {
     let updated = 0
 
     for (const row of data) {
+      const normalizeKey = (k: string) => k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_-]+/g, '_').trim()
       const getVal = (keys: string[]) => {
-        const foundKey = Object.keys(row).find(k => keys.includes(k.trim().toLowerCase()))
+        const foundKey = Object.keys(row).find(k => keys.includes(normalizeKey(k)))
         return foundKey ? row[foundKey] : null
       }
 

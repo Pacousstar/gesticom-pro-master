@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
 
     const ecritures = await prisma.ecritureComptable.findMany({
       where,
+      take: 20000,
       orderBy: [{ compteId: 'asc' }, { date: 'asc' }],
       include: {
         journal: { select: { code: true, libelle: true } },
@@ -92,9 +93,17 @@ export async function GET(request: NextRequest) {
       return { ...gl, solde }
     })
 
+    // Grand totals
+    let grandTotalDebit = 0
+    let grandTotalCredit = 0
+    let grandTotalSolde = 0
+
     // Préparer les données pour Excel
     const rows: any[] = []
     for (const entry of result) {
+      grandTotalDebit += entry.soldeDebit
+      grandTotalCredit += entry.soldeCredit
+      grandTotalSolde += entry.solde
       // En-tête du compte
       rows.push({
         Compte: `${entry.compte.numero} - ${entry.compte.libelle}`,
@@ -145,6 +154,18 @@ export async function GET(request: NextRequest) {
         Solde: '',
       })
     }
+
+    // Grand total row
+    rows.push({
+      Compte: '',
+      Date: '',
+      Journal: '',
+      Pièce: '',
+      Libellé: 'TOTAL GÉNÉRAL',
+      Débit: grandTotalDebit,
+      Crédit: grandTotalCredit,
+      Solde: grandTotalSolde,
+    })
 
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Compte: '', Date: '', Journal: '', Pièce: '', Libellé: '', Débit: '', Crédit: '', Solde: '' }])
     const colWidths = [

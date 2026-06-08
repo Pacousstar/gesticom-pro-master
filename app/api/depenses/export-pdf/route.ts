@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { jsPDF } = require('jspdf')
@@ -22,10 +23,9 @@ export async function GET(request: NextRequest) {
     const magasinId = request.nextUrl.searchParams.get('magasinId')?.trim()
 
     const where: any = {}
-    
-    if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-      where.entiteId = session.entiteId
-    }
+
+    const entiteId = await getEntiteId(session)
+    if (entiteId) where.entiteId = entiteId
 
     if (dateDebut && dateFin) {
       where.date = {
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
 
     const depenses = await prisma.depense.findMany({
       where,
+      take: 10000,
       orderBy: { date: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },

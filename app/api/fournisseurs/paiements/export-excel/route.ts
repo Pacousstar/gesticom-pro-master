@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
   try {
     const paiements = await prisma.reglementAchat.findMany({
       where,
+      take: 10000,
       include: {
         fournisseur: { select: { nom: true } },
         achat: { select: { numero: true } },

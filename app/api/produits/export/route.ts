@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       include: {
         stocks: { select: { id: true, magasinId: true, quantite: true } }
       },
+      take: 10000,
     })
 
     const rows: any[] = []

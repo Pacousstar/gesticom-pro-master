@@ -92,7 +92,7 @@ export default function ProduitHistoriquePage() {
       </div>
 
       {/* STATS RAPIDES */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
         <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl flex items-center gap-6">
           <div className="h-16 w-16 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600">
              <ShoppingCart className="h-8 w-8" />
@@ -123,7 +123,7 @@ export default function ProduitHistoriquePage() {
       </div>
 
       {/* JOURNAL DES OPÉRATIONS */}
-      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
+      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden no-print">
         <div className="bg-gray-50/50 px-8 py-6 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter italic flex items-center gap-2">
                <History className="h-5 w-5 text-orange-500" /> Chronologie des Transactions

@@ -229,7 +229,7 @@ export default function PlanComptesPage() {
           <p className="mt-4 text-gray-600">Aucun compte trouvé</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden no-print">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">

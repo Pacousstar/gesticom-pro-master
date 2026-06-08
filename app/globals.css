@@ -188,4 +188,12 @@ tbody td {
   .print\:hidden {
     display: none !important;
   }
+  .print\:block {
+    position: static !important;
+    inset: auto !important;
+  }
+  main {
+    height: auto !important;
+    overflow: visible !important;
+  }
 }

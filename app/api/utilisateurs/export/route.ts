@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
 
     const utilisateurs = await prisma.utilisateur.findMany({
       where,
+      take: 10000,
       select: {
         login: true,
         nom: true,

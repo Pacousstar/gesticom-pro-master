@@ -148,13 +148,36 @@ export async function PATCH(
         },
       })
 
-      // RD1: Re-comptabiliser si la dépense est payée
+      // RD1: Toujours nettoyer les anciennes écritures comptables
+      await deleteEcrituresByReference('DEPENSE', id, tx)
+
+      // Nettoyer les anciens mouvements de trésorerie (toujours)
+      await tx.caisse.deleteMany({
+        where: {
+          entiteId: d.entiteId,
+          type: 'SORTIE',
+          motif: { contains: `Dépense #${id}` }
+        }
+      })
+      const oldOpsBancaires = await tx.operationBancaire.findMany({
+        where: {
+          entiteId: d.entiteId,
+          libelle: { contains: `Dépense #${id}` }
+        }
+      })
+      for (const op of oldOpsBancaires) {
+        await tx.banque.update({
+          where: { id: op.banqueId },
+          data: { soldeActuel: { increment: op.montant } }
+        })
+        await tx.operationBancaire.delete({ where: { id: op.id } })
+      }
+
+      // RD2: Re-comptabiliser et re-synchroniser si la dépense est payée
       const shouldComptabiliser = d.statutPaiement === 'PAYE' || (d.montantPaye && d.montantPaye > 0)
       if (shouldComptabiliser) {
         const montantCompta = d.montantPaye && d.montantPaye > 0 ? d.montantPaye : d.montant
 
-        // Supprimer les anciennes écritures et re-créer
-        await deleteEcrituresByReference('DEPENSE', id, tx)
         await comptabiliserDepense({
           depenseId: d.id,
           date: d.date,
@@ -167,71 +190,43 @@ export async function PATCH(
           magasinId: d.magasinId,
           entiteId: d.entiteId,
         }, tx)
-      }
 
-      // RD2: Re-synchroniser la trésorerie (caisse ou banque)
-      if (shouldComptabiliser && d.montantPaye && d.montantPaye > 0) {
-        // Nettoyer les anciens mouvements de trésorerie (par motif exact basé sur l'ID)
-        await tx.caisse.deleteMany({
-          where: {
-            entiteId: d.entiteId,
-            type: 'SORTIE',
-            motif: { contains: `Dépense #${id}` }
-          }
-        })
-
-        // Supprimer les anciennes opérations bancaires (par libellé basé sur l'ID)
-        const oldOpsBancaires = await tx.operationBancaire.findMany({
-          where: {
-            entiteId: d.entiteId,
-            libelle: { contains: `Dépense #${id}` }
-          }
-        })
-        for (const op of oldOpsBancaires) {
-          await tx.banque.update({
-            where: { id: op.banqueId },
-            data: { soldeActuel: { increment: op.montant } }
-          })
-          await tx.operationBancaire.delete({ where: { id: op.id } })
-        }
-
-        // Créer les nouveaux mouvements de trésorerie
-        if (estModeEspeces(d.modePaiement)) {
-          // Espèces → caisse
-          let targetMagasinId = d.magasinId
-          if (!targetMagasinId) {
-            const firstMag = await tx.magasin.findFirst({
-              where: { entiteId: d.entiteId },
-              select: { id: true }
-            })
-            if (firstMag) targetMagasinId = firstMag.id
-          }
-          if (targetMagasinId) {
-            await enregistrerMouvementCaisse({
-              magasinId: targetMagasinId,
-              type: 'SORTIE',
-              motif: `Dépense #${d.id} : ${d.libelle}${d.beneficiaire ? ' (' + d.beneficiaire + ')' : ''}`,
-              montant: d.montantPaye,
-              utilisateurId: session.userId,
-              entiteId: d.entiteId,
-              date: d.date,
-            }, tx)
-          }
-        } else if (d.modePaiement !== 'CREDIT') {
-          // Banque (virement, mobile money, cheque)
-          if (d.banqueId) {
-            await enregistrerOperationBancaire({
-              banqueId: d.banqueId,
-              entiteId: d.entiteId,
-              date: d.date,
-              type: 'DEPENSE',
-              libelle: `Dépense #${d.id} : ${d.libelle}`,
-              montant: d.montantPaye,
-              utilisateurId: session.userId,
-              reference: d.pieceJustificative || `EXP-${d.id}`,
-              beneficiaire: d.beneficiaire || null,
-              observation: d.observation
-            }, tx)
+        if (d.montantPaye && d.montantPaye > 0) {
+          if (estModeEspeces(d.modePaiement)) {
+            let targetMagasinId = d.magasinId
+            if (!targetMagasinId) {
+              const firstMag = await tx.magasin.findFirst({
+                where: { entiteId: d.entiteId },
+                select: { id: true }
+              })
+              if (firstMag) targetMagasinId = firstMag.id
+            }
+            if (targetMagasinId) {
+              await enregistrerMouvementCaisse({
+                magasinId: targetMagasinId,
+                type: 'SORTIE',
+                motif: `Dépense #${d.id} : ${d.libelle}${d.beneficiaire ? ' (' + d.beneficiaire + ')' : ''}`,
+                montant: d.montantPaye,
+                utilisateurId: session.userId,
+                entiteId: d.entiteId,
+                date: d.date,
+              }, tx)
+            }
+          } else if (d.modePaiement !== 'CREDIT') {
+            if (d.banqueId) {
+              await enregistrerOperationBancaire({
+                banqueId: d.banqueId,
+                entiteId: d.entiteId,
+                date: d.date,
+                type: 'DEPENSE',
+                libelle: `Dépense #${d.id} : ${d.libelle}`,
+                montant: d.montantPaye,
+                utilisateurId: session.userId,
+                reference: d.pieceJustificative || `EXP-${d.id}`,
+                beneficiaire: d.beneficiaire || null,
+                observation: d.observation
+              }, tx)
+            }
           }
         }
       }
@@ -240,8 +235,11 @@ export async function PATCH(
     }, { timeout: 20000 })
 
     // Recalculer le solde de la caisse après modification
-    if (depense.magasinId) {
-      await recalculerSoldeCaisse(depense.magasinId)
+    const magasinsAReCalculer = new Set<number>()
+    if (oldDepense.magasinId) magasinsAReCalculer.add(oldDepense.magasinId)
+    if (depense.magasinId) magasinsAReCalculer.add(depense.magasinId)
+    for (const mId of magasinsAReCalculer) {
+      await recalculerSoldeCaisse(mId)
     }
 
     revalidatePath('/dashboard/depenses')

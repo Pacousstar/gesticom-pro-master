@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
 
   const archives = await prisma.archiveVente.findMany({
     where,
+    take: 10000,
     include: {
       client: { select: { nom: true } },
       magasin: { select: { code: true } },

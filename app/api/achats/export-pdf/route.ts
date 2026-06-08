@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
 
     const achats = await prisma.achat.findMany({
       where,
+      take: 10000,
       orderBy: { date: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },

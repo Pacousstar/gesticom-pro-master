@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
 
     const ecritures = await prisma.ecritureComptable.findMany({
       where,
+      take: 10000,
       orderBy: [{ compteId: 'asc' }, { date: 'asc' }],
       include: {
         compte: { select: { id: true, numero: true, libelle: true, classe: true, type: true } },
@@ -102,8 +103,17 @@ export async function GET(request: NextRequest) {
     // Préparer les données pour Excel
     const rows: any[] = []
     let currentClasse = ''
+
+    // Pre-compute which indices are the last of each classe (O(n) instead of O(n²))
+    const lastOfClasse = new Set<string>()
+    for (let i = result.length - 1; i >= 0; i--) {
+      if (!lastOfClasse.has(result[i].compte.classe)) {
+        lastOfClasse.add(result[i].compte.classe)
+      }
+    }
     
-    for (const entry of result) {
+    for (let idx = 0; idx < result.length; idx++) {
+      const entry = result[idx]
       if (entry.compte.classe !== currentClasse) {
         currentClasse = entry.compte.classe
         // En-tête de classe
@@ -129,8 +139,8 @@ export async function GET(request: NextRequest) {
       })
       
       // Total de classe si c'est le dernier de la classe
-      const isLastOfClasse = result.findIndex((e, idx) => idx > result.indexOf(entry) && e.compte.classe === currentClasse) === -1
-      if (isLastOfClasse && totauxParClasse[currentClasse]) {
+      const isLast = idx === result.length - 1 || result[idx + 1].compte.classe !== currentClasse
+      if (isLast && totauxParClasse[currentClasse]) {
         rows.push({
           Classe: '',
           Numéro: '',

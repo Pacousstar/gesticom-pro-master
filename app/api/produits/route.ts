@@ -66,6 +66,16 @@ export async function GET(request: NextRequest) {
   }
 
   const baseWhere = complet ? { ...whereEntite } : { ...whereEntite, actif: true }
+  const searchWhere = q
+    ? {
+        ...baseWhere,
+        OR: [
+          { code: { contains: q } },
+          { designation: { contains: q } },
+          { categorie: { contains: q } },
+        ],
+      }
+    : baseWhere
 
   if (complet) {
     const produits = await prisma.produit.findMany({
@@ -103,7 +113,7 @@ export async function GET(request: NextRequest) {
 
   const [produits, total] = await Promise.all([
     prisma.produit.findMany({
-      where: baseWhere,
+      where: searchWhere,
       skip,
       take: limit,
       orderBy: [{ categorie: 'asc' }, { code: 'asc' }],
@@ -113,7 +123,7 @@ export async function GET(request: NextRequest) {
         }
       }
     }),
-    prisma.produit.count({ where: baseWhere }),
+    prisma.produit.count({ where: searchWhere }),
   ])
 
   const data = produits.map(p => ({
@@ -121,22 +131,13 @@ export async function GET(request: NextRequest) {
     stockConsolide: p.stocks.reduce((sum, s) => sum + s.quantite, 0)
   }))
 
-  const filtered = q
-    ? data.filter(
-      (p) =>
-        p.code.toLowerCase().includes(q) ||
-        p.designation.toLowerCase().includes(q) ||
-        p.categorie.toLowerCase().includes(q)
-    )
-    : data
-
   const res = NextResponse.json({
-    data: filtered,
+    data,
     pagination: {
       page,
       limit,
-      total: filtered.length,
-      totalPages: Math.ceil(filtered.length / limit),
+      total,
+      totalPages: Math.ceil(total / limit),
     },
   })
   res.headers.set('Cache-Control', 'no-store, max-age=0')

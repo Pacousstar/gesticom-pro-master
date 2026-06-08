@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
@@ -13,24 +14,31 @@ export async function GET(
     const authError = requirePermission(session, 'clients:view')
     if (authError) return authError
 
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+        return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
+
     try {
         const id = Number((await params).id)
         if (!id) return NextResponse.json({ error: 'ID Client requis' }, { status: 400 })
 
         const client = await prisma.client.findUnique({
             where: { id },
-            select: { nom: true, code: true, soldeInitial: true, avoirInitial: true }
+            select: { nom: true, code: true, soldeInitial: true, avoirInitial: true, entiteId: true }
         })
-        if (!client) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 })
+        if (!client || client.entiteId !== entiteId) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 })
 
         const ventes = await prisma.vente.findMany({
             where: { clientId: id, statut: 'VALIDEE' },
+            take: 10000,
             orderBy: { date: 'asc' },
             select: { numero: true, date: true, montantTotal: true }
         })
 
         const reglements = await prisma.reglementVente.findMany({
             where: { clientId: id },
+            take: 10000,
             orderBy: { date: 'asc' },
             select: { date: true, montant: true, modePaiement: true }
         })
@@ -67,6 +75,13 @@ export async function GET(
 
         const wb = XLSX.utils.book_new()
         const ws = XLSX.utils.json_to_sheet(rows)
+
+        if (rows.length > 0) {
+          const totalDebit = rows.reduce((s, r) => s + (Number(r.Débit) || 0), 0)
+          const totalCredit = rows.reduce((s, r) => s + (Number(r.Crédit) || 0), 0)
+          XLSX.utils.sheet_add_aoa(ws, [['', 'TOTAL', totalDebit, totalCredit, solde]], { origin: rows.length + 1 })
+        }
+
         XLSX.utils.book_append_sheet(wb, ws, 'Compte Courant')
         
         const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })

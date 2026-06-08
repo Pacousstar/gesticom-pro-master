@@ -421,7 +421,7 @@ export default function EcrituresPage() {
           <p className="mt-4 text-gray-600">Aucune écriture trouvée</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 no-print">
           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">

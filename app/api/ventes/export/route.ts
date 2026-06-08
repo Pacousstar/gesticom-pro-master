@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
 
   const ventes = await prisma.vente.findMany({
     where,
+    take: 10000,
     include: {
       client: { select: { code: true, nom: true } },
       magasin: { select: { code: true } },

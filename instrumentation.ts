@@ -2,12 +2,12 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     try {
       const { prisma } = await import('@/lib/db')
-      const { repairCaisseIntegrity, repairStockIntegrity, repairBankIntegrity } = await import('@/lib/repair')
+      const { repairCaisseIntegrity, repairBankIntegrity } = await import('@/lib/repair')
 
       console.log('[GestiCom] Démarrage : réalignement automatique des soldes...')
 
       const caisses = await repairCaisseIntegrity()
-      const stocks = await repairStockIntegrity()
+      const stocks = 0 // repairStockIntegrity désactivé : recalcule les stocks via Mouvements, ce qui écrase les stocks initiaux (imports, inventaires)
       const banks = await repairBankIntegrity()
 
       if (caisses + stocks + banks > 0) {

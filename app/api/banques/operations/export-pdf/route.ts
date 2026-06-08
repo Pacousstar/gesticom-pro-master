@@ -141,8 +141,8 @@ export async function GET(request: NextRequest) {
       doc.text(typeLabel, 40, y)
       const libelle = op.libelle.length > 30 ? op.libelle.substring(0, 27) + '...' : op.libelle
       doc.text(libelle, 70, y)
-      doc.text(`${isEntree ? '+' : '-'} ${formatMontant(op.montant)} F`, 130, y)
-      doc.text(`${formatMontant(op.soldeApres)} F`, 160, y)
+      doc.text(`${isEntree ? '+' : '-'} ${formatMontant(op.montant)} F`, 125, y, { align: 'right' })
+      doc.text(`${formatMontant(op.soldeApres)} F`, 165, y, { align: 'right' })
 
       y += 7
     }
@@ -153,13 +153,13 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.setFont(undefined, 'bold')
     doc.text('Total dépôts:', 15, y)
-    doc.text(`${formatMontant(totalDepots)} F`, 130, y)
+    doc.text(`${formatMontant(totalDepots)} F`, 125, y, { align: 'right' })
     y += 5
     doc.text('Total retraits:', 15, y)
-    doc.text(`${formatMontant(totalRetraits)} F`, 130, y)
+    doc.text(`${formatMontant(totalRetraits)} F`, 125, y, { align: 'right' })
     y += 5
     doc.text('Solde net:', 15, y)
-    doc.text(`${formatMontant(totalDepots - totalRetraits)} F`, 130, y)
+    doc.text(`${formatMontant(totalDepots - totalRetraits)} F`, 125, y, { align: 'right' })
 
     const buffer = Buffer.from(doc.output('arraybuffer'))
     return new NextResponse(buffer, {

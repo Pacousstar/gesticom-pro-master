@@ -27,8 +27,8 @@ import {
 import KpiCard from '@/components/dashboard/KpiCard'
 import RecentActivity from '@/components/dashboard/RecentActivity'
 import SuggestionsAchat from '@/components/dashboard/SuggestionsAchat'
-
-
+import DonutChart from '@/components/dashboard/DonutChart'
+import CalendarHeatmap from '@/components/dashboard/CalendarHeatmap'
 
 type CreditAlert = {
   id: string
@@ -72,6 +72,8 @@ type DashboardData = {
   totalDettes: number
   totalCreances: number
   monthlyTrends: Array<{ month: string; current: number; previous: number }>
+  caParCategorie: Array<{ categorie: string; montant: number }>
+  caJournalier: Array<{ jour: number; montant: number }>
   systemAlertes?: SystemAlerte[]
   creditAlerts?: CreditAlert[]
   _timeout?: boolean
@@ -134,10 +136,11 @@ export default function DashboardPage() {
   }
 
   const { data, error, isLoading: loading, mutate, isValidating: refreshing } = useSWR<DashboardData>('/api/dashboard', fetcher, {
-    revalidateOnFocus: true,     // Recharge quand l'onglet redevient actif
-    revalidateIfStale: true,     // Recharge s'il y a plus récent
-    keepPreviousData: true,      // Affiche les anciennes données pendant le chargement au lieu d'un spinner
+    revalidateOnFocus: true,
+    revalidateIfStale: true,
+    keepPreviousData: true,
     errorRetryCount: 2,
+    refreshInterval: 60000,
   })
 
   // Permet de mettre le message d'erreur SWR dans un format exploitable
@@ -171,7 +174,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-6 pb-10 overflow-x-hidden max-w-full">
       {err && (
         <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 flex flex-col gap-1">
           <p className="font-bold flex items-center gap-2 underline"><AlertTriangle className="h-4 w-4" /> Problème de chargement</p>
@@ -241,26 +244,26 @@ export default function DashboardPage() {
       )}
 
 
-      {/* En-tête avec bouton actualiser */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Dashboard ERP</h1>
-          <p className="mt-1 text-white/80 text-sm font-medium">
-            Vue décisionnelle — Performances, stocks et activité en temps réel
-          </p>
-        </div>
-        <button
-          onClick={() => mutate()}
-          disabled={refreshing}
-          className="flex items-center gap-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20 transition-all disabled:opacity-60"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Actualiser
-        </button>
-      </div>
+       {/* En-tête avec bouton actualiser */}
+       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+         <div className="min-w-0">
+           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight break-words">Dashboard ERP</h1>
+           <p className="mt-1 text-white/80 text-xs sm:text-sm font-medium">
+             Vue décisionnelle — Performances, stocks et activité en temps réel
+           </p>
+         </div>
+         <button
+           onClick={() => mutate()}
+           disabled={refreshing}
+           className="flex items-center gap-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20 transition-all disabled:opacity-60 shrink-0"
+         >
+           <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+           Actualiser
+         </button>
+       </div>
 
       {/* KPIs Opérational & Financiers */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
             title: "Chiffre d'Affaire (Jour)",
@@ -304,7 +307,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 lg:grid-cols-5">
         {[
           {
             title: 'Transactions Jour',
@@ -495,6 +498,32 @@ export default function DashboardPage() {
         {/* Suggestions / IA */}
         <div className="flex flex-col h-full">
           <SuggestionsAchat />
+        </div>
+      </div>
+
+      {/* SECTION : DONUT CA PAR CATÉGORIE */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col rounded-2xl bg-white p-5 shadow-lg border border-gray-100">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-1.5 rounded-lg bg-orange-50 text-orange-600">
+              <BarChart3 className="h-4 w-4" />
+            </div>
+            <h2 className="text-sm font-black text-gray-900 uppercase tracking-tight">CA par catégorie</h2>
+          </div>
+          <DonutChart data={data?.caParCategorie || []} total={data?.caMois || 0} />
+        </div>
+
+        <div className="flex flex-col rounded-2xl bg-white p-5 shadow-lg border border-gray-100">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+              <LayoutGrid className="h-4 w-4" />
+            </div>
+            <h2 className="text-sm font-black text-gray-900 uppercase tracking-tight">Carte du mois</h2>
+          </div>
+          <CalendarHeatmap
+            data={data?.caJournalier || []}
+            mois={new Intl.DateTimeFormat('fr-FR', { month: 'long' }).format(new Date())}
+          />
         </div>
       </div>
 

@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
 
     const ecritures = await prisma.ecritureComptable.findMany({
       where,
+      take: 10000,
       orderBy: [{ compteId: 'asc' }, { date: 'asc' }],
       include: {
         compte: { select: { id: true, numero: true, libelle: true, classe: true, type: true } },

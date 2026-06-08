@@ -9,6 +9,8 @@ import { requireRole } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
+import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
 
 export async function POST(
   _request: NextRequest,
@@ -84,10 +86,10 @@ export async function POST(
       })
 
       // 3. Compenser les mouvements de trésorerie en fonction des règlements réels
-      const reglements = (v.reglements || []) as any[]
-      const totalEspeces = reglements.filter((r: any) => estModeEspeces(r.modePaiement)).reduce((s: number, r: any) => s + (r.montant || 0), 0)
+      const reglements = v.reglements || []
+      const totalEspeces = reglements.filter((r) => estModeEspeces(r.modePaiement)).reduce((s, r) => s + (r.montant || 0), 0)
         || (estModeEspeces(v.modePaiement) ? (v.montantPaye || 0) : 0)
-      const totalBanque = reglements.filter((r: any) => estModeBanque(r.modePaiement)).reduce((s: number, r: any) => s + (r.montant || 0), 0)
+      const totalBanque = reglements.filter((r) => estModeBanque(r.modePaiement)).reduce((s, r) => s + (r.montant || 0), 0)
         || (estModeBanque(v.modePaiement) ? (v.montantPaye || 0) : 0)
 
       if (totalEspeces > 0) {
@@ -138,7 +140,6 @@ export async function POST(
 
       // 4. Décrémenter les points de fidélité (1 point par 1000 FCFA)
       if (v.clientId && v.montantPaye && v.montantPaye > 0) {
-        const { pointsFideliteDepuisEncaissement } = await import('@/lib/calculs-commerciaux')
         const pointsADeduire = pointsFideliteDepuisEncaissement(v.montantPaye)
         if (pointsADeduire > 0) {
           await tx.client.update({
@@ -149,7 +150,6 @@ export async function POST(
       }
 
       // 5. Supprimer toutes les écritures comptables
-      const { deleteEcrituresByReference } = await import('@/lib/delete-ecritures')
       await deleteEcrituresByReference('VENTE', id, tx)
       await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
       await deleteEcrituresByReference('VENTE_STOCK', id, tx)

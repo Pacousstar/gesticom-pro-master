@@ -60,6 +60,15 @@ export default function ValeurStockPage() {
       .catch(() => { })
   }, [])
 
+  // Recherche temps réel : mise à jour à chaque frappe avec debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1)
+      fetchData(dateFin, selectedMagasin, 1, search, selectedCategorie)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const loadMagasins = async () => {
     try {
       const res = await fetch('/api/magasins')
@@ -97,8 +106,7 @@ export default function ValeurStockPage() {
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1)
-    setSearch('')
-    fetchData(dateFin, selectedMagasin, 1, '', selectedCategorie)
+    fetchData(dateFin, selectedMagasin, 1, search, selectedCategorie)
   }
 
   const handlePageChange = (newPage: number) => {
@@ -160,7 +168,8 @@ export default function ValeurStockPage() {
                     d.totals?.valeurTotal || 0
                   ].join(';')
                   
-                  const blob = new Blob([csv + '\n' + totalRow], { type: 'text/csv;charset=utf-8;' })
+                  const bom = '\uFEFF'
+                  const blob = new Blob([bom + csv + '\n' + totalRow], { type: 'text/csv;charset=utf-8;' })
                   const blobUrl = window.URL.createObjectURL(blob)
                   const a = document.createElement('a')
                   a.href = blobUrl
@@ -324,12 +333,9 @@ export default function ValeurStockPage() {
                 placeholder="Rechercher un produit..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setCurrentPage(1)
-                    fetchData(dateFin, selectedMagasin, 1, search, selectedCategorie)
-                  }
-                }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.preventDefault()
+          }}
                 className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 focus:border-emerald-500 shadow-sm focus:outline-none"
               />
             </div>

@@ -340,6 +340,35 @@ export default function PaiementsFournisseursPage() {
                             </tfoot>
                           )}
                         </table>
+                        {index === allChunks.length - 1 && (
+                          <div className="mt-4 border-2 border-black p-3">
+                            <div className="grid grid-cols-3 gap-3 mb-2">
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Total Décaissé</p>
+                                <p className="text-base font-black">{total.toLocaleString()} F</p>
+                              </div>
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Espèces</p>
+                                <p className="text-base font-black">{(totalsByMode['ESPECES'] || 0).toLocaleString()} F</p>
+                              </div>
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Mobile Money</p>
+                                <p className="text-base font-black">{(totalsByMode['MOBILE_MONEY'] || 0).toLocaleString()} F</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Chèque</p>
+                                <p className="text-base font-black">{(totalsByMode['CHEQUE'] || 0).toLocaleString()} F</p>
+                              </div>
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Virement</p>
+                                <p className="text-base font-black">{(totalsByMode['VIREMENT'] || 0).toLocaleString()} F</p>
+                              </div>
+                              <div className="border-2 border-black p-2 text-center"></div>
+                            </div>
+                          </div>
+                        )}
                       </ListPrintWrapper>
                     </div>
                   ))}
@@ -387,11 +416,40 @@ export default function PaiementsFournisseursPage() {
                             </tr>
                           </tfoot>
                         )}
-                      </table>
-                    </ListPrintWrapper>
-                  </div>
-                ))}
-      </div>
+                       </table>
+                        {index === allChunks.length - 1 && (
+                          <div className="mt-4 border-2 border-black p-3">
+                            <div className="grid grid-cols-3 gap-3 mb-2">
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Total Décaissé</p>
+                                <p className="text-base font-black">{total.toLocaleString()} F</p>
+                              </div>
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Espèces</p>
+                                <p className="text-base font-black">{(totalsByMode['ESPECES'] || 0).toLocaleString()} F</p>
+                              </div>
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Mobile Money</p>
+                                <p className="text-base font-black">{(totalsByMode['MOBILE_MONEY'] || 0).toLocaleString()} F</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Chèque</p>
+                                <p className="text-base font-black">{(totalsByMode['CHEQUE'] || 0).toLocaleString()} F</p>
+                              </div>
+                              <div className="border-2 border-black p-2 text-center">
+                                <p className="text-[9px] font-black uppercase tracking-widest">Virement</p>
+                                <p className="text-base font-black">{(totalsByMode['VIREMENT'] || 0).toLocaleString()} F</p>
+                              </div>
+                              <div className="border-2 border-black p-2 text-center"></div>
+                            </div>
+                          </div>
+                        )}
+                     </ListPrintWrapper>
+                   </div>
+                 ))}
+       </div>
     </div>
   )
 }

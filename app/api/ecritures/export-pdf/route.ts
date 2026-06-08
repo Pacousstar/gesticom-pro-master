@@ -116,6 +116,17 @@ export async function GET(request: NextRequest) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
+        doc.setFont(undefined, 'bold')
+        doc.text('Date', margin, currentY)
+        doc.text('N°', margin + 20, currentY)
+        doc.text('Journal', margin + 35, currentY)
+        doc.text('Compte', margin + 60, currentY)
+        doc.text('Libellé', margin + 90, currentY)
+        doc.text('Débit', margin + 150, currentY, { align: 'right' })
+        doc.text('Crédit', margin + 170, currentY, { align: 'right' })
+        currentY += lineHeight
+        doc.line(margin, currentY - 2, 200, currentY - 2)
+        doc.setFont(undefined, 'normal')
       }
 
       const dateStr = new Date(e.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })

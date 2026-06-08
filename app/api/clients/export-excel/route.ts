@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx-prototype-pollution-fixed')
@@ -11,12 +12,18 @@ export async function GET(request: NextRequest) {
   const authError = requirePermission(session, 'clients:view')
   if (authError) return authError
 
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
+
   try {
     const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
     
     // Récupérer tous les clients actifs
     const clients = await prisma.client.findMany({
-      where: { actif: true },
+      where: { actif: true, entiteId },
+      take: 10000,
       orderBy: { nom: 'asc' },
       select: { 
         id: true, 

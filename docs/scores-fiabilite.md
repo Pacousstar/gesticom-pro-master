@@ -165,3 +165,4 @@
 
 - TypeScript: `tsc --noEmit` → 0 erreur ✅
 - Compilation Next.js: Succès ✅
+

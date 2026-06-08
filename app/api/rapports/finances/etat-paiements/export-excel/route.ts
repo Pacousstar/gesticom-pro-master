@@ -15,6 +15,10 @@ export async function GET(request: NextRequest) {
   const dateFin = request.nextUrl.searchParams.get('dateFin')
   const filter = request.nextUrl.searchParams.get('filter') // 'TOUT', 'SOLDER', 'NON_SOLDER'
 
+  if (type && !['ACHAT', 'VENTE'].includes(type)) {
+    return NextResponse.json({ error: 'Type invalide' }, { status: 400 })
+  }
+
   const entiteId = await getEntiteId(session)
 
   const dateFilter = dateDebut && dateFin ? {
@@ -39,6 +43,7 @@ export async function GET(request: NextRequest) {
 
       const achats = await prisma.achat.findMany({
         where,
+        take: 10000,
         include: { 
           fournisseur: { select: { nom: true } },
           ReglementAchatLigne: { select: { montant: true } }
@@ -71,6 +76,7 @@ export async function GET(request: NextRequest) {
 
       const ventes = await prisma.vente.findMany({
         where,
+        take: 10000,
         include: { 
           client: { select: { nom: true } },
           ReglementVenteLigne: { select: { montant: true } }
@@ -91,6 +97,22 @@ export async function GET(request: NextRequest) {
           Statut: v.statutPaiement,
         })
       }
+    }
+
+    if (rows.length > 0) {
+      const totalTotal = rows.reduce((s, r) => s + (r['Montant Total'] || 0), 0)
+      const totalPaye = rows.reduce((s, r) => s + (r['Montant Payé'] || 0), 0)
+      const totalSolde = rows.reduce((s, r) => s + (r.Solde || 0), 0)
+      rows.push({
+        Type: 'TOTAL',
+        Date: '',
+        Numéro: '',
+        Tiers: '',
+        'Montant Total': totalTotal,
+        'Montant Payé': totalPaye,
+        Solde: totalSolde,
+        Statut: '',
+      })
     }
 
     const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{

@@ -5,12 +5,13 @@ import type { Session } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import { deleteEcrituresByReference, deleteEcrituresByReferenceForIds } from '@/lib/delete-ecritures'
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
 import { montantLigneTTC, htNetLigne, partFraisApprocheLigne, valeurAchatNetAvecFrais, nouveauPampApresAchatLigne } from '@/lib/calculs-commerciaux'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
+import { verifierCloture } from '@/lib/cloture'
 
 export async function GET(
   _request: NextRequest,
@@ -68,9 +69,8 @@ export async function DELETE(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
-  // VERROU DE SÉCURITÉ : Seul le SUPER_ADMIN peut supprimer définitivement une trace d'achat.
-  if (session!.role !== 'SUPER_ADMIN') {
-    return NextResponse.json({ error: 'Action interdite : Seul le Super Administrateur peut supprimer un achat définitivement pour garantir la traçabilité des stocks.' }, { status: 403 })
+  if (session!.role !== 'SUPER_ADMIN' && session!.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Action interdite : Seul le Super Administrateur ou l\'Administrateur peut supprimer un achat.' }, { status: 403 })
   }
 
   const id = Number((await params).id)
@@ -85,6 +85,8 @@ export async function DELETE(
         include: { lignes: true, reglements: true },
       })
       if (!a) throw new Error('Achat introuvable.')
+
+      await verifierCloture(a.date, session, tx)
 
       // 1. Nettoyer compta (Grand Livre)
       await deleteEcrituresByReference('ACHAT', id, tx)
@@ -316,9 +318,10 @@ const reglAchat = await tx.reglementAchat.create({
       const result = await prisma.$transaction(async (tx: any) => {
         const oldAchat = await tx.achat.findUnique({
           where: { id },
-          include: { lignes: true }
+          include: { lignes: true, reglements: true }
         })
         if (!oldAchat) throw new Error("Achat introuvable")
+        if (oldAchat.statut === 'ANNULEE') throw new Error("Achat annulé ne peut plus être modifié")
 
         // VERROU COMPTABLE : Interdiction de modifier un achat de plus de 24h (Sauf Super_Admin)
         const diffHeures = (new Date().getTime() - new Date(oldAchat.date).getTime()) / (1000 * 3600)
@@ -345,9 +348,19 @@ const reglAchat = await tx.reglementAchat.create({
         // 2. Nettoyer compta et règlements auto
         await deleteEcrituresByReference('ACHAT', id, tx)
         await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
+        if (oldAchat.reglements.length > 0) {
+          await deleteEcrituresByReferenceForIds('ACHAT_REGLEMENT', oldAchat.reglements.map((r: any) => r.id), tx)
+        }
         await deleteEcrituresByReference('ACHAT_STOCK', id, tx)
-await tx.reglementAchat.deleteMany({ where: { achatId: id } })
-        await tx.reglementAchatLigne.deleteMany({ where: { achatId: id } })
+
+        const regsData = Array.isArray(reglements) && reglements.length > 0
+          ? reglements
+          : oldAchat.reglements.map((r: any) => ({ mode: r.modePaiement, montant: r.montant, banqueId: r.banqueId }))
+
+        if (regsData.length > 0) {
+          await tx.reglementAchat.deleteMany({ where: { achatId: id } })
+          await tx.reglementAchatLigne.deleteMany({ where: { achatId: id } })
+        }
         // On supprime les mouvements de caisse liés exactement à ce numéro
         await tx.caisse.deleteMany({ 
           where: { 
@@ -418,7 +431,6 @@ await tx.reglementAchat.deleteMany({ where: { achatId: id } })
 
         const fApprocheTotal = Math.max(0, Number(fraisApproche || 0))
         const totalFinal = newTotalTTC + fApprocheTotal
-        const regsData = Array.isArray(reglements) ? reglements : []
         const mntPaye = regsData.reduce((acc: number, r: any) => {
           if (String(r.mode).toUpperCase() === 'CREDIT') return acc
           return acc + (Number(r.montant) || 0)

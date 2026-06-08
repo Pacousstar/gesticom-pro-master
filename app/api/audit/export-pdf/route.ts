@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.OR = [
         { description: { contains: search } },
-        { type: { contains: search, mode: 'insensitive' } },
-        { action: { contains: search, mode: 'insensitive' } },
+        { type: { contains: search } },
+        { action: { contains: search } },
       ]
     }
 
@@ -114,6 +114,15 @@ export async function GET(request: NextRequest) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
+        doc.setFont(undefined, 'bold')
+        doc.text('Date', margin, currentY)
+        doc.text('Utilisateur', margin + 35, currentY)
+        doc.text('Action', margin + 70, currentY)
+        doc.text('Type', margin + 95, currentY)
+        doc.text('Description', margin + 115, currentY)
+        currentY += lineHeight
+        doc.line(margin, currentY - 2, 195, currentY - 2)
+        doc.setFont(undefined, 'normal')
       }
 
       const dateFormatted = new Date(log.date).toLocaleString('fr-FR', {

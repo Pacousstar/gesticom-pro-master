@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const clients = await prisma.client.findMany({
-      where: { actif: true },
+      where: { actif: true, entiteId },
+      take: 10000,
       select: {
         id: true,
         code: true,
@@ -77,6 +78,17 @@ export async function GET(request: NextRequest) {
     const venteGlobaleMap = Object.fromEntries(ventesGlobales.map((v: any) => [v.clientId, v._sum.montantTotal || 0]))
     const reglementGlobaleMap = Object.fromEntries(reglementsGlobaux.map((r: any) => [r.clientId, r._sum.montant || 0]))
 
+    const clientIds = clients.map(c => c.id)
+    const allVentes = await prisma.vente.findMany({
+      where: { clientId: { in: clientIds }, statut: 'VALIDEE' },
+      orderBy: { date: 'desc' },
+      select: { clientId: true, numero: true }
+    })
+    const latestVenteNum = new Map()
+    for (const v of allVentes) {
+      if (!latestVenteNum.has(v.clientId)) latestVenteNum.set(v.clientId, v.numero)
+    }
+
     const rows: any[] = []
     let totalFac = 0
     let totalPai = 0
@@ -98,12 +110,7 @@ export async function GET(request: NextRequest) {
 
       const statut = soldeClient > 0.01 ? 'DOIT' : soldeClient < -0.01 ? 'CRÉDIT' : 'SOLDÉ'
 
-      // Récupérer le numéro de la dernière facture pour l'affichage
-      const derV = await prisma.vente.findFirst({
-        where: { clientId: c.id, statut: 'VALIDEE' },
-        orderBy: { date: 'desc' },
-        select: { numero: true }
-      })
+      const derNumero = latestVenteNum.get(c.id)
 
       totalFac += factures
       totalPai += paiements
@@ -111,7 +118,7 @@ export async function GET(request: NextRequest) {
       totalSolde += soldeClient
 
       rows.push({
-        'N° Facture': derV?.numero || '—',
+        'N° Facture': derNumero || '—',
         'Code / Nom': `${c.code || ''} ${c.nom}`.trim(),
         Localisation: c.localisation || '—',
         'Total Factures (Période)': factures,

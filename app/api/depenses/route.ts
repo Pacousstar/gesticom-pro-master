@@ -6,7 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 import { comptabiliserDepense } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
-import { estModeEspeces } from '@/lib/enums-commerce'
+import { estModeEspeces, estModeBanque } from '@/lib/enums-commerce'
 import fs from 'fs'
 import path from 'path'
 
@@ -159,6 +159,10 @@ export async function POST(request: NextRequest) {
       if (session.role !== 'SUPER_ADMIN' && magasin.entiteId !== entiteId) {
         return NextResponse.json({ error: 'Ce magasin n\'appartient pas à votre entité.' }, { status: 403 })
       }
+    }
+
+    if (estModeBanque(modePaiement) && !body.banqueId) {
+      return NextResponse.json({ error: 'Compte bancaire requis pour ce mode de paiement.' }, { status: 400 })
     }
 
     const depense = await prisma.$transaction(async (tx) => {

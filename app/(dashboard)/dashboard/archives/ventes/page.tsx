@@ -39,10 +39,19 @@ export default function ArchivesVentesPage() {
   const fetchArchives = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/archives/ventes')
+      const params = new URLSearchParams({ limit: '10000' })
+      if (filterDateDebut) params.set('dateDebut', filterDateDebut)
+      if (filterDateFin) params.set('dateFin', filterDateFin)
+      const res = await fetch('/api/archives/ventes?' + params.toString())
       if (res.ok) {
         const data = await res.json()
-        setArchives(Array.isArray(data) ? data : [])
+        if (data.data) {
+          setArchives(data.data)
+        } else if (Array.isArray(data)) {
+          setArchives(data)
+        } else {
+          setArchives([])
+        }
       } else {
         setArchives([])
       }
@@ -95,7 +104,7 @@ export default function ArchivesVentesPage() {
         </div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-emerald-100/50">
+      <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-emerald-100/50 no-print">
         <div className="relative mb-6">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-900/30" />
           <input

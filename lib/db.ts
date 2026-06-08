@@ -29,9 +29,7 @@ if (dbUrl.startsWith('file:')) {
   dbUrl = `file:${filePath.replace(/\\/g, '/')}`;
 }
 
-if (dbUrl && process.env.NEXT_PHASE !== 'phase-production-build') {
-  console.log(`[Prisma] Connexion active : ${dbUrl}`);
-} else if (process.env.NODE_ENV === 'production' && !dbUrl) {
+if (process.env.NODE_ENV === 'production' && !dbUrl) {
   console.error('[lib/db] ERREUR FATALE : DATABASE_URL non définie !');
 }
 

@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     ]
   }
 
-  const [charges, total] = await Promise.all([
+  const [charges, total, totalAgg] = await Promise.all([
     prisma.charge.findMany({
       where,
       skip,
@@ -85,11 +85,15 @@ export async function GET(request: NextRequest) {
         utilisateur: { select: { nom: true, login: true } },
       },
     }),
-    prisma.charge.count({ where })
+    prisma.charge.count({ where }),
+    prisma.charge.aggregate({ where, _sum: { montant: true } }),
   ])
+
+  const totalAmount = totalAgg._sum.montant || 0
 
   return NextResponse.json({
     charges,
+    totalAmount,
     pagination: {
       page,
       limit,

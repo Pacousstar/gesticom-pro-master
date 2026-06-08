@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 
-const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwAYkQJ/C6WjzBai+t9tO\ng1ggasoIHqI2CCHaVRamGIzS8lu2HDlfOnys/I9/Q1iWYFKz106A5/KH6aOVSqfU\nbkjnFa3rNUp40entWUbH/d5Q2NFpsTd/L+jZZWHJbkZi8afzDHIaLrSJ57h88lKS\nOMMc+hng+EW7fIY2g+SibRzsEaKIpcMiCV6sLVFNi7964jtGA5rb99/C+UiFAQeK\ntcK8Fn64kKFOJ26537x6zy5fQbkwdRWr9hXnLS1VRC+hg8UEdoCOmrnC4V9P5UEV\nSXbcLeEbampX12RAJEUcBfyL7bImFVzKSQRVmeaWV+GkZSPyqBjVfH2kuvcJpreF\n2wIDAQAB\n-----END PUBLIC KEY-----\n`
+const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApUdLKXg7rO+Pln/S0ZoD\nBHhCHTfjh+Z72uJOYqv/sbNgHfGNgZyrf+zcKpLFU6chRNhQJJ53XodPzQ51FRSy\n4rN8l2jUjje2+TUcTZPG/NL8x6VR28g8AJIuk8D5ZZx5y8el3VThjmlDCji/b7BH\nUlWT2HlbR6BFDR53P8xi43ag/AwsGnKcSWOqms6OyJDEtE+GUUV2raRpttmW3t7q\nFl7XelwBsXW+FNF7fOc5gBIEnKjYf5abS0QteELNJnldi+DxaoNDDJrG6joS0lmE\nmVSeCQyFyjci7Brcg1lUO3rP5wfTRg6DZOZQVjhkv806JUHvf1TYrlG+7gJ+5Fn3\n1wIDAQAB\n-----END PUBLIC KEY-----\n`
 
 export interface LicencePayload {
   client: string
@@ -65,13 +65,19 @@ export function verifierExpiration(payload: LicencePayload): 'VALIDE' | 'EXPIREE
 }
 
 export function verifierVersion(payload: LicencePayload): boolean {
-  const currentVersion = '3.4.2'
+  const currentVersion = '3.22.5'
   const currentParts = currentVersion.split('.').map(Number)
-  const maxParts = payload.maxVersion.split('.').map(Number)
+  const maxParts = payload.maxVersion.split('.').map(p => {
+    const n = Number(p)
+    return isNaN(n) ? undefined : n
+  })
 
   for (let i = 0; i < 3; i++) {
-    if ((currentParts[i] || 0) > (maxParts[i] || 0)) return false
-    if ((currentParts[i] || 0) < (maxParts[i] || 0)) return true
+    const max = maxParts[i]
+    if (max === undefined) continue
+    const cur = currentParts[i] || 0
+    if (cur > max) return false
+    if (cur < max) return true
   }
   return true
 }

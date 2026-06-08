@@ -297,6 +297,16 @@ export default function StockPage() {
     fetchList(currentPage, searchTerm, selectedCategory)
   }, [currentPage])
 
+  // Recherche temps réel : à chaque frappe, mise à jour avec debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1)
+      setSearchTerm(searchInput)
+      fetchList(1, searchInput, selectedCategory)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
+
   const handlePrintAll = async () => {
     setIsPrinting(true)
     try {
@@ -735,11 +745,7 @@ export default function StockPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                setSearchTerm(searchInput)
-                setCurrentPage(1)
-                fetchList(1, searchInput, selectedCategory)
-              }
+              if (e.key === 'Enter') e.preventDefault()
             }}
             placeholder="Rechercher par code, designation..."
             className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
@@ -834,8 +840,9 @@ export default function StockPage() {
                   ].join(';'))
                 ].join('\n')
                 
-                const totalRow = ['', '', '', '', d.totals?.totalQuantite || 0, '', d.totals?.totalValeur || 0].join(';')
-                const blob = new Blob([csv + '\n' + totalRow], { type: 'text/csv;charset=utf-8;' })
+                const totalRow = ['TOTAL', '', '', '', d.totals?.totalQuantite || 0, '', d.totals?.totalValeur || 0].join(';')
+                const bom = '\uFEFF'
+                const blob = new Blob([bom + csv + '\n' + totalRow], { type: 'text/csv;charset=utf-8;' })
                 const blobUrl = window.URL.createObjectURL(blob)
                 const a = document.createElement('a')
                 a.href = blobUrl
@@ -1229,7 +1236,7 @@ export default function StockPage() {
             {searchLower ? 'Aucun stock ne correspond à la recherche.' : 'Aucun stock. Créez des produits avec leur magasin pour voir les stocks.'}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto no-print">
             <table className="min-w-full divide-y divide-gray-200">
               <thead>
                 <tr className="bg-gray-50">
@@ -1850,7 +1857,7 @@ export default function StockPage() {
                             <th className="border border-black px-2 py-3 text-left">Code / Réf</th>
                             <th className="border border-black px-2 py-3 text-left">Établissement</th>
                             <th className="border border-black px-2 py-3 text-right">Quantité</th>
-                            <th className="border border-black px-2 py-3 text-right">Seuil Min</th>
+                            <th className="border border-black px-2 py-3 text-right">PAMP (Pro)</th>
                             <th className="border border-black px-2 py-3 text-center uppercase text-[10px]">Statut</th>
                           </tr>
                         </thead>
@@ -1869,7 +1876,9 @@ export default function StockPage() {
                                 <td className="border border-black px-2 py-2 font-mono text-[11px] font-bold">{s.produit.code}</td>
                                 <td className="border border-black px-2 py-2 uppercase font-bold text-gray-600 text-[11px]">{s.magasin.nom}</td>
                                 <td className="border border-black px-2 py-2 text-right font-black text-[15px]">{s.quantite.toLocaleString()}</td>
-                                <td className="border border-black px-2 py-2 text-right italic text-gray-500">{s.produit.seuilMin}</td>
+                                <td className="border border-black px-2 py-2 text-right italic text-gray-500">
+                                  {s.produit.pamp != null ? `${s.produit.pamp.toLocaleString()} F` : '—'}
+                                </td>
                                 <td className="border border-black px-2 py-2 text-center">
                                   <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${isAlerte ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'}`}>
                                     {isAlerte ? 'Alerte' : 'Ok'}

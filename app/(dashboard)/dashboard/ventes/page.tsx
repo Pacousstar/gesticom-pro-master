@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import SuppressionConfirmModal from '@/components/SuppressionConfirmModal'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { 
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X, 
   Search, Scan, Camera, Edit2, Pencil, Trash, CreditCard, Wallet, UserPlus, 
-  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent, DollarSign
+  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent, DollarSign, RotateCcw
 } from 'lucide-react'
 import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
@@ -60,6 +61,7 @@ export default function VentesPage() {
   }>>([])
   const [annulant, setAnnulant] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
   const [userRole, setUserRole] = useState<string>('')
   const [detailVente, setDetailVente] = useState<{
     id: number
@@ -82,6 +84,7 @@ export default function VentesPage() {
     reglements: Array<{ mode: string; montant: number; date?: string; reference?: string | null }>
   } | null>(null)
   const [loadingDetail, setLoadingDetail] = useState<number | null>(null)
+  const [detailRetours, setDetailRetours] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
   const [err, setErr] = useState('')
@@ -173,6 +176,85 @@ export default function VentesPage() {
     soldeInitial: '0',
     compteId: '',
   })
+
+  const [retourModalVente, setRetourModalVente] = useState<any>(null)
+  const [retourLignes, setRetourLignes] = useState<any[]>([])
+  const [retourRemboursement, setRetourRemboursement] = useState(true)
+  const [retourMode, setRetourMode] = useState('ESPECES')
+  const [retourObservation, setRetourObservation] = useState('')
+  const [retourBanqueId, setRetourBanqueId] = useState('')
+  const [savingRetour, setSavingRetour] = useState(false)
+  const [deletingRetourId, setDeletingRetourId] = useState<number | null>(null)
+
+  const handleDeleteRetour = async (retourId: number) => {
+    if (!confirm('Supprimer définitivement ce retour ? Cette action est irréversible.')) return
+    setDeletingRetourId(retourId)
+    try {
+      const res = await fetch(`/api/retours/${retourId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setDetailRetours((prev) => prev.filter((r) => r.id !== retourId))
+        showSuccess('Retour supprimé avec succès.')
+      } else {
+        const d = await res.json()
+        showError(d.error || 'Erreur lors de la suppression du retour.')
+      }
+    } catch {
+      showError('Erreur réseau lors de la suppression.')
+    } finally {
+      setDeletingRetourId(null)
+    }
+  }
+
+  const openRetourModal = (v: any) => {
+    setRetourModalVente(v)
+    setRetourLignes((v.lignes || []).map((l: any) => {
+      const p = produits.find(x => x.id === l.produitId)
+      const st = p?.stocks?.find((s: any) => s.magasinId === (v.magasinId || v.magasin?.id))
+      const q = Number(l.quantite) || 1
+      return {
+        produitId: l.produitId,
+        designation: l.designation,
+        code: p?.code || '',
+        quantite: 0,
+        maxQuantite: l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        unitaireTTC: (Number(l.montant) || 0) / q,
+        stockActuel: st?.quantite ?? 0,
+      }
+    }))
+    setRetourRemboursement(true)
+    setRetourMode('ESPECES')
+    setRetourBanqueId('')
+    setRetourObservation('')
+  }
+
+  const handleRetour = async () => {
+    if (!retourModalVente) return
+    const lignes = retourLignes.filter(l => l.quantite > 0)
+    if (!lignes.length) { showError('Sélectionnez au moins un produit.'); return }
+    setSavingRetour(true)
+    try {
+      const r = await fetch(`/api/ventes/${retourModalVente.id}/retour`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lignes: lignes.map(l => ({ produitId: l.produitId, quantite: l.quantite })),
+          remboursement: retourRemboursement,
+          modeRemboursement: retourMode,
+          banqueId: retourMode !== 'ESPECES' ? retourBanqueId : null,
+          observation: retourObservation || null,
+        }),
+      })
+      if (!r.ok) throw new Error((await r.json()).error || 'Erreur réseau')
+      showSuccess('Retour effectué avec succès.')
+      setRetourModalVente(null)
+      fetchVentes()
+    } catch (e: any) {
+      showError(formatApiError(e) || 'Erreur lors du retour.')
+    } finally {
+      setSavingRetour(false)
+    }
+  }
 
   const addReglement = () => {
     setFormData(f => ({
@@ -468,10 +550,16 @@ export default function VentesPage() {
 
   const handleVoirDetail = useCallback(async (id: number) => {
     setDetailVente(null)
+    setDetailRetours([])
     setLoadingDetail(id)
     try {
       const res = await fetch(`/api/ventes/${id}`)
-      if (res.ok) setDetailVente(await res.json())
+      if (res.ok) {
+        const vente = await res.json()
+        setDetailVente(vente)
+        const r = await fetch(`/api/ventes/${id}/retour`)
+        if (r.ok) setDetailRetours(await r.json())
+      }
     } finally {
       setLoadingDetail(null)
     }
@@ -498,11 +586,6 @@ export default function VentesPage() {
       showError('Quantité invalide.')
       return
     }
-    if (qte > qteDispo) {
-      showError(`⚠️ Stock insuffisant pour ${p.designation}. Disponible: ${qteDispo}.`)
-      return
-    }
-
     // Blocage Prix Minimum (PVM)
     const pMin = (p as any).prixMinimum || 0
     const pSaisi = Number(ajoutProduit.prixUnitaire) || 0
@@ -663,8 +746,7 @@ export default function VentesPage() {
           setCreateClientAfter(() => () => doEnregistrerVente(lignes))
           setShowCreateClient(true)
         } else if (data.error?.includes('Stock insuffisant')) {
-          // Extraire les informations du message d'erreur
-          const match = data.error.match(/Stock insuffisant pour (.+?) \(dispo: (\d+)\)/)
+          const match = data.error.match(/Stock insuffisant pour (.+?) \((\d+) dispo/)
           if (match) {
             const designation = match[1]
             const quantiteDisponible = Number(match[2])
@@ -930,15 +1012,26 @@ export default function VentesPage() {
     }
   }
 
-  const handleSupprimer = async (v: { id: number; numero: string }) => {
-    if (!confirm(`Supprimer définitivement la vente ${v.numero} ? Toutes les données liées (lignes, écritures, règlements) seront supprimées. Cette action est irréversible.`)) return
-    setSupprimant(v.id)
+  const handleSupprimer = (v: { id: number; numero: string; lignes?: any[]; reglements?: any[] }) => {
+    setDeleteConfirmTarget({
+      id: v.id,
+      numero: v.numero,
+      lignesCount: v.lignes?.length ?? 0,
+      reglementsCount: v.reglements?.length ?? 0,
+    })
+  }
+
+  const handleConfirmSuppression = async () => {
+    const target = deleteConfirmTarget
+    if (!target) return
+    setSupprimant(target.id)
+    setDeleteConfirmTarget(null)
     setErr('')
     try {
-      const res = await fetch(`/api/ventes/${v.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/ventes/${target.id}`, { method: 'DELETE' })
       if (res.ok) {
-        setVentes((list) => list.filter((x) => x.id !== v.id))
-        if (detailVente?.id === v.id) setDetailVente(null)
+        setVentes((list) => list.filter((x) => x.id !== target.id))
+        if (detailVente?.id === target.id) setDetailVente(null)
         showSuccess(MESSAGES.VENTE_SUPPRIMEE)
       } else {
         const d = await res.json()
@@ -2027,18 +2120,8 @@ export default function VentesPage() {
               <div className="flex gap-2">
                 <button 
                   type="submit" 
-                  disabled={submitting || formData.lignes.some(l => {
-                    const p = produits.find(prod => prod.id === l.produitId)
-                    const s = p?.stocks?.find(st => st.magasinId === Number(formData.magasinId))?.quantite || 0
-                    return l.quantite > s
-                  })} 
-                  className={`rounded-lg px-4 py-2 text-white font-bold transition-all shadow-lg ${
-                    formData.lignes.some(l => {
-                      const p = produits.find(prod => prod.id === l.produitId)
-                      const s = p?.stocks?.find(st => st.magasinId === Number(formData.magasinId))?.quantite || 0
-                      return l.quantite > s
-                    }) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'
-                  }`}
+                  disabled={submitting}
+                  className="rounded-lg px-4 py-2 text-white font-bold transition-all shadow-lg bg-orange-500 hover:bg-orange-600"
                 >
                   {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Enregistrer la vente'}
                 </button>
@@ -2305,8 +2388,12 @@ export default function VentesPage() {
                         {resteAPayer > 0 ? `${resteAPayer.toLocaleString('fr-FR')} F` : '-'}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`rounded px-2 py-0.5 text-xs font-medium ${v.statut === 'ANNULEE' ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-800'}`}>
-                          {v.statut === 'ANNULEE' ? 'Annulée' : 'Validée'}
+                        <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+                          v.statut === 'ANNULEE' ? 'bg-gray-200 text-gray-700' :
+                            'bg-green-100 text-green-800'
+                        }`}>
+                          {v.statut === 'ANNULEE' ? 'Annulée' :
+                            'Validée'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -2369,14 +2456,23 @@ export default function VentesPage() {
                             {loadingDetail === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                           </button>
                           {v.statut === 'VALIDEE' && (
-                            <button
-                              onClick={() => handleAnnuler(v)}
-                              disabled={annulant === v.id}
-                              className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                              title="Annuler la vente"
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </button>
+                            <>
+                              <button
+                                onClick={() => openRetourModal(v)}
+                                className="rounded p-1.5 text-amber-600 hover:bg-amber-50"
+                                title="Retour de marchandise"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleAnnuler(v)}
+                                disabled={annulant === v.id}
+                                className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                title="Annuler la vente"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </button>
+                            </>
                           )}
                           {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                             <button
@@ -2505,8 +2601,12 @@ export default function VentesPage() {
                 <div><span className="font-medium text-gray-700">Montant payé (avance) :</span> <span className="text-gray-900">{(Number(detailVente.montantPaye) || 0).toLocaleString('fr-FR')} FCFA</span></div>
                 <div><span className="font-medium text-gray-700">Reste à payer :</span> <strong className="text-amber-800">{(Number(detailVente.montantTotal) - (Number(detailVente.montantPaye) || 0)).toLocaleString('fr-FR')} FCFA</strong></div>
                 <div><span className="font-medium text-gray-700">Statut :</span>
-                  <span className={`ml-1 rounded px-2 py-0.5 text-xs font-medium ${detailVente.statut === 'ANNULEE' ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-800'}`}>
-                    {detailVente.statut === 'ANNULEE' ? 'Annulée' : 'Validée'}
+                  <span className={`ml-1 rounded px-2 py-0.5 text-xs font-medium ${
+                    detailVente.statut === 'ANNULEE' ? 'bg-gray-200 text-gray-700' :
+                      'bg-green-100 text-green-800'
+                  }`}>
+                    {detailVente.statut === 'ANNULEE' ? 'Annulée' :
+                      'Validée'}
                   </span>
                 </div>
                 {detailVente.numeroBon && (
@@ -2525,6 +2625,65 @@ export default function VentesPage() {
                 </table>
               </div>
               <p className="text-right font-semibold text-gray-900">Montant total : {Number(detailVente.montantTotal).toLocaleString('fr-FR')} FCFA</p>
+              {Number(detailVente.remiseGlobale) > 0 && (
+                <p className="text-right text-sm text-red-600 font-medium">Remise globale : -{Number(detailVente.remiseGlobale).toLocaleString('fr-FR')} FCFA</p>
+              )}
+
+              {detailRetours.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-sm font-semibold text-amber-800 flex items-center gap-1.5">
+                    <RotateCcw className="h-4 w-4" />
+                    Retours de marchandise ({detailRetours.length})
+                  </h3>
+                  {detailRetours.map((retour) => (
+                    <div key={retour.id} className="mb-3 rounded-lg border border-amber-200 bg-amber-50/50 p-3 text-sm">
+                      <div className="mb-2 flex items-center justify-between text-xs text-gray-600">
+                        <span className="font-medium text-amber-800">{retour.numero}</span>
+                        <div className="flex items-center gap-2">
+                          {retour.estRembourse ? (
+                            <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">Remboursé</span>
+                          ) : (
+                            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">Non remboursé</span>
+                          )}
+                          <span>{new Date(retour.createdAt).toLocaleString('fr-FR')}</span>
+                        </div>
+                      </div>
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b border-amber-200 text-left text-gray-600"><th className="pb-1 pr-3">Produit</th><th className="pb-1 pr-3 text-right">Qté</th><th className="pb-1 pr-3 text-right">P.U.</th><th className="pb-1 pr-3 text-right text-red-500">Remise</th><th className="pb-1 pr-3 text-right text-blue-500">TVA</th><th className="pb-1 text-right">Total</th></tr></thead>
+                        <tbody>
+                          {retour.lignes.map((l: any, i: number) => (
+                            <tr key={i} className="border-b border-amber-100">
+                              <td className="py-1 pr-3 text-gray-900">{l.designation}</td>
+                              <td className="py-1 pr-3 text-right text-gray-900">{l.quantite}</td>
+                              <td className="py-1 pr-3 text-right text-gray-900">{l.prixUnitaire.toLocaleString('fr-FR')} F</td>
+                              <td className="py-1 pr-3 text-right text-red-600">{l.remise ? `-${l.remise}` : '0'} F</td>
+                              <td className="py-1 pr-3 text-right text-blue-600">{l.tva || 0}%</td>
+                              <td className="py-1 text-right font-medium text-amber-700">{l.montant.toLocaleString('fr-FR')} F</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="mt-1.5 flex items-center justify-between text-xs text-gray-600">
+                        <span>Par : {retour.utilisateur?.nom || '—'}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-amber-800">Total retourné : {retour.montantTotal.toLocaleString('fr-FR')} F</span>
+                          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                            <button
+                              onClick={() => handleDeleteRetour(retour.id)}
+                              disabled={deletingRetourId === retour.id}
+                              className="rounded p-1 text-red-500 hover:bg-red-100 disabled:opacity-50"
+                              title="Supprimer ce retour"
+                            >
+                              {deletingRetourId === retour.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {retour.observation && <p className="mt-1 text-xs text-gray-500 italic">{retour.observation}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2919,12 +3078,144 @@ export default function VentesPage() {
         </div>
       )}
 
+      {/* Modal de confirmation de suppression détaillée */}
+      <SuppressionConfirmModal
+        isOpen={deleteConfirmTarget !== null}
+        onClose={() => setDeleteConfirmTarget(null)}
+        onConfirm={handleConfirmSuppression}
+        titre={`Supprimer la vente ${deleteConfirmTarget?.numero ?? ''} ?`}
+        message="Vous êtes sur le point de supprimer définitivement cette vente. Toutes les données associées seront effacées irréversiblement."
+        details={[
+          { label: 'Lignes de vente', count: deleteConfirmTarget?.lignesCount, description: 'produits et quantités vendus' },
+          { label: 'Règlements', count: deleteConfirmTarget?.reglementsCount, description: 'paiements enregistrés' },
+          { label: 'Écritures comptables', description: 'Grand Livre (VE, CA, OD) — TVA, créances, trésorerie' },
+          { label: 'Mouvements caisse', description: 'entrées/sorties de caisse liées' },
+          { label: 'Opérations bancaires', description: 'dépôts, virements avec inversion du solde' },
+          { label: 'Mouvements de stock', description: 'sorties de stock annulées, quantité remise à niveau' },
+          { label: 'Points fidélité', description: 'points clients déduits de l\'encaissement' },
+        ]}
+      />
+
       {/* Modal scanner code-barres — chargé dynamiquement, 100% offline */}
       {scannerOpen && (
         <BarcodeScanner
           onScan={handleBarcodeScan}
           onClose={() => setScannerOpen(false)}
         />
+      )}
+
+      {/* Modal Retour de marchandise */}
+      {retourModalVente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="mb-1 text-lg font-bold text-gray-900">
+              Retour de marchandise — {retourModalVente.numero}
+            </h2>
+            <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+              <span>Client : <strong className="text-gray-700">{retourModalVente.client?.nom || retourModalVente.clientLibre || '—'}</strong></span>
+              <span>Date : <strong className="text-gray-700">{new Date(retourModalVente.date).toLocaleString('fr-FR')}</strong></span>
+            </div>
+            <p className="mb-4 text-sm text-gray-600">
+              Sélectionnez les produits à retourner, leur quantité et le mode de remboursement.
+            </p>
+            <div className="mb-4 max-h-[35vh] overflow-y-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-xs uppercase text-gray-500 border-b border-gray-200">
+                  <tr>
+                    <th className="pb-2 pr-2 text-left">Produit</th>
+                    <th className="pb-2 pr-2 text-right">Max</th>
+                    <th className="pb-2 pr-2 text-right">Stock</th>
+                    <th className="pb-2 pr-2 text-right">Qté</th>
+                    <th className="pb-2 pr-2 text-right">P.U.</th>
+                    <th className="pb-2 text-right">Sous-total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {retourLignes.map((l, i) => {
+                    const sousTotal = l.quantite * l.unitaireTTC
+                    return (
+                      <tr key={l.produitId}>
+                        <td className="py-2 pr-2">
+                          <p className="font-medium text-gray-900 truncate max-w-[200px]">{l.designation}</p>
+                          {l.code && <p className="text-[10px] text-gray-400">{l.code}</p>}
+                        </td>
+                        <td className="py-2 pr-2 text-right text-gray-500">{l.maxQuantite}</td>
+                        <td className="py-2 pr-2 text-right text-gray-500">{l.stockActuel}</td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={l.maxQuantite}
+                            value={l.quantite}
+                            onChange={(e) => {
+                              const v = Math.min(l.maxQuantite, Math.max(0, Number(e.target.value) || 0))
+                              setRetourLignes(prev => prev.map((r, j) => j === i ? { ...r, quantite: v } : r))
+                            }}
+                            className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-center text-sm"
+                          />
+                        </td>
+                        <td className="py-2 pr-2 text-right text-gray-900">{l.prixUnitaire.toLocaleString('fr-FR')}</td>
+                        <td className="py-2 text-right font-medium text-emerald-700">{sousTotal.toLocaleString('fr-FR')} F</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mb-4 flex items-center justify-between rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+              <span>Total du retour</span>
+              <span>{retourLignes.reduce((s, l) => s + l.quantite * l.unitaireTTC, 0).toLocaleString('fr-FR')} F</span>
+            </div>
+            <div className="mb-4 space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={retourRemboursement} onChange={(e) => setRetourRemboursement(e.target.checked)} className="rounded" />
+                Effectuer un remboursement
+              </label>
+              {retourRemboursement && (
+                <>
+                  <select value={retourMode} onChange={(e) => setRetourMode(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                    <option value="ESPECES">Espèces</option>
+                    <option value="MOBILE_MONEY">Mobile Money</option>
+                    <option value="CHEQUE">Chèque</option>
+                    <option value="VIREMENT">Virement</option>
+                  </select>
+                  {retourMode !== 'ESPECES' && (
+                    <select value={retourBanqueId} onChange={(e) => setRetourBanqueId(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                      <option value="">Sélectionnez un compte bancaire</option>
+                      {banques.map((b: any) => (
+                        <option key={b.id} value={b.id}>{b.nom} — {b.numeroCompte}</option>
+                      ))}
+                    </select>
+                  )}
+                </>
+              )}
+              <textarea
+                placeholder="Observation (optionnelle)"
+                value={retourObservation}
+                onChange={(e) => setRetourObservation(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                rows={2}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setRetourModalVente(null)}
+                disabled={savingRetour}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleRetour}
+                disabled={savingRetour}
+                className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {savingRetour ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                Valider le retour
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

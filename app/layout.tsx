@@ -28,7 +28,7 @@ export const viewport: Viewport = {
   themeColor: "#f97316",
 };
 
-// Retrait des composants de licence
+import PwaRegister from '@/components/PwaRegister'
 
 export default function RootLayout({
   children,
@@ -39,6 +39,7 @@ export default function RootLayout({
     <html lang="fr" suppressHydrationWarning>
       <body className="antialiased bg-gray-50 bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 min-h-screen">
         {children}
+        <PwaRegister />
       </body>
     </html>
   );

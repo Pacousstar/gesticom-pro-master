@@ -7,9 +7,7 @@ const filesToDelete = [
   'server.log',
   '.env.example',
   'eslint.config.mjs',
-  'postcss.config.mjs',
   '.gitignore',
-  'next-env.d.ts'
 ];
 
 console.log('🌪️  DERNIER COUP DE BALAI MASTER-SHIELD...');

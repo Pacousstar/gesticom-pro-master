@@ -460,7 +460,7 @@ function ComptePagine({ entry, rechTextuelle }: { entry: GrandLivreEntry, rechTe
     if (rechTextuelle && filteredEc.length === 0) return null;
 
     return (
-        <div className="rounded-3xl border border-gray-200 bg-white shadow-xl overflow-hidden group">
+        <div className="rounded-3xl border border-gray-200 bg-white shadow-xl overflow-hidden group no-print">
             <div className="bg-gradient-to-r from-blue-900 to-slate-800 px-6 py-5 flex items-center justify-between border-b border-gray-100 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-full bg-gradient-to-l from-black/20 to-transparent pointer-events-none" />
                 <div className="relative z-10 flex gap-4 items-center">

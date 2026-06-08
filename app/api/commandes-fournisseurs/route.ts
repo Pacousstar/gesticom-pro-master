@@ -39,9 +39,9 @@ export async function GET(request: NextRequest) {
   // Recherche texte
   if (search) {
     where.OR = [
-      { numero: { contains: search, mode: 'insensitive' } },
-      { fournisseur: { nom: { contains: search, mode: 'insensitive' } } },
-      { fournisseurLibre: { contains: search, mode: 'insensitive' } }
+      { numero: { contains: search } },
+      { fournisseur: { nom: { contains: search } } },
+      { fournisseurLibre: { contains: search } }
     ]
   }
 

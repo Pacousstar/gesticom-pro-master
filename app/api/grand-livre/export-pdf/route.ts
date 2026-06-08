@@ -143,6 +143,8 @@ export async function GET(request: NextRequest) {
     // Tableau
     doc.setFontSize(8)
     let currentY = y
+    let grandTotalDebit = 0
+    let grandTotalCredit = 0
 
     for (const entry of result) {
       if (currentY > pageHeight - 40) {
@@ -171,6 +173,16 @@ export async function GET(request: NextRequest) {
         if (currentY > pageHeight - 30) {
           doc.addPage()
           currentY = 20
+          doc.setFont(undefined, 'bold')
+          doc.text('Date', margin, currentY)
+          doc.text('Journal', margin + 30, currentY)
+          doc.text('Pièce', margin + 50, currentY)
+          doc.text('Libellé', margin + 70, currentY)
+          doc.text('Débit', margin + 130, currentY)
+          doc.text('Crédit', margin + 155, currentY)
+          currentY += lineHeight
+          doc.line(margin, currentY - 2, 195, currentY - 2)
+          doc.setFont(undefined, 'normal')
         }
 
         const dateFormatted = new Date(ecriture.date).toLocaleDateString('fr-FR')
@@ -191,8 +203,22 @@ export async function GET(request: NextRequest) {
       doc.text('TOTAL', margin + 70, currentY)
       doc.text(formatMontant(entry.soldeDebit), margin + 130, currentY)
       doc.text(formatMontant(entry.soldeCredit), margin + 155, currentY)
+      grandTotalDebit += entry.soldeDebit
+      grandTotalCredit += entry.soldeCredit
       currentY += lineHeight * 2
     }
+
+    // Grand total
+    if (currentY > pageHeight - 30) {
+      doc.addPage()
+      currentY = 20
+    }
+    doc.line(margin, currentY - 2, 195, currentY - 2)
+    doc.setFont(undefined, 'bold')
+    doc.text('TOTAL GÉNÉRAL', margin + 70, currentY)
+    doc.text(formatMontant(grandTotalDebit), margin + 130, currentY)
+    doc.text(formatMontant(grandTotalCredit), margin + 155, currentY)
+    currentY += lineHeight
 
     // Pied de page
     const totalPages = doc.internal.pages.length - 1

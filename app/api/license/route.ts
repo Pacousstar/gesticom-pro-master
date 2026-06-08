@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { validerLicence } from '@/lib/license'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const licence = await prisma.licence.findFirst({
@@ -9,10 +11,42 @@ export async function GET() {
     })
 
     if (!licence) {
+      const essai = await prisma.licence.create({
+        data: {
+          cle: '',
+          clientNom: 'Essai',
+          finValidite: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          statut: 'ESSAI',
+          typeEssai: true,
+          debutEssai: new Date(),
+          features: '["all"]',
+        }
+      })
       return NextResponse.json({
-        active: false,
-        statut: 'ABSENTE',
-        message: 'Aucune licence installée'
+        active: true,
+        statut: 'ESSAI',
+        clientNom: 'Essai gratuit',
+        debutValidite: essai.debutEssai,
+        finValidite: essai.finValidite,
+        joursRestants: 7,
+        features: ['all'],
+      })
+    }
+
+    if (licence.typeEssai) {
+      const debut = licence.debutEssai || licence.createdAt
+      const fin = licence.finValidite || new Date(debut.getTime() + 7 * 24 * 60 * 60 * 1000)
+      const joursRestants = Math.max(0, Math.ceil((fin.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+      const expire = Date.now() > fin.getTime()
+
+      return NextResponse.json({
+        active: !expire,
+        statut: expire ? 'ESSAI_EXPIRE' : 'ESSAI',
+        clientNom: 'Essai gratuit',
+        debutValidite: debut,
+        finValidite: fin,
+        joursRestants,
+        features: ['all'],
       })
     }
 
@@ -66,6 +100,8 @@ export async function POST(request: NextRequest) {
           clientNom: validation.payload!.client,
           finValidite: validation.payload!.expire ? new Date(validation.payload!.expire) : null,
           statut: 'ACTIVE',
+          typeEssai: false,
+          debutEssai: null,
           features: JSON.stringify(validation.payload!.features),
         }
       })

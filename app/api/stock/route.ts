@@ -45,8 +45,8 @@ export async function GET(request: NextRequest) {
   // Recherche et filtre catégorie pour les produits
   const searchConditions = search ? {
     OR: [
-      { designation: { contains: search, mode: 'insensitive' } },
-      { code: { contains: search, mode: 'insensitive' } }
+      { designation: { contains: search } },
+      { code: { contains: search } }
     ]
   } : {}
 

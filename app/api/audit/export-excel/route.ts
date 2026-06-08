@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.OR = [
         { description: { contains: search } },
-        { type: { contains: search, mode: 'insensitive' } },
-        { action: { contains: search, mode: 'insensitive' } },
+        { type: { contains: search } },
+        { action: { contains: search } },
       ]
     }
 
@@ -91,6 +91,11 @@ export async function GET(request: NextRequest) {
     }))
 
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Date: '', Utilisateur: '', Login: '', Rôle: '', Action: '', Type: '', Description: '', 'Adresse IP': '', 'User Agent': '', Détails: '' }])
+
+    if (rows.length > 0) {
+      XLSX.utils.sheet_add_aoa(ws, [['', '', '', '', '', 'Total lignes', rows.length]], { origin: rows.length + 1 })
+    }
+
     const colWidths = [
       { wch: 20 },
       { wch: 20 },

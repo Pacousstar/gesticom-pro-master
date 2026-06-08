@@ -222,7 +222,7 @@ export default function BalancePage() {
           <p className="mt-2 text-sm font-bold text-slate-400 uppercase tracking-widest">Aucune donnée disponible pour vos critères actuels</p>
         </div>
       ) : (
-        <div className="rounded-[2.5rem] border border-gray-100 bg-white shadow-2xl overflow-hidden">
+        <div className="rounded-[2.5rem] border border-gray-100 bg-white shadow-2xl overflow-hidden no-print">
           <div className="bg-gradient-to-r from-blue-900 to-slate-800 p-8 flex items-center justify-between border-b border-gray-100">
                 <h3 className="text-xl font-black text-white uppercase tracking-tighter italic">Tableau SYNTHÉTIQUE</h3>
                 <span className="text-[9px] font-black uppercase text-blue-100 tracking-[0.2em] border border-blue-800 bg-black/20 px-4 py-1.5 rounded-full shadow-sm">

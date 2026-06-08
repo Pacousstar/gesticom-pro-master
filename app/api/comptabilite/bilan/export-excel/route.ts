@@ -99,7 +99,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    actifRows.push({ Compte: '', Libellé: 'TOTAL ACTIF', 'Montant N': totalActif, 'Montant N-1': 0 })
+    const totalActifN1 = actifRows.reduce((sum, row) => sum + (row['Montant N-1'] || 0), 0)
+    actifRows.push({ Compte: '', Libellé: 'TOTAL ACTIF', 'Montant N': totalActif, 'Montant N-1': totalActifN1 })
 
     const passifRows: any[] = []
 
@@ -123,7 +124,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    passifRows.push({ Compte: '', Libellé: 'TOTAL PASSIF', 'Montant N': totalPassif, 'Montant N-1': 0 })
+    const totalPassifN1 = passifRows.reduce((sum, row) => sum + (row['Montant N-1'] || 0), 0)
+    passifRows.push({ Compte: '', Libellé: 'TOTAL PASSIF', 'Montant N': totalPassif, 'Montant N-1': totalPassifN1 })
 
     const frngLabel = frng >= 0 ? 'Positif (ressources durables > emplois stables)' : 'Négatif (déséquilibre financier)'
     const bfrLabel = bfr >= 0 ? 'Besoin de financement du cycle d\'exploitation' : 'Excédent de ressources d\'exploitation'

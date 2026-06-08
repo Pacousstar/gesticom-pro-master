@@ -132,6 +132,15 @@ export async function GET(request: NextRequest) {
         if (y > pageHeight - 30) {
           doc.addPage()
           y = 20
+          doc.setFont(undefined, 'bold')
+          doc.text('Compte', margin, y)
+          doc.text('Libellé', margin + 35, y)
+          doc.text('Débit', margin + 110, y, { align: 'right' })
+          doc.text('Crédit', margin + 140, y, { align: 'right' })
+          doc.text('Solde', margin + 170, y, { align: 'right' })
+          y += lineHeight
+          doc.line(margin, y - 2, 190, y - 2)
+          doc.setFont(undefined, 'normal')
         }
         doc.text(entry.compte.numero, margin, y)
         doc.text(entry.compte.libelle.length > 30 ? entry.compte.libelle.substring(0, 30) + '...' : entry.compte.libelle, margin + 35, y)
@@ -213,6 +222,9 @@ export async function GET(request: NextRequest) {
         grandLivre[compteId].soldeCredit += ecriture.credit
       }
 
+      let grandTotalDebit = 0
+      let grandTotalCredit = 0
+      let grandTotalSolde = 0
       const result = Object.values(grandLivre).map((gl) => {
         let solde = 0
         if (gl.compte.type === 'ACTIF' || gl.compte.type === 'CHARGES') {
@@ -220,6 +232,9 @@ export async function GET(request: NextRequest) {
         } else {
           solde = gl.soldeCredit - gl.soldeDebit
         }
+        grandTotalDebit += gl.soldeDebit
+        grandTotalCredit += gl.soldeCredit
+        grandTotalSolde += solde
         return { ...gl, solde }
       })
 
@@ -267,6 +282,16 @@ export async function GET(request: NextRequest) {
           if (y > pageHeight - 30) {
             doc.addPage()
             y = 20
+            doc.setFont(undefined, 'bold')
+            doc.text('Date', margin, y)
+            doc.text('Journal', margin + 30, y)
+            doc.text('Pièce', margin + 50, y)
+            doc.text('Libellé', margin + 70, y)
+            doc.text('Débit', margin + 130, y, { align: 'right' })
+            doc.text('Crédit', margin + 150, y, { align: 'right' })
+            y += lineHeight
+            doc.line(margin, y - 2, 190, y - 2)
+            doc.setFont(undefined, 'normal')
           }
           const dateStr = new Date(ecriture.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
           doc.text(dateStr, margin, y)
@@ -286,6 +311,14 @@ export async function GET(request: NextRequest) {
         doc.text(formatMontant(compte.solde), margin + 150, y, { align: 'right' })
         y += 10
       }
+
+      y += 5
+      doc.line(margin, y - 2, 190, y - 2)
+      doc.setFont(undefined, 'bold')
+      doc.text('TOTAL GÉNÉRAL', margin + 70, y)
+      doc.text(formatMontant(grandTotalDebit), margin + 130, y, { align: 'right' })
+      doc.text(formatMontant(grandTotalCredit), margin + 150, y, { align: 'right' })
+      doc.text(formatMontant(grandTotalSolde), margin + 170, y, { align: 'right' })
 
       // Pied de page
       const totalPages = doc.internal.pages.length - 1

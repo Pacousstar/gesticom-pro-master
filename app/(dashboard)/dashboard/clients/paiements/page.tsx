@@ -280,6 +280,37 @@ export default function PaiementsClientsPage() {
             </tr>
           </tfoot>
         </table>
+
+        <div className="mt-6 border-2 border-black p-4">
+          <div className="grid grid-cols-3 gap-4 mb-2">
+            <div className="border-2 border-black p-3 text-center">
+              <p className="text-[10px] font-black uppercase tracking-widest">Total Encaissé</p>
+              <p className="text-lg font-black">{total.toLocaleString('fr-FR')} F</p>
+            </div>
+            <div className="border-2 border-black p-3 text-center">
+              <p className="text-[10px] font-black uppercase tracking-widest">Espèces</p>
+              <p className="text-lg font-black">{(totalsByMode['ESPECES'] || 0).toLocaleString('fr-FR')} F</p>
+            </div>
+            <div className="border-2 border-black p-3 text-center">
+              <p className="text-[10px] font-black uppercase tracking-widest">Chèque</p>
+              <p className="text-lg font-black">{(totalsByMode['CHEQUE'] || 0).toLocaleString('fr-FR')} F</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="border-2 border-black p-3 text-center">
+              <p className="text-[10px] font-black uppercase tracking-widest">Virement</p>
+              <p className="text-lg font-black">{(totalsByMode['VIREMENT'] || 0).toLocaleString('fr-FR')} F</p>
+            </div>
+            <div className="border-2 border-black p-3 text-center">
+              <p className="text-[10px] font-black uppercase tracking-widest">Mobile Money</p>
+              <p className="text-lg font-black">{(totalsByMode['MOBILE_MONEY'] || 0).toLocaleString('fr-FR')} F</p>
+            </div>
+            <div className="border-2 border-black p-3 text-center">
+              <p className="text-[10px] font-black uppercase tracking-widest">Multi</p>
+              <p className="text-lg font-black">{(totalsByMode['MULTI'] || 0).toLocaleString('fr-FR')} F</p>
+            </div>
+          </div>
+        </div>
         
         <div className="mt-12 flex justify-between items-end">
            <p className="text-[10px] italic text-gray-500 uppercase font-black">Document de contrôle financier - Gesticom Pro</p>

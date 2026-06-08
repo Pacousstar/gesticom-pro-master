@@ -185,11 +185,35 @@ export async function GET(request: NextRequest) {
           SUM(montantTotal) as montant
         FROM Vente
         WHERE statut IN ('VALIDE', 'VALIDEE')
-        AND date >= datetime(${new Date(now.getFullYear() - 2, now.getMonth(), 1).toISOString()})
+        AND date >= ${new Date(now.getFullYear() - 2, now.getMonth(), 1).toISOString()}
         ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.empty}
         GROUP BY mois
         ORDER BY mois ASC
       `.catch(catchEmpty('tendances.raw')),
+      // 15 - CA PAR CATÉGORIE DE PRODUIT (pour donut)
+      prisma.$queryRaw<any[]>`
+        SELECT p.categorie, SUM(vl.montant) as montant
+        FROM "VenteLigne" vl
+        INNER JOIN "Produit" p ON vl."produitId" = p.id
+        INNER JOIN "Vente" v ON vl."venteId" = v.id
+        WHERE v.statut IN ('VALIDE', 'VALIDEE')
+        AND v.date >= ${new Date(now.getFullYear(), 0, 1).toISOString()}
+        ${entiteId ? Prisma.sql`AND v."entiteId" = ${entiteId}` : Prisma.empty}
+        GROUP BY p.categorie
+        ORDER BY montant DESC
+      `.catch(catchEmpty('caCategorie.raw')),
+      // 16 - CA PAR JOUR POUR LE MOIS EN COURS (heatmap)
+      prisma.$queryRaw<any[]>`
+        SELECT strftime('%d', date) as jour, SUM(montantTotal) as montant
+        FROM Vente
+        WHERE statut IN ('VALIDE', 'VALIDEE')
+        AND date >= ${new Date(now.getFullYear(), now.getMonth(), 1).toISOString()}
+        AND date < ${new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()}
+        ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.empty}
+        GROUP BY jour
+        ORDER BY jour ASC
+      `.catch(catchEmpty('caJournalier.raw')),
+      // 17 - (réservé)
     ])
 
     const timeoutFallback: any[] = [
@@ -208,6 +232,8 @@ export async function GET(request: NextRequest) {
       { _sum: { montantTotal: 0, montantPaye: 0 } }, // 12
       [], // 13
       [], // 14
+      [], // 15
+      [], // 16
     ]
 
 const result = await Promise.race([
@@ -237,6 +263,8 @@ const result = await Promise.race([
       creancesAgg,
       systemAlertesRaw,
       tendancesRaw,
+      caCategorieRaw,
+      caJournalierRaw,
     ] = result
 
     // Extraction des données Sales
@@ -408,6 +436,14 @@ const result = await Promise.race([
       totalDepensesCount: toNum(depensesAgg?._count?.id),
       totalDepensesAmount: toNum(depensesAgg?._sum?.montant),
       monthlyTrends,
+      caParCategorie: (caCategorieRaw as any[]).map((c: any) => ({
+        categorie: c.categorie || 'DIVERS',
+        montant: toNum(c.montant),
+      })),
+      caJournalier: (caJournalierRaw as any[]).map((d: any) => ({
+        jour: Number(d.jour),
+        montant: toNum(d.montant),
+      })),
       _timeout: timedOut,
     }, {
       headers: {
@@ -444,6 +480,8 @@ const result = await Promise.race([
       totalDepensesCount: 0,
       totalDepensesAmount: 0,
       monthlyTrends: [],
+      caParCategorie: [],
+      caJournalier: [],
       _timeout: false,
     }, { status: 500 })
   } finally {

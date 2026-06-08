@@ -18,6 +18,7 @@ export type ActionType =
   | 'VALIDATION'
   | 'ANNULATION'
   | 'RESTAURATION'
+  | 'RETOUR'
 
 export type EntityType =
   | 'UTILISATEUR'
@@ -43,6 +44,8 @@ export type EntityType =
   | 'PRINT_TEMPLATE'
   | 'JOURNAL'
   | 'TRANSFERT'
+  | 'RETOUR'
+  | 'COMMANDE_FOURNISSEUR'
 
 export interface AuditLogData {
   utilisateurId: number

@@ -33,6 +33,7 @@ model Entite {
   transferts            Transfert[]
   utilisateurs          Utilisateur[]
   ventes                Vente[]
+  retours               Retour[]
 }
 
 model Utilisateur {
@@ -44,7 +45,7 @@ model Utilisateur {
   role                      String
   permissionsPersonnalisees String?
   rolesSupplementaires      String?
-  entiteId                  Int
+  entiteId                  Int                   @default(1)
   actif                     Boolean               @default(true)
   tokenVersion              Int                   @default(0)
   lastLoginAt               DateTime?
@@ -68,6 +69,7 @@ model Utilisateur {
   transferts                Transfert[]
   entite                    Entite                @relation(fields: [entiteId], references: [id])
   ventes                    Vente[]
+  retours                   Retour[]
 
   @@index([entiteId])
   @@index([actif])
@@ -96,6 +98,7 @@ model Magasin {
   transfertsOrigine     Transfert[]           @relation("TransfertOrigine")
   transfertsDest        Transfert[]           @relation("TransfertDest")
   ventes                Vente[]
+  retours               Retour[]
 
   @@index([entiteId])
   @@index([actif])
@@ -126,6 +129,7 @@ model Produit {
   stocks          Stock[]
   transfertLignes TransfertLigne[]
   ventesLignes    VenteLigne[]
+  retourLignes    RetourLigne[]
 
   @@index([designation])
   @@index([categorie])
@@ -241,6 +245,7 @@ model Client {
   archiveVentes  ArchiveVente[]
   reglements     ReglementVente[]
   ventes         Vente[]
+  retours        Retour[]
   entite         Entite               @relation(fields: [entiteId], references: [id])
 
   @@index([actif])
@@ -436,6 +441,7 @@ model Vente {
   utilisateur         Utilisateur           @relation(fields: [utilisateurId], references: [id])
   lignes              VenteLigne[]
   ReglementVenteLigne ReglementVenteLigne[]
+  retours             Retour[]
 
   @@index([date])
   @@index([numero])
@@ -463,6 +469,51 @@ model VenteLigne {
   vente        Vente    @relation(fields: [venteId], references: [id], onDelete: Cascade)
 
   @@index([venteId])
+  @@index([produitId])
+}
+
+model Retour {
+  id              Int          @id @default(autoincrement())
+  numero          String       @unique
+  date            DateTime     @default(now())
+  venteId         Int
+  vente           Vente        @relation(fields: [venteId], references: [id])
+  clientId        Int?
+  client          Client?      @relation(fields: [clientId], references: [id])
+  magasinId       Int
+  magasin         Magasin      @relation(fields: [magasinId], references: [id])
+  entiteId        Int
+  entite          Entite       @relation(fields: [entiteId], references: [id])
+  utilisateurId   Int
+  utilisateur     Utilisateur  @relation(fields: [utilisateurId], references: [id])
+  montantTotal    Float
+  observation     String?
+  estRembourse    Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  lignes          RetourLigne[]
+
+  @@index([venteId])
+  @@index([clientId])
+  @@index([entiteId])
+  @@index([magasinId])
+}
+
+model RetourLigne {
+  id         Int     @id @default(autoincrement())
+  retourId   Int
+  retour     Retour  @relation(fields: [retourId], references: [id], onDelete: Cascade)
+  produitId  Int
+  produit    Produit @relation(fields: [produitId], references: [id])
+  designation String
+  quantite   Float
+  prixUnitaire Float
+  tva        Float   @default(0)
+  remise     Float   @default(0)
+  montant    Float
+  createdAt  DateTime @default(now())
+
+  @@index([retourId])
   @@index([produitId])
 }
 
@@ -857,6 +908,8 @@ model Licence {
   finValidite   DateTime?
   statut        String    @default("ACTIVE")
   features      String    @default("[]")
+  typeEssai     Boolean   @default(false)
+  debutEssai    DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }

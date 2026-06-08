@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
   const [stocks, topData, mouvements] = await Promise.all([
     prisma.stock.findMany({
       where: { ...where, produit: { actif: true } },
+      take: 10000,
       include: {
         produit: { select: { id: true, code: true, designation: true, categorie: true, seuilMin: true } },
         magasin: { select: { id: true, code: true, nom: true } },
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
               statut: { in: ['VALIDE', 'VALIDEE'] },
             },
           },
+          take: 10000,
           select: { produitId: true, quantite: true },
         })
       : prisma.venteLigne.groupBy({ 
@@ -60,6 +62,7 @@ export async function GET(request: NextRequest) {
         }),
     prisma.mouvement.findMany({
       where: { ...where, ...(deb && fin ? { date: { gte: deb, lte: fin } } : {}) },
+      take: 20000,
       orderBy: { date: 'desc' },
       include: {
         produit: { select: { code: true, designation: true } },
@@ -125,10 +128,22 @@ export async function GET(request: NextRequest) {
     Observation: m.observation ?? '',
   }))
 
+  const wsAlertes = XLSX.utils.json_to_sheet(alertes.length ? alertes : [{ Code: '', Désignation: '', Catégorie: '', Magasin: '', Quantité: '', 'Seuil min': '', Manquant: '' }])
+  const wsTop = XLSX.utils.json_to_sheet(topProduits.length ? topProduits : [{ Code: '', Désignation: '', 'Quantité vendue': '' }])
+  const wsMouv = XLSX.utils.json_to_sheet(mouvementsRows.length ? mouvementsRows : [{ Date: '', Type: '', 'Code produit': '', Désignation: '', Magasin: '', Quantité: '', Observation: '' }])
+
+  if (alertes.length > 0) XLSX.utils.sheet_add_aoa(wsAlertes, [['', '', '', '', '', 'Total alertes', alertes.length]], { origin: alertes.length + 1 })
+  if (topProduits.length > 0) XLSX.utils.sheet_add_aoa(wsTop, [['', '', topProduits.reduce((s, p) => s + p['Quantité vendue'], 0)]], { origin: topProduits.length + 1 })
+  if (mouvementsRows.length > 0) XLSX.utils.sheet_add_aoa(wsMouv, [['', '', '', '', '', 'Total', mouvementsRows.reduce((s, r) => s + r.Quantité, 0), '']], { origin: mouvementsRows.length + 1 })
+
+  wsAlertes['!cols'] = [{ wch: 12 }, { wch: 35 }, { wch: 15 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 10 }]
+  wsTop['!cols'] = [{ wch: 12 }, { wch: 35 }, { wch: 18 }]
+  wsMouv['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 15 }, { wch: 35 }, { wch: 20 }, { wch: 10 }, { wch: 40 }]
+
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(alertes.length ? alertes : [{ Code: '', Désignation: '', Catégorie: '', Magasin: '', Quantité: '', 'Seuil min': '', Manquant: '' }]), 'Alertes stock')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(topProduits.length ? topProduits : [{ Code: '', Désignation: '', 'Quantité vendue': '' }]), 'Top produits')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mouvementsRows.length ? mouvementsRows : [{ Date: '', Type: '', 'Code produit': '', Désignation: '', Magasin: '', Quantité: '', Observation: '' }]), 'Mouvements')
+  XLSX.utils.book_append_sheet(wb, wsAlertes, 'Alertes stock')
+  XLSX.utils.book_append_sheet(wb, wsTop, 'Top produits')
+  XLSX.utils.book_append_sheet(wb, wsMouv, 'Mouvements')
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
 
   const filename = `rapports_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')

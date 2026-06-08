@@ -49,8 +49,8 @@ export async function GET(request: NextRequest) {
     const produitWhere: any = { actif: true, entiteId }
     if (search) {
       produitWhere.OR = [
-        { designation: { contains: search, mode: 'insensitive' } },
-        { code: { contains: search, mode: 'insensitive' } }
+        { designation: { contains: search } },
+        { code: { contains: search } }
       ]
     }
     if (categorie && categorie !== 'TOUTE') {

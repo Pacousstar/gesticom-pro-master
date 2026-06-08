@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 export async function GET(
@@ -13,6 +14,11 @@ export async function GET(
     const authError = requirePermission(session, 'fournisseurs:view')
     if (authError) return authError
 
+    const entiteId = await getEntiteId(session)
+    if (!entiteId) {
+        return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+    }
+
     try {
         const id = Number((await params).id)
         if (!id) return NextResponse.json({ error: 'ID Fournisseur requis' }, { status: 400 })
@@ -23,9 +29,9 @@ export async function GET(
 
         const fournisseur = await prisma.fournisseur.findUnique({
             where: { id },
-            select: { nom: true, code: true, soldeInitial: true, avoirInitial: true }
+            select: { nom: true, code: true, soldeInitial: true, avoirInitial: true, entiteId: true }
         })
-        if (!fournisseur) return NextResponse.json({ error: 'Fournisseur introuvable' }, { status: 404 })
+        if (!fournisseur || fournisseur.entiteId !== entiteId) return NextResponse.json({ error: 'Fournisseur introuvable' }, { status: 404 })
 
         const whereAchat: any = { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } }
         const whereReglement: any = { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } }

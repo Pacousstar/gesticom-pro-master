@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
 
     const charges = await prisma.charge.findMany({
       where,
+      take: 10000,
       orderBy: { date: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },
@@ -69,9 +70,12 @@ export async function GET(request: NextRequest) {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Charges')
 
     const colWidths = [
-      { wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 30 }, { wch: 20 },
+      { wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 15 }, { wch: 30 }, { wch: 20 },
     ]
     worksheet['!cols'] = colWidths
+
+    const totalMontant = charges.reduce((s, c) => s + c.montant, 0)
+    XLSX.utils.sheet_add_aoa(worksheet, [['Total', '', '', totalMontant, '', '']], { origin: data.length + 3 })
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     const filename = `charges-${new Date().toISOString().split('T')[0]}.xlsx`

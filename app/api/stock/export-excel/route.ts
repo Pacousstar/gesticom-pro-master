@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx-prototype-pollution-fixed')
@@ -10,6 +11,11 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'stocks:view')
   if (authError) return authError
+
+  const entiteId = await getEntiteId(session)
+  if (!entiteId) {
+    return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
+  }
 
   try {
     const magasinId = request.nextUrl.searchParams.get('magasinId')?.trim()
@@ -25,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     const [tousProduits, stocksExistants, magasin] = await Promise.all([
       prisma.produit.findMany({
-        where: { actif: true },
+        where: { actif: true, entiteId },
         select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, pamp: true },
         orderBy: { code: 'asc' },
       }),

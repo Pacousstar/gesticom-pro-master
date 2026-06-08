@@ -10,18 +10,59 @@ export async function GET(req: NextRequest) {
     const authError = requirePermission(session, 'archives:view')
     if (authError) return authError
 
-    const archives = await prisma.archiveVente.findMany({
-      where: { entiteId: session.entiteId },
-      include: {
-        lignes: true,
-        client: { select: { nom: true } },
-        utilisateur: { select: { nom: true } },
-        magasin: { select: { code: true, nom: true } },
-      },
-      orderBy: { date: 'desc' }
-    })
+    const page = Math.max(1, Number(req.nextUrl.searchParams.get('page')) || 1)
+    const limit = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 10000))
+    const skip = (page - 1) * limit
+    const dateDebut = req.nextUrl.searchParams.get('dateDebut')?.trim()
+    const dateFin = req.nextUrl.searchParams.get('dateFin')?.trim()
+    const clientIdParam = req.nextUrl.searchParams.get('clientId')?.trim()
 
-    return NextResponse.json(archives)
+    const where: any = { entiteId: session.entiteId }
+
+    if (dateDebut || dateFin) {
+      where.date = {}
+      if (dateDebut) where.date.gte = new Date(dateDebut + 'T00:00:00')
+      if (dateFin) where.date.lte = new Date(dateFin + 'T23:59:59')
+    }
+
+    if (clientIdParam) {
+      const cId = Number(clientIdParam)
+      if (Number.isInteger(cId) && cId > 0) {
+        where.clientId = cId
+      }
+    }
+
+    const [archives, total, totalsAgg] = await Promise.all([
+      prisma.archiveVente.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          lignes: {
+            select: { id: true, venteId: true, designation: true, quantite: true, prixUnitaire: true, montant: true }
+          },
+          client: { select: { nom: true } },
+          utilisateur: { select: { nom: true } },
+          magasin: { select: { code: true, nom: true } },
+        },
+        orderBy: { date: 'desc' }
+      }),
+      prisma.archiveVente.count({ where }),
+      prisma.archiveVente.aggregate({ where, _sum: { montantTotal: true } }),
+    ])
+
+    return NextResponse.json({
+      data: archives,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      totals: {
+        montantTotal: totalsAgg._sum.montantTotal || 0,
+      }
+    })
   } catch (e) {
     console.error('Error fetching archives:', e)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
