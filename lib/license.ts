@@ -65,7 +65,7 @@ export function verifierExpiration(payload: LicencePayload): 'VALIDE' | 'EXPIREE
 }
 
 export function verifierVersion(payload: LicencePayload): boolean {
-  const currentVersion = '3.22.5'
+  const currentVersion = '3.23.2'
   const currentParts = currentVersion.split('.').map(Number)
   const maxParts = payload.maxVersion.split('.').map(p => {
     const n = Number(p)

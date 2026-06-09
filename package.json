@@ -1,6 +1,6 @@
 {
   "name": "gesticom",
-  "version": "3.23.1",
+  "version": "3.23.2",
   "private": true,
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev",
