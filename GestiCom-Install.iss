@@ -53,8 +53,9 @@ Source: ".next\static\*"; DestDir: "{app}\.next\static"; Flags: ignoreversion re
 Source: ".next\static\chunks\*.css"; DestDir: "{app}\.next\static\chunks"; Flags: ignoreversion
 Source: "public\*"; DestDir: "{app}\public"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "screenshots, documentation"
 
-; Prisma : indispensable pour la base de données
+; Prisma : schéma + migrations (indispensable pour prisma migrate deploy)
 Source: "prisma\schema.prisma"; DestDir: "{app}\prisma"; Flags: ignoreversion
+Source: "prisma\migrations\*"; DestDir: "{app}\prisma\migrations"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Moteur Node.js
 Source: "node.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -68,7 +69,7 @@ Source: "node_modules\@prisma\*"; DestDir: "{app}\node_modules\@prisma"; Flags: 
 Source: ".env"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall
 
 ; Base de données initiale : On ne l'écrase JAMAIS si elle existe déjà (uninsneveruninstall)
-Source: "prisma\gesticom.db"; DestDir: "C:\gesticom"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall
+Source: "prisma\gesticom.db"; DestDir: "C:\gesticom"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall skipifsourcedoesntexist
 
 ; Scripts VITAUX uniquement
 Source: "start.js"; DestDir: "{app}"; Flags: ignoreversion
