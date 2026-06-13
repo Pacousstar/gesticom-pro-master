@@ -1,7 +1,7 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
 ; Version 3.23.2 - Production Finale
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "3.28.1"
+#define MyAppVersion "3.32.3"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "node.exe"
@@ -98,6 +98,9 @@ Filename: "{app}\node.exe"; Parameters: """{app}\scripts\maintenance-runner.js""
 
 ; Installation et démarrage du service Windows GestiCom (invisible)
 Filename: "{app}\node.exe"; Parameters: """{app}\scripts\install-service.js"""; Flags: runhidden; StatusMsg: "Installation du service GestiCom Pro..."
+
+; Lancer GestiCom Pro automatiquement à la fin de l'installation/MAJ
+Filename: "wscript.exe"; Parameters: """{app}\LANCER-SILENCIEUX.vbs"""; WorkingDir: "{app}"; Flags: postinstall nowait runhidden; StatusMsg: "Lancement de GestiCom Pro..."; Description: "Lancer GestiCom Pro"
 
 [UninstallRun]
 ; Arrêter et supprimer le service Windows une seule fois à la désinstallation

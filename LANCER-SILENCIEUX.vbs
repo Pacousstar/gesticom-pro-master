@@ -27,7 +27,7 @@ Set httpReady = CreateObject("MSXML2.XMLHTTP")
 On Error Resume Next
 httpReady.open "GET", "http://127.0.0.1:3001/", False
 httpReady.Send
-If httpReady.Status >= 200 And httpReady.Status < 500 Then
+If httpReady.Status = 200 Then
   Log "Serveur deja en ligne, ouverture navigateur"
   WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
   WScript.Quit
@@ -39,7 +39,6 @@ Set exec = WshShell.Exec("sc query GestiComPro")
 output = exec.StdOut.ReadAll()
 If InStr(output, "SERVICE_NAME") = 0 Then
   Err "Service GestiComPro introuvable"
-  WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
   WScript.Quit
 End If
 
@@ -47,6 +46,13 @@ End If
 If InStr(output, "RUNNING") = 0 Then
   Log "Demarrage du service..."
   WshShell.Run "net start GestiComPro", 0, True
+  ' Si net start echoue (ex: STOP_PENDING), tenter sc start
+  Set exec2 = WshShell.Exec("sc query GestiComPro")
+  output2 = exec2.StdOut.ReadAll()
+  If InStr(output2, "RUNNING") = 0 Then
+    Log "Fallback sc start..."
+    WshShell.Run "sc start GestiComPro", 0, True
+  End If
 End If
 
 ' Verifier si .migrated existe
@@ -54,13 +60,13 @@ flagFile = appDir & "\.migrated"
 isFirstLaunch = Not fso.FileExists(flagFile)
 
 If isFirstLaunch Then
-  maxAttempts = 150
-  Log "Premier demarrage (attente jusqu'a 5 min)"
+  maxAttempts = 60
+  Log "Premier demarrage (attente jusqu'a 2 min)"
 Else
-  maxAttempts = 30
+  maxAttempts = 15
 End If
 
-' Attendre que le serveur reponde
+' Attendre que le serveur reponde (HTTP 200 uniquement)
 serveurPret = False
 For i = 1 To maxAttempts
   WScript.Sleep 2000
@@ -68,7 +74,7 @@ For i = 1 To maxAttempts
   Set http = CreateObject("MSXML2.XMLHTTP")
   http.open "GET", "http://127.0.0.1:3001/", False
   http.Send
-  If http.Status >= 200 And http.Status < 500 Then
+  If http.Status = 200 Then
     serveurPret = True
     Exit For
   End If
@@ -81,20 +87,8 @@ If serveurPret Then
 Else
   Err "Serveur non disponible apres " & maxAttempts & " tentatives"
   If isFirstLaunch Then
-    Err "La migration de la base de donnees a peut-etre echoue"
+    Err "La migration de la base de donnees a peut-etre echoue. Consultez le fichier " & errFile
   End If
-  WScript.Sleep 5000
-  On Error Resume Next
-  Set http = CreateObject("MSXML2.XMLHTTP")
-  http.open "GET", "http://127.0.0.1:3001/", False
-  http.Send
-  If http.Status >= 200 And http.Status < 500 Then
-    WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
-    Log "Ouverture differee reussie"
-  Else
-    Err "Echec definitif"
-  End If
-  On Error GoTo 0
 End If
 
 Log "Termine"

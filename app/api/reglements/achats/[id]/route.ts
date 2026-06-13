@@ -46,13 +46,9 @@ export async function DELETE(
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
 
       if (estModeEspeces(reglement.modePaiement)) {
+        const motif = reglement.achat?.numero || `R${reglement.id}`
         await tx.caisse.deleteMany({
-          where: {
-            OR: [
-              { motif: `RÈGLEMENT ACHAT ${reglement.achat?.numero || ''}` },
-              { motif: `RÈGLEMENT : ${reglement.achat?.numero || ''}` },
-            ].filter(Boolean)
-          }
+          where: { motif: { contains: motif } }
         })
         const magasinId = reglement.achat?.magasinId
         if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
@@ -145,13 +141,9 @@ export async function PATCH(
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
 
       if (estModeEspeces(old.modePaiement)) {
+        const motif = old.achat?.numero || `R${id}`
         await tx.caisse.deleteMany({
-          where: {
-            OR: [
-              { motif: `RÈGLEMENT ACHAT ${old.achat?.numero || ''}` },
-              { motif: `RÈGLEMENT : ${old.achat?.numero || ''}` },
-            ].filter(Boolean)
-          }
+          where: { motif: { contains: motif } }
         })
         const magasinId = old.achat?.magasinId
         if (magasinId) await recalculerSoldeCaisse(magasinId, tx)

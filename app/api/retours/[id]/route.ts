@@ -5,7 +5,6 @@ import { prisma } from '@/lib/db'
 import { logSuppression, getIpAddress } from '@/lib/audit'
 import { recalculerSoldeCaisse } from '@/lib/caisse'
 import { verifierCloture } from '@/lib/cloture'
-import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 
 export async function DELETE(
   _request: NextRequest,
@@ -24,17 +23,14 @@ export async function DELETE(
   }
 
   try {
+    const retour = await prisma.retour.findUnique({
+      where: { id },
+      include: { lignes: true },
+    })
+    if (!retour) throw new Error('Retour introuvable.')
+
     await prisma.$transaction(async (tx) => {
-      const retour = await tx.retour.findUnique({
-        where: { id },
-        include: { lignes: true },
-      })
-      if (!retour) throw new Error('Retour introuvable.')
-
       await verifierCloture(retour.createdAt, session, tx)
-
-      // 0. Nettoyer les écritures comptables liées au retour
-      await deleteEcrituresByReference('RETOUR', id, tx)
 
       const vente = await tx.vente.findUnique({ where: { id: retour.venteId }, select: { numero: true } })
 
@@ -86,10 +82,10 @@ export async function DELETE(
 
       // 6. Recalculer le solde caisse
       await recalculerSoldeCaisse(retour.magasinId, tx)
-
-      // 7. LOG D'AUDIT
-      await logSuppression(session, 'RETOUR', id, `Suppression retour ${retour.numero}`, { numero: retour.numero, montant: retour.montantTotal }, getIpAddress(_request))
     }, { timeout: 30000 })
+
+    // 7. LOG D'AUDIT (hors transaction)
+    await logSuppression(session, 'RETOUR', id, `Suppression retour ${retour.numero}`, { numero: retour.numero, montant: retour.montantTotal }, getIpAddress(_request))
 
     revalidatePath('/dashboard/ventes')
     revalidatePath('/api/retours')

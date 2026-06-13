@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
   const searchNumero = request.nextUrl.searchParams.get('numero')?.trim() || request.nextUrl.searchParams.get('search')?.trim()
   const searchNumeroBon = request.nextUrl.searchParams.get('numeroBon')?.trim()
   const searchClient = request.nextUrl.searchParams.get('clientSearch')?.trim()
+  const typeVenteFilter = request.nextUrl.searchParams.get('typeVente')?.trim()
 
   const entiteIdFilter = await getEntiteIdOrAll(session)
   const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
@@ -73,6 +74,11 @@ export async function GET(request: NextRequest) {
       { client: { code: { contains: searchClient } } },
       { clientLibre: { contains: searchClient } },
     ]
+  }
+
+  // Filtre par type de vente
+  if (typeVenteFilter && ['LIVRAISON_IMMEDIATE', 'COMMANDE'].includes(typeVenteFilter)) {
+    where.typeVente = typeVenteFilter
   }
 
   const [ventes, total, aggregates] = await Promise.all([
@@ -154,6 +160,24 @@ export async function POST(request: NextRequest) {
     const observation = body?.observation != null ? String(body.observation).trim() || null : null
     const numeroBon = body?.numeroBon != null ? String(body.numeroBon).trim() || null : null
     const estVenteRapide = body?.estVenteRapide === true
+    const typeVente = ['LIVRAISON_IMMEDIATE', 'COMMANDE'].includes(String(body?.typeVente || 'LIVRAISON_IMMEDIATE'))
+      ? String(body.typeVente) : 'LIVRAISON_IMMEDIATE'
+    const livrerLe = body?.dateLivraison != null ? (() => {
+      const dlStr = String(body.dateLivraison).trim()
+      if (dlStr) {
+        const now = new Date()
+        const parts = dlStr.split('-')
+        if (parts.length === 3) {
+          const [yStr, mStr, dStr] = parts
+          const y = Number(yStr), m = Number(mStr), d = Number(dStr)
+          if (Number.isInteger(y) && Number.isInteger(m) && Number.isInteger(d)) {
+            return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
+          }
+        }
+        return new Date(dlStr)
+      }
+      return null
+    })() : null
     
     // --- SUPPORT MULTI-PAIEMENT ---
     const reglementsPayload = Array.isArray(body?.reglements) ? body.reglements : []
@@ -368,12 +392,14 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      for (const l of lignesValides) {
-        const st = await tx.stock.findUnique({ 
-          where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } } 
-        })
-        if ((st?.quantite ?? 0) < l.quantite) {
-          throw new ApiError(`Stock insuffisant pour ${l.designation} (${st?.quantite || 0} dispo, ${l.quantite} requis).`, 409, 'INSUFFICIENT_STOCK')
+      if (typeVente !== 'COMMANDE') {
+        for (const l of lignesValides) {
+          const st = await tx.stock.findUnique({ 
+            where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } } 
+          })
+          if ((st?.quantite ?? 0) < l.quantite) {
+            throw new ApiError(`Stock insuffisant pour ${l.designation} (${st?.quantite || 0} dispo, ${l.quantite} requis).`, 409, 'INSUFFICIENT_STOCK')
+          }
         }
       }
 
@@ -393,6 +419,8 @@ export async function POST(request: NextRequest) {
           pointsGagnes,
           statutPaiement,
           estVenteRapide,
+          typeVente,
+          dateLivraison: (typeVente === 'COMMANDE' && body?.dateLivraison) ? livrerLe : null,
           modePaiement: listReglements.length > 1 ? 'MULTI' : (listReglements[0]?.mode || modePaiementPrincipal),
           observation,
           numeroBon,
@@ -413,23 +441,25 @@ export async function POST(request: NextRequest) {
         include: { client: { select: { nom: true } }, lignes: true, magasin: { select: { code: true, nom: true } } },
       })
 
-      for (const l of lignesValides) {
-        await tx.stock.update({
-          where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } },
-          data: { quantite: { decrement: l.quantite } },
-        })
-        await tx.mouvement.create({
-          data: {
-            type: 'SORTIE',
-            produitId: l.produitId,
-            magasinId,
-            entiteId,
-            utilisateurId: session.userId,
-            quantite: l.quantite,
-            dateOperation: dateVente,
-            observation: `Vente ${num}`,
-          },
-        })
+      if (typeVente !== 'COMMANDE') {
+        for (const l of lignesValides) {
+          await tx.stock.update({
+            where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } },
+            data: { quantite: { decrement: l.quantite } },
+          })
+          await tx.mouvement.create({
+            data: {
+              type: 'SORTIE',
+              produitId: l.produitId,
+              magasinId,
+              entiteId,
+              utilisateurId: session.userId,
+              quantite: l.quantite,
+              dateOperation: dateVente,
+              observation: `Vente ${num}`,
+            },
+          })
+        }
       }
 
       let resteReglement = montantTotal
@@ -489,22 +519,41 @@ export async function POST(request: NextRequest) {
             }, tx)
           }
         }
+
+        // COMMANDE avec paiement : comptabiliser l'avance client (4191) dès la création du règlement
+        if (typeVente === 'COMMANDE') {
+          const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
+          await comptabiliserReglementVente({
+            reglementId: rv.id,
+            venteId: v.id,
+            numeroVente: num,
+            date: dateVente,
+            montant: montantReg,
+            modePaiement: reg.mode,
+            utilisateurId: session.userId,
+            entiteId,
+            magasinId,
+            estAcompte: true,
+          }, tx)
+        }
       }
 
-      await comptabiliserVente({
-        venteId: v.id,
-        numeroVente: num,
-        date: dateVente,
-        montantTotal,
-        modePaiement: reglementsEffectifs.length > 1 ? 'MULTI' : (reglementsEffectifs[0]?.mode || modePaiementPrincipal),
-        clientId,
-        entiteId,
-        utilisateurId: session.userId,
-        magasinId,
-        reglements: reglementsEffectifs,
-        fraisApproche,
-        lignes: lignesValides,
-      }, tx)
+      if (typeVente !== 'COMMANDE') {
+        await comptabiliserVente({
+          venteId: v.id,
+          numeroVente: num,
+          date: dateVente,
+          montantTotal,
+          modePaiement: reglementsEffectifs.length > 1 ? 'MULTI' : (reglementsEffectifs[0]?.mode || modePaiementPrincipal),
+          clientId,
+          entiteId,
+          utilisateurId: session.userId,
+          magasinId,
+          reglements: reglementsEffectifs,
+          fraisApproche,
+          lignes: lignesValides,
+        }, tx)
+      }
 
       return v
     }, { timeout: 20000 })

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { estModeEspeces } from '@/lib/enums-commerce'
 
 export async function GET(
@@ -78,9 +79,9 @@ export async function GET(
     const [ventes, reglements] = await Promise.all([
       prisma.vente.findMany({
         where: whereVente,
-        orderBy: { date: 'desc' },
+        orderBy: { date: 'asc' },
         select: {
-          id: true, numero: true, date: true, montantTotal: true,
+          id: true, numero: true, date: true, createdAt: true, montantTotal: true,
           montantPaye: true, modePaiement: true, statutPaiement: true, magasin: { select: { nom: true } },
           reglements: { select: { id: true, modePaiement: true } },
           ReglementVenteLigne: { select: { reglementId: true, montant: true } }
@@ -88,9 +89,9 @@ export async function GET(
       }),
       prisma.reglementVente.findMany({
         where: whereReglement,
-        orderBy: { date: 'desc' },
+        orderBy: { date: 'asc' },
         select: {
-          id: true, montant: true, modePaiement: true, date: true,
+          id: true, montant: true, modePaiement: true, date: true, createdAt: true,
           observation: true, venteId: true,
           vente: { select: { numero: true } }
         }
@@ -114,6 +115,7 @@ export async function GET(
       ...dataWithRealPaye.map((v: any) => ({
         id: v.id,
         date: v.date,
+        createdAt: v.createdAt,
         numero: v.numero,
         type: 'ACHAT' as const,
         debit: v.montantTotal || 0,
@@ -123,6 +125,7 @@ export async function GET(
       ...reglements.map((r: any) => ({
         id: r.id,
         date: r.date,
+        createdAt: r.createdAt,
         numero: `R${r.id}`,
         type: 'REGLEMENT' as const,
         debit: 0,
@@ -131,7 +134,7 @@ export async function GET(
         reference: r.venteId ? r.vente?.numero || `V${r.venteId}` : '-',
         mode: r.modePaiement
       }))
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     // Ajouter les soldes initiaux au début de l'historique si ils existent
     const initialOperations: any[] = []
@@ -335,6 +338,19 @@ export async function POST(
           console.warn(`[paiement client] Mode de paiement non géré pour trésorerie: ${modePaiement}`)
         }
       }
+
+      // ✅ COMPTABILISATION
+      await comptabiliserReglementVente({
+        reglementId: reglement.id,
+        venteId: 0,
+        numeroVente: `CC-CLI-${clientId}`,
+        date: dateReglement,
+        montant,
+        modePaiement,
+        entiteId,
+        utilisateurId: session.userId,
+        magasinId: magasinId ? Number(magasinId) : undefined
+      }, tx)
 
       return reglement
     }, { timeout: 20000 })

@@ -24,16 +24,16 @@ export async function GET(
 
         if (!fournisseur) return NextResponse.json({ error: 'Fournisseur introuvable' }, { status: 404 })
 
-        // R1: Récupérer les achats validés (cohérent avec compte-courant clients)
+        // R1: Récupérer les achats validés
         const achats = await prisma.achat.findMany({
             where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } },
-            select: { id: true, numero: true, date: true, montantTotal: true, observation: true }
+            select: { id: true, numero: true, date: true, createdAt: true, montantTotal: true, observation: true }
         })
 
-        // R1+R2: Récupérer les règlements validés (cohérent avec clients)
+        // R2: Récupérer les règlements validés
         const reglements = await prisma.reglementAchat.findMany({
             where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } },
-            select: { id: true, date: true, montant: true, modePaiement: true, observation: true, achat: { select: { numero: true } } }
+            select: { id: true, date: true, createdAt: true, montant: true, modePaiement: true, observation: true, achat: { select: { numero: true } } }
         })
 
         // 4. Fusionner et trier chronologiquement
@@ -68,6 +68,7 @@ export async function GET(
                 libelle: `Achat N° ${a.numero}`,
                 reference: a.numero,
                 date: a.date,
+                createdAt: a.createdAt,
                 debit: a.montantTotal,
                 credit: 0,
                 observation: a.observation
@@ -81,6 +82,7 @@ export async function GET(
                 libelle: r.achat ? `Règlement facture ${r.achat.numero}` : 'Règlement libre / Avoir',
                 reference: r.achat?.numero || '-',
                 date: r.date,
+                createdAt: r.createdAt,
                 debit: 0,
                 credit: r.montant,
                 mode: r.modePaiement,

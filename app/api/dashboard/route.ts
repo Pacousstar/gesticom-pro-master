@@ -177,14 +177,14 @@ export async function GET(request: NextRequest) {
         take: 10
       }).catch(catchEmpty('systemAlerte.findMany')),
 
-      // 14 - TENDANCES MENSUELLES (Version pour Dates en Entiers/Unix)
+      // 14 - TENDANCES MENSUELLES (date stockée en ms → conversion pour strftime)
       prisma.$queryRaw<any[]>`
         SELECT 
-          strftime('%Y-%m', date) as mois,
+          strftime('%Y-%m', date / 1000, 'unixepoch') as mois,
           SUM(montantTotal) as montant
         FROM Vente
         WHERE statut IN ('VALIDE', 'VALIDEE')
-        AND date >= ${new Date(now.getFullYear() - 2, now.getMonth(), 1).toISOString()}
+        AND date >= ${new Date(now.getFullYear() - 2, now.getMonth(), 1).getTime()}
         ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.empty}
         GROUP BY mois
         ORDER BY mois ASC
@@ -196,18 +196,18 @@ export async function GET(request: NextRequest) {
         INNER JOIN "Produit" p ON vl."produitId" = p.id
         INNER JOIN "Vente" v ON vl."venteId" = v.id
         WHERE v.statut IN ('VALIDE', 'VALIDEE')
-        AND v.date >= ${new Date(now.getFullYear(), 0, 1).toISOString()}
+        AND v.date >= ${new Date(now.getFullYear(), 0, 1).getTime()}
         ${entiteId ? Prisma.sql`AND v."entiteId" = ${entiteId}` : Prisma.empty}
         GROUP BY p.categorie
         ORDER BY montant DESC
       `.catch(catchEmpty('caCategorie.raw')),
       // 16 - CA PAR JOUR POUR LE MOIS EN COURS (heatmap)
       prisma.$queryRaw<any[]>`
-        SELECT strftime('%d', date) as jour, SUM(montantTotal) as montant
+        SELECT strftime('%d', date / 1000, 'unixepoch') as jour, SUM(montantTotal) as montant
         FROM Vente
         WHERE statut IN ('VALIDE', 'VALIDEE')
-        AND date >= ${new Date(now.getFullYear(), now.getMonth(), 1).toISOString()}
-        AND date < ${new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()}
+        AND date >= ${new Date(now.getFullYear(), now.getMonth(), 1).getTime()}
+        AND date < ${new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime()}
         ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.empty}
         GROUP BY jour
         ORDER BY jour ASC

@@ -22,7 +22,6 @@ const csp = [
 
 const nextConfig = {
   output: 'standalone',
-  typescript: { ignoreBuildErrors: true },
   env: {
     NEXT_PUBLIC_APP_VERSION: pkgVersion,
   },

@@ -53,6 +53,8 @@ export default function VenteFormModal({
     numeroBon: '',
     lignes: [] as Ligne[],
     pointsGagnes: 0,
+    typeVente: 'LIVRAISON_IMMEDIATE',
+    dateLivraison: '',
   })
   const [ajoutProduit, setAjoutProduit] = useState({
     produitId: '', quantite: '1', prixUnitaire: '', recherche: '', tvaPerc: '', remise: '', remiseType: 'MONTANT' as 'MONTANT' | 'POURCENT',
@@ -206,6 +208,8 @@ export default function VenteFormModal({
         tva: Number(l.tvaPerc) || 0,
         remise: Number(l.remise) || 0,
       })),
+      typeVente: formData.typeVente,
+      dateLivraison: formData.typeVente === 'COMMANDE' ? formData.dateLivraison || undefined : undefined,
     }
 
     try {
@@ -220,7 +224,7 @@ export default function VenteFormModal({
           date: new Date().toLocaleDateString('en-CA'),
           magasinId: '', clientId: '', clientLibre: '', modePaiement: 'ESPECES', montantPaye: '',
           reglements: [{ mode: 'ESPECES', montant: '' }], banqueId: '', remiseGlobale: '', observation: '', numeroBon: '',
-          lignes: [], pointsGagnes: 0,
+          lignes: [], pointsGagnes: 0, typeVente: 'LIVRAISON_IMMEDIATE', dateLivraison: '',
         })
         setAddLignesPopupOpen(false)
         setPopupLignes([])
@@ -518,6 +522,25 @@ export default function VenteFormModal({
                 <p className="text-sm font-black text-orange-700">{pointsGagnes} points</p>
               </div>
             </div>
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type de vente</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setFormData(f => ({ ...f, typeVente: 'LIVRAISON_IMMEDIATE', dateLivraison: '' }))} className={`flex-1 rounded-lg border-2 px-3 py-2 text-sm font-bold transition-all ${formData.typeVente === 'LIVRAISON_IMMEDIATE' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'}`}>
+                    Livraison immédiate
+                  </button>
+                  <button type="button" onClick={() => setFormData(f => ({ ...f, typeVente: 'COMMANDE' }))} className={`flex-1 rounded-lg border-2 px-3 py-2 text-sm font-bold transition-all ${formData.typeVente === 'COMMANDE' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'}`}>
+                    Vente sur commande
+                  </button>
+                </div>
+              </div>
+              {formData.typeVente === 'COMMANDE' && (
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-blue-700 mb-1">Date de livraison prévue</label>
+                  <input type="date" value={formData.dateLivraison} onChange={(e) => setFormData(f => ({ ...f, dateLivraison: e.target.value }))} className="w-full rounded-lg border border-blue-200 px-3 py-2 focus:border-blue-500 focus:outline-none" />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -659,6 +682,7 @@ export default function VenteFormModal({
                 date: new Date().toLocaleDateString('en-CA'), magasinId: '', clientId: '', clientLibre: '',
                 modePaiement: 'ESPECES', montantPaye: '', reglements: [{ mode: 'ESPECES', montant: '' }],
                 banqueId: '', remiseGlobale: '', observation: '', numeroBon: '', lignes: [], pointsGagnes: 0,
+                typeVente: 'LIVRAISON_IMMEDIATE', dateLivraison: '',
               })}} className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300">
                 Annuler
               </button>

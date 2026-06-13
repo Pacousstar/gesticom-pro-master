@@ -1558,7 +1558,7 @@ export default function VentesPage() {
           const periode = (dateDebut || dateFin)
             ? 'Période: ' + (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...')
             : 'Toutes périodes'
-          const pages = paginateForPrint(allVentesForPrint, 20)
+          const pages = paginateForPrint(allVentesForPrint, { otherPagesSize: 20 })
           return pages.map((pageData, pageIdx) => (
             <div key={pageIdx} className="print-page">
               <ListPrintWrapper

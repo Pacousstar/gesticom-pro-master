@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams.get('search')?.trim() || ''
   const categorie = request.nextUrl.searchParams.get('categorie')
   const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
-  const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
+  const limit = Math.min(1000, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 20))
   const skip = (page - 1) * limit
   const exportAll = request.nextUrl.searchParams.get('export') === 'all'
 

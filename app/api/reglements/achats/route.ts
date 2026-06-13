@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
         await enregistrerMouvementCaisse({
           magasinId: Number(body.magasinId),
           type: 'SORTIE',
-          motif: `Règlement Achat : ${observation}`,
+          motif: `Règlement Achat ${a?.numero || 'R'+reglement.id} : ${observation}`,
           montant,
           utilisateurId: session.userId,
           entiteId,

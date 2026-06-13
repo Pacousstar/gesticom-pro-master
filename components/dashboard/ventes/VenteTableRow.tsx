@@ -2,7 +2,7 @@
 
 import { memo } from 'react'
 import {
-  DollarSign, Wallet, Edit2, Eye, RotateCcw, XCircle, Trash2, Loader2,
+  DollarSign, Wallet, Eye, RotateCcw, XCircle, Trash2, Loader2, Pencil, Truck,
 } from 'lucide-react'
 import { formatDate } from '@/lib/format-date'
 
@@ -12,17 +12,20 @@ interface VenteTableRowProps {
   annulant: number | null
   supprimant: number | null
   loadingDetail: number | null
+  livrant: number | null
   onEdit: (v: any) => void
   onPay: (payload: { id: number; numero: string; reste: number }) => void
   onView: (id: number) => void
   onReturn: (v: any) => void
   onCancel: (v: any) => void
   onDelete: (v: any) => void
+  onEditModal?: (v: any) => void
+  onDeliver?: (v: any) => void
 }
 
 function VenteTableRowInner({
-  v, userRole, annulant, supprimant, loadingDetail,
-  onEdit, onPay, onView, onReturn, onCancel, onDelete,
+  v, userRole, annulant, supprimant, loadingDetail, livrant,
+  onEdit, onPay, onView, onReturn, onCancel, onDelete, onEditModal, onDeliver,
 }: VenteTableRowProps) {
   const resteAPayer = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
 
@@ -42,6 +45,19 @@ function VenteTableRowInner({
       <td className="px-4 py-3 text-sm text-gray-600">{v.magasin.code}</td>
       <td className="px-4 py-3 text-right font-medium text-gray-900">
         {Number(v.montantTotal).toLocaleString('fr-FR')} F
+      </td>
+      <td className="px-4 py-3">
+        {v.typeVente === 'COMMANDE' ? (
+          <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+            v.dateLivraison ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+          }`}>
+            {v.dateLivraison ? 'Livrée' : 'Commande'}
+          </span>
+        ) : (
+          <span className="rounded px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">
+            Directe
+          </span>
+        )}
       </td>
       <td className="px-4 py-3 text-sm text-gray-600">
         <div className="flex items-center gap-1.5" title={v.modePaiement === 'ESPECES' ? "Espèces" : v.modePaiement}>
@@ -85,15 +101,26 @@ function VenteTableRowInner({
               <Wallet className="h-4 w-4" />
             </button>
           )}
-          {v.statut !== 'ANNULEE' && (
+          {v.typeVente === 'COMMANDE' && !v.dateLivraison && v.statut !== 'ANNULEE' && onDeliver && (
             <button
-              onClick={() => onEdit(v)}
-              className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
-              title="Modifier la facture"
+              onClick={() => onDeliver(v)}
+              disabled={livrant === v.id}
+              className="rounded p-1.5 text-blue-600 hover:bg-blue-100 disabled:opacity-50"
+              title="Livrer la commande"
             >
-              <Edit2 className="h-4 w-4" />
+              {livrant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
             </button>
           )}
+          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && v.statut !== 'ANNULEE' && onEditModal && (
+            <button
+              onClick={() => onEditModal(v)}
+              className="rounded p-1.5 text-orange-600 hover:bg-orange-100"
+              title="Modifier la facture complète"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
+
           <button
             onClick={() => onView(v.id)}
             disabled={loadingDetail === v.id}

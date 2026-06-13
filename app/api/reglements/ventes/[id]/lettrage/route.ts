@@ -25,18 +25,15 @@ export async function PATCH(
             return NextResponse.json({ error: 'ID Règlement et ID Vente requis' }, { status: 400 })
         }
 
-        const res = await prisma.$transaction(async (tx) => {
-            // 1. Vérifier le règlement
+        const result = await prisma.$transaction(async (tx) => {
             const reglement = await tx.reglementVente.findUnique({
                 where: { id },
-                include: { vente: true }
+                include: { ReglementVenteLigne: { select: { montant: true } } }
             })
 
             if (!reglement) throw new Error('Règlement introuvable')
-            if (reglement.venteId) throw new Error('Ce règlement est déjà lettré à une facture')
-            if ((reglement.entiteId || 0) !== entiteId) throw new Error('Accès refusé à ce règlement (entité différente)')
+            if ((reglement.entiteId || 0) !== entiteId) throw new Error('Accès refusé (entité différente)')
 
-            // 2. Vérifier la vente
             const vente = await tx.vente.findUnique({
                 where: { id: venteId },
                 include: { ReglementVenteLigne: { select: { montant: true } } }
@@ -45,52 +42,53 @@ export async function PATCH(
             if (!vente) throw new Error('Vente introuvable')
             if (vente.statutPaiement === 'PAYE') throw new Error('Cette facture est déjà soldée')
             if (vente.clientId !== reglement.clientId) throw new Error('Le règlement appartient à un autre client')
-            if (vente.entiteId !== entiteId) throw new Error('Accès refusé à cette vente (entité différente)')
+            if (vente.entiteId !== entiteId) throw new Error('Accès refusé (entité différente)')
 
-            // 2b. Calculer le montantPaye réel depuis les Lignes (source de vérité)
+            const dejaAlloue = (reglement.ReglementVenteLigne || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
+            const restantReglement = Math.max(0, reglement.montant - dejaAlloue)
+
+            if (restantReglement <= 0.01) throw new Error('Ce règlement n\'a plus de montant disponible à lettrer')
+
             const realMontantPaye = (vente.ReglementVenteLigne || []).reduce((s: number, l: any) => s + (l.montant || 0), 0)
-
-            // 3. Mettre à jour le règlement
-            const updatedReglement = await tx.reglementVente.update({
-                where: { id },
-                data: { venteId }
-            })
-
-            // 4. Calculer le reste à payer
             const resteAPayer = Math.max(0, (vente.montantTotal || 0) - realMontantPaye)
-            if (reglement.montant - resteAPayer > 0.01) {
-                throw new Error(`Paiement invalide: le règlement (${reglement.montant.toLocaleString()} F) dépasse le reste à payer (${resteAPayer.toLocaleString()} F).`)
-            }
 
-            // 5. Créer la Ligne de règlement
-            await tx.reglementVenteLigne.create({
-                data: {
-                    reglementId: id,
-                    venteId,
-                    montant: Math.min(reglement.montant, resteAPayer),
-                }
+            if (resteAPayer <= 0.01) throw new Error('Cette facture est déjà soldée')
+
+            const ligneExistante = await tx.reglementVenteLigne.findFirst({
+                where: { reglementId: id, venteId }
             })
 
-            // 6. Recalculer montantPaye depuis toutes les Lignes
+            if (ligneExistante) throw new Error('Ce règlement est déjà lettré à cette facture')
+
+            const montantAlloue = Math.min(restantReglement, resteAPayer)
+
+            await tx.reglementVenteLigne.create({
+                data: { reglementId: id, venteId, montant: montantAlloue }
+            })
+
             const allLignes = await tx.reglementVenteLigne.findMany({
                 where: { venteId },
                 select: { montant: true }
             })
             const nouveauMontantPaye = allLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
-            const nouveauStatutPaiement = nouveauMontantPaye >= (vente.montantTotal || 0) - 0.01 ? 'PAYE' : 'PARTIEL'
+            const nouveauStatut = nouveauMontantPaye >= (vente.montantTotal || 0) - 0.01 ? 'PAYE' : 'PARTIEL'
 
             await tx.vente.update({
                 where: { id: venteId },
-                data: { 
-                    montantPaye: nouveauMontantPaye,
-                    statutPaiement: nouveauStatutPaiement
-                }
+                data: { montantPaye: nouveauMontantPaye, statutPaiement: nouveauStatut }
             })
 
-            return updatedReglement
+            const nouveauRestant = Math.max(0, restantReglement - montantAlloue)
+
+            return {
+                restant: nouveauRestant,
+                alloue: montantAlloue,
+                venteId,
+                statutPaiement: nouveauStatut
+            }
         })
 
-        return NextResponse.json(res)
+        return NextResponse.json(result)
     } catch (error: any) {
         console.error('Erreur Lettrage Vente:', error)
         return NextResponse.json({ error: error.message || 'Erreur serveur' }, { status: 500 })

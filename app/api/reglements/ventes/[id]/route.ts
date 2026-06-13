@@ -43,16 +43,11 @@ export async function DELETE(
       await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
 
       if (estModeEspeces(reglement.modePaiement)) {
+        const motif = reglement.vente?.numero || `R${reglement.id}`
         await tx.caisse.deleteMany({
-          where: {
-            OR: [
-              { motif: `RÈGLEMENT VENTE ${reglement.vente?.numero || ''}` },
-              { motif: `RÈGLEMENT : ${reglement.vente?.numero || ''}` },
-              { id: reglement.id }
-            ].filter(Boolean) as any
-          }
+          where: { motif: { contains: motif } }
         })
-        const magasinId = reglement.vente?.magasinId || reglement.vente?.magasinId
+        const magasinId = reglement.vente?.magasinId
         if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
       } else if (estModeBanque(reglement.modePaiement)) {
         const opsBancaires = await tx.operationBancaire.findMany({
@@ -152,13 +147,9 @@ export async function PATCH(
       await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
 
       if (estModeEspeces(old.modePaiement)) {
+        const motif = old.vente?.numero || `R${id}`
         await tx.caisse.deleteMany({
-          where: {
-            OR: [
-              { motif: `RÈGLEMENT VENTE ${old.vente?.numero || ''}` },
-              { motif: `RÈGLEMENT : ${old.vente?.numero || ''}` },
-            ].filter(Boolean)
-          }
+          where: { motif: { contains: motif } }
         })
         const magasinId = old.vente?.magasinId
         if (magasinId) await recalculerSoldeCaisse(magasinId, tx)

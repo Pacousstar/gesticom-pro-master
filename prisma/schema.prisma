@@ -432,6 +432,8 @@ model Vente {
   numeroBon           String?
   dateOperation       DateTime              @default(now())
   estHistorique       Boolean               @default(false)
+  typeVente           String                @default("LIVRAISON_IMMEDIATE")
+  dateLivraison       DateTime?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   reglements          ReglementVente[]
@@ -450,6 +452,8 @@ model Vente {
   @@index([magasinId])
   @@index([statut])
   @@index([statutPaiement])
+  @@index([typeVente])
+  @@index([dateLivraison])
 }
 
 model VenteLigne {

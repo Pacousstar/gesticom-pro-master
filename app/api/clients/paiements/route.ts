@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const dateDebut = searchParams.get('dateDebut')
   const dateFin = searchParams.get('dateFin')
-  const limit = Math.min(500, Math.max(1, Number(searchParams.get('limit')) || 100))
+  const limit = Math.min(99999, Math.max(1, Number(searchParams.get('limit')) || 100))
   const page = Math.max(1, Number(searchParams.get('page')) || 1)
 
   const where: any = { statut: { in: ['VALIDEE', 'VALIDE'] } }

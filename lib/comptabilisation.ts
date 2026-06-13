@@ -371,6 +371,7 @@ export async function comptabiliserReglementVente(data: {
   utilisateurId: number
   entiteId?: number
   magasinId?: number | null
+  estAcompte?: boolean
 }, tx?: TxClient) {
   const p = tx || prisma
 
@@ -382,8 +383,8 @@ export async function comptabiliserReglementVente(data: {
   }
 
   const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
-  // Si venteId est null/0 => acompte client (avance) : on crédite 4191 (passif) au lieu de 411.
-  const isAcompteClient = !data.venteId || data.venteId <= 0
+  // Si venteId est null/0 ou estAcompte=true => acompte client (avance) : on crédite 4191 (passif) au lieu de 411.
+  const isAcompteClient = data.estAcompte || !data.venteId || data.venteId <= 0
   const compteTiers = isAcompteClient
     ? await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS_AVANCES, 'Clients - Avances et acomptes reçus', '4', 'PASSIF', tx)
     : await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS, 'Clients', '4', 'ACTIF', tx)
@@ -455,6 +456,142 @@ export async function comptabiliserReglementVente(data: {
   // NOTE: Les mouvements physiques de Caisse/Banque ne sont JAMAIS gérés ici.
   // C'est à l'API métier de décider si le paiement doit impacter la trésorerie physique
   // (selon la règle de flexibilité métier adoptée).
+}
+
+/**
+ * Comptabilise la livraison d'une commande client.
+ * Reprend l'avance (4191), reconnaît le revenu (701) et sort le stock (603/311).
+ */
+export async function comptabiliserLivraisonCommande(data: {
+  venteId: number
+  numeroVente: string
+  date: Date
+  montantTotal: number
+  entiteId?: number
+  utilisateurId: number
+  magasinId: number
+  lignes?: { produitId: number; designation: string; quantite: number; prixUnitaire: number; coutUnitaire: number; tva?: number; remise?: number }[]
+}, tx?: TxClient) {
+  const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'COMMANDE_LIVRAISON', referenceId: data.venteId }
+  })
+
+  const journalVentes = await getOrCreateJournal('VE', 'Journal des Ventes', 'VENTES', tx)
+  const journalOD = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
+  const compteVentes = await getOrCreateCompte('701', 'Ventes de marchandises', '7', 'PRODUITS', tx)
+  const compteTva = await getOrCreateCompte(COMPTES_DEFAUT.TVA_COLLECTEE, 'TVA Collectée', '4', 'PASSIF', tx)
+  const compteAvance = await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS_AVANCES, 'Clients - Avances et acomptes reçus', '4', 'PASSIF', tx)
+  const compteVariationStock = await getOrCreateCompte(COMPTES_DEFAUT.VARIATION_STOCKS, 'Variation de stocks', '6', 'CHARGES', tx)
+  const compteStock = await getOrCreateCompte(COMPTES_DEFAUT.STOCK_MARCHANDISES, 'Stock de marchandises', '3', 'ACTIF', tx)
+
+  const entiteId = data.entiteId
+  if (!entiteId) throw new Error('[Comptabilisation] entiteId requis')
+
+  // Calcul TVA et HT
+  let montantHT = 0
+  let montantTVA = 0
+  if (data.lignes && data.lignes.length > 0) {
+    montantHT = montantHtNetTotalLignesCompta(
+      data.lignes.map((l) => ({
+        quantite: l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        remise: l.remise ?? 0,
+      }))
+    )
+    montantTVA = montantTvaDepuisTtcEtHtNet(data.montantTotal, montantHT)
+  } else {
+    const param = await p.parametre.findFirst({ orderBy: { id: 'asc' } })
+    montantHT = htNetDepuisTtcEtTauxGlobal(data.montantTotal, param?.tvaParDefaut || 0)
+    montantTVA = montantTvaDepuisTtcEtHtNet(data.montantTotal, montantHT)
+  }
+
+  // 1. Reprise de l'avance client : Débit 4191 (le passif diminue) / Crédit 701 (revenu reconnu)
+  await createEcriture({
+    date: data.date,
+    journalId: journalVentes.id,
+    entiteId,
+    piece: data.numeroVente,
+    libelle: `Livraison commande ${data.numeroVente} - Reprise avance`,
+    compteId: compteAvance.id,
+    debit: data.montantTotal,
+    credit: 0,
+    reference: data.numeroVente,
+    referenceType: 'COMMANDE_LIVRAISON',
+    referenceId: data.venteId,
+    utilisateurId: data.utilisateurId,
+  }, tx)
+
+  // 2. Chiffre d'affaires HT
+  await createEcriture({
+    date: data.date,
+    journalId: journalVentes.id,
+    entiteId,
+    piece: data.numeroVente,
+    libelle: `Livraison commande ${data.numeroVente} (HT)`,
+    compteId: compteVentes.id,
+    debit: 0,
+    credit: montantHT,
+    reference: data.numeroVente,
+    referenceType: 'COMMANDE_LIVRAISON',
+    referenceId: data.venteId,
+    utilisateurId: data.utilisateurId,
+  }, tx)
+
+  // 3. TVA Collectée
+  if (montantTVA > 0) {
+    await createEcriture({
+      date: data.date,
+      journalId: journalVentes.id,
+      entiteId,
+      piece: data.numeroVente,
+      libelle: `TVA sur livraison commande ${data.numeroVente}`,
+      compteId: compteTva.id,
+      debit: 0,
+      credit: montantTVA,
+      reference: data.numeroVente,
+      referenceType: 'COMMANDE_LIVRAISON',
+      referenceId: data.venteId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
+
+  // 4. Sortie de stock (603/311)
+  if (data.lignes && data.lignes.length > 0) {
+    const coutTotal = data.lignes.reduce((sum, l) => sum + (l.coutUnitaire * l.quantite), 0)
+    if (coutTotal > 0) {
+      await createEcriture({
+        date: data.date,
+        journalId: journalOD.id,
+        entiteId,
+        piece: data.numeroVente,
+        libelle: `Sortie Stock - Livraison commande ${data.numeroVente}`,
+        compteId: compteVariationStock.id,
+        debit: coutTotal,
+        credit: 0,
+        reference: data.numeroVente,
+        referenceType: 'COMMANDE_LIVRAISON',
+        referenceId: data.venteId,
+        utilisateurId: data.utilisateurId,
+      }, tx)
+      await createEcriture({
+        date: data.date,
+        journalId: journalOD.id,
+        entiteId,
+        piece: data.numeroVente,
+        libelle: `Sortie Stock - Livraison commande ${data.numeroVente}`,
+        compteId: compteStock.id,
+        debit: 0,
+        credit: coutTotal,
+        reference: data.numeroVente,
+        referenceType: 'COMMANDE_LIVRAISON',
+        referenceId: data.venteId,
+        utilisateurId: data.utilisateurId,
+      }, tx)
+    }
+  }
 }
 
 /**

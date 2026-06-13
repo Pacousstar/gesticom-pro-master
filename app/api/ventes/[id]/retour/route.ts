@@ -73,6 +73,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!vente) return badRequest('Vente introuvable.')
     if (vente.entiteId !== entiteId) return badRequest('Accès refusé à cette vente.')
     if (vente.statut === 'ANNULEE') return badRequest('Vente annulée.')
+    if (vente.typeVente === 'COMMANDE' && !vente.dateLivraison) {
+      return badRequest('Commande non livrée : impossible de retourner du stock. Annulez la commande plutôt.')
+    }
 
     const retour = await prisma.$transaction(async (tx: any) => {
       const lignesAretourner: any[] = []

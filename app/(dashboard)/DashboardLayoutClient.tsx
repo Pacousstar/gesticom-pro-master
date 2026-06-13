@@ -50,7 +50,7 @@ import { ToastContainer } from '@/components/ui/Toast'
 import { useToast } from '@/hooks/useToast'
 import SupportModal from '@/components/SupportModal'
 import UpdateChecker from '@/components/UpdateChecker'
-import { ThemeProvider, useTheme } from '@/components/ThemeProvider'
+import { useTheme } from '@/components/ThemeProvider'
 
 // Diagnostic DB banner
 type DbInfo = { nodeEnv?: string; databaseUrl?: string }
@@ -459,7 +459,6 @@ export default function DashboardLayoutClient({
   // if (!mounted) return null;
 
   return (
-    <ThemeProvider>
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700">
       {/* Animations de fond */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -1090,6 +1089,5 @@ export default function DashboardLayoutClient({
       <ToastContainer toasts={toasts} onClose={removeToast} />
       <UpdateChecker />
     </div>
-    </ThemeProvider>
   )
 }

@@ -303,7 +303,7 @@ useEffect(() => {
       <div className="hidden print:block">
         {(() => {
           const dataForPrint = allDataForPrint.length > 0 ? allDataForPrint : filteredData
-          const pages = paginateForPrint(dataForPrint, 22)
+          const pages = paginateForPrint(dataForPrint, { otherPagesSize: 22 })
           const totalEntrees = dataForPrint.reduce((s, m) => s + (m.type === 'ENTREE' ? (Number(m.quantite) || 0) : 0), 0)
           const totalSorties = dataForPrint.reduce((s, m) => s + (m.type === 'SORTIE' ? (Number(m.quantite) || 0) : 0), 0)
           const netFlux = totalEntrees - totalSorties

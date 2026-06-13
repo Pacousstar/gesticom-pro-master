@@ -59,22 +59,26 @@ export async function POST(
       // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
       await verifierCloture(v.date, session, tx)
 
-      for (const l of v.lignes) {
-        await tx.stock.updateMany({
-          where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
-          data: { quantite: { increment: l.quantite } },
-        })
-        await tx.mouvement.create({
-          data: {
-            type: 'ENTREE',
-            produitId: l.produitId,
-            magasinId: v.magasinId,
-            entiteId: v.entiteId,
-            utilisateurId: session.userId,
-            quantite: l.quantite,
-            observation: `Annulation vente ${v.numero}`,
-          },
-        })
+      const estCommandeNonLivree = v.typeVente === 'COMMANDE' && !v.dateLivraison
+
+      if (!estCommandeNonLivree) {
+        for (const l of v.lignes) {
+          await tx.stock.updateMany({
+            where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
+            data: { quantite: { increment: l.quantite } },
+          })
+          await tx.mouvement.create({
+            data: {
+              type: 'ENTREE',
+              produitId: l.produitId,
+              magasinId: v.magasinId,
+              entiteId: v.entiteId,
+              utilisateurId: session.userId,
+              quantite: l.quantite,
+              observation: `Annulation vente ${v.numero}`,
+            },
+          })
+        }
       }
 
       await tx.vente.update({ where: { id }, data: { statut: 'ANNULEE' } })
@@ -154,6 +158,7 @@ export async function POST(
       await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
       await deleteEcrituresByReference('VENTE_STOCK', id, tx)
       await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
+      await deleteEcrituresByReference('COMMANDE_LIVRAISON', id, tx)
 
       // 6. LOG D'AUDIT
       await logSuppression(

@@ -604,15 +604,15 @@ const reglAchat = await tx.reglementAchat.create({
           lignes: updated.lignes,
         }, tx)
 
-        // 8. LOG D'AUDIT
-        await logModification(session!, 'ACHAT', updated.id, `Mise à jour complète de l'achat ${updated.numero}`, oldAchat, updated, getIpAddress(request))
-
-        return updated
+        return { updated, oldAchat }
       }, { timeout: 30000 })
+
+      // 8. LOG D'AUDIT (hors transaction pour éviter les conflits de client Prisma)
+      await logModification(session!, 'ACHAT', result.updated.id, `Mise à jour complète de la facture ${result.updated.numero}`, result.oldAchat, result.updated, getIpAddress(request))
 
       revalidatePath('/dashboard/achats')
       revalidatePath('/api/achats')
-      return NextResponse.json(result)
+      return NextResponse.json(result.updated)
     }
 
     return NextResponse.json({ error: 'Action non reconnue.' }, { status: 400 })

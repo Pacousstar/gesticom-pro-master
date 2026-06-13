@@ -45,6 +45,8 @@ export default function ModificationAchatModal({
     lignes: [] as Ligne[]
   })
   
+  const [numero, setNumero] = useState('')
+
   const [ajout, setAjout] = useState({
     produitId: '',
     quantite: '1',
@@ -91,6 +93,7 @@ export default function ModificationAchatModal({
       setFournisseurs(mFourData.data || mFourData || [])
       setProduits(Array.isArray(mProd) ? mProd : mProd.data || [])
       setBanques((mBanquesData.data || mBanquesData || []).filter((b: any) => b.actif !== false))
+      setNumero(mAchat.numero || '')
 
       setFormData({
         date: mAchat.date.split('T')[0],
@@ -215,7 +218,7 @@ export default function ModificationAchatModal({
         <div className="flex items-center justify-between bg-blue-700 px-8 py-6 text-white text-3xl font-black uppercase italic tracking-tighter">
           <div className="flex items-center gap-3">
             <ShoppingBag className="h-8 w-8" />
-            MODIFIER L'ACHAT #{achatId}
+            MODIFIER LA FACTURE {numero || `#${achatId}`}
           </div>
           <button onClick={onClose} className="rounded-full bg-white/20 p-2 hover:bg-white/30 transition-colors">
             <X className="h-6 w-6" />

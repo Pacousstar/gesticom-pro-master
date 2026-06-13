@@ -726,11 +726,12 @@ const captureImages: Record<string, string> = {
   'CAPTURE : interface principale avec annotations': '/captures/accueil.png',
   'CAPTURE : Dashboard complet avec KPI': '/captures/dashboard.png',
   'CAPTURE : zone d\'alertes du dashboard': '/captures/dashboard-alertes.png',
-  'CAPTURE : formulaire de nouvelle vente': '/captures/vente-formulaire.png',
-  'CAPTURE : impression liste des ventes': '/captures/vente-impression.png',
-  'CAPTURE : liste des ventes avec filtres appliqués': '/captures/vente-liste.png',
-  'CAPTURE : formulaire de nouvel achat': '/captures/achat-formulaire.png',
-  'CAPTURE : liste des achats avec filtres': '/captures/achat-liste.png',
+  'CAPTURE : bilan comptable': '/captures/compta-bilan.png',
+  'CAPTURE : grand livre': '/captures/compta-grand-livre.png',
+  'CAPTURE : rapports généraux': '/captures/rapports-generaux.png',
+  'CAPTURE : paramètres entreprise': '/captures/parametres-entreprise.png',
+  'CAPTURE : page sauvegarde': '/captures/parametres-sauvegarde.png',
+  'CAPTURE : page monitoring': '/captures/monitoring.png',
 }
 
 function getCaptureImage(name: string): string | null {

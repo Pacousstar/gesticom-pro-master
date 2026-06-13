@@ -238,7 +238,7 @@ export default function PaiementsClientsPage() {
           const entite = entreprise?.nomEntreprise || 'GESTICOM PRO'
           const today = new Date().toLocaleDateString('fr-FR')
           const periode = `Période du ${new Date(startDate).toLocaleDateString('fr-FR')} au ${new Date(endDate).toLocaleDateString('fr-FR')}`
-          const pages = paginateForPrint(filteredData, 25)
+          const pages = paginateForPrint(filteredData, { otherPagesSize: 25 })
           return pages.map((pageData, pageIdx) => (
             <div key={pageIdx} className="print-page p-4">
               <ListPrintWrapper
