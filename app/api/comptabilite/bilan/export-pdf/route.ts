@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { getBilanForYear } from '../route'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { jsPDF } = require('jspdf')
 
 function formatMontant(n: number): string {

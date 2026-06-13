@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { parseExcel } from '@/lib/excel'
 import { requireRole } from '@/lib/require-role'
 
 export async function POST(req: NextRequest) {
@@ -16,10 +16,7 @@ export async function POST(req: NextRequest) {
         if (!file) return NextResponse.json({ error: 'Fichier manquant' }, { status: 400 })
 
         const buffer = Buffer.from(await file.arrayBuffer())
-        const workbook = XLSX.read(buffer, { type: 'buffer' })
-        const sheetName = workbook.SheetNames[0]
-        const sheet = workbook.Sheets[sheetName]
-        const data = XLSX.utils.sheet_to_json(sheet) as any[]
+        const { rows: data } = await parseExcel(buffer)
 
         if (data.length === 0) return NextResponse.json({ error: 'Le fichier est vide' }, { status: 400 })
 
@@ -41,7 +38,7 @@ export async function POST(req: NextRequest) {
             }
 
             const numero = getVal(['numero', 'facture', 'ref', 'bon'])?.toString()
-            const dateStr = getVal(['date', 'created_at', 'le'])
+            const dateStr = getVal(['date', 'created_at', 'le'])?.toString()
             const fournisseurNom = getVal(['fournisseur', 'nom fournisseur', 'supplier', 'expediteur'])?.toString()
             const montantTotal = Number(getVal(['montant total', 'total', 'montant', 'net'])) || 0
             const statut = (getVal(['statut', 'status', 'etat'])?.toString() || 'VALIDEE').toUpperCase()

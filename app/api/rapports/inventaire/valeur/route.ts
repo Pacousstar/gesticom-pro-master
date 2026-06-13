@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
         pamp: prixValo,
         valeurTotal: qte * prixValo
       }
-    }).filter(d => d.quantite !== 0)
+    }).filter((d: any) => exportAll || d.quantite !== 0)
 
     // Calcul des totaux
     let totalValeur = 0

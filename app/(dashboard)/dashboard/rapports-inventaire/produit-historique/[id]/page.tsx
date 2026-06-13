@@ -8,13 +8,10 @@ import {
   Package, 
   ShoppingCart, 
   ShoppingBag, 
-  Calendar, 
   User, 
   Warehouse,
   TrendingUp,
   History,
-  Download,
-  Filter,
   Printer
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'

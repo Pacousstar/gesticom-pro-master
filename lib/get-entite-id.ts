@@ -1,6 +1,12 @@
 import { Session } from './auth'
 import { prisma } from './db'
 
+async function resolveEntite(entiteId: number): Promise<number> {
+  const entite = await prisma.entite.findUnique({ where: { id: entiteId }, select: { id: true } })
+  if (entite) return entiteId
+  return 0
+}
+
 export async function ensureDefaultEntite(): Promise<number> {
   let entite = await prisma.entite.findFirst({ orderBy: { id: 'asc' }, select: { id: true } })
   if (entite) {
@@ -28,28 +34,30 @@ export async function getEntiteId(session: Session | null): Promise<number> {
       where: { id: session.userId },
       select: { entiteId: true },
     })
-    if (user?.entiteId && user.entiteId > 0) {
-      return user.entiteId
-    }
-    
     if (user) {
+      if (user.entiteId && user.entiteId > 0 && (await resolveEntite(user.entiteId))) {
+        return user.entiteId
+      }
+      const newId = await ensureDefaultEntite()
       await prisma.utilisateur.update({
         where: { id: session.userId },
-        data: { entiteId: await ensureDefaultEntite() },
+        data: { entiteId: newId },
       })
+      return newId
     }
     return await ensureDefaultEntite()
   }
 
   if (session.entiteId > 0) {
-    return session.entiteId
+    const valid = await resolveEntite(session.entiteId)
+    if (valid) return valid
   }
 
   const user = await prisma.utilisateur.findUnique({
     where: { id: session.userId },
     select: { entiteId: true },
   })
-  if (user?.entiteId && user.entiteId > 0) {
+  if (user?.entiteId && user.entiteId > 0 && (await resolveEntite(user.entiteId))) {
     return user.entiteId
   }
 

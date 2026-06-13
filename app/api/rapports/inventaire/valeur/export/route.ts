@@ -4,8 +4,8 @@ import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -145,24 +145,9 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'N°': '', 'Code': '', 'Désignation': '', 'Catégorie': '', 'Qté en Stock': '', 'Unité': '', 'Cout Unit (PAMP)': '', 'Valeur Totale': '' }])
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Valorisation Stock')
-
-    const colWidths = [
-      { wch: 6 }, { wch: 15 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 8 }, { wch: 15 }, { wch: 18 }
-    ]
-    worksheet['!cols'] = colWidths
-
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    const buf = await rowsToBuffer(rows as any[], 'Valorisation Stock')
     const filename = `valorisation-stock-${dateFin}-${new Date().toISOString().split('T')[0]}.xlsx`
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('Export Excel Valeur Stock error:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

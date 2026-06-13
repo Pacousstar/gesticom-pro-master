@@ -1,4 +1,15 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('next/server', () => ({
+  NextResponse: { json: (body: any, init?: any) => ({ status: init?.status || 200, json: async () => body }) },
+  NextRequest: class { },
+}))
+
+vi.mock('@/lib/auth', () => ({
+  getSession: vi.fn().mockResolvedValue({ userId: 1, login: 'admin', nom: 'Admin', role: 'SUPER_ADMIN', entiteId: 1 }),
+}))
+
 import { getBilanForYear } from '@/app/api/comptabilite/bilan/route'
 
 const mockFindMany = vi.hoisted(() => vi.fn())

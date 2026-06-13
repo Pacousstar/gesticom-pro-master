@@ -6,7 +6,6 @@ import { useToast } from '@/hooks/useToast'
 import { chargeSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
 
 type Charge = {
@@ -402,7 +401,7 @@ export default function ChargesPage() {
               <tbody className="divide-y divide-gray-200 bg-white">
                 {charges.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">{new Date(c.date).toLocaleDateString('fr-FR')}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">{new Date(c.date).toLocaleString('fr-FR')}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{c.magasin?.nom || '—'}</td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${c.type === 'FIXE' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>

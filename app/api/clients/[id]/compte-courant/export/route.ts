@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
@@ -73,25 +73,15 @@ export async function GET(
             })
         })
 
-        const wb = XLSX.utils.book_new()
-        const ws = XLSX.utils.json_to_sheet(rows)
-
         if (rows.length > 0) {
           const totalDebit = rows.reduce((s, r) => s + (Number(r.Débit) || 0), 0)
           const totalCredit = rows.reduce((s, r) => s + (Number(r.Crédit) || 0), 0)
-          XLSX.utils.sheet_add_aoa(ws, [['', 'TOTAL', totalDebit, totalCredit, solde]], { origin: rows.length + 1 })
+          rows.push({ Date: '', Libellé: 'TOTAL', Débit: totalDebit, Crédit: totalCredit, Solde: solde })
         }
 
-        XLSX.utils.book_append_sheet(wb, ws, 'Compte Courant')
-        
-        const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
-        return new NextResponse(buf, {
-            headers: {
-                'Content-Disposition': `attachment; filename="Compte_Courant_${client.nom.replace(/\s+/g, '_')}.xlsx"`,
-                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            }
-        })
+        const buf = await rowsToBuffer(rows, 'Compte Courant')
+        const filename = `Compte_Courant_${client.nom.replace(/\s+/g, '_')}.xlsx`
+        return makeResponse(buf, filename)
     } catch (error) {
         console.error('Export Excel Erreur:', error)
         return NextResponse.json({ error: 'Erreur lors de l\'export' }, { status: 500 })

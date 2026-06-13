@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { getEntiteId } from '@/lib/get-entite-id'
+import { parseExcel } from '@/lib/excel'
 import { requireRole } from '@/lib/require-role'
 
 export async function POST(req: NextRequest) {
     try {
         const session = await getSession()
         if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+        const entiteId = await getEntiteId(session)
         const forbidden = requireRole(session, ['SUPER_ADMIN', 'ADMIN'])
         if (forbidden) return forbidden
 
@@ -16,10 +18,7 @@ export async function POST(req: NextRequest) {
         if (!file) return NextResponse.json({ error: 'Fichier manquant' }, { status: 400 })
 
         const buffer = Buffer.from(await file.arrayBuffer())
-        const workbook = XLSX.read(buffer, { type: 'buffer' })
-        const sheetName = workbook.SheetNames[0]
-        const sheet = workbook.Sheets[sheetName]
-        const data = XLSX.utils.sheet_to_json(sheet) as any[]
+        const { rows: data } = await parseExcel(buffer)
 
         if (data.length === 0) return NextResponse.json({ error: 'Le fichier est vide' }, { status: 400 })
 
@@ -36,8 +35,8 @@ export async function POST(req: NextRequest) {
             const nom = getVal(['nom', 'client', 'name', 'raison sociale'])
             const code = getVal(['code', 'ref', 'reference', 'identifiant'])?.toString()
             const telephone = getVal(['telephone', 'tel', 'phone', 'mobile'])?.toString()
-            const adresse = getVal(['adresse', 'address', 'ville', 'quartier'])
-            const email = getVal(['email', 'mail', 'courriel'])
+            const adresse = getVal(['adresse', 'address', 'ville', 'quartier'])?.toString()
+            const email = getVal(['email', 'mail', 'courriel'])?.toString()
             const soldeInitial = Number(getVal(['solde initial', 'solde_initial', 'debit initial', 'dette'])) || 0
             const avoirInitial = Number(getVal(['avoir initial', 'avoir_initial', 'credit initial', 'avance'])) || 0
 
@@ -46,7 +45,7 @@ export async function POST(req: NextRequest) {
             // Recherche par code ou par nom exact AU SEIN de la même entité
             const existing = await prisma.client.findFirst({
                 where: {
-                    entiteId: session.entiteId,
+                    entiteId,
                     OR: [
                         code ? { code } : { id: -1 },
                         { nom: nom.toString() }
@@ -76,7 +75,7 @@ export async function POST(req: NextRequest) {
                         email,
                         soldeInitial,
                         avoirInitial,
-                        entiteId: session.entiteId,
+                        entiteId,
                         type: 'CASH',
                         actif: true
                     }

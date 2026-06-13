@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-import { unauthorized, forbidden, notFound, badRequest, handleApiError } from '@/lib/api-error'
+import { unauthorized, notFound, badRequest, handleApiError } from '@/lib/api-error'
 
 export async function GET(
   request: NextRequest,

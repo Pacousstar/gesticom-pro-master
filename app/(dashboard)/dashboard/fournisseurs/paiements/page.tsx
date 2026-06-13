@@ -5,7 +5,7 @@ import { Search, Loader2, Calendar, User, CreditCard, Hash, Coins, Download, Fil
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface PaiementFournisseur {
   id: number
@@ -49,10 +49,10 @@ export default function PaiementsFournisseursPage() {
   const fetchData = async (start: string, end: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/fournisseurs/paiements?dateDebut=${start}&dateFin=${end}`)
+      const res = await fetch(`/api/fournisseurs/paiements?dateDebut=${start}&dateFin=${end}&page=1&limit=500`)
       if (res.ok) {
-        const d = await res.json()
-        setData(d)
+        const json = await res.json()
+        setData(Array.isArray(json) ? json : (json.data || []))
       } else {
         showError('Impossible de charger les paiements.')
       }

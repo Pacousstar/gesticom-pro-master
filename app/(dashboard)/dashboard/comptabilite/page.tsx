@@ -7,15 +7,11 @@ import {
   ShoppingCart,
   Users,
   ArrowUp,
-  ArrowDown,
-  ArrowDownCircle,
   TrendingUp,
   FileText,
   DollarSign,
-  Download,
   Share2,
   FileSpreadsheet,
-  Clock,
   ShoppingBag,
   Receipt
 } from 'lucide-react'
@@ -348,13 +344,13 @@ export default async function ComptabilitePage({
       {/* --- GRILLE DES LISTES DE FLUX --- */}
       <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4 pt-8">
         {[
-          { title: "Ventes du mois", data: ventesMois, color: "emerald", icon: ShoppingCart, path: "/dashboard/ventes" },
-          { title: "Achats du mois", data: achatsMois, color: "blue", icon: FileText, path: "/dashboard/achats" },
-          { title: "Dépenses du mois", data: depensesMois, color: "rose", icon: DollarSign, path: "/dashboard/depenses" },
-          { title: "Charges du mois", data: chargesMois, color: "purple", icon: Receipt, path: "/dashboard/charges" },
+          { title: "Ventes du mois", data: ventesMois, bg: "bg-emerald-500", text: "text-emerald-600", icon: ShoppingCart, path: "/dashboard/ventes" },
+          { title: "Achats du mois", data: achatsMois, bg: "bg-blue-500", text: "text-blue-600", icon: FileText, path: "/dashboard/achats" },
+          { title: "Dépenses du mois", data: depensesMois, bg: "bg-rose-500", text: "text-rose-600", icon: DollarSign, path: "/dashboard/depenses" },
+          { title: "Charges du mois", data: chargesMois, bg: "bg-purple-500", text: "text-purple-600", icon: Receipt, path: "/dashboard/charges" },
         ].map((bloc, bIdx) => (
           <div key={bIdx} className="overflow-hidden rounded-[2rem] bg-white shadow-xl border border-gray-100 flex flex-col h-[450px]">
-            <div className={`p-6 bg-${bloc.color}-500 text-white flex items-center justify-between`}>
+            <div className={`p-6 ${bloc.bg} text-white flex items-center justify-between`}>
               <div className="flex items-center gap-3">
                 <bloc.icon className="h-5 w-5" />
                 <h3 className="font-black uppercase tracking-tighter text-sm italic">{bloc.title}</h3>
@@ -374,7 +370,7 @@ export default async function ComptabilitePage({
                     {bloc.data.map((item: any, i: number) => (
                       <tr key={i} className="group">
                         <td className="py-3 pr-2">
-                          <p className={`text-xs font-black text-${bloc.color}-600 uppercase tracking-tighter truncate max-w-[120px]`}>
+                          <p className={`text-xs font-black ${bloc.text} uppercase tracking-tighter truncate max-w-[120px]`}>
                             {'numero' in item ? item.numero : ('libelle' in item ? item.libelle : item.rubrique)}
                           </p>
                           <p className="text-[9px] font-bold text-gray-400 mt-0.5">{new Date(item.date).toLocaleDateString('fr-FR', {day: '2-digit', month: 'short'})}</p>

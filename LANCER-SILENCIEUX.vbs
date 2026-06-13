@@ -2,7 +2,7 @@ Const ForAppending = 8
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set WshShell = CreateObject("WScript.Shell")
 
-appDir = "C:\GestiComPro"
+appDir = fso.GetParentFolderName(WScript.ScriptFullName)
 logFile = appDir & "\GestiComService.out"
 errFile = appDir & "\GestiComService.err"
 
@@ -20,13 +20,7 @@ Sub Err(msg)
   f.Close
 End Sub
 
-Log "Demarrage"
-
-' Verifier que node.exe existe
-If Not fso.FileExists(appDir & "\node.exe") Then
-  Err "node.exe introuvable dans " & appDir
-  WScript.Quit 1
-End If
+Log "Ouverture GestiCom Pro"
 
 ' Verifier si le serveur est deja en ligne
 Set httpReady = CreateObject("MSXML2.XMLHTTP")
@@ -35,37 +29,36 @@ httpReady.open "GET", "http://127.0.0.1:3001/", False
 httpReady.Send
 If httpReady.Status >= 200 And httpReady.Status < 500 Then
   Log "Serveur deja en ligne, ouverture navigateur"
-  WshShell.Run "cmd /c start http://localhost:3001", 0, False
+  WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
   WScript.Quit
 End If
 On Error GoTo 0
+
+' Verifier que le service Windows existe
+Set exec = WshShell.Exec("sc query GestiComPro")
+output = exec.StdOut.ReadAll()
+If InStr(output, "SERVICE_NAME") = 0 Then
+  Err "Service GestiComPro introuvable"
+  WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
+  WScript.Quit
+End If
+
+' Demarrer le service si besoin
+If InStr(output, "RUNNING") = 0 Then
+  Log "Demarrage du service..."
+  WshShell.Run "net start GestiComPro", 0, True
+End If
 
 ' Verifier si .migrated existe
 flagFile = appDir & "\.migrated"
 isFirstLaunch = Not fso.FileExists(flagFile)
 
 If isFirstLaunch Then
-  maxAttempts = 150 ' 150 * 2s = 5 min
-  Log "Premier demarrage : migration en cours (attente jusqu'a 5 min)"
+  maxAttempts = 150
+  Log "Premier demarrage (attente jusqu'a 5 min)"
 Else
-  maxAttempts = 30 ' 30 * 2s = 60s
-  Log "Demarrage normal"
+  maxAttempts = 30
 End If
-
-' Tuer tout processus node residu
-On Error Resume Next
-Dim shell
-Set shell = CreateObject("WScript.Shell")
-shell.Run "taskkill /F /IM node.exe /T", 0, True
-On Error GoTo 0
-
-Log "Lancement du serveur..."
-
-' Lancer le serveur (fenetre completement cachee)
-cmd = """" & appDir & "\node.exe"" """ & appDir & "\scripts\standalone-launcher.js"""
-WshShell.Run cmd, 0, False
-
-Log "node.exe lance, attente du serveur..."
 
 ' Attendre que le serveur reponde
 serveurPret = False
@@ -77,28 +70,26 @@ For i = 1 To maxAttempts
   http.Send
   If http.Status >= 200 And http.Status < 500 Then
     serveurPret = True
-    Log "Serveur pret (status " & http.Status & "), ouverture navigateur"
     Exit For
   End If
   On Error GoTo 0
 Next
 
 If serveurPret Then
-  WshShell.Run "cmd /c start http://localhost:3001", 0, False
+  WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
   Log "Application ouverte dans le navigateur"
 Else
   Err "Serveur non disponible apres " & maxAttempts & " tentatives"
   If isFirstLaunch Then
     Err "La migration de la base de donnees a peut-etre echoue"
   End If
-  ' Derniere tentative apres 5s supplementaires
   WScript.Sleep 5000
   On Error Resume Next
   Set http = CreateObject("MSXML2.XMLHTTP")
   http.open "GET", "http://127.0.0.1:3001/", False
   http.Send
   If http.Status >= 200 And http.Status < 500 Then
-    WshShell.Run "cmd /c start http://localhost:3001", 0, False
+    WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
     Log "Ouverture differee reussie"
   Else
     Err "Echec definitif"

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import RapportsNav from '../RapportsNav'
 import { Filter, Users, Loader2, X, FileText, ChevronRight, Calendar, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface VendeurData {
     vendeur: string

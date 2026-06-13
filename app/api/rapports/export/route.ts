@@ -3,8 +3,8 @@ import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { multiSheetToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     }),
   ])
 
-  const alertes = stocks
+  const alertes: any[] = stocks
     .filter((s) => s.quantite < s.produit.seuilMin)
     .map((s) => ({
       Code: s.produit.code,
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
       Manquant: s.produit.seuilMin - s.quantite,
     }))
 
-  let topProduits: Array<{ Code: string; Désignation: string; 'Quantité vendue': number }>
+  let topProduits: any[]
   if (hasDates && Array.isArray(topData)) {
     const byId = new Map<number, number>()
     const lignes = topData as Array<{ produitId: number; quantite: number }>
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
     }))
   }
 
-  const mouvementsRows = mouvements.map((m) => ({
+  const mouvementsRows: any[] = mouvements.map((m) => ({
     Date: m.date.toISOString().slice(0, 16),
     Type: m.type,
     'Code produit': m.produit?.code ?? '',
@@ -128,29 +128,24 @@ export async function GET(request: NextRequest) {
     Observation: m.observation ?? '',
   }))
 
-  const wsAlertes = XLSX.utils.json_to_sheet(alertes.length ? alertes : [{ Code: '', Désignation: '', Catégorie: '', Magasin: '', Quantité: '', 'Seuil min': '', Manquant: '' }])
-  const wsTop = XLSX.utils.json_to_sheet(topProduits.length ? topProduits : [{ Code: '', Désignation: '', 'Quantité vendue': '' }])
-  const wsMouv = XLSX.utils.json_to_sheet(mouvementsRows.length ? mouvementsRows : [{ Date: '', Type: '', 'Code produit': '', Désignation: '', Magasin: '', Quantité: '', Observation: '' }])
+  if (alertes.length > 0) {
+    const totalAlertes = alertes.length
+    alertes.push({ Code: '', Désignation: '', Catégorie: '', Magasin: '', Quantité: '', 'Seuil min': 'Total alertes', Manquant: totalAlertes })
+  }
+  if (topProduits.length > 0) {
+    const totalVendue = topProduits.reduce((s: number, p: any) => s + p['Quantité vendue'], 0)
+    topProduits.push({ Code: '', Désignation: '', 'Quantité vendue': totalVendue })
+  }
+  if (mouvementsRows.length > 0) {
+    const totalQte = mouvementsRows.reduce((s: number, r: any) => s + r.Quantité, 0)
+    mouvementsRows.push({ Date: '', Type: '', 'Code produit': '', Désignation: '', Magasin: '', Quantité: 'Total', Observation: totalQte })
+  }
 
-  if (alertes.length > 0) XLSX.utils.sheet_add_aoa(wsAlertes, [['', '', '', '', '', 'Total alertes', alertes.length]], { origin: alertes.length + 1 })
-  if (topProduits.length > 0) XLSX.utils.sheet_add_aoa(wsTop, [['', '', topProduits.reduce((s, p) => s + p['Quantité vendue'], 0)]], { origin: topProduits.length + 1 })
-  if (mouvementsRows.length > 0) XLSX.utils.sheet_add_aoa(wsMouv, [['', '', '', '', '', 'Total', mouvementsRows.reduce((s, r) => s + r.Quantité, 0), '']], { origin: mouvementsRows.length + 1 })
-
-  wsAlertes['!cols'] = [{ wch: 12 }, { wch: 35 }, { wch: 15 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 10 }]
-  wsTop['!cols'] = [{ wch: 12 }, { wch: 35 }, { wch: 18 }]
-  wsMouv['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 15 }, { wch: 35 }, { wch: 20 }, { wch: 10 }, { wch: 40 }]
-
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, wsAlertes, 'Alertes stock')
-  XLSX.utils.book_append_sheet(wb, wsTop, 'Top produits')
-  XLSX.utils.book_append_sheet(wb, wsMouv, 'Mouvements')
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
+  const buf = await multiSheetToBuffer([
+    { name: 'Alertes stock', rows: alertes.length ? alertes as any[] : [{ Code: '', Désignation: '', Catégorie: '', Magasin: '', Quantité: '', 'Seuil min': '', Manquant: '' }] },
+    { name: 'Top produits', rows: topProduits.length ? topProduits as any[] : [{ Code: '', Désignation: '', 'Quantité vendue': '' }] },
+    { name: 'Mouvements', rows: mouvementsRows.length ? mouvementsRows as any[] : [{ Date: '', Type: '', 'Code produit': '', Désignation: '', Magasin: '', Quantité: '', Observation: '' }] },
+  ])
   const filename = `rapports_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')
-  return new NextResponse(buf, {
-    headers: {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    },
-  })
+  return makeResponse(buf, filename)
 }

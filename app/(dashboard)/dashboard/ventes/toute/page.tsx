@@ -4,23 +4,16 @@ import { useState, useEffect } from 'react'
 import { 
   Search, 
   Loader2, 
-  Download, 
   Filter, 
   ShoppingCart, 
-  Calendar, 
   Tag, 
-  CreditCard, 
   Warehouse, 
-  TrendingUp, 
-  ArrowUp, 
   Printer, 
   FileSpreadsheet,
   CheckCircle2,
   Clock,
   Pencil,
-  Trash2,
-  ChevronRight,
-  ShieldAlert
+  Trash2
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'

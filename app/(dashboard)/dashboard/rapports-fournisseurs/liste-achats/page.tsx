@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Loader2, Download, Filter, ShoppingBag, Truck, Calendar, CreditCard, Warehouse, Printer } from 'lucide-react'
+import { Search, Loader2, Filter, ShoppingBag, Calendar, CreditCard, Warehouse, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface AchatListe {
   id: number

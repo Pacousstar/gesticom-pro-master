@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Loader2, Download, Coins, Package, Warehouse, Calendar, ArrowRight, Printer, ArrowDown } from 'lucide-react'
+import { Search, Loader2, Download, Coins, Package, Warehouse, Calendar, ArrowRight, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'

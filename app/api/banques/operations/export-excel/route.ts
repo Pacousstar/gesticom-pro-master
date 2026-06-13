@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const data = operations.map((op) => {
+    const data: any[] = operations.map((op) => {
       const isEntree = op.type === 'DEPOT' || op.type === 'VIREMENT_ENTRANT' || op.type === 'INTERETS'
       const typeLabel = 
         op.type === 'DEPOT' ? 'Dépôt' :
@@ -75,25 +75,6 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const worksheet = XLSX.utils.json_to_sheet(data)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Opérations bancaires')
-
-    // Ajuster les largeurs des colonnes
-    const colWidths = [
-      { wch: 12 }, // Date
-      { wch: 18 }, // Type
-      { wch: 35 }, // Compte bancaire
-      { wch: 30 }, // Libellé
-      { wch: 15 }, // Référence
-      { wch: 20 }, // Bénéficiaire
-      { wch: 15 }, // Montant
-      { wch: 15 }, // Solde avant
-      { wch: 15 }, // Solde après
-      { wch: 20 }, // Utilisateur
-    ]
-    worksheet['!cols'] = colWidths
-
     const totalDepots = operations
       .filter(op => ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS'].includes(op.type))
       .reduce((s, op) => s + op.montant, 0)
@@ -104,22 +85,18 @@ export async function GET(request: NextRequest) {
     const totalSoldeAvant = operations.reduce((s, op) => s + op.soldeAvant, 0)
     const totalSoldeApres = operations.reduce((s, op) => s + op.soldeApres, 0)
 
-    XLSX.utils.sheet_add_aoa(worksheet, [
-      ['TOTAL DÉPÔTS', '', '', '', '', '', totalDepots, '', '', ''],
-      ['TOTAL RETRAITS', '', '', '', '', '', totalRetraits, '', '', ''],
-      ['', '', '', '', '', '', '', '', '', ''],
-      ['TOTAL GÉNÉRAL', '', '', '', '', '', totalMontant, totalSoldeAvant, totalSoldeApres, ''],
-    ], { origin: data.length + 3 })
+    data.push(
+      { Date: '', Type: '', 'Compte bancaire': '', Libellé: '', Référence: '', Bénéficiaire: '', Montant: '', 'Solde avant': '', 'Solde après': '', Utilisateur: '' },
+      { Date: '', Type: '', 'Compte bancaire': '', Libellé: '', Référence: '', Bénéficiaire: '', Montant: '', 'Solde avant': '', 'Solde après': '', Utilisateur: '' },
+      { Date: 'TOTAL DÉPÔTS', Type: '', 'Compte bancaire': '', Libellé: '', Référence: '', Bénéficiaire: '', Montant: totalDepots, 'Solde avant': '', 'Solde après': '', Utilisateur: '' },
+      { Date: 'TOTAL RETRAITS', Type: '', 'Compte bancaire': '', Libellé: '', Référence: '', Bénéficiaire: '', Montant: totalRetraits, 'Solde avant': '', 'Solde après': '', Utilisateur: '' },
+      { Date: '', Type: '', 'Compte bancaire': '', Libellé: '', Référence: '', Bénéficiaire: '', Montant: '', 'Solde avant': '', 'Solde après': '', Utilisateur: '' },
+      { Date: 'TOTAL GÉNÉRAL', Type: '', 'Compte bancaire': '', Libellé: '', Référence: '', Bénéficiaire: '', Montant: totalMontant, 'Solde avant': totalSoldeAvant, 'Solde après': totalSoldeApres, Utilisateur: '' },
+    )
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    const buf = await rowsToBuffer(data as any[], 'Opérations bancaires')
     const filename = `operations-bancaires-${new Date().toISOString().split('T')[0]}.xlsx`
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('GET /api/banques/operations/export-excel:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

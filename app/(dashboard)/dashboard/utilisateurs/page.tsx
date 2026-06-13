@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { UserPlus, Users, Edit, Ban, Shield, Loader2, CheckCircle2, XCircle, Eye, EyeOff, Lock, X, Save, Printer, Search, Filter, UserCheck, ChevronDown, ChevronUp, Download } from 'lucide-react'
+import { UserPlus, Users, Edit, Ban, Loader2, CheckCircle2, XCircle, Eye, EyeOff, Lock, X, Save, Printer, Search, Filter, UserCheck, ChevronDown, ChevronUp, Download } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 import { ROLE_PERMISSIONS, ROLE_DESCRIPTIONS, type Role, type Permission } from '@/lib/roles-permissions'

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { parseExcel } from '@/lib/excel'
 
 const CODE_PADDING = 3
 
@@ -23,11 +24,7 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: 'Fichier manquant' }, { status: 400 })
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const XLSX = await import('xlsx-prototype-pollution-fixed').then(m => m.default || m)
-    const workbook = XLSX as any
-    const sheetName = workbook.SheetNames[0]
-    const sheet = workbook.Sheets[sheetName]
-    const data = XLSX.utils.sheet_to_json(sheet) as any[]
+    const { rows: data } = await parseExcel(buffer)
 
     if (data.length === 0) return NextResponse.json({ error: 'Le fichier est vide' }, { status: 400 })
 

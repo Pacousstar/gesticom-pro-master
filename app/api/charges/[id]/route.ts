@@ -148,7 +148,7 @@ export async function PATCH(
         where: {
           entiteId: c.entiteId,
           type: 'SORTIE',
-          motif: { contains: `Charge #${id}` }
+          motif: { contains: `#${id}` }
         }
       })
 
@@ -266,7 +266,7 @@ export async function DELETE(
         where: {
           entiteId: charge.entiteId,
           type: 'SORTIE',
-          motif: { contains: `Charge #${id}` }
+          motif: { contains: `#${id}` }
         }
       })
 

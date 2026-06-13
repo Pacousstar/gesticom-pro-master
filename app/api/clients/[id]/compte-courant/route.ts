@@ -117,7 +117,7 @@ export async function GET(
         numero: v.numero,
         type: 'ACHAT' as const,
         debit: v.montantTotal || 0,
-        credit: v.montantPaye || 0,
+        credit: 0,
         libelle: `Vente ${v.numero} - ${v.magasin?.nom || ''}`
       })),
       ...reglements.map((r: any) => ({

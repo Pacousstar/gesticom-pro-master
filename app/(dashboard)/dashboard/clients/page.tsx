@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Users, Search, Plus, Loader2, Pencil, Trash2, X, FileSpreadsheet, Download, Clock, Calendar, FileText, ChevronRight, DollarSign, CheckCircle2, Printer } from 'lucide-react'
+import useSWR from 'swr'
+import { fetcher } from '@/lib/swr-fetcher'
+import { Search, Plus, Loader2, Pencil, Trash2, X, Download, Clock, Calendar, FileText, ChevronRight, DollarSign, Printer, Users, AlertTriangle } from 'lucide-react'
 import PaymentModal from '@/components/dashboard/PaymentModal'
 import { useToast } from '@/hooks/useToast'
 import { clientSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Client = {
   id: number
@@ -33,14 +34,11 @@ export default function ClientsPage() {
   const searchParams = useSearchParams()
   const qFromUrl = searchParams.get('q') ?? ''
   const [q, setQ] = useState(qFromUrl)
-  const [list, setList] = useState<Client[]>([])
-  const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
   const [editing, setEditing] = useState<Client | null>(null)
   const [err, setErr] = useState('')
   const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
-  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
   const [formData, setFormData] = useState({
     code: '',
     nom: '',
@@ -74,38 +72,23 @@ export default function ClientsPage() {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
   }, [])
 
-  const fetchList = async (page?: number) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: String(page ?? currentPage),
-        limit: '20',
-      })
-      if (q) params.set('q', q)
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
-
-      const res = await fetch(`/api/clients?${params.toString()}`)
-      if (res.ok) {
-        const response = await res.json()
-        if (response.data) {
-          setList(response.data)
-          setPagination(response.pagination)
-        } else {
-          setList(Array.isArray(response) ? response : [])
-          setPagination(null)
-        }
-      } else {
-        setList([])
-        setPagination(null)
-      }
-    } catch {
-      setList([])
-      setPagination(null)
-    } finally {
-      setLoading(false)
-    }
+  const buildListUrl = (page: number) => {
+    const p = new URLSearchParams({ page: String(page), limit: '20' })
+    if (q) p.set('q', q)
+    if (dateDebut) p.set('dateDebut', dateDebut)
+    if (dateFin) p.set('dateFin', dateFin)
+    return `/api/clients?${p.toString()}`
   }
+
+  const { data: listData, isLoading: listLoading, mutate } = useSWR(
+    buildListUrl(currentPage),
+    fetcher,
+    { keepPreviousData: true, revalidateOnFocus: false }
+  )
+
+  const list: Client[] = listData?.data || (Array.isArray(listData) ? listData : [])
+  const pagination = listData?.pagination || null
+  const loading = listLoading && !listData
 
   useEffect(() => {
     setQ(qFromUrl)
@@ -113,12 +96,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-    fetchList(1)
   }, [q, dateDebut, dateFin])
-
-  useEffect(() => {
-    fetchList()
-  }, [currentPage])
 
   const handlePrintAll = async (type: 'PORTEFEUILLE' | 'REPERTOIRE') => {
     setPrintType(type)
@@ -147,7 +125,6 @@ export default function ClientsPage() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchList(page)
   }
 
   const handleDelete = async (c: Client) => {
@@ -156,7 +133,7 @@ export default function ClientsPage() {
       const res = await fetch(`/api/clients/${c.id}`, { method: 'DELETE' })
       if (res.ok) {
         setCurrentPage(1)
-        fetchList(1)
+        mutate()
         showSuccess(MESSAGES.CLIENT_SUPPRIME)
       } else {
         const d = await res.json()
@@ -232,8 +209,8 @@ export default function ClientsPage() {
           setForm(false)
           setEditing(null)
           setCurrentPage(1)
-          fetchList(1)
-          setTimeout(() => fetchList(1), 500)
+          mutate()
+          setTimeout(() => mutate(), 500)
           showSuccess(MESSAGES.CLIENT_MODIFIE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la modification.')
@@ -250,8 +227,8 @@ export default function ClientsPage() {
         if (res.ok) {
           setForm(false)
           setCurrentPage(1)
-          fetchList(1)
-          setTimeout(() => fetchList(1), 500)
+          mutate()
+          setTimeout(() => mutate(), 500)
           showSuccess(MESSAGES.CLIENT_ENREGISTRE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
@@ -318,7 +295,7 @@ export default function ClientsPage() {
       if (res.ok) {
         showSuccess("Dette corrigée avec succès.")
         setEditingDebt(null)
-        fetchList()
+        mutate()
       } else {
         showError("Erreur lors de la correction.")
       }
@@ -386,6 +363,50 @@ export default function ClientsPage() {
             <Plus className="h-4 w-4" />
             Nouveau
           </button>
+        </div>
+      </div>
+
+      {/* COMPTEURS DE PERFORMANCE CLIENTS */}
+      <div className="space-y-2 no-print">
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6 italic">Analyse du Portefeuille Clients : Zéro Erreur</p>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+          {[
+            {
+              label: "Encours Total Dû",
+              val: (list.reduce((acc, c) => acc + (c.dette ?? 0), 0)).toLocaleString('fr-FR') + ' F',
+              icon: DollarSign,
+              color: "from-blue-600 to-indigo-700",
+              sub: "Engagements financiers cumulés"
+            },
+            {
+              label: "Volume Clients",
+              val: (list.length).toLocaleString() + ' Comptes',
+              icon: Users,
+              color: "from-emerald-600 to-teal-700",
+              sub: "Portefeuille client actif"
+            },
+            {
+              label: "Alerte Crédit",
+              val: list.filter(c => (c.dette ?? 0) > 1000000).length.toLocaleString() + ' Tiers',
+              icon: AlertTriangle,
+              color: "from-orange-500 to-rose-600",
+              sub: "Dettes > 1 000 000 F"
+            },
+          ].map((c, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br ${c.color} p-6 h-36 shadow-2xl transition-all border border-white/10 group`}>
+               <div className="relative z-10 text-white flex flex-col justify-between h-full">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
+                    <c.icon className="h-4 w-4" />
+                    {c.label}
+                  </div>
+                  <div>
+                    <h3 className="text-3xl font-black tracking-tighter italic">{c.val}</h3>
+                    <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
+                  </div>
+               </div>
+               <c.icon className="absolute right-[-10px] bottom-[-10px] h-24 w-24 text-white opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-500" />
+            </div>
+          ))}
         </div>
       </div>
 
@@ -821,7 +842,7 @@ export default function ClientsPage() {
         <PaymentModal
           isOpen={!!paymentModal}
           onClose={() => setPaymentModal(null)}
-          onSuccess={() => fetchList()}
+          onSuccess={() => mutate()}
           type="VENTE"
           tierId={paymentModal.client.id}
           tierNom={paymentModal.client.nom}

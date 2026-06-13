@@ -3,8 +3,8 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -142,24 +142,9 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'N° Facture': '', 'Code / Nom': '', Localisation: '', 'Total Factures (Période)': '', 'Paiements (Période)': '', 'Reste à payer (PÉRIODE)': '', 'Solde Global Client': '', 'Statut Global': '' }])
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Soldes Clients')
-
-    const colWidths = [
-      { wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 },
-    ]
-    worksheet['!cols'] = colWidths
-
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    const buf = await rowsToBuffer(rows as any[], 'Soldes Clients')
     const filename = `soldes_clients_${dateDebut || 'init'}_${dateFin || 'fin'}.xlsx`
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error: any) {
     console.error('Export Excel Soldes Clients:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

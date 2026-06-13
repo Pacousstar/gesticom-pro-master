@@ -7,6 +7,7 @@ const logFile = path.join(projectRoot, 'GestiComService.out');
 const errFile = path.join(projectRoot, 'GestiComService.err');
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const prismaCli = path.join(projectRoot, 'node_modules', 'prisma', 'build', 'index.js');
+const schemaPath = path.join(projectRoot, 'prisma', 'schema.prisma');
 const dbPath = 'C:/gesticom/gesticom.db';
 
 const tmpFile = path.join(projectRoot, '_mig.sql');
@@ -26,103 +27,162 @@ process.env.DATABASE_URL = 'file:C:/gesticom/gesticom.db';
 process.env.NODE_ENV = 'production';
 process.env.PORT = String(PORT);
 
-const serverPath = path.join(projectRoot, 'server.js');
+let serverPath = path.join(projectRoot, 'server.js');
 if (!fs.existsSync(serverPath)) {
-  e(`server.js introuvable dans ${projectRoot}`);
+  serverPath = path.join(projectRoot, '.next', 'standalone', 'server.js');
+}
+if (!fs.existsSync(serverPath)) {
+  e(`server.js introuvable dans ${projectRoot} ni .next/standalone/`);
   process.exit(1);
 }
 
 l('Migration automatique de la base de donnees...');
 
-// ═══════════════════════════════════════════════════════════════════
-//  SÉCURITÉ : on utilise prisma migrate deploy (officiel, idempotent)
-//  plutôt que des ALTER TABLE manuels, car les migrations sont
-//  versionnées et testées. Les quelques ALTER TABLE ci-dessous ne
-//  concernent que les corrections de données (pas de schéma).
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  1. SCHÉMA : détection auto du mode migration
+//     - Si _prisma_migrations existe → prisma migrate deploy (versionné)
+//     - Sinon → prisma db push (s'applique sur base existante non suivie)
+// ═══════════════════════════════════════════════════════════════════════
 
-function execOne(sql) {
+function hasMigrationTable() {
   try {
-    fs.writeFileSync(tmpFile, sql.trim(), 'utf-8');
-    execSync(`node "${prismaCli}" db execute --url="file:${dbPath}" --file="${tmpFile}"`, {
-      cwd: projectRoot, stdio: 'pipe', timeout: 30000,
-    });
-    return true;
-  } catch (err) {
-    const msg = (err.stderr || err.message || '').toString().toLowerCase();
-    if (msg.includes('duplicate column') || msg.includes('already exists')) return 'exists';
+    const out = execSync(
+      `node "${prismaCli}" db execute --url="file:${dbPath}" --stdin`,
+      {
+        input: "SELECT name FROM sqlite_master WHERE type='table' AND name='_prisma_migrations'",
+        cwd: projectRoot, stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000, windowsHide: true,
+      }
+    );
+    return out.toString().trim().length > 0;
+  } catch {
     return false;
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  MIGRATION OFFICIELLE : prisma migrate deploy
-//  Applique les migrations Prisma manquantes (versionnées).
-//  Ne touche jamais les données existantes.
-// ═══════════════════════════════════════════════════════════════════
-l('Exécution de prisma migrate deploy...');
+if (hasMigrationTable()) {
+  l('Base suivie par Prisma → prisma migrate deploy');
+  try {
+    execSync(`node "${prismaCli}" migrate deploy --schema="${schemaPath}"`, {
+      cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
+    });
+    l('  prisma migrate deploy réussi');
+  } catch (err) {
+    const msg = (err.stderr || err.message || '');
+    e('  prisma migrate deploy échoué: ' + msg);
+    // P3005: schema not empty / P3009: failed migrations
+    // → supprimer _prisma_migrations pour repartir sur un db push sain
+    if (msg.includes('P3005') || msg.includes('P3009')) {
+      l('  Migrations corrompues → nettoyage de _prisma_migrations...');
+      try {
+        execSync(`node "${prismaCli}" db execute --url="file:${dbPath}" --stdin`, {
+          input: 'DROP TABLE IF EXISTS "_prisma_migrations";',
+          cwd: projectRoot, stdio: 'pipe', timeout: 15000, windowsHide: true,
+        });
+        l('  Table _prisma_migrations supprimée');
+      } catch (dropErr) {
+        e('  Échec suppression _prisma_migrations: ' + (dropErr.stderr || dropErr.message));
+      }
+    }
+    l('  Repli: prisma db push...');
+    try {
+      execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
+        cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
+      });
+      l('  prisma db push réussi (repli)');
+    } catch (err2) {
+      e('  prisma db push échoué: ' + (err2.stderr || err2.message));
+    }
+  }
+} else {
+  l('Base existante sans historique Prisma → prisma db push');
+  try {
+    execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
+      cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
+    });
+    l('  prisma db push réussi');
+  } catch (err) {
+    e('  prisma db push échoué: ' + (err.stderr || err.message));
+    l('  La base existante est conservée telle quelle.');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  2. DÉPENDANCES : s'assurer que bcryptjs est disponible pour seed.js
+//     avec NODE_PATH et npm install --omit=dev si nécessaire
+// ═══════════════════════════════════════════════════════════════════════
+
+const nodeModulesPath = path.join(projectRoot, 'node_modules');
+process.env.NODE_PATH = [
+  nodeModulesPath,
+  ...(process.env.NODE_PATH || '').split(path.delimiter).filter(Boolean),
+].join(path.delimiter);
+require('module').Module._initPaths();
+
+if (!fs.existsSync(path.join(nodeModulesPath, 'bcryptjs'))) {
+  l('bcryptjs manquant → installation des dépendances...');
+  try {
+    execSync('npm install --omit=dev --no-audit --no-fund', {
+      cwd: projectRoot, stdio: 'pipe', timeout: 120000, windowsHide: true,
+    });
+    l('  Dépendances installées');
+  } catch (err) {
+    e('  npm install échoué: ' + (err.stderr || err.message));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  3. SEED : crée Entite/Magasin/Admin UNIQUEMENT si base vierge
+//     Exécuté AVANT les corrections pour garantir qu'Entite existe
+// ═══════════════════════════════════════════════════════════════════════
+
+l('Seed automatique...');
 try {
-  execSync(`node "${prismaCli}" migrate deploy --schema="${path.join(projectRoot, 'prisma', 'schema.prisma')}"`, {
-    cwd: projectRoot, stdio: 'pipe', timeout: 60000,
+  execSync(`node "${path.join(projectRoot, 'scripts', 'seed.js')}"`, {
+    cwd: projectRoot, stdio: 'pipe', timeout: 30000, windowsHide: true,
   });
-  l('  prisma migrate deploy réussi');
+  l('  Seed terminé');
 } catch (err) {
-  e('  prisma migrate deploy échoué: ' + (err.stderr || err.message));
-  // On continue — le launcher ne doit pas bloquer le démarrage
+  e('  Seed échoué: ' + (err.stderr || err.message));
+  l('  Repli: création manuelle des données minimales...');
+  try {
+    const prismaClientPath = path.join(nodeModulesPath, '@prisma', 'client');
+    if (fs.existsSync(prismaClientPath)) {
+      execSync(`node -e "
+        const { PrismaClient } = require('@prisma/client');
+        const prisma = new PrismaClient();
+        (async () => {
+          const exists = await prisma.entite.findFirst();
+          if (!exists) {
+            const e = await prisma.entite.create({ data: { code: 'ENT001', nom: 'Entreprise Principale', type: 'PRINCIPALE', localisation: '-', active: true } });
+            console.log('Entite créée (repli):', e.id);
+            const m = await prisma.magasin.create({ data: { code: 'MAG01', nom: 'Magasin 01', localisation: '-', entiteId: e.id, actif: true } });
+            console.log('Magasin créé (repli):', m.id);
+          }
+          const users = await prisma.utilisateur.count();
+          if (users === 0) {
+            const bcrypt = require('bcryptjs');
+            const hash = await bcrypt.hash('Admin@123', 10);
+            await prisma.utilisateur.create({ data: { login: 'admin', nom: 'Super Admin', email: 'admin@gesticom.local', motDePasse: hash, role: 'SUPER_ADMIN', entiteId: (await prisma.entite.findFirst()).id, actif: true } });
+            console.log('Admin créé (repli)');
+          }
+          await prisma.\$disconnect();
+        })();
+      "`, { cwd: projectRoot, stdio: 'pipe', timeout: 30000, windowsHide: true });
+      l('  Données minimales créées (repli)');
+    } else {
+      e('  @prisma/client introuvable, impossible de créer les données minimales');
+    }
+  } catch (err2) {
+    e('  Repli seed échoué: ' + (err2.message || err2));
+  }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  Les migrations Prisma ne couvrent pas toutes les tables (certaines
-//  ont été ajoutées directement dans schema.prisma sans migration).
-//  On les crée ici avec CREATE TABLE IF NOT EXISTS (sûr, idempotent).
-//  Toute nouvelle table DOIT être ajoutée ici ET dans schema.prisma.
-// ═══════════════════════════════════════════════════════════════════
-
-l('Création des tables manquantes...');
-const createTableStmts = [
-  // --- Retour ---
-  `CREATE TABLE IF NOT EXISTS "Retour" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "numero" TEXT NOT NULL UNIQUE, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "venteId" INTEGER NOT NULL, "clientId" INTEGER, "magasinId" INTEGER NOT NULL, "entiteId" INTEGER NOT NULL, "utilisateurId" INTEGER NOT NULL, "montantTotal" REAL NOT NULL, "observation" TEXT, "estRembourse" INTEGER NOT NULL DEFAULT 0, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL);`,
-  `CREATE TABLE IF NOT EXISTS "RetourLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "retourId" INTEGER NOT NULL, "produitId" INTEGER NOT NULL, "designation" TEXT NOT NULL, "quantite" REAL NOT NULL, "prixUnitaire" REAL NOT NULL, "tva" REAL NOT NULL DEFAULT 0, "remise" REAL NOT NULL DEFAULT 0, "montant" REAL NOT NULL, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`,
-  // --- Transfert ---
-  `CREATE TABLE IF NOT EXISTS "Transfert" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "numero" TEXT NOT NULL UNIQUE, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "magasinOrigineId" INTEGER NOT NULL, "magasinDestId" INTEGER NOT NULL, "entiteId" INTEGER NOT NULL, "utilisateurId" INTEGER NOT NULL, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`,
-  `CREATE TABLE IF NOT EXISTS "TransfertLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "transfertId" INTEGER NOT NULL, "produitId" INTEGER NOT NULL, "designation" TEXT NOT NULL, "quantite" REAL NOT NULL, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`,
-  // --- ReglementVente ---
-  `CREATE TABLE IF NOT EXISTS "ReglementVente" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "montant" REAL NOT NULL, "modePaiement" TEXT NOT NULL, "statut" TEXT NOT NULL DEFAULT 'VALIDE', "rapproche" INTEGER NOT NULL DEFAULT 0, "banqueId" INTEGER, "venteId" INTEGER, "clientId" INTEGER, "utilisateurId" INTEGER NOT NULL, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "entiteId" INTEGER DEFAULT 1);`,
-  `CREATE TABLE IF NOT EXISTS "ReglementVenteLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "reglementId" INTEGER NOT NULL, "venteId" INTEGER NOT NULL, "montant" REAL NOT NULL);`,
-  // --- ReglementAchat ---
-  `CREATE TABLE IF NOT EXISTS "ReglementAchat" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "montant" REAL NOT NULL, "modePaiement" TEXT NOT NULL, "statut" TEXT NOT NULL DEFAULT 'VALIDE', "rapproche" INTEGER NOT NULL DEFAULT 0, "achatId" INTEGER, "fournisseurId" INTEGER, "utilisateurId" INTEGER NOT NULL, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME, "entiteId" INTEGER DEFAULT 1);`,
-  `CREATE TABLE IF NOT EXISTS "ReglementAchatLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "reglementId" INTEGER NOT NULL, "achatId" INTEGER NOT NULL, "montant" REAL NOT NULL);`,
-  // --- ArchiveVente ---
-  `CREATE TABLE IF NOT EXISTS "ArchiveVente" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "numeroFactureOrigine" TEXT NOT NULL, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "magasinId" INTEGER NOT NULL, "entiteId" INTEGER NOT NULL, "utilisateurId" INTEGER NOT NULL, "clientId" INTEGER, "clientLibre" TEXT, "montantTotal" REAL NOT NULL, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`,
-  `CREATE TABLE IF NOT EXISTS "ArchiveVenteLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "venteId" INTEGER NOT NULL, "produitId" INTEGER, "designation" TEXT NOT NULL, "quantite" REAL NOT NULL, "prixUnitaire" REAL NOT NULL, "montant" REAL NOT NULL);`,
-  `CREATE TABLE IF NOT EXISTS "ArchiveSoldeClient" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "entiteId" INTEGER NOT NULL, "utilisateurId" INTEGER NOT NULL, "clientId" INTEGER, "clientLibre" TEXT, "montant" REAL NOT NULL, "dateArchive" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "observation" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`,
-  // --- CommandeFournisseur ---
-  `CREATE TABLE IF NOT EXISTS "CommandeFournisseur" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "numero" TEXT NOT NULL UNIQUE, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "fournisseurId" INTEGER, "fournisseurLibre" TEXT, "magasinId" INTEGER NOT NULL, "entiteId" INTEGER NOT NULL, "utilisateurId" INTEGER NOT NULL, "montantTotal" REAL NOT NULL DEFAULT 0, "fraisApproche" REAL NOT NULL DEFAULT 0, "observation" TEXT, "statut" TEXT NOT NULL DEFAULT 'BROUILLON', "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME);`,
-  `CREATE TABLE IF NOT EXISTS "CommandeFournisseurLigne" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "commandeId" INTEGER NOT NULL, "produitId" INTEGER NOT NULL, "designation" TEXT NOT NULL, "quantite" REAL NOT NULL, "prixUnitaire" REAL NOT NULL, "tva" REAL NOT NULL DEFAULT 0, "remise" REAL NOT NULL DEFAULT 0, "montant" REAL NOT NULL);`,
-  // --- SystemAlerte ---
-  `CREATE TABLE IF NOT EXISTS "SystemAlerte" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "date" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "type" TEXT NOT NULL DEFAULT 'INFO', "categorie" TEXT NOT NULL DEFAULT 'AUTRE', "message" TEXT NOT NULL, "referenceId" INTEGER, "lu" INTEGER NOT NULL DEFAULT 0, "entiteId" INTEGER DEFAULT 1, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`,
-  // --- Licence ---
-  `CREATE TABLE IF NOT EXISTS "Licence" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "cle" TEXT NOT NULL, "clientNom" TEXT, "debutValidite" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "finValidite" DATETIME, "statut" TEXT NOT NULL DEFAULT 'ACTIVE', "features" TEXT NOT NULL DEFAULT '[]', "typeEssai" INTEGER NOT NULL DEFAULT 0, "debutEssai" DATETIME, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME);`,
-];
-// Exécuter les CREATE TABLE IF NOT EXISTS (idempotent)
-for (const stmt of createTableStmts) {
-  execOne(stmt);
-}
-l(`  ${createTableStmts.length} tables vérifiées/créées`);
-
-// ═══════════════════════════════════════════════════════════════════
-//  Ci-dessous : uniquement des corrections de données (UPDATE),
-//  jamais d'ALTER TABLE.
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  4. CORRECTIONS : appliquées APRÈS le seed (garantit qu'Entite existe)
+// ═══════════════════════════════════════════════════════════════════════
 
 const fixEntiteId = '(SELECT id FROM "Entite" ORDER BY id ASC LIMIT 1)';
 
-// ═══════════════════════════════════════════════════════════════════
-//  SÉCURITÉ : les corrections ci-dessous ne corrigent que les
-//  valeurs NULL ou 0. Elles ne modifient JAMAIS les entiteId
-//  existants et valides (≠ 0), pour ne pas écraser les données
-//  réelles du client (multi-entités).
-// ═══════════════════════════════════════════════════════════════════
 const fixNullStmts = [
   'UPDATE "Vente" SET "dateOperation" = "date" WHERE "dateOperation" IS NULL;',
   'UPDATE "Vente" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;',
@@ -143,7 +203,6 @@ const fixNullStmts = [
   'UPDATE "Vente" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
   'UPDATE "VenteLigne" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
   `UPDATE "Produit" SET "actif" = 1 WHERE "actif" IS NULL;`,
-  // entiteId: seulement NULL ou 0 → jamais d'écrasement des valeurs existantes
   `UPDATE "Produit" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
   `UPDATE "Client" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
   `UPDATE "Fournisseur" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
@@ -161,30 +220,38 @@ const fixNullStmts = [
   `UPDATE "EcritureComptable" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
 ];
 
-const flagPath = path.join(projectRoot, '.migrated');
-const isFirstLaunch = !fs.existsSync(flagPath);
-
-// Étape 3: TOUJOURS corriger les données (actif, entiteId, updatedAt)
-l('Correction des données...');
-let fixed = 0;
-for (const stmt of fixNullStmts) {
-  if (execOne(stmt)) fixed++;
+function execOne(sql) {
+  try {
+    fs.writeFileSync(tmpFile, sql.trim(), 'utf-8');
+    execSync(`node "${prismaCli}" db execute --url="file:${dbPath}" --file="${tmpFile}"`, {
+      cwd: projectRoot, stdio: 'pipe', timeout: 30000, windowsHide: true,
+    });
+    return true;
+  } catch (err) {
+    const msg = (err.stderr || err.message || '').toString().toLowerCase();
+    if (msg.includes('duplicate column') || msg.includes('already exists')) return 'exists';
+    return false;
+  }
 }
-l(`  ${fixed} corrections appliquées`);
 
-// Étape: Seed auto (crée admin/entité/magasin si base vierge, sans risque sur existant)
-l('Seed automatique...');
+l('Correction des données (batch)...');
 try {
-  execSync(`node "${path.join(projectRoot, 'scripts', 'seed.js')}"`, {
-    cwd: projectRoot, stdio: 'pipe', timeout: 30000,
+  fs.writeFileSync(tmpFile, fixNullStmts.join('\n'), 'utf-8');
+  execSync(`node "${prismaCli}" db execute --url="file:${dbPath}" --file="${tmpFile}"`, {
+    cwd: projectRoot, stdio: 'pipe', timeout: 30000, windowsHide: true,
   });
-  l('  Seed terminé');
+  l(`  ${fixNullStmts.length} corrections appliquées`);
 } catch (err) {
-  e('  Seed échoué: ' + (err.stderr || err.message));
+  e('  Erreur batch corrections: ' + (err.stderr || err.message));
+  l('  Repli exécution individuelle...');
+  let fixed = 0;
+  for (const stmt of fixNullStmts) { if (execOne(stmt)) fixed++; }
+  l(`  ${fixed} corrections appliquées (repli)`);
 }
 
 // Marquer la migration comme terminée
-if (isFirstLaunch) {
+const flagPath = path.join(projectRoot, '.migrated');
+if (!fs.existsSync(flagPath)) {
   try { fs.writeFileSync(flagPath, new Date().toISOString(), 'utf-8'); l('Migration initiale marquée comme terminée'); } catch {}
 }
 
@@ -198,8 +265,9 @@ const errStream = fs.createWriteStream(errFile, { flags: 'a' });
 
 const nextServer = fork(serverPath, [], {
   env: process.env,
-  cwd: projectRoot,
+  cwd: path.dirname(serverPath),
   silent: true,
+  windowsHide: true,
 });
 nextServer.stdout.pipe(outStream);
 nextServer.stderr.pipe(errStream);

@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import {
-  FileText, Loader2, AlertTriangle, TrendingUp, ArrowRightLeft,
-  FileSpreadsheet, Trash2, Search, Filter, X,
+import { Loader2, AlertTriangle, TrendingUp, ArrowRightLeft,
+  FileSpreadsheet, Search,
   Users, ShoppingBag, CreditCard, PieChart,
   Package, DollarSign, Star, Printer
 } from 'lucide-react'

@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { jsPDF } = require('jspdf')
 
 function formatMontant(n: number): string {

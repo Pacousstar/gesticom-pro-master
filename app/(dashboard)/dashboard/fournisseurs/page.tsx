@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import useSWR from 'swr'
+import { fetcher } from '@/lib/swr-fetcher'
 import { Truck, Search, Plus, Loader2, Pencil, Trash2, FileSpreadsheet, Download, Clock, X, FileText, Calendar, ChevronRight, DollarSign, Printer } from 'lucide-react'
 import PaymentModal from '@/components/dashboard/PaymentModal'
 import { useToast } from '@/hooks/useToast'
@@ -9,9 +11,8 @@ import { fournisseurSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Fournisseur = {
   id: number
@@ -31,14 +32,11 @@ export default function FournisseursPage() {
   const searchParams = useSearchParams()
   const qFromUrl = searchParams.get('q') ?? ''
   const [q, setQ] = useState(qFromUrl)
-  const [list, setList] = useState<Fournisseur[]>([])
-  const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
   const [editing, setEditing] = useState<Fournisseur | null>(null)
   const [err, setErr] = useState('')
   const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
-  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
   const [formData, setFormData] = useState({ code: '', nom: '', telephone: '', email: '', ncc: '', localisation: '', numeroCamion: '', soldeInitial: '0', avoirInitial: '0' })
   const [userRole, setUserRole] = useState<string>('')
   const [selectedHistory, setSelectedHistory] = useState<{ id: number; nom: string } | null>(null)
@@ -55,36 +53,15 @@ export default function FournisseursPage() {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
   }, [])
 
-  const fetchList = async (page?: number) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: String(page ?? currentPage),
-        limit: '20',
-      })
-      if (q) params.set('q', q)
-      const res = await fetch(`/api/fournisseurs?${params.toString()}`)
-      if (res.ok) {
-        const response = await res.json()
-        if (response.data) {
-          setList(response.data)
-          setPagination(response.pagination)
-        } else {
-          // Compatibilité avec l'ancien format
-          setList(Array.isArray(response) ? response : [])
-          setPagination(null)
-        }
-      } else {
-        setList([])
-        setPagination(null)
-      }
-    } catch {
-      setList([])
-      setPagination(null)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { data: listData, isLoading: listLoading, mutate } = useSWR(
+    `/api/fournisseurs?page=${currentPage}&limit=20${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+    fetcher,
+    { keepPreviousData: true, revalidateOnFocus: false }
+  )
+
+  const list: Fournisseur[] = listData?.data || (Array.isArray(listData) ? listData : [])
+  const pagination = listData?.pagination || null
+  const loading = listLoading && !listData
 
   useEffect(() => {
     setQ(qFromUrl)
@@ -92,12 +69,7 @@ export default function FournisseursPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-    fetchList(1)
   }, [q])
-
-  useEffect(() => {
-    fetchList()
-  }, [currentPage])
 
   const handlePrintAll = async () => {
     setIsPrinting(true)
@@ -123,7 +95,6 @@ export default function FournisseursPage() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchList(page)
   }
 
   const handleDelete = async (f: Fournisseur) => {
@@ -132,7 +103,7 @@ export default function FournisseursPage() {
       const res = await fetch(`/api/fournisseurs/${f.id}`, { method: 'DELETE' })
       if (res.ok) {
         setCurrentPage(1)
-        fetchList(1)
+        mutate()
         showSuccess(MESSAGES.FOURNISSEUR_SUPPRIME)
       } else {
         const d = await res.json()
@@ -204,8 +175,8 @@ export default function FournisseursPage() {
           setForm(false)
           setEditing(null)
           setCurrentPage(1)
-          fetchList(1)
-          setTimeout(() => fetchList(1), 500)
+          mutate()
+          setTimeout(() => mutate(), 500)
           showSuccess(MESSAGES.FOURNISSEUR_MODIFIE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la modification.')
@@ -222,8 +193,8 @@ export default function FournisseursPage() {
         if (res.ok) {
           setForm(false)
           setCurrentPage(1)
-          fetchList(1)
-          setTimeout(() => fetchList(1), 500)
+          mutate()
+          setTimeout(() => mutate(), 500)
           showSuccess(MESSAGES.FOURNISSEUR_ENREGISTRE)
         } else {
           const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
@@ -685,6 +656,7 @@ export default function FournisseursPage() {
                 body * { visibility: hidden; }
                 #printable-fournisseur-history, #printable-fournisseur-history * { visibility: visible; }
                 #printable-fournisseur-history { position: absolute; left: 0; top: 0; width: 100%; height: auto; overflow: visible !important; }
+                #printable-fournisseur-history > div { overflow: visible !important; height: auto !important; }
                 .no-print { display: none !important; }
               }
             ` }} />
@@ -700,135 +672,188 @@ export default function FournisseursPage() {
                 Aucun achat enregistré pour ce fournisseur.
               </div>
             ) : (
-              <div className="space-y-6">
-                {/* En-tête Impression (Visible uniquement à l'impression) */}
-                <div className="hidden print:block border-b-2 border-gray-900 pb-4 mb-6">
-                    <h1 className="text-2xl font-bold uppercase">Historique des Achats</h1>
-                    <p className="text-lg font-medium">Fournisseur : {selectedHistory.nom}</p>
-                    <p className="text-sm text-gray-600 italic">Édité le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}</p>
-                </div>
-
-                {/* Synthèse Financière (Les Compteurs) */}
-                <div className="grid grid-cols-3 gap-4 mb-8">
-                  <div className="bg-gray-900 rounded-xl p-4 text-white shadow-lg border-b-4 border-orange-500">
-                    <p className="text-[10px] uppercase font-bold text-gray-400">Total Achats</p>
-                    <p className="text-xl font-black italic tracking-tighter">
-                      {historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0).toLocaleString()} F
-                    </p>
-                  </div>
-                  <div className="bg-emerald-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-emerald-800">
-                    <p className="text-[10px] uppercase font-bold text-emerald-100">Total Payé</p>
-                    <p className="text-xl font-black italic tracking-tighter">
-                      {historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0).toLocaleString()} F
-                    </p>
-                  </div>
-                  <div className="bg-red-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-red-800">
-                    <p className="text-[10px] uppercase font-bold text-red-100">Reste à Payer</p>
-                    <p className="text-xl font-black italic tracking-tighter">
-                      {(historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0) - historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)).toLocaleString()} F
-                    </p>
-                  </div>
-                </div>
-
-                {/* Liste des Achats - Design Professionnel */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest border-l-4 border-orange-600 pl-3">Détail chronologique</h3>
-                  {historyData.map((h: any, i: number) => (
-                    <div key={i} className="border-2 border-gray-100 rounded-2xl p-5 bg-white hover:border-orange-200 hover:shadow-xl transition-all group relative overflow-hidden">
-                      {/* Badge Statut en filigrane */}
-                      <div className="absolute top-2 right-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                         <FileText className="h-16 w-16 -rotate-12" />
-                      </div>
-
-                      <div className="flex items-center justify-between mb-4 relative z-10">
-                         <div>
-                            <span className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter mb-1 inline-block">ACHAT {h.numero}</span>
-                            <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
-                               <Calendar className="h-3 w-3" />
-                               {new Date(h.date).toLocaleDateString('fr-FR')}
-                            </div>
-                         </div>
-                         <div className="text-right">
-                            <p className="text-xl font-black text-gray-900 tracking-tighter italic">{h.montantTotal.toLocaleString()} F</p>
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800 border-green-200 border' : 'bg-orange-100 text-orange-800 border-orange-200 border'}`}>
-                              {h.statutPaiement === 'PAYE' ? 'SÉCURISÉ ✅' : 'IMPAYÉ ⏳'}
-                            </span>
-                         </div>
-                      </div>
-
-                      {/* Lignes de Détail (Micro-design) */}
-                      <div className="space-y-2 mt-4 bg-gray-50/50 p-3 rounded-xl border border-dashed border-gray-200">
-                        {h.lignes && h.lignes.length > 0 ? h.lignes.map((l: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between text-[11px] font-medium text-gray-700">
-                            <span className="flex-1">
-                               <span className="bg-gray-200 text-gray-800 px-1.5 py-0.5 rounded font-black mr-2 italic">{l.quantite}</span>
-                               {l.produit?.designation || l.designation}
-                            </span>
-                            <span className="text-gray-900 font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</span>
-                          </div>
-                        )) : (
-                          <p className="text-[10px] text-gray-400 italic">Détails indisponibles</p>
-                        )}
-                      </div>
-
-                      {/* Footer de Facture */}
-                      <div className="mt-4 pt-3 flex items-center justify-between text-[10px] border-t border-gray-100 no-print">
-                         <div className="flex items-center gap-4">
-                            <span className="text-gray-400 italic">Paiement : <span className="text-gray-700 font-bold uppercase">{h.modePaiement}</span></span>
-                            <span className="text-gray-400 italic">Réglé : <span className="text-emerald-700 font-bold">{(h.montantPaye || 0).toLocaleString()} F</span></span>
-                         </div>
-                         <div className="flex items-center gap-2">
-                           <button
-                             title="Imprimer facture A4 premium"
-                             onClick={async () => {
-                               let entreprise: any = {}
-                              try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch (_) {}
-                               const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles } = await import('@/lib/print-templates')
-                               const lignesHTML = generateLignesHTML((h.lignes || []).map((l: any) => ({ designation: l.produit?.designation || l.designation, quantite: l.quantite, prixUnitaire: l.prixUnitaire, montant: l.montant })))
-                               const template = getDefaultA4Template('ACHAT')
-                               const logoPath = entreprise.logoLocal || entreprise.logo
-                               const logoHTML = logoPath ? `<img src="${logoPath}" alt="Logo" style="max-width:150px;height:auto;display:block"/>` : ''
-                               const html = replaceTemplateVariables(template, {
-                                 ENTREPRISE_NOM: entreprise.nomEntreprise || '', ENTREPRISE_CONTACT: entreprise.contact || '',
-                                 ENTREPRISE_LOCALISATION: entreprise.localisation || '', ENTREPRISE_NCC: entreprise.numNCC || '',
-                                 ENTREPRISE_RC: entreprise.registreCommerce || '', ENTREPRISE_LOGO: logoHTML,
-                                 ENTREPRISE_PIED_DE_PAGE: entreprise.piedDePage || '',
-                                 ENTREPRISE_MENTION_SPECIALE: entreprise.mentionSpeciale || 'Les marchandises livrées ne sont pas reprises.',
-                                 NUMERO: h.numero, DATE: new Date(h.date).toLocaleDateString('fr-FR'),
-                                 HEURE: new Date(h.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-                                 FOURNISSEUR_NOM: selectedHistory?.nom || '', LIGNES: lignesHTML,
-                                 TOTAL: `${h.montantTotal.toLocaleString()} FCFA`,
-                                 MONTANT_PAYE: `${(h.montantPaye || 0).toLocaleString()} FCFA`,
-                                 RESTE: `${Math.max(0, h.montantTotal - (h.montantPaye || 0)).toLocaleString()} FCFA`,
-                                 MODE_PAIEMENT: h.modePaiement || 'ESPECES', OBSERVATION: h.observation || ''
-                               })
-                               const pw = window.open('', '_blank')
-                               if (!pw) { alert('Autorisez les popups.'); return }
-                               pw.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Facture ${h.numero}</title><style>${getPrintStyles('A4')}</style></head><body><div class="print-document">${html}</div></body></html>`)
-                               pw.document.close()
-                               pw.onload = () => { setTimeout(() => { pw.print(); pw.close() }, 250) }
-                             }}
-                             className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-2.5 py-1.5 rounded-lg hover:bg-orange-50 hover:text-orange-700 transition-all font-bold tracking-tighter"
-                           >
-                             <FileText className="h-3 w-3" /> A4
-                           </button>
-                           <button 
-                            onClick={() => window.location.href = `/dashboard/achats?numero=${h.numero}`}
-                            className="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all font-bold tracking-tighter uppercase"
-                           >
-                            Visualiser <ChevronRight className="h-3 w-3" />
-                           </button>
-                         </div>
-                      </div>
+              <>
+                {/* Contenu écran uniquement */}
+                <div className="space-y-6 print:hidden">
+                  {/* Synthèse Financière (Les Compteurs) */}
+                  <div className="grid grid-cols-3 gap-4 mb-8">
+                    <div className="bg-gray-900 rounded-xl p-4 text-white shadow-lg border-b-4 border-orange-500">
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Total Achats</p>
+                      <p className="text-xl font-black italic tracking-tighter">
+                        {historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0).toLocaleString()} F
+                      </p>
                     </div>
-                  ))}
+                    <div className="bg-emerald-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-emerald-800">
+                      <p className="text-[10px] uppercase font-bold text-emerald-100">Total Payé</p>
+                      <p className="text-xl font-black italic tracking-tighter">
+                        {historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0).toLocaleString()} F
+                      </p>
+                    </div>
+                    <div className="bg-red-600 rounded-xl p-4 text-white shadow-lg border-b-4 border-red-800">
+                      <p className="text-[10px] uppercase font-bold text-red-100">Reste à Payer</p>
+                      <p className="text-xl font-black italic tracking-tighter">
+                        {(historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0) - historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)).toLocaleString()} F
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Liste des Achats - Design Professionnel */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest border-l-4 border-orange-600 pl-3">Détail chronologique</h3>
+                    {historyData.map((h: any, i: number) => (
+                      <div key={i} className="border-2 border-gray-100 rounded-2xl p-5 bg-white hover:border-orange-200 hover:shadow-xl transition-all group relative overflow-hidden">
+                        <div className="absolute top-2 right-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                           <FileText className="h-16 w-16 -rotate-12" />
+                        </div>
+                        <div className="flex items-center justify-between mb-4 relative z-10">
+                           <div>
+                              <span className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter mb-1 inline-block">ACHAT {h.numero}</span>
+                              <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+                                 <Calendar className="h-3 w-3" />
+                                 {new Date(h.date).toLocaleDateString('fr-FR')}
+                              </div>
+                           </div>
+                           <div className="text-right">
+                              <p className="text-xl font-black text-gray-900 tracking-tighter italic">{h.montantTotal.toLocaleString()} F</p>
+                              <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800 border-green-200 border' : 'bg-orange-100 text-orange-800 border-orange-200 border'}`}>
+                                {h.statutPaiement === 'PAYE' ? 'SÉCURISÉ ✅' : 'IMPAYÉ ⏳'}
+                              </span>
+                           </div>
+                        </div>
+                        <div className="space-y-2 mt-4 bg-gray-50/50 p-3 rounded-xl border border-dashed border-gray-200">
+                          {h.lignes && h.lignes.length > 0 ? h.lignes.map((l: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between text-[11px] font-medium text-gray-700">
+                              <span className="flex-1">
+                                 <span className="bg-gray-200 text-gray-800 px-1.5 py-0.5 rounded font-black mr-2 italic">{l.quantite}</span>
+                                 {l.produit?.designation || l.designation}
+                              </span>
+                              <span className="text-gray-900 font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</span>
+                            </div>
+                          )) : (
+                            <p className="text-[10px] text-gray-400 italic">Détails indisponibles</p>
+                          )}
+                        </div>
+                        <div className="mt-4 pt-3 flex items-center justify-between text-[10px] border-t border-gray-100 no-print">
+                           <div className="flex items-center gap-4">
+                              <span className="text-gray-400 italic">Paiement : <span className="text-gray-700 font-bold uppercase">{h.modePaiement}</span></span>
+                              <span className="text-gray-400 italic">Réglé : <span className="text-emerald-700 font-bold">{(h.montantPaye || 0).toLocaleString()} F</span></span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             <button
+                               title="Imprimer facture A4 premium"
+                               onClick={async () => {
+                                 let entreprise: any = {}
+                                try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch (_) {}
+                                 const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles } = await import('@/lib/print-templates')
+                                 const lignesHTML = generateLignesHTML((h.lignes || []).map((l: any) => ({ designation: l.produit?.designation || l.designation, quantite: l.quantite, prixUnitaire: l.prixUnitaire, montant: l.montant })))
+                                 const template = getDefaultA4Template('ACHAT')
+                                 const logoPath = entreprise.logoLocal || entreprise.logo
+                                 const logoHTML = logoPath ? `<img src="${logoPath}" alt="Logo" style="max-width:150px;height:auto;display:block"/>` : ''
+                                 const html = replaceTemplateVariables(template, {
+                                   ENTREPRISE_NOM: entreprise.nomEntreprise || '', ENTREPRISE_CONTACT: entreprise.contact || '',
+                                   ENTREPRISE_LOCALISATION: entreprise.localisation || '', ENTREPRISE_NCC: entreprise.numNCC || '',
+                                   ENTREPRISE_RC: entreprise.registreCommerce || '', ENTREPRISE_LOGO: logoHTML,
+                                   ENTREPRISE_PIED_DE_PAGE: entreprise.piedDePage || '',
+                                   ENTREPRISE_MENTION_SPECIALE: entreprise.mentionSpeciale || 'Les marchandises livrées ne sont pas reprises.',
+                                   NUMERO: h.numero, DATE: new Date(h.date).toLocaleDateString('fr-FR'),
+                                   HEURE: new Date(h.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                                   FOURNISSEUR_NOM: selectedHistory?.nom || '', LIGNES: lignesHTML,
+                                   TOTAL: `${h.montantTotal.toLocaleString()} FCFA`,
+                                   MONTANT_PAYE: `${(h.montantPaye || 0).toLocaleString()} FCFA`,
+                                   RESTE: `${Math.max(0, h.montantTotal - (h.montantPaye || 0)).toLocaleString()} FCFA`,
+                                   MODE_PAIEMENT: h.modePaiement || 'ESPECES', OBSERVATION: h.observation || ''
+                                 })
+                                 const pw = window.open('', '_blank')
+                                 if (!pw) { alert('Autorisez les popups.'); return }
+                                 pw.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Facture ${h.numero}</title><style>${getPrintStyles('A4')}</style></head><body><div class="print-document">${html}</div></body></html>`)
+                                 pw.document.close()
+                                 pw.onload = () => { setTimeout(() => { pw.print(); pw.close() }, 250) }
+                               }}
+                               className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-2.5 py-1.5 rounded-lg hover:bg-orange-50 hover:text-orange-700 transition-all font-bold tracking-tighter"
+                             >
+                               <FileText className="h-3 w-3" /> A4
+                             </button>
+                             <button 
+                              onClick={() => window.location.href = `/dashboard/achats?numero=${h.numero}`}
+                              className="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all font-bold tracking-tighter uppercase"
+                             >
+                              Visualiser <ChevronRight className="h-3 w-3" />
+                             </button>
+                           </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Pied de page Impression */}
-                <div className="hidden print:block mt-12 border-t pt-4 text-center text-[10px] text-gray-500 italic">
-                    Généré par GestiCom Pro - Logiciel de Gestion Commerciale Expert.
+                {/* Contenu impression paginé */}
+                <div className="hidden print:block">
+                  {(() => {
+                    const totalAchats = historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0)
+                    const totalPaye = historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)
+                    const reste = totalAchats - totalPaye
+                    const chunks = paginateForPrint(historyData)
+
+                    return chunks.map((chunk, index, allChunks) => (
+                      <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                        <ListPrintWrapper
+                          title="Historique des Achats"
+                          subtitle={`Fournisseur : ${selectedHistory.nom}`}
+                          pageNumber={index + 1}
+                          totalPages={allChunks.length}
+                          kpis={[
+                            { label: 'Total Achats', value: `${totalAchats.toLocaleString()} F` },
+                            { label: 'Total Payé', value: `${totalPaye.toLocaleString()} F` },
+                            { label: 'Reste à Payer', value: `${reste.toLocaleString()} F`, color: reste > 0 ? 'text-red-700' : 'text-emerald-700' },
+                            { label: 'Nbre Achats', value: `${historyData.length}` },
+                          ]}
+                        >
+                          <table className="w-full text-[14px] border-collapse border border-gray-300">
+                            <thead>
+                              <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                                <th className="border border-gray-300 px-3 py-3 text-left">N° Facture</th>
+                                <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
+                                <th className="border border-gray-300 px-3 py-3 text-left">Statut</th>
+                                <th className="border border-gray-300 px-3 py-3 text-right">Montant Total</th>
+                                <th className="border border-gray-300 px-3 py-3 text-right">Montant Payé</th>
+                                <th className="border border-gray-300 px-3 py-3 text-right">Reste</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {chunk.map((h: any, idx: number) => (
+                                <tr key={idx} className="border-b border-gray-200">
+                                  <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{h.numero || '-'}</td>
+                                  <td className="border border-gray-300 px-3 py-2">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
+                                  <td className="border border-gray-300 px-3 py-2">
+                                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
+                                      {h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'}
+                                    </span>
+                                  </td>
+                                  <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
+                                  <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(h.montantTotal - (h.montantPaye || 0)) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                                    {(Math.max(0, h.montantTotal - (h.montantPaye || 0))).toLocaleString()} F
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            {index === allChunks.length - 1 && (
+                              <tfoot>
+                                <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
+                                  <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAL GÉNÉRAL</td>
+                                  <td className="border border-gray-300 px-3 py-4 text-right">{totalAchats.toLocaleString()} F</td>
+                                  <td className="border border-gray-300 px-3 py-4 text-right">{totalPaye.toLocaleString()} F</td>
+                                  <td className="border border-gray-300 px-3 py-4 text-right">{reste.toLocaleString()} F</td>
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </ListPrintWrapper>
+                      </div>
+                    ))
+                  })()}
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -838,7 +863,7 @@ export default function FournisseursPage() {
         <PaymentModal
           isOpen={!!paymentModal}
           onClose={() => setPaymentModal(null)}
-          onSuccess={() => fetchList()}
+          onSuccess={() => mutate()}
           type="ACHAT"
           tierId={paymentModal.fournisseur.id}
           tierNom={paymentModal.fournisseur.nom}

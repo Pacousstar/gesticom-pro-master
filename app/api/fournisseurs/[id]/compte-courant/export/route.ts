@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
@@ -125,18 +125,9 @@ export async function GET(
             'Solde': solde
         })
 
-        const ws = XLSX.utils.json_to_sheet(rows)
-        const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, 'Relevé')
-
-        const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' })
-
-        return new NextResponse(buffer, {
-            headers: {
-                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition': `attachment; filename="releve_compte_${fournisseur.nom.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx"`
-            }
-        })
+        const buf = await rowsToBuffer(rows, 'Relevé')
+        const filename = `releve_compte_${fournisseur.nom.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
+        return makeResponse(buf, filename)
     } catch (e) {
         console.error('GET /api/fournisseurs/[id]/compte-courant/export:', e)
         return NextResponse.json({ error: 'Erreur génération export.' }, { status: 500 })

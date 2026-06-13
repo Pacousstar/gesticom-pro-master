@@ -1,17 +1,29 @@
-const { FlatCompat } = require('@eslint/eslintrc');
-const path = require('path');
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+const tsParser = require('@typescript-eslint/parser');
+const unusedImports = require('eslint-plugin-unused-imports');
+const tsPlugin = require('@typescript-eslint/eslint-plugin');
 
 const configs = [
-  ...compat.config({
-    extends: ['next/core-web-vitals'],
-    rules: {
-      '@next/next/no-img-element': 'off',
+  {
+    files: ['**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsParser,
     },
-  }),
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      'unused-imports': unusedImports,
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'unused-imports/no-unused-imports': 'warn',
+      'unused-imports/no-unused-vars': ['warn', {
+        vars: 'all',
+        varsIgnorePattern: '^_',
+        args: 'after-used',
+        argsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      }],
+    },
+  },
   {
     ignores: [
       '.next/*',

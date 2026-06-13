@@ -4,8 +4,8 @@ import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    const rows = mouvements.map((m, index) => ({
+    const rows: any[] = mouvements.map((m, index) => ({
       'N°': index + 1,
       'Date Opération': m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR') : '—',
       'Code Produit': m.produit?.code || '—',
@@ -84,30 +84,13 @@ export async function GET(request: NextRequest) {
     }))
 
     const totalQte = mouvements.reduce((s, m) => s + m.quantite, 0)
-    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'N°': '', 'Date Opération': '', 'Code Produit': '', 'Désignation': '', 'Magasin': '', 'Type': '', 'Quantité': '', 'Unité': '', 'Utilisateur': '', 'Observations': '' }])
-
     if (rows.length > 0) {
-      XLSX.utils.sheet_add_aoa(worksheet, [['', '', '', '', '', 'TOTAL', totalQte, '', '', '']], { origin: rows.length + 1 })
+      rows.push({ 'N°': '', 'Date Opération': '', 'Code Produit': '', 'Désignation': '', 'Magasin': '', 'Type': 'TOTAL', 'Quantité': totalQte, 'Unité': '', 'Utilisateur': '', 'Observations': '' })
     }
 
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Mouvements Stock')
-
-    // Ajustement des largeurs de colonnes
-    const colWidths = [
-      { wch: 6 }, { wch: 20 }, { wch: 15 }, { wch: 35 }, { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 20 }, { wch: 40 }
-    ]
-    worksheet['!cols'] = colWidths
-
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    const buf = await rowsToBuffer(rows as any[], 'Mouvements Stock')
     const filename = `mouvements-stock-${new Date().toISOString().split('T')[0]}.xlsx`
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('Export Excel Mouvements error:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

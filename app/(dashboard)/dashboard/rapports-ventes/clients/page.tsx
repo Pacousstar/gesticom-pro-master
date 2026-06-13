@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import RapportsNav from '../RapportsNav'
-import { Filter, UserCheck, Loader2, X, Calendar, FileText, ChevronRight, PieChart, Printer } from 'lucide-react'
+import { Filter, UserCheck, Loader2, X, Calendar, FileText, ChevronRight, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 import { useToast } from '@/hooks/useToast'
 
 interface ClientData {

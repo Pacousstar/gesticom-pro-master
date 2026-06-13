@@ -3,7 +3,6 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
-import { getEntiteId } from '@/lib/get-entite-id'
 import { deleteEcrituresByReference, deleteEcrituresByReferenceForIds } from '@/lib/delete-ecritures'
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
 import {

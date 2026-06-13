@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { jsPDF } = require('jspdf')
 
 const EXPORT_MAX_ROWS = 1000

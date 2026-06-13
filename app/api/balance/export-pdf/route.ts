@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { jsPDF } = require('jspdf')
 
 // Fonction pour formater les montants correctement pour jsPDF

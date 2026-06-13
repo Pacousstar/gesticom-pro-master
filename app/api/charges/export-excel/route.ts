@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const data = charges.map((c) => ({
+    const data: any[] = charges.map((c) => ({
       Date: new Date(c.date).toLocaleDateString('fr-FR'),
       Rubrique: c.rubrique,
       Magasin: c.magasin ? `${c.magasin.code} - ${c.magasin.nom}` : '—',
@@ -65,27 +65,16 @@ export async function GET(request: NextRequest) {
       Utilisateur: c.utilisateur.nom,
     }))
 
-    const worksheet = XLSX.utils.json_to_sheet(data)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Charges')
-
-    const colWidths = [
-      { wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 15 }, { wch: 30 }, { wch: 20 },
-    ]
-    worksheet['!cols'] = colWidths
-
     const totalMontant = charges.reduce((s, c) => s + c.montant, 0)
-    XLSX.utils.sheet_add_aoa(worksheet, [['Total', '', '', totalMontant, '', '']], { origin: data.length + 3 })
+    data.push(
+      { Date: '', Rubrique: '', Magasin: '', Montant: '', Observation: '', Utilisateur: '' },
+      { Date: '', Rubrique: '', Magasin: '', Montant: '', Observation: '', Utilisateur: '' },
+      { Date: 'Total', Rubrique: '', Magasin: '', Montant: totalMontant, Observation: '', Utilisateur: '' },
+    )
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    const buf = await rowsToBuffer(data as any[], 'Charges')
     const filename = `charges-${new Date().toISOString().split('T')[0]}.xlsx`
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('GET /api/charges/export-excel:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

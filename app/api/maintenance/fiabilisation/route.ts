@@ -3,12 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import {
-  comptabiliserDepense,
-  comptabiliserCharge,
   comptabiliserVente,
-  comptabiliserAchat,
   comptabiliserReglementVente,
-  comptabiliserReglementAchat,
 } from '@/lib/comptabilisation'
 
 export async function POST() {

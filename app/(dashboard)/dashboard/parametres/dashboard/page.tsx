@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, GripVertical, X, Save, Loader2, Eye, EyeOff } from 'lucide-react'
+import { LayoutDashboard, GripVertical, Save, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 

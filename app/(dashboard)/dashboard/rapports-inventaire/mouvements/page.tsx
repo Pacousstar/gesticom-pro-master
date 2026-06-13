@@ -5,6 +5,7 @@ import { Search, Loader2, Download, Filter, Package, Warehouse, User, ArrowUpRig
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface Mouvement {
   id: number
@@ -54,6 +55,7 @@ export default function MouvementsStockPage() {
   const [selectedMouvement, setSelectedMouvement] = useState<Mouvement | null>(null)
   const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
+  const [allDataForPrint, setAllDataForPrint] = useState<any[]>([])
   const [entreprise, setEntreprise] = useState<any>(null)
 
 useEffect(() => {
@@ -186,14 +188,32 @@ useEffect(() => {
           <p className="text-sm text-white/90 font-medium">Historique détaillé des flux de produits</p>
         </div>
         <div className="flex gap-2 no-print print:hidden">
-          <button 
-            onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
-            disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
-            IMPRIMER LA LISTE
-          </button>
+        <button 
+          onClick={async () => {
+            setIsPrinting(true)
+            try {
+              let url = `/api/rapports/inventaire/mouvements?dateDebut=${startDate}&dateFin=${endDate}&limit=10000&includeTotals=true`
+              if (selectedProduct !== 'TOUT') url += `&produitId=${selectedProduct}`
+              if (selectedMagasin !== 'TOUT') url += `&magasinId=${selectedMagasin}`
+              if (selectedType !== 'TOUT') url += `&type=${selectedType}`
+              if (search) url += `&search=${encodeURIComponent(search)}`
+              const res = await fetch(url)
+              if (res.ok) {
+                const d = await res.json()
+                setAllDataForPrint(Array.isArray(d.data) ? d.data : [])
+              }
+              setTimeout(() => { window.print(); setIsPrinting(false) }, 1000)
+            } catch (e) {
+              console.error(e)
+              setIsPrinting(false)
+            }
+          }}
+          disabled={isPrinting}
+          className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50"
+        >
+          {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} 
+          IMPRIMER LA LISTE
+        </button>
           <button 
             onClick={async () => {
               try {
@@ -281,58 +301,73 @@ useEffect(() => {
       </div>
 
       <div className="hidden print:block">
-        <ListPrintWrapper
-          title="Journal des Mouvements de Stock"
-          subtitle="Rapport technique des flux"
-          dateRange={{ start: startDate, end: endDate }}
-        >
-          <table className="w-full text-[10px] border-collapse border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                <th className="border border-gray-300 px-3 py-3 text-left">Date (Enreg. / Opération)</th>
-                <th className="border border-gray-300 px-3 py-3 text-left">Produit / Magasin / Code</th>
-                <th className="border border-gray-300 px-3 py-3 text-center">Type</th>
-                <th className="border border-gray-300 px-3 py-3 text-right">Quantité</th>
-                <th className="border border-gray-300 px-3 py-3 text-left">Obs / Utilisateur</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData.map((m, idx) => (
-                <tr key={idx} className="border-b border-gray-200">
-                  <td className="border border-gray-300 px-3 py-2 text-[9px]">
-                    <p className="font-bold">{m.date ? new Date(m.date).toLocaleString('fr-FR') : '—'}</p>
-                    <p className="text-gray-500 italic">{m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR') : '—'}</p>
-                  </td>
-                  <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
-                    {m.produit}<br/>
-                    <small className="font-normal italic text-gray-500">{m.magasin} • {m.code || '—'}</small>
-                  </td>
-                  <td className="border border-gray-300 px-3 py-2 text-center font-black uppercase italic text-[9px]">
-                    {m.type}
-                  </td>
-                  <td className={`border border-gray-300 px-3 py-2 text-right font-black ${m.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
-                    {m.type === 'SORTIE' ? '-' : '+'}{m.quantite.toLocaleString()} {m.unite}
-                  </td>
-                  <td className="border border-gray-300 px-3 py-2 text-[8px]">
-                    <p className="font-bold uppercase tracking-tighter">{m.utilisateur}</p>
-                    <p className="italic text-gray-500">{m.observation || '-'}</p>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-               <tr className="bg-gray-50 font-black text-sm">
-                  <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Bilan des Flux (Période)</td>
-                  <td className="border border-gray-300 px-3 py-4 text-right text-orange-700">
-                     {netFlux > 0 ? '+' : ''}{netFlux.toLocaleString()} UNITÉS
-                  </td>
-                  <td className="border border-gray-300 px-3 py-4 text-[9px] text-gray-500 font-normal">
-                     E: {totalEntrees.toLocaleString()} / S: {totalSorties.toLocaleString()}
-                  </td>
-               </tr>
-            </tfoot>
-          </table>
-        </ListPrintWrapper>
+        {(() => {
+          const dataForPrint = allDataForPrint.length > 0 ? allDataForPrint : filteredData
+          const pages = paginateForPrint(dataForPrint, 22)
+          const totalEntrees = dataForPrint.reduce((s, m) => s + (m.type === 'ENTREE' ? (Number(m.quantite) || 0) : 0), 0)
+          const totalSorties = dataForPrint.reduce((s, m) => s + (m.type === 'SORTIE' ? (Number(m.quantite) || 0) : 0), 0)
+          const netFlux = totalEntrees - totalSorties
+          return pages.map((pageData, pageIdx) => (
+            <div key={pageIdx} className="print-page">
+              <ListPrintWrapper
+                title="Journal des Mouvements de Stock"
+                subtitle="Rapport technique des flux"
+                dateRange={{ start: startDate, end: endDate }}
+                pageNumber={pageIdx + 1}
+                totalPages={pages.length}
+              >
+                <table className="w-full text-[10px] border-collapse border border-gray-300">
+                  <thead>
+                    <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                      <th className="border border-gray-300 px-3 py-3 text-left">Date (Enreg. / Opération)</th>
+                      <th className="border border-gray-300 px-3 py-3 text-left">Produit / Magasin / Code</th>
+                      <th className="border border-gray-300 px-3 py-3 text-center">Type</th>
+                      <th className="border border-gray-300 px-3 py-3 text-right">Quantité</th>
+                      <th className="border border-gray-300 px-3 py-3 text-left">Obs / Utilisateur</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageData.map((m: any, idx: number) => (
+                      <tr key={idx} className="border-b border-gray-200">
+                        <td className="border border-gray-300 px-3 py-2 text-[9px]">
+                          <p className="font-bold">{m.date ? new Date(m.date).toLocaleString('fr-FR') : '—'}</p>
+                          <p className="text-gray-500 italic">{m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR') : '—'}</p>
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
+                          {m.produit}<br/>
+                          <small className="font-normal italic text-gray-500">{m.magasin} • {m.code || '—'}</small>
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2 text-center font-black uppercase italic text-[9px]">
+                          {m.type}
+                        </td>
+                        <td className={`border border-gray-300 px-3 py-2 text-right font-black ${m.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
+                          {m.type === 'SORTIE' ? '-' : '+'}{m.quantite.toLocaleString()} {m.unite}
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2 text-[8px]">
+                          <p className="font-bold uppercase tracking-tighter">{m.utilisateur}</p>
+                          <p className="italic text-gray-500">{m.observation || '-'}</p>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {pageIdx === pages.length - 1 && (
+                    <tfoot>
+                      <tr className="bg-gray-50 font-black text-sm">
+                        <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Bilan des Flux (Période)</td>
+                        <td className="border border-gray-300 px-3 py-4 text-right text-orange-700">
+                          {netFlux > 0 ? '+' : ''}{netFlux.toLocaleString()} UNITÉS
+                        </td>
+                        <td className="border border-gray-300 px-3 py-4 text-[9px] text-gray-500 font-normal">
+                          E: {totalEntrees.toLocaleString()} / S: {totalSorties.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </ListPrintWrapper>
+            </div>
+          ))
+        })()}
       </div>
 
       <div className="grid grid-cols-1 gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm print:hidden">

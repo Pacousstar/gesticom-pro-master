@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Search, Plus, Upload, Download, Loader2, Pencil, Trash2, AlertTriangle, X, Printer, RotateCcw } from 'lucide-react'
+import useSWR from 'swr'
+import { Search, Plus, Upload, Download, Loader2, Pencil, Trash2, AlertTriangle, X, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { produitSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import Pagination from '@/components/ui/Pagination'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
@@ -43,11 +43,9 @@ export default function ProduitsPage() {
   const searchParams = useSearchParams()
   const qFromUrl = searchParams.get('q') ?? ''
   const [q, setQ] = useState(qFromUrl)
-  const [list, setList] = useState<Produit[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [categories, setCategories] = useState<string[]>(['DIVERS'])
   const [magasins, setMagasins] = useState<Magasin[]>([])
-  const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [fournisseurs, setFournisseurs] = useState<{ id: number; nom: string }[]>([])
   const [form, setForm] = useState(false)
@@ -65,7 +63,6 @@ export default function ProduitsPage() {
   const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE_REPORT = 25
-  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
   const [suggesting, setSuggesting] = useState(false)
   const [formData, setFormData] = useState({
     code: '',
@@ -86,35 +83,38 @@ export default function ProduitsPage() {
   const [dateFin, setDateFin] = useState('')
   const [entreprise, setEntreprise] = useState<any>(null)
 
-  const fetchList = async (page?: number) => {
-    setLoading(true)
+  const handlePrintAll = async () => {
+    setIsPrinting(true)
     try {
-      const p = new URLSearchParams({
-        page: String(page ?? currentPage),
-        limit: '20',
-      })
-      if (q) p.set('q', q)
-      const res = await fetch(`/api/produits?${p.toString()}`)
+      const params = new URLSearchParams({ limit: '10000' })
+      if (q) params.set('q', q)
+      if (dateDebut) params.set('dateDebut', dateDebut)
+      if (dateFin) params.set('dateFin', dateFin)
+      const res = await fetch('/api/produits?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        if (response.data) {
-          setList(response.data)
-          setPagination(response.pagination)
-        } else {
-          setList(Array.isArray(response) ? response : [])
-          setPagination(null)
-        }
+        setAllProductsForPrint(response.data || [])
+        setTimeout(() => { window.print(); setIsPrinting(false) }, 500)
       } else {
-        setList([])
-        setPagination(null)
+        setIsPrinting(false)
       }
-    } catch {
-      setList([])
-      setPagination(null)
-    } finally {
-      setLoading(false)
+    } catch (e) {
+      console.error(e)
+      setIsPrinting(false)
     }
   }
+
+  const fetcher = (url: string) => fetch(url).then(r => r.json())
+
+  const { data: listData, isLoading: listLoading, mutate } = useSWR(
+    `/api/produits?page=${currentPage}&limit=20${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+    fetcher,
+    { keepPreviousData: true, revalidateOnFocus: false }
+  )
+
+  const list: Produit[] = listData?.data || (Array.isArray(listData) ? listData : [])
+  const pagination = listData?.pagination || null
+  const loading = listLoading && !listData
 
   useEffect(() => {
     setQ(qFromUrl)
@@ -122,12 +122,7 @@ export default function ProduitsPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-    fetchList(1)
   }, [q])
-
-  useEffect(() => {
-    fetchList()
-  }, [currentPage])
 
   useEffect(() => {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
@@ -135,7 +130,6 @@ export default function ProduitsPage() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchList(page)
   }
 
   const fetchStats = () => {
@@ -202,7 +196,7 @@ export default function ProduitsPage() {
       const d = await res.json()
       if (res.ok) {
         setEditing(null)
-        fetchList()
+        mutate()
         showSuccess('Produit modifié avec succès.')
       } else {
         const errorMsg = formatApiError(d.error || 'Erreur lors de la modification.')
@@ -224,7 +218,7 @@ export default function ProduitsPage() {
       const data = await res.json()
       if (res.ok) {
         setDeleting(null)
-        fetchList()
+        mutate()
         fetchStats()
         showSuccess(data.softDeleted ? 'Produit archivé (historique conservé).' : 'Produit supprimé.')
       } else {
@@ -247,7 +241,7 @@ export default function ProduitsPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        fetchList()
+        mutate()
         fetchStats()
         showSuccess('Produit restauré avec succès.')
       } else {
@@ -285,7 +279,7 @@ export default function ProduitsPage() {
             if (data.errors.length > 5) msg += `\n... et ${data.errors.length - 5} autres`
           }
           showSuccess(msg)
-          fetchList()
+          mutate()
           fetchStats()
           window.dispatchEvent(new CustomEvent('produit-created'))
         } else {
@@ -420,11 +414,11 @@ export default function ProduitsPage() {
         setForm(false)
         setFormData({ code: '', codeBarres: '', designation: '', categorie: 'DIVERS', unite: 'unite', magasinId: '', prixAchat: '', prixVente: '', prixMinimum: '', fournisseurId: '', seuilMin: '5', quantiteInitiale: '0' })
         setCurrentPage(1)
-        fetchList(1)
+        mutate()
         fetchStats()
         window.dispatchEvent(new CustomEvent('produit-created'))
         showSuccess(`Produit ${data.code} créé avec succès.`)
-        setTimeout(() => fetchList(1), 500)
+        setTimeout(() => mutate(), 500)
         setTimeout(() => fetchStats(), 1000)
       } else {
         const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
@@ -462,82 +456,9 @@ export default function ProduitsPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              const generatePrintHTML = () => {
-                const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
-                const entite = entreprise ? (entreprise.nom || entreprise.raisonSociale || 'GestiCom') : 'GestiCom'
-                const periode = (dateDebut || dateFin) ? 'Période: ' + (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...') : 'Toutes périodes'
-                
-                let totalValeurVente = 0
-                let totalValeurAchat = 0
-                let totalStock = 0
-                
-                const rows = list.map((p, idx) => {
-                  const stock = p.stocks && p.stocks.length > 0 ? p.stocks.reduce((sum: number, s: any) => sum + (s.quantite || 0), 0) : 0
-                  const prixVente = Number(p.prixVente) || 0
-                  const prixAchat = Number(p.pamp) || Number(p.prixAchat) || 0
-                  const valeurVente = stock * prixVente
-                  const valeurAchat = stock * prixAchat
-                  totalValeurVente += valeurVente
-                  totalValeurAchat += valeurAchat
-                  totalStock += stock
-                  
-                  const magName = p.stocks && p.stocks.length > 0 ? 'Mag-' + p.stocks[0].magasinId : '—'
-                  
-                  return '<tr>' +
-                    '<td>' + (idx + 1) + '</td>' +
-                    '<td>' + (p.code || '—') + '</td>' +
-                    '<td>' + (p.designation || '—') + '</td>' +
-                    '<td>' + (p.categorie || '—') + '</td>' +
-                    '<td>' + magName + '</td>' +
-                    '<td>' + (prixAchat > 0 ? prixAchat.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
-                    '<td>' + (prixVente > 0 ? prixVente.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
-                    '<td>' + (p.prixMinimum ? Number(p.prixMinimum).toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
-                    '<td>' + stock + '</td>' +
-                    '<td>' + (p.seuilMin || '—') + '</td>' +
-                    '<td>' + (p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '—') + '</td>' +
-                    '<td>' + (valeurVente !== 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
-                    '<td>' + (valeurAchat !== 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—') + '</td>' +
-                  '</tr>'
-                }).join('')
-                
-                return '<!DOCTYPE html><html><head>' +
-                  '<title>Produits</title>' +
-                  '<style>@page { size: landscape; margin: 5mm; }' +
-                  'body { font-family: Arial, sans-serif; font-size: 12px; }' +
-                  '.header { text-align: center; margin-bottom: 10px; }' +
-                  'h1 { font-size: 14px; margin: 0; }' +
-                  '.subtitle { font-size: 13px; color: #666; }' +
-                  '.info { font-size: 13px; color: #888; margin-bottom: 10px; }' +
-                  'table { width: 100%; border-collapse: collapse; font-size: 11px; }' +
-                  'th, td { border: 1px solid #000; padding: 2px 3px; text-align: center; }' +
-                  'th { background: #f0f0f0; font-weight: bold; font-size: 10px; }' +
-                  'tfoot td { background: #e0e0e0; font-weight: bold; }' +
-                  '.footer { margin-top: 10px; text-align: right; font-size: 10px; color: #666; }' +
-                  '</style></head><body>' +
-                  '<div class="header">' +
-                    '<h1>' + entite + '</h1>' +
-                    '<p class="subtitle">Liste des produits</p>' +
-                    '<p class="info">' + today + ' • ' + periode + '</p>' +
-                  '</div>' +
-                  '<table><thead><tr>' +
-                    '<th>N°</th><th>Code</th><th>Désignation</th><th>Catégorie</th><th>Magasin</th><th>PAMP</th><th>Prix vente</th><th>Prix Min.</th><th>Stock</th><th>Seuil</th><th>Date création</th><th>Valeur vente</th><th>Valeur achat</th>' +
-                  '</tr></thead><tbody>' + rows + '</tbody>' +
-                  '<tfoot><tr>' +
-                    '<td colspan="8">TOTAUX</td>' +
-                    '<td>' + totalStock.toLocaleString('fr-FR') + '</td>' +
-                    '<td>—</td>' +
-                    '<td>—</td>' +
-                    '<td>' + totalValeurVente.toLocaleString('fr-FR') + ' F</td>' +
-                    '<td>' + totalValeurAchat.toLocaleString('fr-FR') + ' F</td>' +
-                  '</tr></tfoot></table>' +
-                  '<div class="footer">Total: ' + list.length + ' produits</div>' +
-                  '<script>window.print();<\/script></body></html>'
-              }
-              const printWindow = window.open('', '_blank')
-              if (printWindow) { printWindow.document.write(generatePrintHTML()); printWindow.document.close() }
-            }}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-400 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100"
+            onClick={handlePrintAll}
+            disabled={isPrinting}
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-400 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 disabled:opacity-50"
             title="Imprimer la liste des produits"
           >
             <Printer className="h-4 w-4" />
@@ -1032,6 +953,96 @@ export default function ProduitsPage() {
           </div>
         </div>
       )}
+
+      {/* Impression paginée */}
+      <div className="hidden print:block">
+        {(() => {
+          const data = allProductsForPrint.length > 0 ? allProductsForPrint : list
+          const periode = (dateDebut || dateFin)
+            ? (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...')
+            : 'Toutes périodes'
+          const chunks = paginateForPrint(data)
+
+          return chunks.map((chunk, index, allChunks) => {
+            let totalValeurVente = 0, totalValeurAchat = 0, totalStock = 0
+
+            return (
+              <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                <ListPrintWrapper
+                  title="Liste des produits"
+                  subtitle={q ? `Filtre: "${q}"` : periode}
+                  pageNumber={index + 1}
+                  totalPages={allChunks.length}
+                  layout="landscape"
+                >
+                  <table className="w-full text-[14px] border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                        <th className="border border-gray-300 px-2 py-3 text-center">N°</th>
+                        <th className="border border-gray-300 px-2 py-3 text-left">Code</th>
+                        <th className="border border-gray-300 px-2 py-3 text-left">Désignation</th>
+                        <th className="border border-gray-300 px-2 py-3 text-left">Catégorie</th>
+                        <th className="border border-gray-300 px-2 py-3 text-left">Magasin</th>
+                        <th className="border border-gray-300 px-2 py-3 text-right">PAMP</th>
+                        <th className="border border-gray-300 px-2 py-3 text-right">Prix vente</th>
+                        <th className="border border-gray-300 px-2 py-3 text-right">Prix Min.</th>
+                        <th className="border border-gray-300 px-2 py-3 text-right">Stock</th>
+                        <th className="border border-gray-300 px-2 py-3 text-right">Seuil</th>
+                        <th className="border border-gray-300 px-2 py-3 text-left">Date création</th>
+                        <th className="border border-gray-300 px-2 py-3 text-right">Valeur vente</th>
+                        <th className="border border-gray-300 px-2 py-3 text-right">Valeur achat</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {chunk.map((p, idx) => {
+                        const stock = p.stocks && p.stocks.length > 0
+                          ? p.stocks.reduce((sum: number, s: any) => sum + (s.quantite || 0), 0) : 0
+                        const prixVente = Number(p.prixVente) || 0
+                        const prixAchat = Number(p.pamp) || Number(p.prixAchat) || 0
+                        const valeurVente = stock * prixVente
+                        const valeurAchat = stock * prixAchat
+                        totalValeurVente += valeurVente
+                        totalValeurAchat += valeurAchat
+                        totalStock += stock
+                        const magName = p.stocks && p.stocks.length > 0 ? 'Mag-' + p.stocks[0].magasinId : '—'
+                        return (
+                          <tr key={idx} className="border-b border-gray-200">
+                            <td className="border border-gray-300 px-2 py-2 text-center font-bold">{idx + 1}</td>
+                            <td className="border border-gray-300 px-2 py-2 font-mono">{p.code || '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2 font-bold">{p.designation || '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2">{p.categorie || '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2">{magName}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right">{prixAchat > 0 ? prixAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right">{prixVente > 0 ? prixVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right">{p.prixMinimum ? Number(p.prixMinimum).toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right font-bold">{stock}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right">{p.seuilMin || '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right">{valeurVente !== 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right">{valeurAchat !== 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    {index === allChunks.length - 1 && (
+                      <tfoot>
+                        <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
+                          <td colSpan={8} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAUX</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{totalStock.toLocaleString('fr-FR')}</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">—</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">—</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{totalValeurVente.toLocaleString('fr-FR') + ' F'}</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{totalValeurAchat.toLocaleString('fr-FR') + ' F'}</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </ListPrintWrapper>
+              </div>
+            )
+          })
+        })()}
+      </div>
     </div>
   )
 }

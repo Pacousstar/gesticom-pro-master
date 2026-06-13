@@ -6,6 +6,7 @@ import {
   Search, Edit2, Pencil, Wallet, AlertTriangle, Calculator, FileText,
 } from 'lucide-react'
 import SuppressionConfirmModal from '@/components/SuppressionConfirmModal'
+import ModificationAchatModal from '@/components/dashboard/achats/ModificationAchatModal'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
@@ -126,6 +127,7 @@ export default function AchatsPage() {
   const [formFournisseurSearch, setFormFournisseurSearch] = useState('')
   const [showFournisseurList, setShowFournisseurList] = useState(false)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
+  const [editingAchatModalId, setEditingAchatModalId] = useState<number | null>(null)
   const [entreprise, setEntreprise] = useState<any>(null)
   const [banques, setBanques] = useState<any[]>([])
   const [showCreateBanque, setShowCreateBanque] = useState(false)
@@ -440,9 +442,24 @@ export default function AchatsPage() {
 
   const ITEMS_PER_PAGE_REPORT = 22
 
-  const handleOpenPreview = () => {
+  const handleOpenPreview = async () => {
     setIsPrintingData(true)
-    setAllAchatsForPrint(achats)
+    try {
+      const params = new URLSearchParams({ limit: '10000', page: '1' })
+      if (dateDebut) params.set('dateDebut', dateDebut)
+      if (dateFin) params.set('dateFin', dateFin)
+      if (searchQuery) params.set('q', searchQuery)
+      if (searchNumero) params.set('numero', searchNumero)
+      if (searchNumeroCamion) params.set('numeroCamion', searchNumeroCamion)
+      if (searchFournisseur) params.set('fournisseurSearch', searchFournisseur)
+      const res = await fetch('/api/achats?' + params.toString())
+      if (res.ok) {
+        const response = await res.json()
+        setAllAchatsForPrint(response.data || [])
+      }
+    } catch (e) {
+      console.error(e)
+    }
     setIsPreviewOpen(true)
     setIsPrintingData(false)
   }
@@ -1552,6 +1569,15 @@ export default function AchatsPage() {
                             <Wallet className="h-4 w-4" />
                           </button>
                         )}
+                        {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                          <button
+                            onClick={() => setEditingAchatModalId(a.id)}
+                            className="rounded p-1.5 text-blue-600 hover:bg-blue-100"
+                            title="Modifier la facture"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleVoirDetail(a.id)}
                           disabled={loadingDetail === a.id}
@@ -2074,6 +2100,13 @@ export default function AchatsPage() {
           defaultTemplateId={defaultTemplateId}
         />
       )}
+
+      <ModificationAchatModal
+        isOpen={editingAchatModalId !== null}
+        onClose={() => setEditingAchatModalId(null)}
+        achatId={editingAchatModalId || 0}
+        onSuccess={() => fetchAchats()}
+      />
 
       <SuppressionConfirmModal
         isOpen={deleteConfirmTarget !== null}

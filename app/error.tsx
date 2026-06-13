@@ -12,7 +12,18 @@ export default function Error({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error('GestiCom error boundary:', error.message, error.digest)
+    fetch('/api/errors/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: error.message,
+        stack: error.stack,
+        source: 'error.tsx',
+        digest: error.digest,
+        url: window.location.href,
+        level: 'error',
+      }),
+    }).catch(() => {})
   }, [error])
 
   return (

@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Book, Plus, Loader2, Pencil, Trash2, X, Search, Filter, Download, FileSpreadsheet, Printer } from 'lucide-react'
+import { Book, Plus, Loader2, Pencil, Trash2, X, Filter, FileSpreadsheet, Printer } from 'lucide-react'
 import ComptabiliteNav from '../ComptabiliteNav'
 import { useToast } from '@/hooks/useToast'
-import { journalSchema } from '@/lib/validations'
-import { validateForm, formatApiError } from '@/lib/validation-helpers'
+import { formatApiError } from '@/lib/validation-helpers'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 

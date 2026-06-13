@@ -5,9 +5,7 @@ import {
   comptabiliserVente,
   comptabiliserAchat,
   comptabiliserDepense,
-  comptabiliserCharge,
-  comptabiliserReglementVente,
-  comptabiliserReglementAchat
+  comptabiliserCharge
 } from '@/lib/comptabilisation'
 import { repairCaisseIntegrity, repairStockIntegrity, repairBankIntegrity } from '@/lib/repair'
 import path from 'path'

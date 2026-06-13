@@ -1,5 +1,0 @@
-const D = require('better-sqlite3')
-const db = new D('./prisma/gesticom.db')
-const s = db.prepare('SELECT COUNT(*) as c FROM "Stock" WHERE quantite>0').get()
-console.log('Stock >0:', s.c)
-db.close()

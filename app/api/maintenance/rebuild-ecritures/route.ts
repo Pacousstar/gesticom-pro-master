@@ -252,6 +252,7 @@ export async function POST(request: NextRequest) {
           { observation: { contains: 'Stock initial' } },
           { observation: { contains: 'Inventaire' } },
           { observation: { contains: 'Régul' } },
+          { observation: { contains: 'RÉGUL' } },
           { observation: { contains: 'Ajust' } },
         ],
       },

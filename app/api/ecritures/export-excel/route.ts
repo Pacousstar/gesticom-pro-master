@@ -3,8 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const rows = ecritures.map((e) => ({
+    const rows: any[] = ecritures.map((e) => ({
       Date: new Date(e.date).toISOString().slice(0, 10),
       Numéro: e.numero,
       Journal: `${e.journal.code} - ${e.journal.libelle}`,
@@ -77,40 +77,18 @@ export async function GET(request: NextRequest) {
       Utilisateur: e.utilisateur.nom || e.utilisateur.login,
     }))
 
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [
-      { Date: '', Numéro: '', Journal: '', Pièce: '', Libellé: '', Compte: '', Débit: '', Crédit: '', Référence: '', 'Type Réf.': '', Utilisateur: '' }
-    ])
-    
-    const colWidths = [
-      { wch: 12 }, // Date
-      { wch: 15 }, // Numéro
-      { wch: 20 }, // Journal
-      { wch: 15 }, // Pièce
-      { wch: 40 }, // Libellé
-      { wch: 25 }, // Compte
-      { wch: 12 }, // Débit
-      { wch: 12 }, // Crédit
-      { wch: 15 }, // Référence
-      { wch: 15 }, // Type Réf.
-      { wch: 20 }, // Utilisateur
-    ]
-    ws['!cols'] = colWidths
-
     const totalDebit = ecritures.reduce((s, e) => s + e.debit, 0)
     const totalCredit = ecritures.reduce((s, e) => s + e.credit, 0)
-    XLSX.utils.sheet_add_aoa(ws, [['', '', '', '', '', '', totalDebit, totalCredit, '', '', '']], { origin: rows.length + 3 })
 
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Écritures')
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    rows.push(
+      { Date: '', Numéro: '', Journal: '', Pièce: '', Libellé: '', Compte: '', Débit: '', Crédit: '', Référence: '', 'Type Réf.': '', Utilisateur: '' },
+      { Date: '', Numéro: '', Journal: '', Pièce: '', Libellé: '', Compte: '', Débit: '', Crédit: '', Référence: '', 'Type Réf.': '', Utilisateur: '' },
+      { Date: '', Numéro: '', Journal: '', Pièce: '', Libellé: '', Compte: '', Débit: totalDebit, Crédit: totalCredit, Référence: '', 'Type Réf.': '', Utilisateur: '' },
+    )
 
+    const buf = await rowsToBuffer(rows as any[], 'Écritures')
     const filename = `ecritures_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')
-    return new NextResponse(buf, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('Export Excel écritures:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

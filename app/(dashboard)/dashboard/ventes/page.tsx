@@ -1,32 +1,25 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import SuppressionConfirmModal from '@/components/SuppressionConfirmModal'
-import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
-import { 
+import { VenteTableRow } from '@/components/dashboard/ventes/VenteTableRow'
+import VenteFormModal from '@/components/dashboard/ventes/VenteFormModal'
+import ModificationVenteModal from '@/components/dashboard/ventes/ModificationVenteModal'
+import {
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X, 
-  Search, Scan, Camera, Edit2, Pencil, Trash, CreditCard, Wallet, UserPlus, 
-  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent, DollarSign, RotateCcw
+  Search, Edit2, Wallet, AlertTriangle, XCircle, RotateCcw, CreditCard
 } from 'lucide-react'
-import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import PrintPreview from '@/components/print/PrintPreview'
-import { useToast } from '@/hooks/useToast'
+import Pagination from '@/components/ui/Pagination'
+import { formatDate } from '@/lib/format-date'
+import { montantLigneTTC, montantTvaImpliciteLigne } from '@/lib/calculs-commerciaux'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
-import Pagination from '@/components/ui/Pagination'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
-import { formatDate } from '@/lib/format-date'
-import {
-  montantLigneTTC,
-  montantTotalVenteDocument,
-  montantTvaImpliciteLigne,
-  pointsFideliteDepuisEncaissement,
-} from '@/lib/calculs-commerciaux'
-
-// Chargement dynamique du scanner (évite les erreurs SSR liées au DOM et à la webcam)
-const BarcodeScanner = dynamic(() => import('@/components/scanner/BarcodeScanner'), { ssr: false })
+import { useToast } from '@/hooks/useToast'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Magasin = { id: number; code: string; nom: string }
 type Client = { id: number; nom: string; type: string; code?: string }
@@ -39,8 +32,6 @@ type Produit = {
   prixMinimum?: number | null;
   stocks: Array<{ magasinId: number; quantite: number }>; prixAchat?: number | null 
 }
-type Ligne = { produitId: number; designation: string; code?: string; quantite: number; prixUnitaire: number; tvaPerc?: number; remise?: number; remiseType?: 'MONTANT' | 'POURCENT' }
-
 export default function VentesPage() {
   const searchParams = useSearchParams()
   const openIdParam = searchParams.get('open')
@@ -61,6 +52,7 @@ export default function VentesPage() {
   }>>([])
   const [annulant, setAnnulant] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
+  const [livrant, setLivrant] = useState<number | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
   const [userRole, setUserRole] = useState<string>('')
   const [detailVente, setDetailVente] = useState<{
@@ -87,86 +79,35 @@ export default function VentesPage() {
   const [detailRetours, setDetailRetours] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
-  const [err, setErr] = useState('')
-  const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
   const [totals, setTotals] = useState<{ montantTotal: number; montantPaye: number; resteAPayer: number } | null>(null)
-  const [formData, setFormData] = useState({
-    date: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD local
-    magasinId: '',
-    clientId: '',
-    clientLibre: '',
-    modePaiement: 'ESPECES',
-    montantPaye: '',
-    reglements: [{ mode: 'ESPECES', montant: '' }] as { mode: string; montant: string }[], // Support Multi-Paiement
-    banqueId: '',
-    remiseGlobale: '',
-    observation: '',
-    numeroBon: '',
-    lignes: [] as Ligne[],
-    pointsGagnes: 0,
-  })
-  const [ajoutProduit, setAjoutProduit] = useState({
-    produitId: '',
-    quantite: '1',
-    prixUnitaire: '',
-    recherche: '',
-    tvaPerc: '',
-    remise: '',
-    remiseType: 'MONTANT' as 'MONTANT' | 'POURCENT'
-  })
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
   const [filterClientId, setFilterClientId] = useState('')
   const [filterClientSearch, setFilterClientSearch] = useState('')
-  // Filtres de recherche avancée
   const [searchNumero, setSearchNumero] = useState('')
   const [searchNumeroBon, setSearchNumeroBon] = useState('')
   const [searchClient, setSearchClient] = useState('')
-  const [addLignesPopupOpen, setAddLignesPopupOpen] = useState(false)
-  const [popupLignes, setPopupLignes] = useState<Ligne[]>([])
-  const [popupAjoutProduit, setPopupAjoutProduit] = useState({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
-  const [submitting, setSubmitting] = useState(false)
-  const [showCreateClient, setShowCreateClient] = useState(false)
-  // État du scanner code-barres
-  const [scannerOpen, setScannerOpen] = useState(false)
-  const [scannerContext, setScannerContext] = useState<'main' | 'popup'>('main')
-  const [clientForm, setClientForm] = useState({
-    nom: '',
-    telephone: '',
-    email: '',
-    adresse: '',
-    type: 'CASH',
-    plafondCredit: '',
-  })
-  const [savingClient, setSavingClient] = useState(false)
-  const [createClientAfter, setCreateClientAfter] = useState<(() => void) | null>(null)
-  const [stockInsuffisantModal, setStockInsuffisantModal] = useState<{
-    produitId: number
-    produitDesignation: string
-    quantiteDemandee: number
-    quantiteDisponible: number
-    magasinId: number
-    lignes: Ligne[]
-  } | null>(null)
-  const [ajoutStockQuantite, setAjoutStockQuantite] = useState('')
-  const [ajoutStockSaving, setAjoutStockSaving] = useState(false)
-  const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
-  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
-  const [savingReglement, setSavingReglement] = useState(false)
-
-  // Récupérer le templateId par défaut pour VENTE
-  // Récupérer le templateId par défaut pour VENTE
+  const [typeVenteFilter, setTypeVenteFilter] = useState('')
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printData, setPrintData] = useState<TemplateData | null>(null)
   const [tvaParDefaut, setTvaParDefaut] = useState(0)
-  const [formClientSearch, setFormClientSearch] = useState('')
-  const [showClientList, setShowClientList] = useState(false)
+  const [editingVente, setEditingVente] = useState<any>(null)
   const [editingVenteId, setEditingVenteId] = useState<number | null>(null)
+  const [editingVenteModalId, setEditingVenteModalId] = useState<number | null>(null)
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [allVentesForPrint, setAllVentesForPrint] = useState<any[]>([])
+  const [isPrinting, setIsPrinting] = useState(false)
   const [banques, setBanques] = useState<any[]>([])
+
+  const { success: showSuccess, error: showError } = useToast()
+  const [err, setErr] = useState('')
+
+  const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
+  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
+  const [savingReglement, setSavingReglement] = useState(false)
   const [showCreateBanque, setShowCreateBanque] = useState(false)
   const [creatingBanque, setCreatingBanque] = useState(false)
   const [newBanque, setNewBanque] = useState({
@@ -186,101 +127,6 @@ export default function VentesPage() {
   const [savingRetour, setSavingRetour] = useState(false)
   const [deletingRetourId, setDeletingRetourId] = useState<number | null>(null)
 
-  const handleDeleteRetour = async (retourId: number) => {
-    if (!confirm('Supprimer définitivement ce retour ? Cette action est irréversible.')) return
-    setDeletingRetourId(retourId)
-    try {
-      const res = await fetch(`/api/retours/${retourId}`, { method: 'DELETE' })
-      if (res.ok) {
-        setDetailRetours((prev) => prev.filter((r) => r.id !== retourId))
-        showSuccess('Retour supprimé avec succès.')
-      } else {
-        const d = await res.json()
-        showError(d.error || 'Erreur lors de la suppression du retour.')
-      }
-    } catch {
-      showError('Erreur réseau lors de la suppression.')
-    } finally {
-      setDeletingRetourId(null)
-    }
-  }
-
-  const openRetourModal = (v: any) => {
-    setRetourModalVente(v)
-    setRetourLignes((v.lignes || []).map((l: any) => {
-      const p = produits.find(x => x.id === l.produitId)
-      const st = p?.stocks?.find((s: any) => s.magasinId === (v.magasinId || v.magasin?.id))
-      const q = Number(l.quantite) || 1
-      return {
-        produitId: l.produitId,
-        designation: l.designation,
-        code: p?.code || '',
-        quantite: 0,
-        maxQuantite: l.quantite,
-        prixUnitaire: l.prixUnitaire,
-        unitaireTTC: (Number(l.montant) || 0) / q,
-        stockActuel: st?.quantite ?? 0,
-      }
-    }))
-    setRetourRemboursement(true)
-    setRetourMode('ESPECES')
-    setRetourBanqueId('')
-    setRetourObservation('')
-  }
-
-  const handleRetour = async () => {
-    if (!retourModalVente) return
-    const lignes = retourLignes.filter(l => l.quantite > 0)
-    if (!lignes.length) { showError('Sélectionnez au moins un produit.'); return }
-    setSavingRetour(true)
-    try {
-      const r = await fetch(`/api/ventes/${retourModalVente.id}/retour`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lignes: lignes.map(l => ({ produitId: l.produitId, quantite: l.quantite })),
-          remboursement: retourRemboursement,
-          modeRemboursement: retourMode,
-          banqueId: retourMode !== 'ESPECES' ? retourBanqueId : null,
-          observation: retourObservation || null,
-        }),
-      })
-      if (!r.ok) throw new Error((await r.json()).error || 'Erreur réseau')
-      showSuccess('Retour effectué avec succès.')
-      setRetourModalVente(null)
-      fetchVentes()
-    } catch (e: any) {
-      showError(formatApiError(e) || 'Erreur lors du retour.')
-    } finally {
-      setSavingRetour(false)
-    }
-  }
-
-  const addReglement = () => {
-    setFormData(f => ({
-      ...f,
-      reglements: [...f.reglements, { mode: 'ESPECES', montant: '' }]
-    }))
-  }
-
-  const removeReglement = (index: number) => {
-    if (formData.reglements.length <= 1) return
-    setFormData(f => ({
-      ...f,
-      reglements: f.reglements.filter((_, i) => i !== index)
-    }))
-  }
-
-  const updateReglement = (index: number, key: 'mode' | 'montant', value: string) => {
-    setFormData(f => ({
-      ...f,
-      reglements: f.reglements.map((r, i) => i === index ? { ...r, [key]: value } : r)
-    }))
-  }
-
-  const totalPayeReglements = formData.reglements.reduce((sum, r) => sum + (Number(r.montant) || 0), 0)
-  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
-
   useEffect(() => {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { 
       if (d) {
@@ -294,61 +140,6 @@ export default function VentesPage() {
       .catch(() => setBanques([]))
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => { })
   }, [])
-
-  const refreshBanques = async () => {
-    try {
-      const r = await fetch('/api/banques', { cache: 'no-store' as any })
-      const d = r.ok ? await r.json() : null
-      setBanques(Array.isArray(d?.data) ? d.data : [])
-      return Array.isArray(d?.data) ? d.data : []
-    } catch {
-      setBanques([])
-      return []
-    }
-  }
-
-  const createBanqueInline = async (target: 'FORM' | 'REGLEMENT') => {
-    const numero = (newBanque.numero || '').trim()
-    const nomBanque = (newBanque.nomBanque || '').trim()
-    const libelle = (newBanque.libelle || '').trim()
-    if (!numero || !nomBanque || !libelle) {
-      showError('Veuillez renseigner Numéro, Banque et Libellé.')
-      return
-    }
-    setCreatingBanque(true)
-    try {
-      const res = await fetch('/api/banques', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          numero,
-          nomBanque,
-          libelle,
-          soldeInitial: Number(newBanque.soldeInitial) || 0,
-          compteId: newBanque.compteId || undefined,
-        }),
-      })
-      const d = await res.json()
-      if (!res.ok) {
-        showError(d?.error || 'Erreur lors de la création du compte bancaire.')
-        return
-      }
-
-      // Rafraîchir la liste + auto-sélection
-      await refreshBanques()
-      if (d?.id) {
-        if (target === 'FORM') setFormData((f) => ({ ...f, banqueId: String(d.id) }))
-        if (target === 'REGLEMENT') setReglementData((prev) => ({ ...prev, banqueId: String(d.id) }))
-      }
-      setNewBanque({ numero: '', nomBanque: '', libelle: '', soldeInitial: '0', compteId: '' })
-      setShowCreateBanque(false)
-      showSuccess('Compte bancaire créé et sélectionné.')
-    } catch (e) {
-      showError('Erreur réseau lors de la création du compte bancaire.')
-    } finally {
-      setCreatingBanque(false)
-    }
-  }
 
   useEffect(() => {
     fetch('/api/print-templates?type=VENTE&actif=true')
@@ -493,6 +284,7 @@ export default function VentesPage() {
     if (searchNumero) params.set('numero', searchNumero)
     if (searchNumeroBon) params.set('numeroBon', searchNumeroBon)
     if (searchClient) params.set('clientSearch', searchClient)
+    if (typeVenteFilter) params.set('typeVente', typeVenteFilter)
     fetch('/api/ventes?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [], pagination: null, totals: null }))
       .then((response) => {
@@ -510,38 +302,65 @@ export default function VentesPage() {
       .finally(() => setLoading(false))
   }
 
+  const handlePrintAll = async () => {
+    setIsPrinting(true)
+    try {
+      const params = new URLSearchParams({ limit: '10000', page: '1' })
+      if (dateDebut) params.set('dateDebut', dateDebut)
+      if (dateFin) params.set('dateFin', dateFin)
+      if (filterClientId) params.set('clientId', filterClientId)
+      if (searchNumero) params.set('numero', searchNumero)
+      if (searchNumeroBon) params.set('numeroBon', searchNumeroBon)
+      if (searchClient) params.set('clientSearch', searchClient)
+      if (typeVenteFilter) params.set('typeVente', typeVenteFilter)
+      const res = await fetch('/api/ventes?' + params.toString())
+      if (res.ok) {
+        const response = await res.json()
+        setAllVentesForPrint(response.data || [])
+        setTimeout(() => { window.print(); setIsPrinting(false) }, 500)
+      } else {
+        setIsPrinting(false)
+      }
+    } catch (e) {
+      console.error(e)
+      setIsPrinting(false)
+    }
+  }
+
   useEffect(() => {
     fetchVentes()
   }, [currentPage])
+
+  const handleEditVente = useCallback((v: any) => {
+    setEditingVente(v)
+    setForm(true)
+  }, [])
+
+  const handleEditVenteModal = useCallback((v: any) => {
+    setEditingVenteModalId(v.id)
+  }, [])
 
 
   // Raccourcis clavier
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl+N ou Cmd+N : Nouvelle vente
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !form && !addLignesPopupOpen) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !form) {
         e.preventDefault()
         setForm(true)
       }
       // Échap : Fermer les modals
       if (e.key === 'Escape') {
-        if (addLignesPopupOpen) {
-          setAddLignesPopupOpen(false)
-          setErr('')
-        } else if (form) {
+        if (form) {
           setForm(false)
         } else if (detailVente) {
           setDetailVente(null)
-        } else if (showCreateClient) {
-          setShowCreateClient(false)
-          setCreateClientAfter(null)
-          setErr('')
         }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [form, addLignesPopupOpen, detailVente, showCreateClient])
+  }, [form, detailVente])
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -572,424 +391,6 @@ export default function VentesPage() {
       handleVoirDetail(id)
     }
   }, [openIdParam, handleVoirDetail])
-  const addLigne = () => {
-    const pId = Number(ajoutProduit.produitId)
-    const p = produits.find((x) => x.id === pId)
-    if (!p) {
-      showError('Sélectionnez un produit.')
-      return
-    }
-    const qte = Number(ajoutProduit.quantite) || 0
-    const st = p.stocks?.find((x: any) => x.magasinId === Number(formData.magasinId))
-    const qteDispo = st?.quantite || 0
-    if (qte <= 0) {
-      showError('Quantité invalide.')
-      return
-    }
-    // Blocage Prix Minimum (PVM)
-    const pMin = (p as any).prixMinimum || 0
-    const pSaisi = Number(ajoutProduit.prixUnitaire) || 0
-    if (pMin > 0 && pSaisi < pMin) {
-      showError(`🔔 PRIX INSUFFISANT : Le prix de vente minimum autorisé pour ${p.designation} est de ${pMin.toLocaleString('fr-FR')} FCFA. Veuillez augmenter le prix !`)
-      return
-    }
-
-    const tvaVal = ajoutProduit.tvaPerc !== '' ? Number(ajoutProduit.tvaPerc) : tvaParDefaut
-    let remiseVal = Number(ajoutProduit.remise) || 0
-    
-    // Calcul de la remise si type pourcentage (sur HT net)
-    if (ajoutProduit.remiseType === 'POURCENT' && remiseVal > 0) {
-      const ht = Number(ajoutProduit.prixUnitaire) * qte
-      remiseVal = ht * (remiseVal / 100)
-    }
-
-    const nouvelleLigne: Ligne = {
-      produitId: p.id,
-      designation: p.designation,
-      code: p.code,
-      quantite: qte,
-      prixUnitaire: Number(ajoutProduit.prixUnitaire),
-      tvaPerc: tvaVal,
-      remise: remiseVal,
-      remiseType: ajoutProduit.remiseType || 'MONTANT',
-    }
-    setFormData((f) => ({ ...f, lignes: [...f.lignes, nouvelleLigne] }))
-    setAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', recherche: '', tvaPerc: '', remise: '', remiseType: 'MONTANT' })
-  }
-
-  const editLigne = (i: number) => {
-    const l = formData.lignes[i]
-    setAjoutProduit({
-      produitId: String(l.produitId),
-      quantite: String(l.quantite),
-      prixUnitaire: String(l.prixUnitaire),
-      tvaPerc: String(l.tvaPerc || '0'),
-      remise: String(l.remise || '0'),
-      remiseType: l.remiseType || (l.remise && l.remise < 100 ? 'POURCENT' : 'MONTANT'),
-      recherche: l.designation
-    })
-    setFormData((f) => ({ ...f, lignes: f.lignes.filter((_, j) => j !== i) }))
-  }
-
-  const removeLigne = (i: number) => {
-    setFormData((f) => ({ ...f, lignes: f.lignes.filter((_, j) => j !== i) }))
-  }
-
-  const { totalHT, totalTVA, totalRemise, totalAvantRemiseGlobale } = formData.lignes.reduce(
-    (acc, val) => {
-      const q = val.quantite
-      const pu = val.prixUnitaire
-      const t = val.tvaPerc || 0
-      const r = Number(val.remise) || 0
-      const ht = q * pu
-      const montantLigne = montantLigneTTC({
-        quantite: q,
-        prixUnitaire: pu,
-        remiseLigne: r,
-        tvaPourcent: t,
-      })
-
-      acc.totalHT += ht
-      acc.totalTVA += montantTvaImpliciteLigne({
-        quantite: q,
-        prixUnitaire: pu,
-        remiseLigne: r,
-        tvaPourcent: t,
-      })
-      acc.totalRemise += r
-      acc.totalAvantRemiseGlobale += montantLigne
-      return acc
-    },
-    { totalHT: 0, totalTVA: 0, totalRemise: 0, totalAvantRemiseGlobale: 0 }
-  )
-  const total = montantTotalVenteDocument(
-    totalAvantRemiseGlobale,
-    Number(formData.remiseGlobale) || 0,
-    0
-  )
-  const pointsGagnes = pointsFideliteDepuisEncaissement(total)
-
-  const popupTotal = popupLignes.reduce(
-    (s, l) =>
-      s +
-      montantLigneTTC({
-        quantite: l.quantite,
-        prixUnitaire: l.prixUnitaire,
-        remiseLigne: Number(l.remise) || 0,
-        tvaPourcent: l.tvaPerc || 0,
-      }),
-    0
-  )
-
-  const doEnregistrerVente = async (lignes: Ligne[]) => {
-    const magasinId = Number(formData.magasinId)
-    if (!magasinId || !lignes.length) return
-    setErr('')
-    setSubmitting(true)
-
-    const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
-    const requestData = {
-      date: formData.date || undefined,
-      magasinId,
-      clientId: formData.clientId ? Number(formData.clientId) : null,
-      clientLibre: formData.clientLibre.trim() || null,
-      numeroBon: formData.numeroBon.trim() || null,
-      modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
-      reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
-      banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
-      remiseGlobale: Number(formData.remiseGlobale) || 0,
-      observation: formData.observation.trim() || null,
-      lignes: lignes.map((l) => ({
-        produitId: l.produitId,
-        quantite: l.quantite,
-        prixUnitaire: l.prixUnitaire,
-        tva: Number(l.tvaPerc) || 0,
-        remise: Number(l.remise) || 0,
-      })),
-    }
-
-    // Dans GestiCom Offline, on tente toujours l'enregistrement direct vers le serveur local.
-    // La file d'attente (SyncQueue) n'est utilisée que si le serveur local est injoignable (géré dans le catch).
-
-    try {
-      const res = await fetch('/api/ventes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setForm(false)
-        setAddLignesPopupOpen(false)
-        setPopupLignes([])
-        setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
-        setFormData({
-          date: new Date().toLocaleDateString('en-CA'),
-          magasinId: '',
-          clientId: '',
-          clientLibre: '',
-          modePaiement: 'ESPECES',
-          montantPaye: '',
-          reglements: [{ mode: 'ESPECES', montant: '' }],
-          banqueId: '',
-          remiseGlobale: '',
-          observation: '',
-          numeroBon: '',
-          lignes: [],
-          pointsGagnes: 0,
-        })
-        setCurrentPage(1)
-        showSuccess(MESSAGES.VENTE_ENREGISTREE)
-        fetchVentes(undefined, undefined, 1)
-      } else {
-        if (data.error?.includes('Client introuvable')) {
-          setCreateClientAfter(() => () => doEnregistrerVente(lignes))
-          setShowCreateClient(true)
-        } else if (data.error?.includes('Stock insuffisant')) {
-          const match = data.error.match(/Stock insuffisant pour (.+?) \((\d+) dispo/)
-          if (match) {
-            const designation = match[1]
-            const quantiteDisponible = Number(match[2])
-            // Trouver la ligne concernée
-            const ligneProbleme = lignes.find((l) => l.designation === designation)
-            if (ligneProbleme) {
-              setStockInsuffisantModal({
-                produitId: ligneProbleme.produitId,
-                produitDesignation: designation,
-                quantiteDemandee: ligneProbleme.quantite,
-                quantiteDisponible,
-                magasinId: Number(formData.magasinId),
-                lignes,
-              })
-              setAjoutStockQuantite(String(ligneProbleme.quantite - quantiteDisponible))
-            } else {
-              showError(data.error)
-            }
-          } else {
-            showError(data.error)
-          }
-        } else {
-          const errorMsg = formatApiError(data.error || 'Erreur lors de l\'enregistrement.')
-          setErr(errorMsg)
-          showError(errorMsg)
-        }
-      }
-    } catch (e) {
-      const errorMsg = formatApiError(e)
-      setErr(errorMsg)
-      showError(errorMsg)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErr('')
-    const magasinId = Number(formData.magasinId)
-    if (!magasinId) { setErr('Choisissez un magasin.'); return }
-    if (!formData.lignes.length) {
-      setAddLignesPopupOpen(true)
-      setPopupLignes([])
-      setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
-      return
-    }
-    const needsBanqueValidation = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
-    if (needsBanqueValidation && !formData.banqueId) {
-      setErr('Sélectionnez un compte bancaire pour les règlements non espèces.')
-      return
-    }
-    const hasCreditMode = formData.reglements.some((r) => String(r.mode).toUpperCase() === 'CREDIT')
-    const totalPaye = formData.reglements.reduce((sum, r) => sum + (Number(r.montant) || 0), 0)
-    if (!hasCreditMode && totalPaye < total && totalPaye > 0) {
-      const missing = total - totalPaye
-      setErr(`Le montant saisi (${totalPaye.toLocaleString('fr-FR')} F) est inférieur au total (${total.toLocaleString('fr-FR')} F). Il manque ${missing.toLocaleString('fr-FR')} F. Ajoutez un règlement en mode "Crédit" ou complétez le montant.`)
-      return
-    }
-    if (editingVenteId) {
-       await doModifierVente(formData.lignes)
-    } else {
-       await doEnregistrerVente(formData.lignes)
-    }
-  }
-
-  const doModifierVente = async (lignes: Ligne[]) => {
-    setSubmitting(true)
-    setErr('')
-    try {
-      const magasinId = Number(formData.magasinId)
-      const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
-      const res = await fetch(`/api/ventes/${editingVenteId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'FULL_UPDATE',
-          date: formData.date,
-          magasinId,
-          clientId: formData.clientId ? Number(formData.clientId) : null,
-          clientLibre: formData.clientLibre.trim() || null,
-          modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
-          reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
-          banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
-          remiseGlobale: formData.remiseGlobale !== '' ? Number(formData.remiseGlobale) : 0,
-          observation: (formData.observation || '').trim() || null,
-          numeroBon: (formData.numeroBon || '').trim() || null,
-          lignes: lignes.map((l) => ({
-            produitId: l.produitId,
-            quantite: l.quantite,
-            prixUnitaire: l.prixUnitaire,
-            tva: l.tvaPerc || 0,
-            remise: l.remise || 0,
-          })),
-        }),
-      })
-
-      const data = await res.json()
-      if (res.ok) {
-        setForm(false)
-        setEditingVenteId(null)
-        showSuccess('Vente modifiée avec succès.')
-        fetchVentes()
-        if (detailVente?.id === editingVenteId) setDetailVente(null)
-      } else {
-        const errorMsg = formatApiError(data.error || 'Erreur lors de la modification.')
-        setErr(errorMsg)
-        showError(errorMsg)
-      }
-    } catch (e) {
-      const errorMsg = formatApiError(e)
-      setErr(errorMsg)
-      showError(errorMsg)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  // Calculer points restants pour remise (Fidélité Pro)
-  const clientSel = clients.find(c => c.id === Number(formData.clientId))
-  // @ts-ignore
-  const pointsClient = clientSel?.pointsFidelite || 0
-
-  const addLigneInPopup = () => {
-    const pid = Number(popupAjoutProduit.produitId)
-    const q = Math.max(1, Math.floor(Number(popupAjoutProduit.quantite) || 0))
-    const pu = Math.max(0, Number(popupAjoutProduit.prixUnitaire) || 0)
-    const tvaLigne = popupAjoutProduit.tvaPerc !== '' ? Math.max(0, Number(popupAjoutProduit.tvaPerc)) : 0
-    const p = Array.isArray(produits) ? produits.find((x) => x.id === pid) : undefined
-    
-    if (!p || !q) return
-
-    // Blocage Prix Minimum (PVM)
-    const pMin = (p as any).prixMinimum || 0
-    if (pMin > 0 && pu < pMin) {
-      showError(`🔔 PRIX INSUFFISANT : Le prix de vente minimum autorisé pour ${p.designation} est de ${pMin.toLocaleString('fr-FR')} FCFA. Veuillez augmenter le prix !`)
-      return
-    }
-
-    setPopupLignes((prev) => [...prev, { produitId: pid, designation: p.designation, quantite: q, prixUnitaire: pu, tvaPerc: tvaLigne }])
-    setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
-  }
-
-  const removePopupLigne = (i: number) => {
-    setPopupLignes((prev) => prev.filter((_, j) => j !== i))
-  }
-
-  const onSelectProduit = (id: string) => {
-    const p = produits.find((x) => x.id === Number(id))
-    if (p) {
-      const prixDefaut = (p.prixVente && p.prixVente > 0) ? p.prixVente : (p.prixAchat ?? 0)
-      setAjoutProduit((a) => ({ ...a, produitId: id, prixUnitaire: String(prixDefaut) }))
-    }
-  }
-
-  /**
-   * Callback déclenché quand le scanner détecte un code-barres.
-   * Cherche le produit par code et le sélectionne automatiquement dans le formulaire.
-   */
-  const handleBarcodeScan = (code: string) => {
-    setScannerOpen(false)
-    const codeNorm = code.trim().toLowerCase()
-    // Recherche 1 : par codeBarres (EAN-13, QR du produit physique)
-    // Recherche 2 : par code interne GestiCom (fallback)
-    const produit = produits.find(
-      (p) =>
-        (p as any).codeBarres?.trim().toLowerCase() === codeNorm ||
-        p.code.trim().toLowerCase() === codeNorm
-    )
-    if (!produit) {
-      showError(`Produit introuvable pour le code scanné : "${code}". Renseignez le champ "Code-barres" du produit dans le catalogue.`)
-      return
-    }
-    const prixDefaut = (produit.prixVente && produit.prixVente > 0) ? produit.prixVente : (produit.prixAchat ?? 0)
-    if (scannerContext === 'popup') {
-      setPopupAjoutProduit((a) => ({
-        ...a,
-        produitId: String(produit.id),
-        prixUnitaire: String(prixDefaut),
-        recherche: produit.designation,
-      }))
-    } else {
-      setAjoutProduit((a) => ({
-        ...a,
-        produitId: String(produit.id),
-        prixUnitaire: String(prixDefaut),
-        recherche: produit.designation,
-      }))
-    }
-    showSuccess(`✅ Produit scanné : ${produit.designation}`)
-  }
-
-  const handleCreateClient = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSavingClient(true)
-    setErr('')
-    try {
-      const plaf = clientForm.type === 'CREDIT' && clientForm.plafondCredit
-        ? Math.max(0, Number(clientForm.plafondCredit))
-        : null
-      const res = await fetch('/api/clients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nom: clientForm.nom.trim(),
-          telephone: clientForm.telephone.trim() || null,
-          email: clientForm.email.trim() || null,
-          adresse: clientForm.adresse.trim() || null,
-          type: clientForm.type,
-          plafondCredit: plaf,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setShowCreateClient(false)
-        setClients((prev) => [...prev, data])
-        setFormData((f) => ({ ...f, clientId: String(data.id) }))
-        if (createClientAfter) {
-          createClientAfter()
-        }
-        setCreateClientAfter(null)
-        setClientForm({
-          nom: '',
-          telephone: '',
-          email: '',
-          adresse: '',
-          type: 'CASH',
-          plafondCredit: '',
-        })
-        showSuccess('Client créé avec succès.')
-      } else {
-        const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
-        setErr(errorMsg)
-        showError(errorMsg)
-      }
-    } catch (e) {
-      const errorMsg = formatApiError(e)
-      setErr(errorMsg)
-      showError(errorMsg)
-    } finally {
-      setSavingClient(false)
-    }
-  }
 
   const handleAnnuler = async (v: { id: number; numero: string; statut: string }) => {
     if (v.statut === 'ANNULEE') return
@@ -1044,6 +445,151 @@ export default function VentesPage() {
     }
   }
 
+  const handleLivrer = async (v: { id: number; numero: string }) => {
+    if (!confirm(`Livrer la commande ${v.numero} ? Le stock sera déduit.`)) return
+    setLivrant(v.id)
+    try {
+      const res = await fetch(`/api/ventes/${v.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'LIVRER' }),
+      })
+      if (res.ok) {
+        showSuccess('Commande livrée avec succès.')
+        fetchVentes()
+        if (detailVente?.id === v.id) handleVoirDetail(v.id)
+      } else {
+        const d = await res.json()
+        showError(d.error || 'Erreur lors de la livraison.')
+      }
+    } catch (e) {
+      showError(formatApiError(e))
+    } finally {
+      setLivrant(null)
+    }
+  }
+
+  const refreshBanques = async () => {
+    try {
+      const r = await fetch('/api/banques', { cache: 'no-store' as any })
+      const d = r.ok ? await r.json() : null
+      setBanques(Array.isArray(d?.data) ? d.data : [])
+      return Array.isArray(d?.data) ? d.data : []
+    } catch {
+      setBanques([])
+      return []
+    }
+  }
+
+  const createBanqueInline = async (target: 'FORM' | 'REGLEMENT') => {
+    const numero = (newBanque.numero || '').trim()
+    const nomBanque = (newBanque.nomBanque || '').trim()
+    const libelle = (newBanque.libelle || '').trim()
+    if (!numero || !nomBanque || !libelle) {
+      showError('Veuillez renseigner Numéro, Banque et Libellé.')
+      return
+    }
+    setCreatingBanque(true)
+    try {
+      const res = await fetch('/api/banques', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numero,
+          nomBanque,
+          libelle,
+          soldeInitial: Number(newBanque.soldeInitial) || 0,
+          compteId: newBanque.compteId || undefined,
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        showError(d?.error || 'Erreur lors de la création du compte bancaire.')
+        return
+      }
+      await refreshBanques()
+      if (d?.id) {
+        if (target === 'REGLEMENT') setReglementData((prev) => ({ ...prev, banqueId: String(d.id) }))
+      }
+      setNewBanque({ numero: '', nomBanque: '', libelle: '', soldeInitial: '0', compteId: '' })
+      setShowCreateBanque(false)
+      showSuccess('Compte bancaire créé et sélectionné.')
+    } catch (e) {
+      showError('Erreur réseau lors de la création du compte bancaire.')
+    } finally {
+      setCreatingBanque(false)
+    }
+  }
+
+  const openRetourModal = (v: any) => {
+    setRetourModalVente(v)
+    setRetourLignes((v.lignes || []).map((l: any) => {
+      const p = produits.find(x => x.id === l.produitId)
+      const st = p?.stocks?.find((s: any) => s.magasinId === (v.magasinId || v.magasin?.id))
+      const q = Number(l.quantite) || 1
+      return {
+        produitId: l.produitId,
+        designation: l.designation,
+        code: p?.code || '',
+        quantite: 0,
+        maxQuantite: l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        unitaireTTC: (Number(l.montant) || 0) / q,
+        stockActuel: st?.quantite ?? 0,
+      }
+    }))
+    setRetourRemboursement(true)
+    setRetourMode('ESPECES')
+    setRetourBanqueId('')
+    setRetourObservation('')
+  }
+
+  const handleRetour = async () => {
+    if (!retourModalVente) return
+    const lignes = retourLignes.filter((l: any) => l.quantite > 0)
+    if (!lignes.length) { showError('Sélectionnez au moins un produit.'); return }
+    setSavingRetour(true)
+    try {
+      const r = await fetch(`/api/ventes/${retourModalVente.id}/retour`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lignes: lignes.map((l: any) => ({ produitId: l.produitId, quantite: l.quantite })),
+          remboursement: retourRemboursement,
+          modeRemboursement: retourMode,
+          banqueId: retourMode !== 'ESPECES' ? retourBanqueId : null,
+          observation: retourObservation || null,
+        }),
+      })
+      if (!r.ok) throw new Error((await r.json()).error || 'Erreur réseau')
+      showSuccess('Retour effectué avec succès.')
+      setRetourModalVente(null)
+      fetchVentes()
+    } catch (e: any) {
+      showError(formatApiError(e) || 'Erreur lors du retour.')
+    } finally {
+      setSavingRetour(false)
+    }
+  }
+
+  const handleDeleteRetour = async (retourId: number) => {
+    if (!confirm('Supprimer définitivement ce retour ? Cette action est irréversible.')) return
+    setDeletingRetourId(retourId)
+    try {
+      const res = await fetch(`/api/retours/${retourId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setDetailRetours((prev) => prev.filter((r) => r.id !== retourId))
+        showSuccess('Retour supprimé avec succès.')
+      } else {
+        const d = await res.json()
+        showError(d.error || 'Erreur lors de la suppression du retour.')
+      }
+    } catch {
+      showError('Erreur réseau lors de la suppression.')
+    } finally {
+      setDeletingRetourId(null)
+    }
+  }
 
   const handleReglement = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1232,82 +778,13 @@ export default function VentesPage() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            const generatePrintHTML = () => {
-              const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
-              const entite = entreprise ? (entreprise.nom || entreprise.raisonSociale || 'GestiCom') : 'GestiCom'
-              const periode = (dateDebut || dateFin) ? 'Période: ' + (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...') : 'Toutes périodes'
-              const rows = ventes.map((v) => {
-                const rp = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
-                return '<tr>' +
-                  '<td>' + v.numero + '</td>' +
-                  '<td>' + ((v as any).numeroBon || '—') + '</td>' +
-                  '<td>' + formatDate(v.date, { includeTime: false }) + '</td>' +
-                  '<td>' + ((v as any).client?.code || '—') + '</td>' +
-                  '<td>' + ((v as any).client?.nom || (v as any).clientLibre || '—') + '</td>' +
-                  '<td>' + v.magasin.code + '</td>' +
-                  '<td>' + Number(v.montantTotal).toLocaleString('fr-FR') + ' F</td>' +
-                  '<td>' + v.modePaiement.replace('_', ' ') + '</td>' +
-                  '<td>' + (v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit') + '</td>' +
-                  '<td>' + (rp > 0 ? rp.toLocaleString('fr-FR') + ' F' : '-') + '</td>' +
-                  '<td>' + (v.statut === 'ANNULEE' ? 'Annulée' : 'Validée') + '</td>' +
-                '</tr>'
-              }).join('')
-              
-              const totalRow = totals ? '<tfoot><tr>' +
-                '<td colspan="6">TOTAUX</td>' +
-                '<td>' + totals.montantTotal.toLocaleString('fr-FR') + ' F</td>' +
-                '<td colspan="2"></td>' +
-                '<td>' + totals.resteAPayer.toLocaleString('fr-FR') + ' F</td>' +
-                '<td></td>' +
-              '</tr></tfoot>' : ''
-              
-              return '<!DOCTYPE html><html><head>' +
-                '<title>Ventes</title>' +
-                '<style>@page { size: landscape; margin: 5mm; }' +
-                'body { font-family: Arial, sans-serif; font-size: 13px; }' +
-                '.header { text-align: center; margin-bottom: 10px; }' +
-                'h1 { font-size: 14px; margin: 0; }' +
-                '.subtitle { font-size: 13px; color: #666; }' +
-                '.info { font-size: 13px; color: #888; margin-bottom: 10px; }' +
-                '.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px; }' +
-                '.kpi { border: 1px solid #ddd; padding: 12px; text-align: center; border-radius: 4px; background: #f9f9f9; }' +
-                '.kpi-label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #666; }' +
-                '.kpi-value { font-size: 16px; font-weight: bold; color: #000; margin: 5px 0; }' +
-                '.kpi-sub { font-size: 8px; color: #888; }' +
-                'table { width: 100%; border-collapse: collapse; font-size: 13px; }' +
-                'th, td { border: 1px solid #000; padding: 2px 4px; text-align: center; }' +
-                'th { background: #f0f0f0; font-weight: bold; font-size: 12px; }' +
-                'tfoot td { background: #e0e0e0; font-weight: bold; }' +
-                '.footer { margin-top: 10px; text-align: right; font-size: 10px; color: #666; }' +
-                '</style></head><body>' +
-                '<div class="header">' +
-                  '<h1>' + entite + '</h1>' +
-                  '<p class="subtitle">Flux de ventes et encaissements clients</p>' +
-                  '<p class="info">' + today + ' • ' + periode + '</p>' +
-                '</div>' +
-                '<div class="kpis">' +
-                  '<div class="kpi"><div class="kpi-label">Chiffre d\'Affaires</div><div class="kpi-value">' + (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F</div><div class="kpi-sub">Volume de ventes période</div></div>' +
-                  '<div class="kpi"><div class="kpi-label">Total Encaissé</div><div class="kpi-value">' + (totals?.montantPaye || 0).toLocaleString('fr-FR') + ' F</div><div class="kpi-sub">Encaissements réels</div></div>' +
-                  '<div class="kpi"><div class="kpi-label">Reste à Recouvrer</div><div class="kpi-value">' + (totals?.resteAPayer || 0).toLocaleString('fr-FR') + ' F</div><div class="kpi-sub">Créances clients en cours</div></div>' +
-                '</div>' +
-                '<table><thead><tr>' +
-                  '<th>N°</th><th>Bon N°</th><th>Date</th><th>Code Client</th><th>Client</th><th>Magasin</th><th>Montant</th><th>Paiement</th><th>Statut Paiement</th><th>Reste à payer</th><th>Statut</th>' +
-                '</tr></thead><tbody>' + rows + '</tbody>' + totalRow + '</table>' +
-                '<div class="footer">Page ' + (pagination?.page || 1) + '/' + (pagination?.totalPages || 1) + ' • Total: ' + (pagination?.total || 0) + ' ventes</div>' +
-                '<script>window.print();<\/script></body></html>'
-            }
-            const printWindow = window.open('', '_blank')
-            if (printWindow) {
-              printWindow.document.write(generatePrintHTML())
-              printWindow.document.close()
-            }
-          }}
-          className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20"
+          onClick={handlePrintAll}
+          disabled={isPrinting}
+          className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 disabled:opacity-50"
           title="Imprimer la liste des ventes (selon filtres)"
         >
-          <Printer className="h-4 w-4" />
-          Imprimer
+          {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+          {isPrinting ? 'Préparation...' : 'Imprimer'}
         </button>
         <a
           href="/dashboard/ventes/rapide"
@@ -1451,6 +928,14 @@ export default function VentesPage() {
             className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm w-40"
           />
         </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-800">Type</label>
+          <select value={typeVenteFilter} onChange={(e) => setTypeVenteFilter(e.target.value)} className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm w-36 bg-white">
+            <option value="">Tous</option>
+            <option value="LIVRAISON_IMMEDIATE">Directe</option>
+            <option value="COMMANDE">Commande</option>
+          </select>
+        </div>
         <button
           type="button"
           onClick={() => { setCurrentPage(1); fetchVentes(undefined, undefined, 1); }}
@@ -1468,6 +953,7 @@ export default function VentesPage() {
             setSearchNumero('');
             setSearchNumeroBon('');
             setSearchClient('');
+            setTypeVenteFilter('');
             setCurrentPage(1); 
             fetchVentes('', '', 1); 
           }}
@@ -1508,815 +994,25 @@ export default function VentesPage() {
       </div>
 
       {form && (
-        <div className="rounded-xl border border-orange-200 bg-orange-50 p-6 animate-in slide-in-from-top-4 duration-300">
-          <h2 className="mb-4 text-xl font-black text-gray-900 uppercase tracking-tighter italic">
-            {editingVenteId ? `Modifier la facture ${ventes.find(v => v.id === editingVenteId)?.numero || ''}` : 'Nouvelle vente'}
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Date *</label>
-                <input
-                  type="date"
-                  required
-                  value={formData.date}
-                  onChange={(e) => setFormData((f) => ({ ...f, date: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Magasin *</label>
-                <select
-                  required
-                  value={formData.magasinId}
-                  onChange={(e) => setFormData((f) => ({ ...f, magasinId: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
-                >
-                  <option value="">—</option>
-                  {magasins.map((m) => (
-                    <option key={m.id} value={m.id}>{m.code} – {m.nom}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700">Client (optionnel)</label>
-                <div className="relative mt-1 flex gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      placeholder="Rechercher un client par nom..."
-                      value={formClientSearch}
-                      onChange={(e) => {
-                        setFormClientSearch(e.target.value)
-                        if (!e.target.value) setFormData(f => ({ ...f, clientId: '' }))
-                      }}
-                      onFocus={() => { 
-                        setShowClientList(true)
-                        if (!formData.clientId) setFormClientSearch('') 
-                      }}
-                      onBlur={() => setTimeout(() => setShowClientList(false), 200)}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 focus:border-orange-500 focus:outline-none bg-white font-bold"
-                    />
-                    {!formData.clientId && showClientList && (
-                      <div className="absolute z-20 mt-1 w-full max-h-80 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl border-orange-100 p-1">
-                        <div className="sticky top-0 bg-orange-50 px-2 py-1 text-[10px] font-bold text-orange-600 uppercase mb-1 rounded">
-                          {formClientSearch ? 'Résultats de recherche' : 'Tous les clients (cliquez pour choisir)'}
-                        </div>
-                        {clients
-                          .filter(c => c.nom.toLowerCase().includes(formClientSearch.toLowerCase()) || (c.code && c.code.toLowerCase().includes(formClientSearch.toLowerCase())))
-                          .slice(0, 30) // Performance
-                          .map((c) => (
-                            <div
-                              key={c.id}
-                              onMouseDown={(e) => {
-                                e.preventDefault(); // Indispensable : bloque le onBlur de l'input
-                                setFormData(fod => ({ ...fod, clientId: String(c.id), clientLibre: '' }))
-                                setFormClientSearch(c.nom)
-                                setShowClientList(false)
-                              }}
-                              className="cursor-pointer px-4 py-3 text-sm hover:bg-orange-50 font-black text-slate-900 border-b border-gray-50 last:border-0 transition-colors"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span>{c.nom}</span>
-                                <span className="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{c.code || 'SANS CODE'}</span>
-                              </div>
-                            </div>
-                          ))
-                        }
-                        {clients.filter(c => c.nom.toLowerCase().includes(formClientSearch.toLowerCase())).length > 30 && (
-                          <div className="px-4 py-2 text-[10px] text-gray-400 italic bg-gray-50 uppercase font-black text-center">Affinez votre recherche...</div>
-                        )}
-                        {clients.filter(c => c.nom.toLowerCase().includes(formClientSearch.toLowerCase())).length === 0 && (
-                          <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun client trouvé.</div>
-                        )}
-                      </div>
-                    )}
-                    {formData.clientId && (
-                       <button 
-                         type="button"
-                         onClick={() => { setFormData(f => ({ ...f, clientId: '' })); setFormClientSearch('') }}
-                         className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 bg-white"
-                       >
-                         <X className="h-4 w-4" />
-                       </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateClient(true)}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700 hover:bg-gray-50"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Ou nom libre</label>
-                <input
-                  value={formData.clientLibre}
-                  onChange={(e) => setFormData((f) => ({ ...f, clientLibre: e.target.value }))}
-                  placeholder="Si client passager..."
-                  disabled={!!formData.clientId}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 disabled:bg-gray-100 focus:border-orange-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-orange-600">Numéro de BON</label>
-                <input
-                  value={formData.numeroBon}
-                  onChange={(e) => setFormData((f) => ({ ...f, numeroBon: e.target.value }))}
-                  placeholder="N° de bon (facultatif)"
-                  className="mt-1 w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-gray-900 font-bold focus:border-orange-500 focus:outline-none"
-                />
-              </div>
-              <div className="flex items-end">
-                <div className="flex-1 rounded-lg border border-orange-100 bg-orange-50/50 px-3 py-2">
-                  <label className="block text-[10px] font-bold text-orange-600 uppercase">Points à gagner</label>
-                  <p className="text-sm font-black text-orange-700">{pointsGagnes} points</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <h3 className="mb-3 text-sm font-semibold text-gray-700">Lignes</h3>
-              <div className="mb-3 space-y-2">
-                {/* Barre de recherche + bouton scanner */}
-                <div className="relative group">
-                  <div className="absolute left-3 top-3.5 h-4 w-4 text-gray-400 group-focus-within:text-orange-500 transition-colors">
-                    <Search className="h-4 w-4" />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Taper le nom ou le code du produit..."
-                    value={ajoutProduit.recherche || ''}
-                    onChange={(e) => {
-                      setAjoutProduit((a) => ({ ...a, recherche: e.target.value }))
-                    }}
-                    onFocus={refetchProduits}
-                    className="w-full rounded-xl border border-gray-200 bg-white py-4 pl-12 pr-4 text-sm font-bold text-slate-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all shadow-sm placeholder:text-gray-300"
-                  />
-                  {ajoutProduit.recherche.length > 0 && !ajoutProduit.produitId && (
-                    <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg animate-in fade-in zoom-in duration-200">
-                      {produits
-                        .filter(p => {
-                          const search = ajoutProduit.recherche.toLowerCase()
-                          return p.code.toLowerCase().includes(search) || p.designation.toLowerCase().includes(search)
-                        })
-                        .map((p) => {
-                          const s = p.stocks?.find(s => s.magasinId === Number(formData.magasinId))?.quantite || 0
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => {
-                                setAjoutProduit(a => ({ ...a, produitId: String(p.id), recherche: p.designation, prixUnitaire: String(p.prixVente || p.prixAchat || '') }))
-                              }}
-                              className="flex w-full items-center justify-between px-5 py-4 text-left text-sm hover:bg-orange-50 transition-all border-b border-gray-50 last:border-0"
-                            >
-                              <div className="flex flex-col">
-                                <span className="font-black text-slate-900 uppercase tracking-tighter">{p.designation}</span>
-                                <span className="text-[10px] text-gray-400 font-mono font-bold">{p.code}</span>
-                              </div>
-                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                Stock: {s}
-                              </span>
-                            </button>
-                          )
-                        })}
-                    </div>
-                  )}
-                  {ajoutProduit.produitId && (
-                    <button 
-                      onClick={() => setAjoutProduit(a => ({ ...a, produitId: '', recherche: '' }))}
-                      className="absolute right-3 top-3 text-gray-400 hover:text-red-500"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-                {ajoutProduit.produitId && (
-                  (() => {
-                    const p = produits.find(p => p.id === Number(ajoutProduit.produitId))
-                    const s = p?.stocks?.find(st => st.magasinId === Number(formData.magasinId))?.quantite || 0
-                    const qte = Number(ajoutProduit.quantite) || 0
-                    const isInsuffisant = qte > s
-                    
-                    return (
-                      <div className="flex flex-col gap-1 px-1 py-1 animate-in slide-in-from-top-1 duration-200">
-                        {!formData.magasinId && (
-                          <p className="text-[10px] font-bold text-red-600 flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" /> Veuillez sélectionner un magasin pour voir le stock exact.
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 text-xs font-semibold">
-                          <span className="text-gray-500 italic">Produit sélectionné.</span>
-                          <span className="text-gray-900">Stock disponible :</span>
-                          <span className={`px-2 py-0.5 rounded-full shadow-sm text-sm font-bold ${
-                            s > 0 ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
-                          }`}>
-                            {s}
-                          </span>
-                          {isInsuffisant && s > 0 && (
-                            <span className="text-red-600 font-black animate-pulse flex items-center gap-1">
-                              <AlertTriangle className="h-4 w-4" /> QUANTITÉ SUPÉRIEURE AU STOCK !
-                            </span>
-                          )}
-                          {s <= 0 && (
-                            <span className="text-red-700 font-black animate-bounce flex items-center gap-1">
-                              <XCircle className="h-4 w-4" /> STOCK ÉPUISÉ !
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })()
-                )}
-
-              </div>
-              <div className="mb-3 flex flex-wrap gap-2 items-center">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-gray-500 ml-1 font-bold">Quantité</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={ajoutProduit.quantite}
-                    onChange={(e) => setAjoutProduit((a) => ({ ...a, quantite: e.target.value }))}
-                    placeholder="Qté"
-                    className="w-20 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-gray-500 ml-1 font-bold">P.U. (HT)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={ajoutProduit.prixUnitaire}
-                    onChange={(e) => setAjoutProduit((a) => ({ ...a, prixUnitaire: e.target.value }))}
-                    placeholder="Prix HT"
-                    className="w-28 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-gray-500 ml-1 font-bold">Remise</label>
-                  <div className="flex items-center">
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={ajoutProduit.remise}
-                      onChange={(e) => setAjoutProduit((a) => ({ ...a, remise: e.target.value }))}
-                      placeholder="Remise"
-                      className="w-24 rounded-l border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setAjoutProduit(a => ({ ...a, remiseType: a.remiseType === 'MONTANT' ? 'POURCENT' : 'MONTANT' }))}
-                      className={`px-2 py-2 border border-l-0 border-gray-200 text-xs font-bold rounded-r transition-colors ${
-                        ajoutProduit.remiseType === 'POURCENT' ? 'bg-orange-500 text-white border-orange-500' : 'bg-gray-100 text-gray-700'
-                      }`}
-                      title="Changer le mode de remise (Fixe ou %)"
-                    >
-                      {ajoutProduit.remiseType === 'MONTANT' ? 'F' : '%'}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-gray-500 ml-1 font-bold">TVA (%)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={ajoutProduit.tvaPerc}
-                    onChange={(e) => setAjoutProduit((a) => ({ ...a, tvaPerc: e.target.value }))}
-                    placeholder={`TVA %`}
-                    className="w-16 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none bg-orange-50/30"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-orange-600 ml-1 font-bold">Total TTC</label>
-                  <div className="w-28 rounded border border-orange-100 bg-orange-50 px-2 py-2 text-sm font-bold text-orange-800">
-                    {(() => {
-                      const q = Number(ajoutProduit.quantite || 0)
-                      const pu = Number(ajoutProduit.prixUnitaire || 0)
-                      const r = Number(ajoutProduit.remise || 0)
-                      const t = Number(ajoutProduit.tvaPerc || 0)
-                      const ht = q * pu
-                      const rv = ajoutProduit.remiseType === 'MONTANT' ? r : ht * (r / 100)
-                      return montantLigneTTC({
-                        quantite: q,
-                        prixUnitaire: pu,
-                        remiseLigne: rv,
-                        tvaPourcent: t,
-                      }).toLocaleString('fr-FR')
-                    })()} F
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={addLigne}
-                  className="rounded-lg bg-orange-500 px-4 py-2 mt-auto text-sm font-bold text-white hover:bg-orange-600 transition-all shadow-sm"
-                >
-                  Ajouter
-                </button>
-              </div>
-              {formData.lignes.length > 0 && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-gray-600">
-                        <th className="pb-2">Désignation</th>
-                        <th className="pb-2 text-right">Qté</th>
-                        <th className="pb-2 text-right">P.U. (HT)</th>
-                        <th className="pb-2 text-right">Total (HT)</th>
-                        <th className="pb-2 text-right">Remise</th>
-                        <th className="pb-2 text-right">TVA</th>
-                        <th className="pb-2 text-right">Total TTC</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formData.lignes.map((l, i) => {
-                        const ht = l.quantite * l.prixUnitaire
-                        const ttc = montantLigneTTC({
-                          quantite: l.quantite,
-                          prixUnitaire: l.prixUnitaire,
-                          remiseLigne: Number(l.remise) || 0,
-                          tvaPourcent: l.tvaPerc || 0,
-                        })
-                        return (
-                          <tr key={i} className="border-b border-gray-100">
-                            <td className="py-2">{l.designation}</td>
-                            <td className="text-right">{l.quantite}</td>
-                            <td className="text-right">{l.prixUnitaire.toLocaleString('fr-FR')} F</td>
-                            <td className="text-right">{ht.toLocaleString('fr-FR')} F</td>
-                            <td className="text-right text-red-600">
-                              -{(l.remise || 0).toLocaleString('fr-FR')} F
-                              {(() => {
-                                const p = produits.find(prod => prod.id === l.produitId)
-                                const s = p?.stocks?.find(st => st.magasinId === Number(formData.magasinId))?.quantite || 0
-                                if (l.quantite > s) {
-                                  return (
-                                    <div className="text-[10px] font-black text-red-600 mt-1 flex items-center justify-end gap-1 uppercase bg-red-50 p-1 rounded border border-red-200">
-                                      <AlertTriangle className="h-3 w-3" /> Stock insuf ({s})
-                                    </div>
-                                  )
-                                }
-                                return null
-                              })()}
-                            </td>
-                            <td className="text-right">{l.tvaPerc}%</td>
-                            <td className="text-right font-bold text-emerald-700">{ttc.toLocaleString('fr-FR')} F</td>
-                            <td className="w-16">
-                              <div className="flex items-center gap-1 justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => editLigne(i)}
-                                  title="Modifier cette ligne"
-                                  className="rounded p-1 text-blue-600 hover:bg-blue-100 transition-colors"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => removeLigne(i)}
-                                  title="Supprimer la ligne"
-                                  className="rounded p-1 text-red-600 hover:bg-red-100 transition-colors"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <div className="mt-4 flex flex-col items-end text-sm gap-2 border-t border-gray-200 pt-3">
-                <p className="text-slate-900 flex justify-between w-64"><span>Total HT Brut :</span> <span className="font-black text-lg">{totalHT.toLocaleString('fr-FR')} F</span></p>
-                
-                {totalRemise > 0 && (
-                  <p className="text-red-500 flex justify-between w-64"><span>Total Remises :</span> <span className="font-bold">-{totalRemise.toLocaleString('fr-FR')} F</span></p>
-                )}
-
-                <p className="text-blue-800 flex justify-between w-64"><span>Total TVA :</span> <span className="font-black text-lg">{totalTVA.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} F</span></p>
-                
-                <p className="text-lg font-black text-white mt-2 bg-emerald-600 px-4 py-2 rounded shadow-lg w-64 flex justify-between ring-2 ring-emerald-500 ring-offset-2">
-                  <span>TOTAL TTC :</span> <span>{total.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
-                </p>
-              </div>
-            </div>
-
-            {formData.lignes.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-orange-600" />
-                    Règlements (Multi-Paiement)
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={addReglement}
-                    className="text-[10px] font-bold bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700 transition-colors uppercase"
-                  >
-                    + Ajouter un mode
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {formData.reglements.map((r, i) => (
-                    <div key={i} className="grid gap-3 sm:grid-cols-3 items-end bg-white/50 p-2 rounded-lg border border-amber-100/50">
-                      <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Mode</label>
-                        <select
-                          value={r.mode}
-                          onChange={(e) => updateReglement(i, 'mode', e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:outline-none"
-                        >
-                          <option value="ESPECES">Espèces</option>
-                          <option value="MOBILE_MONEY">Mobile Money</option>
-                          <option value="VIREMENT">Virement</option>
-                          <option value="CHEQUE">Chèque</option>
-                          <option value="CREDIT">Crédit (Dette)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Montant à payer</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={r.montant}
-                            onChange={(e) => updateReglement(i, 'montant', e.target.value)}
-                            placeholder={i === 0 ? String(total) : '0'}
-                            className="mt-1 w-full rounded-lg border border-gray-200 pl-3 pr-8 py-1.5 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
-                          />
-                          {formData.reglements.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeReglement(i)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="pb-2 text-[10px] text-gray-400 italic">
-                        {r.mode === 'ESPECES' ? 'Ira en Caisse' : 'Ira en Banque'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-4 border-t border-amber-200 pt-3">
-                   <div className="bg-white p-2 rounded-lg border border-amber-100">
-                      <p className="text-[10px] text-gray-500 uppercase font-bold">Total Facture</p>
-                      <p className="text-lg font-black text-slate-800">{total.toLocaleString('fr-FR')} F</p>
-                   </div>
-                   <div className={`p-2 rounded-lg border ${totalPayeReglements >= total ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                      <p className="text-[10px] text-gray-500 uppercase font-bold">Total Saisi (Payé)</p>
-                      <p className={`text-lg font-black ${totalPayeReglements >= total ? 'text-green-700' : 'text-red-700'}`}>
-                        {totalPayeReglements.toLocaleString('fr-FR')} F
-                      </p>
-                   </div>
-                </div>
-                
-                {totalPayeReglements < total && (
-                  <div className="mt-2 p-2 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold flex items-center gap-2 animate-pulse">
-                    <AlertTriangle className="h-3 w-3" /> 
-                    ATTENTION : IL RESTE {(total - totalPayeReglements).toLocaleString('fr-FR')} F À PAYER !
-                  </div>
-                )}
-
-                {needsBanque && (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-white p-3">
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Compte bancaire à utiliser</label>
-                    <select
-                      required
-                      value={formData.banqueId}
-                      onChange={(e) => setFormData((f) => ({ ...f, banqueId: e.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
-                    >
-                      <option value="">Sélectionner une banque...</option>
-                      {banques.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.nomBanque} — {b.libelle} ({b.numero})
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      Obligatoire pour Mobile Money, Virement et Chèque.
-                    </p>
-
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowCreateBanque((v) => !v)}
-                        className="text-[10px] font-black uppercase text-orange-700 hover:underline"
-                      >
-                        + Créer un compte bancaire
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => refreshBanques()}
-                        className="text-[10px] font-bold text-gray-500 hover:underline"
-                      >
-                        Rafraîchir
-                      </button>
-                    </div>
-
-                    {showCreateBanque && (
-                      <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50/40 p-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Numéro *</label>
-                            <input
-                              value={newBanque.numero}
-                              onChange={(e) => setNewBanque((s) => ({ ...s, numero: e.target.value }))}
-                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
-                              placeholder="Ex: 000123..."
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Banque *</label>
-                            <input
-                              value={newBanque.nomBanque}
-                              onChange={(e) => setNewBanque((s) => ({ ...s, nomBanque: e.target.value }))}
-                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
-                              placeholder="Ex: ECOBANK"
-                            />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Libellé *</label>
-                            <input
-                              value={newBanque.libelle}
-                              onChange={(e) => setNewBanque((s) => ({ ...s, libelle: e.target.value }))}
-                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
-                              placeholder="Ex: Compte courant / Mobile Money"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Solde initial</label>
-                            <input
-                              type="number"
-                              value={newBanque.soldeInitial}
-                              onChange={(e) => setNewBanque((s) => ({ ...s, soldeInitial: e.target.value }))}
-                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase ml-1">Compte comptable (optionnel)</label>
-                            <input
-                              value={newBanque.compteId}
-                              onChange={(e) => setNewBanque((s) => ({ ...s, compteId: e.target.value }))}
-                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:outline-none"
-                              placeholder="512 / 521 / id..."
-                            />
-                          </div>
-                        </div>
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            type="button"
-                            disabled={creatingBanque}
-                            onClick={() => createBanqueInline('FORM')}
-                            className="flex-1 rounded-lg bg-orange-600 px-4 py-2 text-white font-black hover:bg-orange-700 disabled:opacity-60"
-                          >
-                            {creatingBanque ? 'Création...' : 'Créer et sélectionner'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setShowCreateBanque(false)}
-                            className="rounded-lg border-2 border-gray-300 bg-white px-4 py-2 font-bold text-gray-700 hover:bg-gray-50"
-                          >
-                            Fermer
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2">
-              {formData.lignes.some(l => {
-                const p = produits.find(prod => prod.id === l.produitId)
-                const s = p?.stocks?.find(st => st.magasinId === Number(formData.magasinId))?.quantite || 0
-                return l.quantite > s
-              }) && (
-                <div className="p-3 bg-red-100 border-2 border-red-500 rounded-xl flex items-center gap-3 animate-pulse">
-                  <AlertTriangle className="h-6 w-6 text-red-600" />
-                  <p className="text-sm font-black text-red-700 uppercase italic">
-                    Attention : Certains produits n'ont pas assez de stock ! Veuillez corriger avant de valider.
-                  </p>
-                </div>
-              )}
-              <div className="flex gap-2">
-                <button 
-                  type="submit" 
-                  disabled={submitting}
-                  className="rounded-lg px-4 py-2 text-white font-bold transition-all shadow-lg bg-orange-500 hover:bg-orange-600"
-                >
-                  {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Enregistrer la vente'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm(false)}
-                  className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300"
-                >
-                  Annuler
-                </button>
-              </div>
-            </div>
-          </form>
-          {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
-        </div>
+        <VenteFormModal
+          magasins={magasins as any}
+          clients={clients as any}
+          produits={produits as any}
+          ventes={ventes as any}
+          banques={banques}
+          tvaParDefaut={tvaParDefaut}
+          editingVenteId={editingVenteId}
+          onClose={() => { setForm(false); setEditingVenteId(null); setEditingVente(null) }}
+          onSuccess={() => { setForm(false); setEditingVenteId(null); setEditingVente(null); setCurrentPage(1); fetchVentes() }}
+        />
       )}
 
-      {addLignesPopupOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !submitting && setAddLignesPopupOpen(false)}>
-          <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="border-b border-gray-200 px-4 py-3">
-              <h3 className="text-lg font-semibold text-gray-900">Ajoutez au moins une ligne</h3>
-              <p className="mt-1 text-sm text-gray-600">Le stock ne reflète pas encore les produits. Ajoutez les lignes ci‑dessous puis validez pour enregistrer la vente.</p>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="space-y-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Rechercher un produit (code, désignation, catégorie)..."
-                    value={popupAjoutProduit.recherche || ''}
-                    onChange={(e) => {
-                      setPopupAjoutProduit((a) => ({ ...a, recherche: e.target.value }))
-                    }}
-                    onFocus={refetchProduits}
-                    className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm focus:border-orange-500 focus:outline-none"
-                  />
-                </div>
-                <select
-                  value={popupAjoutProduit.produitId}
-                  onChange={(e) => {
-                    const p = Array.isArray(produits) ? produits.find((x) => x.id === Number(e.target.value)) : undefined
-                    if (p) {
-                      // Utiliser prixAchat comme prix par défaut si prixVente est 0 ou null
-                      const prixDefaut = (p.prixVente && p.prixVente > 0) ? p.prixVente : (p.prixAchat ?? 0)
-                      setPopupAjoutProduit((a) => ({ ...a, produitId: e.target.value, prixUnitaire: String(prixDefaut) }))
-                    }
-                  }}
-                  className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
-                  title="Liste de tous les produits enregistrés"
-                >
-                  <option value="">Choisir un produit</option>
-                  {Array.isArray(produits) && produits
-                    .filter(p => {
-                      if (!popupAjoutProduit.recherche) return true
-                      const search = popupAjoutProduit.recherche.toLowerCase()
-                      return (
-                        p.code.toLowerCase().includes(search) ||
-                        p.designation.toLowerCase().includes(search) ||
-                        (p.categorie && p.categorie.toLowerCase().includes(search))
-                      )
-                    })
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>{p.code} – {p.designation}</option>
-                    ))}
-                </select>
-              </div>
-              <div className="flex flex-wrap gap-2 items-end">
-                <input
-                  type="number"
-                  min="1"
-                  value={popupAjoutProduit.quantite}
-                  onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, quantite: e.target.value }))}
-                  placeholder="Qté"
-                  className="w-16 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={popupAjoutProduit.prixUnitaire}
-                  onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, prixUnitaire: e.target.value }))}
-                  placeholder="Prix (HT)"
-                  className="w-24 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={popupAjoutProduit.remise}
-                  onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, remise: e.target.value }))}
-                  placeholder="Remise"
-                  className="w-20 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={popupAjoutProduit.tvaPerc}
-                  onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, tvaPerc: e.target.value }))}
-                  placeholder={`TVA %`}
-                  className="w-16 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none bg-orange-50/30"
-                />
-                <div className="flex flex-col gap-0.5 min-w-[80px]">
-                  <span className="text-[10px] font-bold text-orange-600 ml-1">Total TTC</span>
-                  <div className="rounded border border-orange-100 bg-orange-50 px-2 py-1.5 text-xs font-bold text-orange-800">
-                    {(() => {
-                      const q = Number(popupAjoutProduit.quantite || 0)
-                      const pu = Number(popupAjoutProduit.prixUnitaire || 0)
-                      const r = Number(popupAjoutProduit.remise || 0)
-                      const t = Number(popupAjoutProduit.tvaPerc || 0)
-                      return montantLigneTTC({
-                        quantite: q,
-                        prixUnitaire: pu,
-                        remiseLigne: r,
-                        tvaPourcent: t,
-                      }).toLocaleString('fr-FR')
-                    })()} F
-                  </div>
-                </div>
-                <button type="button" onClick={addLigneInPopup} className="rounded-lg border-2 border-orange-400 bg-orange-100 px-3 py-2 text-sm font-medium text-orange-900 hover:bg-orange-200">
-                  Ajouter
-                </button>
-              </div>
-              {popupLignes.length > 0 && (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left text-gray-600">
-                          <th className="pb-2">Désignation</th>
-                          <th className="pb-2 text-right">Qté</th>
-                          <th className="pb-2 text-right">P.U(HT)</th>
-                          <th className="pb-2 text-right">Remise</th>
-                          <th className="pb-2 text-right">TVA</th>
-                          <th className="pb-2 text-right text-emerald-700">TTC</th>
-                          <th className="w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {popupLignes.map((l, i) => {
-                          const lTTC = montantLigneTTC({
-                            quantite: l.quantite,
-                            prixUnitaire: l.prixUnitaire,
-                            remiseLigne: Number(l.remise) || 0,
-                            tvaPourcent: l.tvaPerc || 0,
-                          })
-                          return (
-                            <tr key={i} className="border-b border-gray-100">
-                              <td className="py-2">{l.designation}</td>
-                              <td className="text-right">{l.quantite}</td>
-                              <td className="text-right">{l.prixUnitaire.toLocaleString('fr-FR')} F</td>
-                              <td className="text-right text-red-600">-{ (l.remise || 0).toLocaleString('fr-FR') }</td>
-                              <td className="text-right">{l.tvaPerc || 0}%</td>
-                              <td className="text-right font-bold text-emerald-700">{lTTC.toLocaleString('fr-FR')} F</td>
-                              <td>
-                                <button type="button" onClick={() => removePopupLigne(i)} className="rounded p-1.5 text-red-600 hover:bg-red-100" title="Supprimer"><Trash2 className="h-4 w-4" /></button>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="mt-3 text-right text-base font-bold text-gray-900">Total : {popupTotal.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</p>
-                </>
-              )}
-            </div>
-            {popupLignes.length === 0 && (
-              <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Choisissez un produit, la quantité et le prix puis cliquez sur &quot;Ajouter&quot;.</p>
-            )}
-            {err && addLignesPopupOpen && <p className="text-sm text-red-600">{err}</p>}
-            <div className="flex gap-2 justify-end border-t border-gray-200 px-4 py-3 bg-gray-50 rounded-b-xl">
-              <button
-                type="button"
-                onClick={() => { setAddLignesPopupOpen(false); setErr(''); }}
-                disabled={submitting}
-                className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300 disabled:opacity-60"
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={() => doEnregistrerVente(popupLignes)}
-                disabled={popupLignes.length === 0 || submitting}
-                className="rounded-lg bg-orange-500 px-4 py-2 text-white hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Valider et enregistrer la vente
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModificationVenteModal
+        isOpen={editingVenteModalId !== null}
+        venteId={editingVenteModalId || 0}
+        onClose={() => setEditingVenteModalId(null)}
+        onSuccess={() => { setEditingVenteModalId(null); setCurrentPage(1); fetchVentes() }}
+      />
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         {loading ? (
@@ -2337,6 +1033,7 @@ export default function VentesPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Client</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Magasin</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Montant</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Paiement</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Statut paiement</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Reste à payer</th>
@@ -2345,150 +1042,25 @@ export default function VentesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {ventes.map((v) => {
-                  const resteAPayer = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
-                  return (
-                    <tr key={v.id} className={v.statut === 'ANNULEE' ? 'bg-gray-100' : 'hover:bg-gray-50'}>
-                      <td className="px-4 py-3 font-mono text-sm text-gray-900">{v.numero}</td>
-                      <td className="px-4 py-3 text-sm font-bold text-orange-600">{(v as any).numeroBon || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {formatDate(v.date, { includeTime: true })}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-mono font-bold text-blue-600 uppercase">
-                        {(v as any).client?.code || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 font-medium">
-                        {(v as any).client?.nom || (v as any).clientLibre || <span className="text-gray-400 italic">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{v.magasin.code}</td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-900">
-                        {Number(v.montantTotal).toLocaleString('fr-FR')} F
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        <div className="flex items-center gap-1.5" title={v.modePaiement === 'ESPECES' ? "Espèces" : v.modePaiement}>
-                          {v.modePaiement === 'ESPECES' ? (
-                            <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-                          ) : (
-                            <Wallet className="h-3.5 w-3.5 text-blue-500" />
-                          )}
-                          {v.modePaiement.replace('_', ' ')}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded px-2 py-0.5 text-xs font-medium ${v.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' :
-                          v.statutPaiement === 'PARTIEL' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-orange-100 text-orange-800'
-                          }`}>
-                          {v.statutPaiement === 'PAYE' ? 'Payé' :
-                            v.statutPaiement === 'PARTIEL' ? 'Partiel' :
-                              'Crédit'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-900">
-                        {resteAPayer > 0 ? `${resteAPayer.toLocaleString('fr-FR')} F` : '-'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded px-2 py-0.5 text-xs font-medium ${
-                          v.statut === 'ANNULEE' ? 'bg-gray-200 text-gray-700' :
-                            'bg-green-100 text-green-800'
-                        }`}>
-                          {v.statut === 'ANNULEE' ? 'Annulée' :
-                            'Validée'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          {v.statutPaiement !== 'PAYE' && v.statut !== 'ANNULEE' && (
-                            <button
-                              onClick={() => setShowReglement({ id: v.id, numero: v.numero, reste: resteAPayer })}
-                              className="rounded p-1.5 text-orange-600 hover:bg-orange-100"
-                              title="Enregistrer un règlement"
-                            >
-                              <Wallet className="h-4 w-4" />
-                            </button>
-                          )}
-                          {v.statut !== 'ANNULEE' && (
-                            <button
-                              onClick={() => {
-                                // @ts-ignore
-                                setFormData({
-                                  date: new Date(v.date).toLocaleDateString('en-CA'),
-                                  magasinId: String((v as any).magasinId || v.magasin.id),
-                                  clientId: (v as any).clientId ? String((v as any).clientId) : '',
-                                  clientLibre: (v as any).clientLibre || '',
-                                  modePaiement: v.modePaiement || 'ESPECES',
-                                  montantPaye: String(v.montantPaye || ''),
-                                  banqueId: '',
-                                  // @ts-ignore
-                                  remiseGlobale: String((v as any).remiseGlobale || ''),
-                                  // @ts-ignore
-                                  observation: (v as any).observation || '',
-                                  // @ts-ignore
-                                  numeroBon: (v as any).numeroBon || '',
-                                  lignes: v.lignes.map((l: any) => ({
-                                    produitId: l.produitId,
-                                    designation: l.designation,
-                                    quantite: l.quantite,
-                                    prixUnitaire: l.prixUnitaire,
-                                    tvaPerc: Number(l.tvaPerc ?? l.tva ?? 0) || 0,
-                                    remise: l.remise || 0,
-                                  })),
-                                  // @ts-ignore
-                                  reglements: (v as any).reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode || v.modePaiement, montant: String(r.montant) })) || [{ mode: v.modePaiement, montant: String(v.montantPaye || '') }],
-                                  pointsGagnes: 0,
-                                })
-                                setFormClientSearch((v as any).client?.nom || '')
-                                setEditingVenteId(v.id)
-                                setForm(true)
-                              }}
-                              className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
-                              title="Modifier la facture"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleVoirDetail(v.id)}
-                            disabled={loadingDetail === v.id}
-                            className="rounded p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
-                            title="Voir le détail"
-                          >
-                            {loadingDetail === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                          {v.statut === 'VALIDEE' && (
-                            <>
-                              <button
-                                onClick={() => openRetourModal(v)}
-                                className="rounded p-1.5 text-amber-600 hover:bg-amber-50"
-                                title="Retour de marchandise"
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleAnnuler(v)}
-                                disabled={annulant === v.id}
-                                className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                title="Annuler la vente"
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
-                            <button
-                              onClick={() => handleSupprimer(v)}
-                              disabled={supprimant === v.id}
-                              className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                              title="Supprimer définitivement"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {ventes.map((v) => (
+                  <VenteTableRow
+                    key={v.id}
+                    v={v}
+                    userRole={userRole}
+                    annulant={annulant}
+                    supprimant={supprimant}
+                    livrant={livrant}
+                    loadingDetail={loadingDetail}
+                    onEdit={handleEditVente}
+                    onEditModal={handleEditVenteModal}
+                    onPay={setShowReglement}
+                    onView={handleVoirDetail}
+                    onReturn={openRetourModal}
+                    onCancel={handleAnnuler}
+                    onDelete={handleSupprimer}
+                    onDeliver={handleLivrer}
+                  />
+                ))}
               </tbody>
               {totals && (
                 <tfoot className="bg-orange-50 font-bold text-gray-900 border-t-2 border-orange-200">
@@ -2497,7 +1069,7 @@ export default function VentesPage() {
                     <td className="px-4 py-3 text-right text-orange-700 bg-orange-100/50">
                       {totals.montantTotal.toLocaleString('fr-FR')} F
                     </td>
-                    <td colSpan={2} className="px-4 py-3 bg-gray-50/30"></td>
+                    <td colSpan={3} className="px-4 py-3 bg-gray-50/30"></td>
                     <td className="px-4 py-3 text-right text-red-700 bg-red-50/50">
                       {totals.resteAPayer.toLocaleString('fr-FR')} F
                     </td>
@@ -2533,31 +1105,6 @@ export default function VentesPage() {
                 {detailVente.statut !== 'ANNULEE' && (
                   <button
                     onClick={() => {
-                      // Préparer les données pour le formulaire de modification
-                      setFormData({
-                        date: new Date(detailVente.date).toLocaleDateString('en-CA'),
-                        magasinId: String(detailVente.magasinId || (detailVente as any).magasin?.id || ''),
-                        clientId: detailVente.clientId ? String(detailVente.clientId) : '',
-                        clientLibre: detailVente.clientLibre || '',
-                        modePaiement: detailVente.modePaiement || 'ESPECES',
-                        montantPaye: String(detailVente.montantPaye || ''),
-                        banqueId: '',
-                        remiseGlobale: String(detailVente.remiseGlobale || ''),
-                        observation: detailVente.observation || '',
-                        numeroBon: detailVente.numeroBon || '',
-                        lignes: detailVente.lignes.map((l: any) => ({
-                          produitId: l.produitId,
-                          designation: l.designation,
-                          quantite: l.quantite,
-                          prixUnitaire: l.prixUnitaire,
-                          tvaPerc: Number(l.tvaPerc ?? l.tva ?? 0) || 0,
-                          remise: l.remise || 0,
-                        })),
-                        // @ts-ignore
-                        reglements: detailVente.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode || detailVente.modePaiement, montant: String(r.montant) })) || [{ mode: detailVente.modePaiement, montant: String(detailVente.montantPaye || '') }],
-                        pointsGagnes: 0,
-                      })
-                      setFormClientSearch(detailVente.client?.nom || '')
                       setEditingVenteId(detailVente.id)
                       setForm(true)
                       setDetailVente(null)
@@ -2685,216 +1232,6 @@ export default function VentesPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {showCreateClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl border border-orange-200 bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Créer un nouveau client</h2>
-              <button
-                onClick={() => {
-                  setShowCreateClient(false)
-                  setCreateClientAfter(null)
-                  setErr('')
-                }}
-                className="rounded p-1 hover:bg-gray-100"
-              >
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-            <form onSubmit={handleCreateClient} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Nom *</label>
-                <input
-                  required
-                  value={clientForm.nom}
-                  onChange={(e) => setClientForm((f) => ({ ...f, nom: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Téléphone</label>
-                <input
-                  value={clientForm.telephone}
-                  onChange={(e) => setClientForm((f) => ({ ...f, telephone: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Type</label>
-                <select
-                  value={clientForm.type}
-                  onChange={(e) => setClientForm((f) => ({ ...f, type: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
-                >
-                  <option value="CASH">CASH</option>
-                  <option value="CREDIT">CREDIT</option>
-                </select>
-              </div>
-              {clientForm.type === 'CREDIT' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Plafond crédit (FCFA)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={clientForm.plafondCredit}
-                    onChange={(e) => setClientForm((f) => ({ ...f, plafondCredit: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
-                  />
-                </div>
-              )}
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={savingClient}
-                  className="rounded-lg bg-orange-500 px-4 py-2 text-white hover:bg-orange-600 disabled:opacity-60"
-                >
-                  {savingClient ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Créer et continuer'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateClient(false)
-                    setCreateClientAfter(null)
-                    setErr('')
-                  }}
-                  className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300"
-                >
-                  Annuler
-                </button>
-              </div>
-            </form>
-            {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Modal Stock Insuffisant */}
-      {stockInsuffisantModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStockInsuffisantModal(null)}>
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between border-b pb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Stock insuffisant</h3>
-                <p className="mt-1 text-sm text-gray-600">
-                  {stockInsuffisantModal.produitDesignation}
-                </p>
-              </div>
-              <button onClick={() => setStockInsuffisantModal(null)} className="rounded p-2 text-gray-500 hover:bg-gray-100">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mb-4 space-y-3 rounded-lg bg-red-50 p-4 border border-red-100">
-              <div className="flex items-start gap-2 text-red-800">
-                <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-black uppercase tracking-tight">Règle d'Or : Entrée avant Sortie</p>
-                  <p className="mt-1 opacity-90">
-                    Ce produit est en rupture de stock informatique ({stockInsuffisantModal.quantiteDisponible} dispo), 
-                    mais vous tentez d'en vendre {stockInsuffisantModal.quantiteDemandee}. 
-                  </p>
-                  <p className="mt-2 font-bold italic">
-                    Avez-vous reçu une livraison physique qui n'a pas encore été saisie ? 
-                    Régularisez immédiatement le stock ci-dessous pour continuer la vente.
-                  </p>
-                </div>
-              </div>
-              <div className="pt-2 border-t border-red-200 space-y-1">
-                <p className="text-xs text-gray-700"><strong>Manquant :</strong> {stockInsuffisantModal.quantiteDemandee - stockInsuffisantModal.quantiteDisponible} unités</p>
-              </div>
-            </div>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                const quantite = Math.max(1, Math.floor(Number(ajoutStockQuantite) || 0))
-                if (quantite <= 0) {
-                  showError('La quantité doit être supérieure à 0.')
-                  return
-                }
-                setAjoutStockSaving(true)
-                try {
-                  // Ajouter le stock
-                  const res = await fetch('/api/stock/entree', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      date: new Date().toISOString().split('T')[0],
-                      magasinId: stockInsuffisantModal.magasinId,
-                      produitId: stockInsuffisantModal.produitId,
-                      quantite,
-                      observation: 'Ajout rapide - Stock insuffisant',
-                    }),
-                  })
-                  const data = await res.json()
-                  if (res.ok) {
-                    showSuccess(`Stock ajouté avec succès (${quantite} unités).`)
-                    setStockInsuffisantModal(null)
-                    setAjoutStockQuantite('')
-                    
-                    // Rafraîchir les produits pour mettre à jour les disponibilités locales
-                    refetchProduits()
-                    
-                    // Réessayer l'enregistrement de la vente après un court délai pour laisser le state se mettre à jour
-                    setTimeout(() => {
-                      doEnregistrerVente(stockInsuffisantModal.lignes)
-                    }, 500)
-                  } else {
-                    showError(data.error || 'Erreur lors de l\'ajout du stock.')
-                  }
-                } catch (e) {
-                  showError('Erreur réseau lors de l\'ajout du stock.')
-                } finally {
-                  setAjoutStockSaving(false)
-                }
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Quantité à ajouter au stock
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={ajoutStockQuantite}
-                  onChange={(e) => setAjoutStockQuantite(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
-                  placeholder="Quantité"
-                  required
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Quantité recommandée : {stockInsuffisantModal.quantiteDemandee - stockInsuffisantModal.quantiteDisponible} unités
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={ajoutStockSaving}
-                  className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-white hover:bg-orange-600 disabled:opacity-60"
-                >
-                  {ajoutStockSaving ? (
-                    <>
-                      <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                      Ajout en cours...
-                    </>
-                  ) : (
-                    'Ajouter au stock et continuer'
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStockInsuffisantModal(null)}
-                  className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300"
-                >
-                  Annuler
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
@@ -3096,14 +1433,6 @@ export default function VentesPage() {
         ]}
       />
 
-      {/* Modal scanner code-barres — chargé dynamiquement, 100% offline */}
-      {scannerOpen && (
-        <BarcodeScanner
-          onScan={handleBarcodeScan}
-          onClose={() => setScannerOpen(false)}
-        />
-      )}
-
       {/* Modal Retour de marchandise */}
       {retourModalVente && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -3217,6 +1546,97 @@ export default function VentesPage() {
           </div>
         </div>
       )}
+      <div className="hidden print:block">
+        {(() => {
+          if (!allVentesForPrint.length) return null
+          const entite = entreprise
+            ? (entreprise.nom || entreprise.raisonSociale || 'GestiCom')
+            : 'GestiCom'
+          const today = new Date().toLocaleDateString('fr-FR', {
+            day: '2-digit', month: 'long', year: 'numeric'
+          })
+          const periode = (dateDebut || dateFin)
+            ? 'Période: ' + (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...')
+            : 'Toutes périodes'
+          const pages = paginateForPrint(allVentesForPrint, 20)
+          return pages.map((pageData, pageIdx) => (
+            <div key={pageIdx} className="print-page">
+              <ListPrintWrapper
+                title="Flux de ventes et encaissements clients"
+                subtitle={`${entite} • ${today} • ${periode}`}
+                pageNumber={pageIdx + 1}
+                totalPages={pages.length}
+              >
+                <div className="flex gap-4 mb-4">
+                  <div className="flex-1 border rounded p-2 text-center bg-gray-50">
+                    <div className="text-xs font-bold uppercase text-gray-500">Chiffre d'Affaires</div>
+                    <div className="text-lg font-bold">{(allVentesForPrint.reduce((s, v) => s + Number(v.montantTotal), 0)).toLocaleString('fr-FR')} F</div>
+                    <div className="text-xs text-gray-400">Volume de ventes période</div>
+                  </div>
+                  <div className="flex-1 border rounded p-2 text-center bg-gray-50">
+                    <div className="text-xs font-bold uppercase text-gray-500">Total Encaissé</div>
+                    <div className="text-lg font-bold">{(allVentesForPrint.reduce((s, v) => s + (Number(v.montantPaye) || 0), 0)).toLocaleString('fr-FR')} F</div>
+                    <div className="text-xs text-gray-400">Encaissements réels</div>
+                  </div>
+                  <div className="flex-1 border rounded p-2 text-center bg-gray-50">
+                    <div className="text-xs font-bold uppercase text-gray-500">Reste à Recouvrer</div>
+                    <div className="text-lg font-bold">{(allVentesForPrint.reduce((s, v) => s + Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0)), 0)).toLocaleString('fr-FR')} F</div>
+                    <div className="text-xs text-gray-400">Créances clients en cours</div>
+                  </div>
+                </div>
+                <table className="min-w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1 text-left">N°</th>
+                      <th className="border p-1 text-left">Bon N°</th>
+                      <th className="border p-1 text-left">Date</th>
+                      <th className="border p-1 text-left">Code Client</th>
+                      <th className="border p-1 text-left">Client</th>
+                      <th className="border p-1 text-left">Magasin</th>
+                      <th className="border p-1 text-right">Montant</th>
+                      <th className="border p-1 text-left">Paiement</th>
+                      <th className="border p-1 text-left">Statut</th>
+                      <th className="border p-1 text-right">Reste</th>
+                      <th className="border p-1 text-left">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageData.map((v: any) => {
+                      const rp = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
+                      return (
+                        <tr key={v.id}>
+                          <td className="border p-1">{v.numero}</td>
+                          <td className="border p-1">{(v as any).numeroBon || '—'}</td>
+                          <td className="border p-1">{formatDate(v.date, { includeTime: false })}</td>
+                          <td className="border p-1">{(v as any).client?.code || '—'}</td>
+                          <td className="border p-1">{(v as any).client?.nom || (v as any).clientLibre || '—'}</td>
+                          <td className="border p-1">{v.magasin.code}</td>
+                          <td className="border p-1 text-right">{Number(v.montantTotal).toLocaleString('fr-FR')} F</td>
+                          <td className="border p-1">{v.modePaiement.replace('_', ' ')}</td>
+                          <td className="border p-1">{v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit'}</td>
+                          <td className="border p-1 text-right">{rp > 0 ? rp.toLocaleString('fr-FR') + ' F' : '-'}</td>
+                          <td className="border p-1">{v.statut === 'ANNULEE' ? 'Annulée' : 'Validée'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  {pageIdx === pages.length - 1 && (
+                    <tfoot>
+                      <tr className="bg-gray-100 font-bold">
+                        <td colSpan={6} className="border p-1 text-right">TOTAUX</td>
+                        <td className="border p-1 text-right">{(allVentesForPrint.reduce((s, v) => s + Number(v.montantTotal), 0)).toLocaleString('fr-FR')} F</td>
+                        <td colSpan={2} className="border p-1"></td>
+                        <td className="border p-1 text-right">{(allVentesForPrint.reduce((s, v) => s + Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0)), 0)).toLocaleString('fr-FR')} F</td>
+                        <td className="border p-1"></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </ListPrintWrapper>
+            </div>
+          ))
+        })()}
+      </div>
     </div>
   )
 }

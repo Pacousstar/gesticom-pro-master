@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Plus, Loader2, Trash2, X, FileSpreadsheet, Download, Clock, Wallet } from 'lucide-react'
+import { Search, Plus, Loader2, Trash2, FileSpreadsheet, Download } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 

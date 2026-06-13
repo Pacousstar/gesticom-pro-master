@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import * as XLSX from 'xlsx-prototype-pollution-fixed'
+import { parseExcel } from '@/lib/excel'
 import { requireRole } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
 
@@ -30,10 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const workbook = XLSX.read(buffer, { type: 'buffer' })
-    const sheetName = workbook.SheetNames[0]
-    const worksheet = workbook.Sheets[sheetName]
-    const data = XLSX.utils.sheet_to_json(worksheet, { raw: false }) as any[]
+    const { rows: data } = await parseExcel(buffer)
 
     // Normaliser les clés : ôter accents, lowercase, remplacer espaces par _
     const normalizeKey = (k: string) => {

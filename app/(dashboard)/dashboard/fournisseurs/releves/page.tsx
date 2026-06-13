@@ -3,8 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { 
-  Truck, Search, Calendar, FileText, Download, Printer, 
-  ArrowLeft, Loader2, DollarSign, CreditCard, ChevronRight,
+  Truck, FileText, Printer, Loader2, CreditCard,
   TrendingDown, TrendingUp, Wallet
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'

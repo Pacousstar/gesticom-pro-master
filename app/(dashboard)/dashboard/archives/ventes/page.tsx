@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { 
   Plus, Loader2, Eye, Printer, Search, 
-  FileText, ArrowLeft, History, ShoppingCart, Calendar, User
+  FileText, History, ShoppingCart, Calendar, User
 } from 'lucide-react'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Archive = {
   id: number

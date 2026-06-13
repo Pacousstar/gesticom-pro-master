@@ -201,8 +201,8 @@ export async function createBackup(): Promise<string> {
   const targetPath = path.join(/*turbopackIgnore: true*/ dir, targetName)
   
   // Validation de sécurité : le chemin cible doit être dans le répertoire de sauvegarde
-  const resolvedTarget = path.resolve(targetPath)
-  const resolvedDir = path.resolve(dir)
+  const resolvedTarget = path.resolve(/*turbopackIgnore: true*/ targetPath)
+  const resolvedDir = path.resolve(/*turbopackIgnore: true*/ dir)
   if (!resolvedTarget.startsWith(resolvedDir)) {
     throw new Error('Chemin de sauvegarde invalide : tentative de path traversal détectée.')
   }

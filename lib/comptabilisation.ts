@@ -1063,6 +1063,7 @@ export async function comptabiliserCharge(data: {
   await createEcriture({
     date: data.date,
     journalId: journal.id,
+    entiteId: data.entiteId,
     piece: null,
     libelle,
     compteId: compteCharge.id,
@@ -1073,10 +1074,11 @@ export async function comptabiliserCharge(data: {
     referenceId: data.chargeId,
     utilisateurId: data.utilisateurId,
   }, tx)
-  
+
   await createEcriture({
     date: data.date,
     journalId: journal.id,
+    entiteId: data.entiteId,
     piece: null,
     libelle,
     compteId: compteReglement.id,

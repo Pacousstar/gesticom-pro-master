@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, Search, Filter, Download, Calendar, User, Activity, FileSpreadsheet, FileText, X, ChevronDown, ChevronUp, Printer } from 'lucide-react'
+import { Loader2, Search, Filter, User, Activity, FileSpreadsheet, FileText, X, ChevronDown, ChevronUp, Printer } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type AuditLog = {
   id: number

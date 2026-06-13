@@ -3,8 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -167,30 +167,9 @@ export async function GET(request: NextRequest) {
       Solde: grandTotalSolde,
     })
 
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Compte: '', Date: '', Journal: '', Pièce: '', Libellé: '', Débit: '', Crédit: '', Solde: '' }])
-    const colWidths = [
-      { wch: 30 }, // Compte
-      { wch: 12 }, // Date
-      { wch: 12 }, // Journal
-      { wch: 12 }, // Pièce
-      { wch: 40 }, // Libellé
-      { wch: 15 }, // Débit
-      { wch: 15 }, // Crédit
-      { wch: 15 }, // Solde
-    ]
-    ws['!cols'] = colWidths
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Grand Livre')
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
+    const buf = await rowsToBuffer(rows as any[], 'Grand Livre')
     const filename = `grand-livre_${dateDebut || 'all'}_${dateFin || 'all'}.xlsx`
-    return new NextResponse(buf, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('Export Excel grand livre:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

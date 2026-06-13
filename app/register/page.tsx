@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Eye, EyeOff, Lock, User, Mail, Shield, Building2, UserPlus } from 'lucide-react'
-import { getSession } from '@/lib/auth'
 
 type Role = 'SUPER_ADMIN' | 'ADMIN' | 'COMPTABLE' | 'GESTIONNAIRE' | 'MAGASINIER' | 'ASSISTANTE'
 

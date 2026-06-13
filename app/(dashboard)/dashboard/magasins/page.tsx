@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Package, Warehouse, ArrowRightLeft, AlertTriangle, DollarSign, Loader2, Building2, ShoppingCart, TrendingUp, MapPin, CheckCircle2, XCircle } from 'lucide-react'
-import { formatApiError } from '@/lib/validation-helpers'
+import { Package, Warehouse, ArrowRightLeft, Loader2, Building2, MapPin, CheckCircle2, XCircle } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 
 type Magasin = { id: number; code: string; nom: string; localisation: string; actif: boolean; estDepotPrincipal: boolean; soldeCaisse: number }
@@ -51,7 +50,7 @@ export default function MagasinsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-3">
+          <h1 className="text-2xl font-black text-white flex items-center gap-3">
             <Warehouse className="h-7 w-7 text-orange-500" /> Magasins & Entrepôts
           </h1>
           <p className="text-sm text-white dark:text-gray-400 mt-1">Gestion multi-magasins, stocks et transferts</p>

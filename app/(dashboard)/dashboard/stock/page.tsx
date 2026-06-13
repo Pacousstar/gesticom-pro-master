@@ -4,11 +4,10 @@ import { useState, useEffect } from 'react'
 import { Loader2, AlertTriangle, Plus, Pencil, Trash2, X, Search, Minus, ClipboardList, FileSpreadsheet, Download, Printer, ArrowRightLeft, CheckCircle2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import Pagination from '@/components/ui/Pagination'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 type Magasin = { id: number; code: string; nom: string }
 type Produit = { id: number; code: string; designation: string; prixAchat?: number | null }
 type StockRow = {
@@ -315,6 +314,8 @@ export default function StockPage() {
         limit: '10000',
       })
       if (magasinId) params.set('magasinId', magasinId)
+      if (searchTerm) params.set('search', searchTerm)
+      if (selectedCategory && selectedCategory !== 'TOUT') params.set('categorie', selectedCategory)
 
       const res = await fetch('/api/stock?' + params.toString())
       if (res.ok) {
@@ -827,9 +828,10 @@ export default function StockPage() {
               const res = await fetch('/api/stock?' + params.toString())
               if (res.ok) {
                 const d = await res.json()
+                const allData = Array.isArray(d) ? d : (d.data || [])
                 const csv = [
                   ['Code', 'Désignation', 'Catégorie', 'Magasin', 'Quantité', 'PAMP', 'Valeur'].join(';'),
-                  ...(d.data || []).map((s: any) => [
+                  ...allData.map((s: any) => [
                     s.produit?.code || '',
                     s.produit?.designation || '',
                     s.produit?.categorie || '',
@@ -840,7 +842,9 @@ export default function StockPage() {
                   ].join(';'))
                 ].join('\n')
                 
-                const totalRow = ['TOTAL', '', '', '', d.totals?.totalQuantite || 0, '', d.totals?.totalValeur || 0].join(';')
+                const totalQte = allData.reduce((acc: number, s: any) => acc + (s.quantite || 0), 0)
+                const totalVal = allData.reduce((acc: number, s: any) => acc + (s.quantite || 0) * (s.produit?.pamp || s.produit?.prixAchat || 0), 0)
+                const totalRow = ['TOTAL', '', '', '', d.totals?.totalQuantite ?? totalQte, '', d.totals?.totalValeur ?? totalVal].join(';')
                 const bom = '\uFEFF'
                 const blob = new Blob([bom + csv + '\n' + totalRow], { type: 'text/csv;charset=utf-8;' })
                 const blobUrl = window.URL.createObjectURL(blob)

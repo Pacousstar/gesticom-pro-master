@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Users, Truck, Search, Calendar, ArrowUpRight, ArrowDownRight, FileText, Loader2 } from 'lucide-react'
+import { Users, Truck, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 
 type Tier = {
   id: number

@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
     const type = request.nextUrl.searchParams.get('type')?.trim()
     const limit = Math.min(500, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 200))
+    const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
 
     const where: any = {}
 
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest) {
       prisma.operationBancaire.findMany({
         where,
         take: limit,
+        skip: (page - 1) * limit,
         orderBy: { date: 'desc' },
         include: {
           banque: { select: { id: true, numero: true, nomBanque: true, libelle: true, entiteId: true } },
@@ -68,7 +70,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: operations,
       pagination: {
-        page: 1, 
+        page, 
         limit,
         total,
         totalPages: Math.ceil(total / limit),

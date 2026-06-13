@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { jsPDF } = require('jspdf')
 
 export async function GET(request: NextRequest) {

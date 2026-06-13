@@ -22,8 +22,7 @@
       }
     ],
     "types": [
-      "next",
-      "styled-jsx"
+      "vitest/globals"
     ],
     "paths": {
       "@/*": [
@@ -38,6 +37,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
+    ".next/types/**/*.tsx",
+    ".next/dev/types/**/*.tsx",
     "**/*.mts"
   ],
   "exclude": [

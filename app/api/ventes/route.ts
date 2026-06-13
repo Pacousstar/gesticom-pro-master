@@ -3,8 +3,8 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
-import { logAction, getIpAddress, getUserAgent } from '@/lib/audit'
-import { comptabiliserVente, comptabiliserReglementVente } from '@/lib/comptabilisation'
+import { logAction, getIpAddress } from '@/lib/audit'
+import { comptabiliserVente } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
@@ -230,6 +230,13 @@ export async function POST(request: NextRequest) {
     let montantTotalAVantRemise = 0
     const lignesValides: any[] = []
 
+    const produitsMap = new Map<number, any>()
+    const tousProduitIds = [...new Set(lignes.map((l: any) => Number(l?.produitId)).filter(Boolean))] as number[]
+    if (tousProduitIds.length > 0) {
+      const produitsTrouves = await prisma.produit.findMany({ where: { id: { in: tousProduitIds } } })
+      for (const p of produitsTrouves) produitsMap.set(p.id, p)
+    }
+
     for (const l of lignes) {
       const produitId = Number(l?.produitId)
       const quantite = Math.max(0, Number(l?.quantite) || 0)
@@ -240,7 +247,7 @@ export async function POST(request: NextRequest) {
       if (isNaN(produitId) || isNaN(quantite) || isNaN(prixUnitaire)) continue
       if (!produitId || quantite <= 0) continue
 
-      const produit = await prisma.produit.findUnique({ where: { id: produitId } })
+      const produit = produitsMap.get(produitId)
       if (!produit) continue
 
       const prixMin = produit.prixMinimum || 0

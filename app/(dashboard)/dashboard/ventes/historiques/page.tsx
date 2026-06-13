@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Archive, Plus, Loader2, Trash2, Eye, Search, Filter, FileSpreadsheet, X, ShoppingCart } from 'lucide-react'
+import { Archive, Plus, Loader2, Trash2, Search, Filter, X } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatDate } from '@/lib/format-date'
 import { montantLigneTTC } from '@/lib/calculs-commerciaux'
-import Pagination from '@/components/ui/Pagination'
 
 type Client = { id: number; nom: string }
 type Magasin = { id: number; code: string; nom: string }

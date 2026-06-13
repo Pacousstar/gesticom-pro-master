@@ -1,7 +1,7 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
-; Version 2.5.0 - Production Finale
+; Version 3.23.2 - Production Finale
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "3.23.2"
+#define MyAppVersion "3.28.1"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "node.exe"
@@ -71,30 +71,38 @@ Source: ".env"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist uninsne
 ; Base de données initiale : On ne l'écrase JAMAIS si elle existe déjà (uninsneveruninstall)
 Source: "prisma\gesticom.db"; DestDir: "C:\gesticom"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall skipifsourcedoesntexist
 
+; Service Windows (NSSM)
+Source: "nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
+
 ; Scripts VITAUX uniquement
 Source: "start.js"; DestDir: "{app}"; Flags: ignoreversion
 Source: "scripts\standalone-launcher.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "scripts\install-service.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\maintenance-runner.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\seed.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\sauvegarde-bd.js"; DestDir: "{app}\scripts"; Flags: ignoreversion
-Source: "scripts\demarrer-serveur.vbs"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "LANCER-SILENCIEUX.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\scripts\demarrer-serveur.vbs"""; IconFilename: "{app}\public\gesticom.ico"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\LANCER-SILENCIEUX.vbs"""; IconFilename: "{app}\public\gesticom.ico"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\scripts\demarrer-serveur.vbs"""; IconFilename: "{app}\public\gesticom.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\LANCER-SILENCIEUX.vbs"""; IconFilename: "{app}\public\gesticom.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 ; Supprimer le verrou "rebuild-ecritures" pour relance automatique lors de chaque MAJ
 ; (évite toute action manuelle côté client)
-Filename: "cmd"; Parameters: "/C if exist ""C:\gesticom\maintenance\rebuild-ecritures-*.done"" del /Q ""C:\gesticom\maintenance\rebuild-ecritures-*.done"""; Flags: runhidden; StatusMsg: "Préparation de la normalisation comptable..."
+Filename: "{cmd}"; Parameters: "/C if exist ""C:\gesticom\maintenance\rebuild-ecritures-*.done"" del /Q ""C:\gesticom\maintenance\rebuild-ecritures-*.done"""; Flags: runhidden; StatusMsg: "Préparation de la normalisation comptable..."
 
 ; Optimisation et Recalcul automatique de la base de données (MAJ)
-Filename: "{app}\node.exe"; Parameters: "{app}\scripts\maintenance-runner.js"; Flags: runhidden; StatusMsg: "Optimisation des données et calcul des soldes..."
+Filename: "{app}\node.exe"; Parameters: """{app}\scripts\maintenance-runner.js"""; Flags: runhidden; StatusMsg: "Optimisation des données et calcul des soldes..."
 
-; Lancement totalement invisible (via wscript.exe qui n'ouvre AUCUNE console)
-Filename: "wscript.exe"; Parameters: "{app}\scripts\demarrer-serveur.vbs"; Flags: postinstall nowait skipifsilent; StatusMsg: "Démarrage du serveur GestiCom..."; Description: "Lancer GestiCom Pro"
+; Installation et démarrage du service Windows GestiCom (invisible)
+Filename: "{app}\node.exe"; Parameters: """{app}\scripts\install-service.js"""; Flags: runhidden; StatusMsg: "Installation du service GestiCom Pro..."
+
+[UninstallRun]
+; Arrêter et supprimer le service Windows une seule fois à la désinstallation
+Filename: "{sys}\sc.exe"; Parameters: "stop GestiComPro"; Flags: runhidden; RunOnceId: "StopGestiComProService"
+Filename: "{sys}\sc.exe"; Parameters: "delete GestiComPro"; Flags: runhidden; RunOnceId: "DeleteGestiComProService"
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -102,9 +110,9 @@ var
   ResultCode: Integer;
 begin
   Result := '';
-  Exec('taskkill', '/F /IM node.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('sc', 'stop GestiComPro', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('sc', 'delete GestiComPro', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM node.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop GestiComPro', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'delete GestiComPro', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1000);
 end;
 

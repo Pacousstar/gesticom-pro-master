@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Filter, DollarSign, Loader2, Calendar, FileText, ArrowUpCircle, ArrowDownCircle, Download, FileSpreadsheet, Printer } from 'lucide-react'
+import { Filter, DollarSign, Loader2, Calendar, FileText, Download, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(val).replace('XOF', 'FCFA')

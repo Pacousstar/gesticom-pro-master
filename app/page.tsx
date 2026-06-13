@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { TrendingUp, Shield, Zap, ArrowRight, Sparkles } from 'lucide-react'
+import { Shield, ArrowRight } from 'lucide-react'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)

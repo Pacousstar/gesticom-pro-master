@@ -3,16 +3,6 @@
  */
 
 import { z } from 'zod'
-import type { 
-  produitSchema, 
-  clientSchema, 
-  fournisseurSchema, 
-  magasinSchema,
-  depenseSchema,
-  chargeSchema,
-  ecritureSchema,
-  journalSchema 
-} from './validations'
 
 /**
  * Valide les données avec un schéma Zod et retourne un message d'erreur formaté

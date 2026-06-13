@@ -1,17 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import {
-  ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X,
-  Search, Scan, Camera, Edit2, Pencil, Trash, CreditCard, Wallet, UserPlus,
-  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent,
+import { Plus, Loader2, Trash2, Eye, Printer, X,
+  Search, Pencil, UserPlus, FileText, XCircle,
   CheckCircle2, ArrowRightLeft, Truck, Download
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
-import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
-import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
+import { generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import PrintPreview from '@/components/print/PrintPreview'
 import { fournisseurSchema } from '@/lib/validations'
 import { validateForm } from '@/lib/validation-helpers'

@@ -6,7 +6,6 @@ import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
 

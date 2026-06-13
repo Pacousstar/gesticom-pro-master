@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { comptabiliserAchat, comptabiliserReglementAchat } from '@/lib/comptabilisation'
+import { comptabiliserAchat } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { estModeBanque } from '@/lib/banque'
@@ -249,6 +249,13 @@ export async function POST(request: NextRequest) {
 let montantFactureHT = 0
     const lignesBrutes: any[] = []
 
+    const produitsMap = new Map<number, any>()
+    const tousProduitIds = [...new Set(lignes.map((l: any) => Number(l?.produitId)).filter(Boolean))] as number[]
+    if (tousProduitIds.length > 0) {
+      const produitsTrouves = await prisma.produit.findMany({ where: { id: { in: tousProduitIds } } })
+      for (const p of produitsTrouves) produitsMap.set(p.id, p)
+    }
+
     for (const l of lignes) {
       const produitId = Number(l?.produitId)
       const quantite = Number(l?.quantite) || 0
@@ -258,7 +265,7 @@ let montantFactureHT = 0
 
       if (quantite <= 0) continue
 
-      const produit = await prisma.produit.findUnique({ where: { id: produitId } })
+      const produit = produitsMap.get(produitId)
       if (!produit) continue
 
       if (prixUnitaire <= 0) {

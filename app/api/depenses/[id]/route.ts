@@ -156,13 +156,13 @@ export async function PATCH(
         where: {
           entiteId: d.entiteId,
           type: 'SORTIE',
-          motif: { contains: `Dépense #${id}` }
+          motif: { contains: `#${id}` }
         }
       })
       const oldOpsBancaires = await tx.operationBancaire.findMany({
         where: {
           entiteId: d.entiteId,
-          libelle: { contains: `Dépense #${id}` }
+          libelle: { contains: `#${id}` }
         }
       })
       for (const op of oldOpsBancaires) {
@@ -297,21 +297,21 @@ await prisma.$transaction(async (tx) => {
         where: {
           entiteId: d.entiteId,
           type: 'SORTIE',
-          motif: { contains: `Dépense #${id}` }
+          motif: { contains: `#${id}` }
         }
       })
 
-      // 3. Nettoyage Trésorerie : BANQUE (libellé basé sur l'ID)
-      const opsBancaires = await tx.operationBancaire.findMany({
-        where: { 
+      // Nettoyer les anciennes opérations bancaires
+      const oldOpsBanc = await tx.operationBancaire.findMany({
+        where: {
           entiteId: d.entiteId,
-          libelle: { contains: `Dépense #${id}` },
+          libelle: { contains: `#${id}` },
           banque: { entiteId: d.entiteId }
         }
       })
 
       const typesEntreeBanque = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU']
-      for (const op of opsBancaires) {
+      for (const op of oldOpsBanc) {
         const estEntree = typesEntreeBanque.includes(op.type.toUpperCase())
         await tx.banque.update({
           where: { id: op.banqueId },

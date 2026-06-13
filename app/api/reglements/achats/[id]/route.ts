@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
 

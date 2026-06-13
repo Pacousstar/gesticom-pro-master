@@ -66,41 +66,52 @@ export default function ModificationAchatModal({
   const loadData = async () => {
     setLoading(true)
     try {
-      const [mAchat, mMag, mFour, mProd, mBanques] = await Promise.all([
-        fetch(`/api/achats/${achatId}`).then(r => r.ok ? r.json() : null),
-        fetch('/api/magasins').then(r => r.ok ? r.json() : []),
-        fetch('/api/fournisseurs?limit=1000').then(r => r.json().then(d => d.data || d)),
-        fetch('/api/produits?complet=1').then(r => r.ok ? r.json() : []),
-        fetch('/api/banques').then(r => r.ok ? r.json() : { data: [] }).then(d => d.data || d || [])
+      const [mAchatRes, mMagRes, mFourRes, mProdRes, mBanquesRes] = await Promise.all([
+        fetch(`/api/achats/${achatId}`),
+        fetch('/api/magasins'),
+        fetch('/api/fournisseurs?limit=1000'),
+        fetch('/api/produits?complet=1'),
+        fetch('/api/banques'),
       ])
 
-      setMagasins(mMag)
-      setFournisseurs(mFour)
-      setProduits(mProd)
-      setBanques(mBanques.filter((b: any) => b.actif !== false))
+      const mAchat = mAchatRes.ok ? await mAchatRes.json() : null
+      const mMag = mMagRes.ok ? await mMagRes.json() : []
+      const mFourData = mFourRes.ok ? await mFourRes.json() : {}
+      const mProd = mProdRes.ok ? await mProdRes.json() : []
+      const mBanquesData = mBanquesRes.ok ? await mBanquesRes.json() : { data: [] }
 
-      if (mAchat) {
-        setFormData({
-          date: mAchat.date.split('T')[0],
-          magasinId: String(mAchat.magasinId),
-          fournisseurId: mAchat.fournisseurId ? String(mAchat.fournisseurId) : '',
-          fournisseurLibre: mAchat.fournisseurLibre || '',
-          modePaiement: mAchat.modePaiement || 'ESPECES',
-          reglements: mAchat.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode, montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: String(mAchat.montantPaye || 0) }],
-          banqueId: '',
-          fraisApproche: String(mAchat.fraisApproche || '0'),
-          observation: mAchat.observation || '',
-          lignes: mAchat.lignes.map((l: any) => ({
-            produitId: l.produitId,
-            designation: l.designation,
-            quantite: l.quantite,
-            prixUnitaire: l.prixUnitaire,
-            tva: l.tva || 0,
-            remise: l.remise || 0,
-            montant: l.montant
-          }))
-        })
+      if (!mAchat) {
+        showError('Achat introuvable.')
+        setLoading(false)
+        onClose()
+        return
       }
+
+      setMagasins(Array.isArray(mMag) ? mMag : mMag.data || [])
+      setFournisseurs(mFourData.data || mFourData || [])
+      setProduits(Array.isArray(mProd) ? mProd : mProd.data || [])
+      setBanques((mBanquesData.data || mBanquesData || []).filter((b: any) => b.actif !== false))
+
+      setFormData({
+        date: mAchat.date.split('T')[0],
+        magasinId: String(mAchat.magasinId),
+        fournisseurId: mAchat.fournisseurId ? String(mAchat.fournisseurId) : '',
+        fournisseurLibre: mAchat.fournisseurLibre || '',
+        modePaiement: mAchat.modePaiement || 'ESPECES',
+        reglements: mAchat.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode, montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: String(mAchat.montantPaye || 0) }],
+        banqueId: '',
+        fraisApproche: String(mAchat.fraisApproche || '0'),
+        observation: mAchat.observation || '',
+        lignes: mAchat.lignes.map((l: any) => ({
+          produitId: l.produitId,
+          designation: l.designation,
+          quantite: l.quantite,
+          prixUnitaire: l.prixUnitaire,
+          tva: l.tva || 0,
+          remise: l.remise || 0,
+          montant: l.montant
+        }))
+      })
     } catch (e) {
       showError('Erreur lors du chargement des données.')
       onClose()

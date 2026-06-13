@@ -12,7 +12,6 @@ import {
   Clock,
   Pencil,
   Trash2,
-  ShieldAlert,
   Printer,
   FileSpreadsheet
 } from 'lucide-react'
@@ -20,7 +19,7 @@ import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ModificationAchatModal from '@/components/dashboard/achats/ModificationAchatModal'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface AchatListe {
   id: number

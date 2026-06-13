@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, ArrowUpRight, ArrowDownRight, Filter, FileBarChart2, Loader2, Package, Search } from 'lucide-react'
-import { formatDate } from '@/lib/format-date'
+import { TrendingUp, ArrowUpRight, Filter, Loader2, Package, Search } from 'lucide-react'
 import Pagination from '@/components/ui/Pagination'
 import { useToast } from '@/hooks/useToast'
 

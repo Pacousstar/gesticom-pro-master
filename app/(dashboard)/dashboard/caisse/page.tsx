@@ -5,10 +5,9 @@ import { Wallet, Plus, Loader2, ArrowDownCircle, ArrowUpCircle, Filter, X, Searc
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Magasin = { id: number; code: string; nom: string }
 type OperationCaisse = {

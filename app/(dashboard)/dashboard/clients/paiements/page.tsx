@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Search, Loader2, Calendar, User, CreditCard, Hash, Coins, Download, Filter, Printer } from 'lucide-react'
+import { Search, Loader2, Calendar, User, CreditCard, Hash, Coins, Filter, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 interface Paiement {
   id: number
@@ -42,13 +44,14 @@ export default function PaiementsClientsPage() {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
   }, [])
 
-  const fetchData = async (start: string, end: string) => {
+  const fetchData = async (start: string, end: string, p?: number) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/clients/paiements?dateDebut=${start}&dateFin=${end}`)
+      const pageNum = p || currentPage
+      const res = await fetch(`/api/clients/paiements?dateDebut=${start}&dateFin=${end}&page=${pageNum}&limit=99999`)
       if (res.ok) {
-        const d = await res.json()
-        setData(d)
+        const json = await res.json()
+        setData(Array.isArray(json) ? json : (json.data || []))
       } else {
         showError('Impossible de charger les paiements.')
       }
@@ -230,95 +233,82 @@ export default function PaiementsClientsPage() {
       </div>
       </div>
       {/* Zone d'impression des Paiements Clients */}
-      <div className="hidden print:block font-sans text-black bg-white p-4">
-        <div className="flex justify-between items-center mb-6 border-b-4 border-black pb-4">
-          <div>
-            <h1 className="text-3xl font-black uppercase tracking-tighter italic">{entreprise?.nomEntreprise || 'GESTICOM PRO'}</h1>
-            <p className="text-sm font-bold uppercase">{entreprise?.localisation || 'Localisation'}</p>
-            <p className="text-xs font-medium text-gray-700">{entreprise?.contact || 'Contact'}</p>
-          </div>
-          <div className="text-right">
-            <h2 className="text-xl font-black text-gray-800 uppercase italic">Journal des Encaissements</h2>
-            <p className="text-sm font-bold">{new Date().toLocaleDateString('fr-FR')}</p>
-            <p className="text-[10px] uppercase text-gray-500 font-bold italic">
-              Période du {new Date(startDate).toLocaleDateString('fr-FR')} au {new Date(endDate).toLocaleDateString('fr-FR')}
-            </p>
-          </div>
-        </div>
-
-        <table className="w-full text-xs border-collapse border-2 border-black">
-          <thead>
-            <tr className="bg-gray-200 uppercase font-black">
-              <th className="border-2 border-black px-2 py-2 text-left">Date</th>
-              <th className="border-2 border-black px-2 py-2 text-left">Client</th>
-              <th className="border-2 border-black px-2 py-2 text-left">Mode</th>
-              <th className="border-2 border-black px-2 py-2 text-left">Référence</th>
-              <th className="border-2 border-black px-2 py-2 text-right">Montant</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((p, idx) => (
-              <tr key={idx} className="border-b border-gray-300">
-                <td className="border-2 border-black px-2 py-1 text-[10px]">
-                  {new Date(p.date).toLocaleString('fr-FR')}
-                </td>
-                <td className="border-2 border-black px-2 py-1 font-bold uppercase">{p.clientNom}</td>
-                <td className="border-2 border-black px-2 py-1">{p.modePaiement}</td>
-                <td className="border-2 border-black px-2 py-1 font-mono">{p.venteNumero}</td>
-                <td className="border-2 border-black px-2 py-1 text-right font-black">
-                  {p.montant.toLocaleString('fr-FR')} F
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot className="font-bold">
-            <tr className="bg-gray-900 text-white font-black uppercase italic">
-              <td colSpan={4} className="border-2 border-black px-3 py-4 text-right text-sm tracking-widest">TOTAL ENCAISSÉ (PÉRIODE)</td>
-              <td className="border-2 border-black px-3 py-4 text-right text-2xl underline decoration-double tracking-tighter">
-                {total.toLocaleString('fr-FR')} F
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <div className="mt-6 border-2 border-black p-4">
-          <div className="grid grid-cols-3 gap-4 mb-2">
-            <div className="border-2 border-black p-3 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest">Total Encaissé</p>
-              <p className="text-lg font-black">{total.toLocaleString('fr-FR')} F</p>
+      <div className="hidden print:block font-sans text-black bg-white">
+        {(() => {
+          const entite = entreprise?.nomEntreprise || 'GESTICOM PRO'
+          const today = new Date().toLocaleDateString('fr-FR')
+          const periode = `Période du ${new Date(startDate).toLocaleDateString('fr-FR')} au ${new Date(endDate).toLocaleDateString('fr-FR')}`
+          const pages = paginateForPrint(filteredData, 25)
+          return pages.map((pageData, pageIdx) => (
+            <div key={pageIdx} className="print-page p-4">
+              <ListPrintWrapper
+                title="Journal des Encaissements"
+                subtitle={`${entite} • ${today} • ${periode}`}
+                pageNumber={pageIdx + 1}
+                totalPages={pages.length}
+              >
+                <div className="flex gap-4 mb-4">
+                  <div className="flex-1 border-2 border-black p-3 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-widest">Total Encaissé</p>
+                    <p className="text-lg font-black">{total.toLocaleString('fr-FR')} F</p>
+                  </div>
+                  <div className="flex-1 border-2 border-black p-3 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-widest">Espèces</p>
+                    <p className="text-lg font-black">{(totalsByMode['ESPECES'] || 0).toLocaleString('fr-FR')} F</p>
+                  </div>
+                  <div className="flex-1 border-2 border-black p-3 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-widest">Chèque</p>
+                    <p className="text-lg font-black">{(totalsByMode['CHEQUE'] || 0).toLocaleString('fr-FR')} F</p>
+                  </div>
+                  <div className="flex-1 border-2 border-black p-3 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-widest">Virement</p>
+                    <p className="text-lg font-black">{(totalsByMode['VIREMENT'] || 0).toLocaleString('fr-FR')} F</p>
+                  </div>
+                  <div className="flex-1 border-2 border-black p-3 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-widest">Mobile Money</p>
+                    <p className="text-lg font-black">{(totalsByMode['MOBILE_MONEY'] || 0).toLocaleString('fr-FR')} F</p>
+                  </div>
+                </div>
+                <table className="w-full text-xs border-collapse border-2 border-black">
+                  <thead>
+                    <tr className="bg-gray-200 uppercase font-black">
+                      <th className="border-2 border-black px-2 py-2 text-left">Date</th>
+                      <th className="border-2 border-black px-2 py-2 text-left">Client</th>
+                      <th className="border-2 border-black px-2 py-2 text-left">Mode</th>
+                      <th className="border-2 border-black px-2 py-2 text-left">Référence</th>
+                      <th className="border-2 border-black px-2 py-2 text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageData.map((p: any, idx: number) => (
+                      <tr key={idx} className="border-b border-gray-300">
+                        <td className="border-2 border-black px-2 py-1 text-[10px]">
+                          {new Date(p.date).toLocaleString('fr-FR')}
+                        </td>
+                        <td className="border-2 border-black px-2 py-1 font-bold uppercase">{p.clientNom}</td>
+                        <td className="border-2 border-black px-2 py-1">{p.modePaiement}</td>
+                        <td className="border-2 border-black px-2 py-1 font-mono">{p.venteNumero}</td>
+                        <td className="border-2 border-black px-2 py-1 text-right font-black">
+                          {p.montant.toLocaleString('fr-FR')} F
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {pageIdx === pages.length - 1 && (
+                    <tfoot className="font-bold">
+                      <tr className="bg-gray-900 text-white font-black uppercase italic">
+                        <td colSpan={4} className="border-2 border-black px-3 py-4 text-right text-sm tracking-widest">TOTAL ENCAISSÉ (PÉRIODE)</td>
+                        <td className="border-2 border-black px-3 py-4 text-right text-2xl underline decoration-double tracking-tighter">
+                          {total.toLocaleString('fr-FR')} F
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </ListPrintWrapper>
             </div>
-            <div className="border-2 border-black p-3 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest">Espèces</p>
-              <p className="text-lg font-black">{(totalsByMode['ESPECES'] || 0).toLocaleString('fr-FR')} F</p>
-            </div>
-            <div className="border-2 border-black p-3 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest">Chèque</p>
-              <p className="text-lg font-black">{(totalsByMode['CHEQUE'] || 0).toLocaleString('fr-FR')} F</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="border-2 border-black p-3 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest">Virement</p>
-              <p className="text-lg font-black">{(totalsByMode['VIREMENT'] || 0).toLocaleString('fr-FR')} F</p>
-            </div>
-            <div className="border-2 border-black p-3 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest">Mobile Money</p>
-              <p className="text-lg font-black">{(totalsByMode['MOBILE_MONEY'] || 0).toLocaleString('fr-FR')} F</p>
-            </div>
-            <div className="border-2 border-black p-3 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest">Multi</p>
-              <p className="text-lg font-black">{(totalsByMode['MULTI'] || 0).toLocaleString('fr-FR')} F</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="mt-12 flex justify-between items-end">
-           <p className="text-[10px] italic text-gray-500 uppercase font-black">Document de contrôle financier - Gesticom Pro</p>
-           <div className="text-center w-64 border-t-2 border-black pt-2">
-              <p className="text-xs font-black uppercase">Visa Service Comptabilité</p>
-              <div className="h-20"></div>
-           </div>
-        </div>
+          ))
+        })()}
       </div>
       <style jsx global>{`
         @media print {

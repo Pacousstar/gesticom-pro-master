@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, Plus, Loader2, Pencil, Trash2, X, Search, Filter, Download, FileSpreadsheet, Printer } from 'lucide-react'
+import { FileText, Plus, Loader2, Pencil, Trash2, X, Filter, Download, FileSpreadsheet, Printer } from 'lucide-react'
 import ComptabiliteNav from '../ComptabiliteNav'
 import { useToast } from '@/hooks/useToast'
 import { ecritureSchema } from '@/lib/validations'
-import { validateForm, formatApiError, ErrorMessages } from '@/lib/validation-helpers'
+import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 import Pagination from '@/components/ui/Pagination'
@@ -83,7 +83,7 @@ export default function EcrituresPage() {
 
   const fetchEcritures = () => {
     setLoading(true)
-    const params = new URLSearchParams({ limit: '500' })
+    const params = new URLSearchParams({ limit: '10000' })
     if (!toutesLesDates) {
       if (dateDebut) params.set('dateDebut', dateDebut)
       if (dateFin) params.set('dateFin', dateFin)
@@ -250,6 +250,7 @@ export default function EcrituresPage() {
   return (
     <div className="space-y-6">
       <ComptabiliteNav />
+      <div className="no-print">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Écritures Comptables</h1>
@@ -441,7 +442,7 @@ export default function EcrituresPage() {
                   {paginatedEcritures.map((e) => (
                   <tr key={e.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      {new Date(e.date).toLocaleDateString('fr-FR')}
+                      {new Date(e.date).toLocaleString('fr-FR')}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">{e.journal.code}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{e.piece || '—'}</td>
@@ -716,7 +717,7 @@ export default function EcrituresPage() {
                         <tbody>
                           {chunk.map((e, idx) => (
                             <tr key={idx} className="border-b border-black hover:bg-gray-50 transition-colors shadow-sm italic font-black text-slate-800">
-                              <td className="border-r-2 border-black px-2 py-2 whitespace-nowrap text-blue-900">{new Date(e.date).toLocaleDateString('fr-FR')}</td>
+                              <td className="border-r-2 border-black px-2 py-2 whitespace-nowrap text-blue-900">{new Date(e.date).toLocaleString('fr-FR')}</td>
                               <td className="border-r-2 border-black px-2 py-2 text-center text-slate-600">{e.journal.code}</td>
                               <td className="border-r-2 border-black px-2 py-2 font-mono text-[10px] truncate max-w-[60px]">{e.piece || '—'}</td>
                               <td className="border-r-2 border-black px-2 py-2 uppercase text-[12px] leading-tight truncate max-w-[150px] text-slate-700">{e.libelle}</td>
@@ -753,6 +754,7 @@ export default function EcrituresPage() {
           </div>
         </div>
       )}
+      </div>
 
       {/* Rendu masqué pour l'impression système direct */}
       <div className="hidden print:block absolute inset-0 bg-white shadow-none">
@@ -782,7 +784,7 @@ export default function EcrituresPage() {
                 <tbody>
                   {chunk.map((e, idx) => (
                     <tr key={idx} className="border-b border-black shadow-sm italic font-black text-slate-800">
-                      <td className="border-r-2 border-black px-2 py-2 whitespace-nowrap text-blue-900">{new Date(e.date).toLocaleDateString('fr-FR')}</td>
+                      <td className="border-r-2 border-black px-2 py-2 whitespace-nowrap text-blue-900">{new Date(e.date).toLocaleString('fr-FR')}</td>
                       <td className="border-r-2 border-black px-2 py-2 text-center text-slate-600 font-black">{e.journal.code}</td>
                       <td className="border-r-2 border-black px-2 py-2 font-mono text-[10px]">{e.piece || '—'}</td>
                       <td className="border-r-2 border-black px-2 py-2 uppercase text-[12px] leading-tight text-slate-700 font-black">{e.libelle}</td>

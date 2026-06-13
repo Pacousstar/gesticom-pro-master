@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, Save, Loader2, Store, Plus, Trash2, Camera, Mail, Info, Clock, Shield, Globe, MapPin, Phone, CreditCard, User, Upload, Download, RotateCcw, X, Printer, Edit2, Building2, Zap, Database, ImagePlus } from 'lucide-react'
+import { Save, Loader2, Store, Trash2, Shield, Printer, Edit2, Building2, Zap, Database, ImagePlus } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
-import Image from 'next/image'
 import Link from 'next/link'
 
 type Magasin = {

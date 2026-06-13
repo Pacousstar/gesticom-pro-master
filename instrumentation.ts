@@ -16,6 +16,11 @@ export async function register() {
         console.log('[GestiCom] Soldes déjà alignés, aucune réparation nécessaire.')
       }
 
+      const { startCronJobs } = await import('@/lib/cron')
+      await startCronJobs().catch((err: unknown) =>
+        console.error('[GestiCom] Erreur démarrage planificateur :', err)
+      )
+
       await prisma.$disconnect()
     } catch (e) {
       console.error('[GestiCom] Erreur lors du réalignement automatique :', e)

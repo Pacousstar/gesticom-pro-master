@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
-  LayoutDashboard,
   Package,
   Warehouse,
   ShoppingCart,
@@ -22,7 +21,6 @@ import {
   Calculator,
   DollarSign,
   Wallet,
-  LifeBuoy,
   TrendingUp,
   Activity,
   UserPlus,
@@ -35,7 +33,6 @@ import {
   Loader2,
   CreditCard,
   FileBarChart,
-  Archive,
   BookOpen,
   ArrowRightLeft,
   Shield,
@@ -45,11 +42,14 @@ import {
   Smartphone,
   Sun,
   Moon,
+  Bug,
+  BarChart3,
 } from 'lucide-react'
 import type { Session } from '@/lib/auth'
 import { ToastContainer } from '@/components/ui/Toast'
 import { useToast } from '@/hooks/useToast'
 import SupportModal from '@/components/SupportModal'
+import UpdateChecker from '@/components/UpdateChecker'
 import { ThemeProvider, useTheme } from '@/components/ThemeProvider'
 
 // Diagnostic DB banner
@@ -109,7 +109,6 @@ const navigation = [
       { name: 'Rapports Généraux', href: '/dashboard/rapports', icon: FileText, permission: 'rapports:view', key: 'rapports' },
       { name: 'État des Paiements', href: '/dashboard/rapports-finances', icon: DollarSign, permission: 'rapports:view', key: 'etatPaiements' },
       { name: 'Rentabilité Produits', href: '/dashboard/rapports/rentabilite', icon: TrendingUp, permission: 'rapports:view', key: 'rentabilite' },
-      { name: 'Guide pédagogique', href: '/dashboard/pedagogie', icon: BookOpen, permission: 'rapports:view' },
     ]
   },
   {
@@ -126,6 +125,15 @@ const navigation = [
       { name: 'Journal d\'audit', href: '/dashboard/audit', icon: Activity, permission: 'audit:view' },
       { name: 'Licence', href: '/dashboard/licence', icon: Shield, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'parametres:view' },
       { name: 'Paramètres', href: '/dashboard/parametres', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'parametres:view' },
+      { name: 'Erreurs', href: '/dashboard/errors', icon: Bug, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'parametres:view' },
+      { name: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'parametres:view' },
+    ]
+  },
+  {
+    section: '📖 DOCUMENTATION',
+    items: [
+      { name: 'Guide pédagogique', href: '/dashboard/pedagogie', icon: BookOpen, permission: 'rapports:view' },
+      { name: 'Manuel Utilisateur', href: '/dashboard/manuel-utilisateur', icon: BookOpen, permission: 'rapports:view' },
     ]
   }
 ]
@@ -664,15 +672,19 @@ export default function DashboardLayoutClient({
               <Image src="/icon-512x512.png" alt="GestiCom Pro" width={16} height={16} className="h-4 w-4 object-contain" />
               SUPPORT
             </button>
-            <form action="/api/auth/logout" method="POST" className="mt-2">
-              <button
-                type="submit"
-                className="flex w-full items-center justify-center gap-3 rounded-xl bg-[#FF4500] hover:bg-[#FF4500] px-4 py-3 text-[11px] font-black text-white transition-all duration-300 shadow-lg hover:shadow-[#FF4500]/30 uppercase tracking-[0.2em]"
-              >
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+                } catch {}
+                window.location.href = '/login'
+              }}
+              className="flex w-full items-center justify-center gap-3 rounded-xl bg-[#FF4500] hover:bg-[#FF4500] px-4 py-3 text-[11px] font-black text-white transition-all duration-300 shadow-lg hover:shadow-[#FF4500]/30 uppercase tracking-[0.2em]"
+            >
                 <LogOut className="h-4 w-4 text-[#006B44]" />
                 DÉCONNEXION
               </button>
-            </form>
           </div>
         </div>
       </aside>
@@ -1076,6 +1088,7 @@ export default function DashboardLayoutClient({
       `}</style>
       <SupportModal isOpen={supportOpen} onClose={() => setSupportOpen(false)} />
       <ToastContainer toasts={toasts} onClose={removeToast} />
+      <UpdateChecker />
     </div>
     </ThemeProvider>
   )

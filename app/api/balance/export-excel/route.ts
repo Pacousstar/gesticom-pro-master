@@ -3,8 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -173,29 +173,9 @@ export async function GET(request: NextRequest) {
       Solde: '',
     })
 
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Classe: '', Numéro: '', Libellé: '', Type: '', Débit: '', Crédit: '', Solde: '' }])
-    const colWidths = [
-      { wch: 10 }, // Classe
-      { wch: 15 }, // Numéro
-      { wch: 40 }, // Libellé
-      { wch: 12 }, // Type
-      { wch: 15 }, // Débit
-      { wch: 15 }, // Crédit
-      { wch: 15 }, // Solde
-    ]
-    ws['!cols'] = colWidths
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Balance')
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
+    const buf = await rowsToBuffer(rows as any[], 'Balance')
     const filename = `balance_${dateDebut || 'all'}_${dateFin || 'all'}.xlsx`
-    return new NextResponse(buf, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('Export Excel balance:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

@@ -4,8 +4,8 @@ import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 import { validateImportData, prepareExportData } from '@/lib/import-export'
 import { getEntiteId } from '@/lib/get-entite-id'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse, parseExcel } from '@/lib/excel'
 
 /**
  * POST : Importer des données depuis Excel/CSV
@@ -35,10 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const workbook = XLSX.read(buffer, { type: 'buffer' })
-    const sheetName = workbook.SheetNames[0]
-    const worksheet = workbook.Sheets[sheetName]
-    const data = XLSX.utils.sheet_to_json(worksheet)
+    const { rows: data } = await parseExcel(buffer)
 
     const validation = validateImportData(entity as any, data)
     
@@ -200,21 +197,28 @@ export async function GET(request: NextRequest) {
     }
 
     const exportData = prepareExportData(entity as any, data)
-    const worksheet = XLSX.utils.json_to_sheet(exportData)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, entity)
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format === 'CSV' ? 'csv' : 'xlsx' })
+    if (format === 'CSV') {
+      const headers = exportData.length > 0 ? Object.keys(exportData[0]) : []
+      const escapeCsv = (v: unknown) => {
+        const s = v == null ? '' : String(v)
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+      }
+      const headerLine = headers.join(',') + '\n'
+      const dataLines = exportData.map(row => headers.map(h => escapeCsv(row[h])).join(',')).join('\n')
+      const buffer = Buffer.from(headerLine + dataLines, 'utf8')
+      const filename = `export-${entity.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`
+      return new NextResponse(buffer, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        },
+      })
+    }
 
-    const filename = `export-${entity.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.${format === 'CSV' ? 'csv' : 'xlsx'}`
-    const contentType = format === 'CSV' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    const buf = await rowsToBuffer(exportData, entity)
+    const filename = `export-${entity.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.xlsx`
+    return makeResponse(buf, filename)
   } catch (e) {
     console.error('GET /api/import-export:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

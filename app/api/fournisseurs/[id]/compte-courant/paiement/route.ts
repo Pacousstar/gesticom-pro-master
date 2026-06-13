@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { comptabiliserCaisse } from '@/lib/comptabilisation'
 import { estModeEspeces } from '@/lib/enums-commerce'
 
 export async function POST(
@@ -143,7 +144,7 @@ export async function POST(
       }
 
       if (estModeEspeces(modePaiement)) {
-        await enregistrerMouvementCaisse({
+        const opCaisse = await enregistrerMouvementCaisse({
           magasinId: Number(magasinId),
           type: 'SORTIE',
           motif: `Paiement fournisseur : ${fournisseur.nom || ''}`,
@@ -152,6 +153,18 @@ export async function POST(
           entiteId,
           date: dateReglement,
         }, tx)
+        if (opCaisse) {
+          await comptabiliserCaisse({
+            caisseId: opCaisse.id,
+            date: dateReglement,
+            type: 'SORTIE',
+            montant,
+            motif: opCaisse.motif,
+            utilisateurId: session.userId,
+            entiteId,
+            sousType: 'MANUEL',
+          }, tx)
+        }
         await recalculerSoldeCaisse(Number(magasinId), tx)
       } else {
         const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')

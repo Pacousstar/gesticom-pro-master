@@ -1,13 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { DollarSign, Plus, Loader2, Trash2, Edit2, Search, Filter, X, FileSpreadsheet, Download, Printer, BookOpen } from 'lucide-react'
+import { DollarSign, Plus, Loader2, Trash2, Edit2, Search, Filter, X, FileSpreadsheet, Download, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 import { useToast } from '@/hooks/useToast'
 import { depenseSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import Pagination from '@/components/ui/Pagination'
 
 type Magasin = { id: number; code: string; nom: string }

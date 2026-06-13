@@ -8,7 +8,7 @@ import { logSuppression, getIpAddress } from '@/lib/audit'
 import { requireRole } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
-import { estModeBanque, estTypeOperationBanqueEntree } from '@/lib/banque'
+import { estModeBanque } from '@/lib/banque'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 
 export async function POST(

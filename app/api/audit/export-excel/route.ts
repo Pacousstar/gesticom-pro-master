@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 const EXPORT_MAX_ROWS = 10000
 
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       take: EXPORT_MAX_ROWS,
     })
 
-    const rows = logs.map((log) => ({
+    const rows: any[] = logs.map((log) => ({
       Date: new Date(log.date).toLocaleString('fr-FR'),
       Utilisateur: log.utilisateur.nom,
       Login: log.utilisateur.login,
@@ -90,37 +90,13 @@ export async function GET(request: NextRequest) {
       Détails: log.details ? JSON.stringify(log.details) : '',
     }))
 
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Date: '', Utilisateur: '', Login: '', Rôle: '', Action: '', Type: '', Description: '', 'Adresse IP': '', 'User Agent': '', Détails: '' }])
-
     if (rows.length > 0) {
-      XLSX.utils.sheet_add_aoa(ws, [['', '', '', '', '', 'Total lignes', rows.length]], { origin: rows.length + 1 })
+      rows.push({ Date: '', Utilisateur: '', Login: '', Rôle: '', Action: '', Type: 'Total lignes', Description: rows.length, 'Adresse IP': '', 'User Agent': '', Détails: '' })
     }
 
-    const colWidths = [
-      { wch: 20 },
-      { wch: 20 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 50 },
-      { wch: 18 },
-      { wch: 40 },
-      { wch: 50 },
-    ]
-    ws['!cols'] = colWidths
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Journal Audit')
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
+    const buf = await rowsToBuffer(rows as any[], 'Journal Audit')
     const filename = `audit_${new Date().toISOString().slice(0, 10)}.xlsx`
-    return new NextResponse(buf, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('Export Excel audit:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

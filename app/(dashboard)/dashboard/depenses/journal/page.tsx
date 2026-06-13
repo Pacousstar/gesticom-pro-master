@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Printer, Loader2, ArrowLeft, Filter, Search, X } from 'lucide-react'
+import { Printer, Loader2, ArrowLeft, Search } from 'lucide-react'
 import Link from 'next/link'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
-import { chunkArray, ITEMS_PER_PRINT_PAGE, paginateForPrint } from '@/lib/print-helpers'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Depense = {
   id: number

@@ -29,6 +29,7 @@ export const viewport: Viewport = {
 };
 
 import PwaRegister from '@/components/PwaRegister'
+import ErrorInitializer from '@/components/ErrorInitializer'
 
 export default function RootLayout({
   children,
@@ -40,6 +41,7 @@ export default function RootLayout({
       <body className="antialiased bg-gray-50 bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 min-h-screen">
         {children}
         <PwaRegister />
+        <ErrorInitializer />
       </body>
     </html>
   );

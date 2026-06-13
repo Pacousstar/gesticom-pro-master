@@ -7,17 +7,14 @@ import {
   Loader2, 
   Printer, 
   Download, 
-  Calendar, 
   Wallet, 
   TrendingUp, 
   History,
   Info,
-  ChevronRight,
   User,
   DollarSign,
   X,
   CheckCircle,
-  CreditCard,
   Pencil,
   Trash2
 } from 'lucide-react'
@@ -29,6 +26,7 @@ interface Operation {
   libelle: string
   reference?: string
   date: string
+  createdAt?: string
   debit: number
   credit: number
   mode?: string
@@ -64,9 +62,14 @@ export default function CompteCourantClientPage() {
   const [allVentesDetail, setAllVentesDetail] = useState<any[]>([])
   const [isPreparingPrint, setIsPreparingPrint] = useState(false)
   const [lettrageError, setLettrageError] = useState('')
+  const [lettrageRestant, setLettrageRestant] = useState(0)
+  const [page, setPage] = useState(0)
+  const pageSize = 5
 
   const handleLettrage = async (reglement: Operation) => {
     setSelectedReglement(reglement)
+    setLettrageRestant(reglement.credit)
+    setPage(0)
     setShowLettrageModal(true)
     setLoadingInvoices(true)
     try {
@@ -89,10 +92,30 @@ export default function CompteCourantClientPage() {
         body: JSON.stringify({ venteId })
       })
       if (res.ok) {
-        showSuccess("Lettrage effectué avec succès !")
-        setShowLettrageModal(false)
-        setSelectedReglement(null)
-        fetchData()
+        const result = await res.json()
+        const nouveauRestant = result.restant || 0
+        if (nouveauRestant <= 0.01) {
+          showSuccess("Lettrage effectué avec succès !")
+          setShowLettrageModal(false)
+          setSelectedReglement(null)
+          setLettrageRestant(0)
+          fetchData()
+        } else {
+          setLettrageRestant(nouveauRestant)
+          setUnpaidInvoices((prev) => prev.filter((v) => v.id !== venteId))
+          setPage(0)
+          if (result.statutPaiement === 'PAYE') {
+            showSuccess(`${result.alloue.toLocaleString('fr-FR')} F alloués à la facture.`)
+          } else {
+            showSuccess(`${result.alloue.toLocaleString('fr-FR')} F alloués.`)
+          }
+          if (unpaidInvoices.length <= 1) {
+            const plusPetitReste = Math.min(...unpaidInvoices.filter(v => v.id !== venteId).map(v => v.montantTotal - (v.montantPaye || 0)))
+            if (nouveauRestant < plusPetitReste) {
+              setLettrageError(`Reste ${nouveauRestant.toLocaleString('fr-FR')} F non lettrable : montant insuffisant pour les factures restantes.`)
+            }
+          }
+        }
       } else {
         const error = await res.json()
         setLettrageError(error.error || "Erreur lors du lettrage.")
@@ -165,6 +188,24 @@ export default function CompteCourantClientPage() {
     setPayDate(new Date(op.date).toISOString().split('T')[0])
     setShowEditModal(true)
   }
+
+  const handleAnnulerLettrage = async (regId: number) => {
+    if (!confirm('Annuler le lettrage de ce règlement ? Les montants seront remis sur les factures concernées.')) return
+    try {
+      const res = await fetch(`/api/reglements/ventes/${regId}/annuler-lettrage`, { method: 'PATCH' })
+      if (res.ok) {
+        showSuccess('Lettrage annulé.')
+        fetchData()
+      } else {
+        const err = await res.json()
+        showError(err.error || 'Erreur lors de l\'annulation.')
+      }
+    } catch {
+      showError('Erreur réseau.')
+    }
+  }
+
+  const [selectedRegs, setSelectedRegs] = useState<number[]>([])
 
   const submitEditReglement = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -468,6 +509,44 @@ export default function CompteCourantClientPage() {
         </div>
 
         <div className="overflow-x-auto">
+          {selectedRegs.length > 0 && (
+            <div className="sticky top-0 z-10 flex items-center justify-between bg-orange-50 px-8 py-3 rounded-t-2xl border-b border-orange-200">
+              <p className="text-xs font-black text-orange-700">
+                {selectedRegs.length} règlement(s) sélectionné(s)
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`/api/clients/${id}/regroupement-lettrage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reglementIds: selectedRegs })
+                      })
+                      if (res.ok) {
+                        const data = await res.json()
+                        showSuccess(`${data.totalAlloue.toLocaleString('fr-FR')} F alloués sur ${data.facturesReglees} facture(s).${data.reste > 0.01 ? ` Reste ${data.reste.toLocaleString('fr-FR')} F non alloués.` : ''}`)
+                        setSelectedRegs([])
+                        fetchData()
+                      } else {
+                        const err = await res.json()
+                        showError(err.error || 'Erreur lors du lettrage groupé.')
+                      }
+                    } catch { showError('Erreur réseau.') }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-700 transition-all shadow-sm flex items-center gap-2"
+                >
+                  <CheckCircle className="h-3.5 w-3.5" /> Lettrer la sélection
+                </button>
+                <button
+                  onClick={() => setSelectedRegs([])}
+                  className="px-4 py-2 rounded-xl border border-orange-200 text-[10px] font-black text-orange-500 uppercase tracking-widest hover:bg-orange-100 transition-all"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-left">
@@ -487,9 +566,11 @@ export default function CompteCourantClientPage() {
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-tighter">
                          {op.date === '1970-01-01T00:00:00.000Z' ? '—' : new Date(op.date).toLocaleDateString('fr-FR')}
                       </p>
-                      {op.date !== '1970-01-01T00:00:00.000Z' && (
+                      {(op.date !== '1970-01-01T00:00:00.000Z' || op.createdAt) && (
                         <p className="text-[10px] font-medium text-gray-400">
-                          {new Date(op.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(op.date).getHours() === 0 && new Date(op.date).getMinutes() === 0 && op.createdAt
+                            ? new Date(op.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+                            : new Date(op.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       )}
                     </div>
@@ -522,11 +603,31 @@ export default function CompteCourantClientPage() {
                   <td className="px-8 py-6 text-center">
                     <div className="flex items-center justify-center gap-2">
                       {op.type === 'REGLEMENT' && op.reference === '-' && (
+                        <>
+                          <input
+                            type="checkbox"
+                            checked={selectedRegs.includes(op.id!)}
+                            onChange={() => setSelectedRegs(prev =>
+                              prev.includes(op.id!) ? prev.filter(x => x !== op.id!) : [...prev, op.id!]
+                            )}
+                            className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                            title="Sélectionner pour lettrage groupé"
+                          />
+                          <button 
+                            onClick={() => handleLettrage(op)}
+                            className="rounded-lg bg-orange-100 px-3 py-1.5 text-[10px] font-black text-orange-600 hover:bg-orange-500 hover:text-white transition-all uppercase tracking-widest flex items-center gap-1 shadow-sm"
+                          >
+                            <CheckCircle className="h-3 w-3" /> Lettrer
+                          </button>
+                        </>
+                      )}
+                      {op.type === 'REGLEMENT' && op.reference !== '-' && op.reference !== 'SOLDE_INITIAL' && (
                         <button 
-                          onClick={() => handleLettrage(op)}
-                          className="rounded-lg bg-orange-100 px-3 py-1.5 text-[10px] font-black text-orange-600 hover:bg-orange-500 hover:text-white transition-all uppercase tracking-widest flex items-center gap-1 shadow-sm"
+                          onClick={() => handleAnnulerLettrage(op.id!)}
+                          className="rounded-lg bg-yellow-100 px-3 py-1.5 text-[10px] font-black text-yellow-700 hover:bg-yellow-500 hover:text-white transition-all uppercase tracking-widest flex items-center gap-1 shadow-sm"
+                          title="Annuler le lettrage"
                         >
-                          <CheckCircle className="h-3 w-3" /> Lettrer
+                          <X className="h-3 w-3" /> Délettrer
                         </button>
                       )}
                       {op.type === 'REGLEMENT' && (
@@ -771,17 +872,24 @@ export default function CompteCourantClientPage() {
                       <History className="h-5 w-5 text-orange-500" />
                       Lettrer un règlement
                     </h2>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Associer le versement de {(selectedReglement as any)?.montant?.toLocaleString('fr-FR') || 0} F à une facture</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                      Versement de {(selectedReglement as any)?.montant?.toLocaleString('fr-FR') || 0} F
+                      {lettrageRestant > 0 && (
+                        <span className="text-orange-600 ml-2">
+                          — Reste à lettrer : {lettrageRestant.toLocaleString('fr-FR')} F
+                        </span>
+                      )}
+                    </p>
                  </div>
                   <button 
-                    onClick={() => { setShowLettrageModal(false); setLettrageError(''); }}
+                    onClick={() => { setShowLettrageModal(false); setLettrageError(''); setLettrageRestant(0); }}
                     className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 text-gray-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all"
                   >
                     <X className="h-5 w-5" />
                  </button>
               </div>
 
-              <div className="p-8">
+              <div className="p-8 max-h-[75vh] overflow-y-auto">
                 {loadingInvoices ? (
                    <div className="flex flex-col items-center py-12 gap-3">
                       <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
@@ -800,21 +908,27 @@ export default function CompteCourantClientPage() {
                    </div>
                  ) : (
                    <div className="grid gap-3">
-                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 text-center">Sélectionnez la facture à régler avec ce montant</p>
+                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 text-center">
+                       {lettrageRestant > 0
+                         ? `Sélectionnez la facture à régler (reste ${lettrageRestant.toLocaleString('fr-FR')} F à allouer)`
+                         : 'Sélectionnez la facture à régler avec ce montant'}
+                     </p>
                      {lettrageError && (
                        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-center">
                          <p className="text-xs font-bold text-red-700">{lettrageError}</p>
                        </div>
                      )}
-                     {unpaidInvoices.map((v) => (
+                     {unpaidInvoices.slice(page * pageSize, (page + 1) * pageSize).map((v) => (
                       <button 
                         key={v.id}
                         onClick={() => confirmLettrage(v.id)}
                         className="group flex items-center justify-between p-5 rounded-2xl bg-gray-50 border border-gray-100 hover:border-orange-500 hover:bg-orange-50 transition-all text-left"
                       >
                          <div>
-                            <p className="text-xs font-black text-gray-800 uppercase tracking-tighter">Vente N° {v.numero}</p>
-                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{new Date(v.date).toLocaleDateString('fr-FR')}</p>
+                            <p className="text-xs font-black text-gray-800 uppercase tracking-tighter">Facture N° {v.numero}</p>
+                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                              {new Date(v.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
                          </div>
                          <div className="text-right">
                             <p className="text-sm font-black text-gray-900 tabular-nums">{v.montantTotal.toLocaleString('fr-FR')} F</p>
@@ -823,9 +937,30 @@ export default function CompteCourantClientPage() {
                             </p>
                          </div>
                       </button>
-                    ))}
-                  </div>
-                )}
+                     ))}
+                     {unpaidInvoices.length > pageSize && (
+                       <div className="flex items-center justify-center gap-4 pt-3">
+                         <button
+                           onClick={() => setPage(Math.max(0, page - 1))}
+                           disabled={page === 0}
+                           className="px-4 py-2 rounded-xl border border-gray-200 text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-gray-50 disabled:opacity-30 transition-all"
+                         >
+                            ◀ Précédent
+                         </button>
+                         <span className="text-[10px] font-black text-gray-400 tabular-nums">
+                           {page + 1} / {Math.ceil(unpaidInvoices.length / pageSize)}
+                         </span>
+                         <button
+                           onClick={() => setPage(Math.min(Math.ceil(unpaidInvoices.length / pageSize) - 1, page + 1))}
+                           disabled={(page + 1) * pageSize >= unpaidInvoices.length}
+                           className="px-4 py-2 rounded-xl border border-gray-200 text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-gray-50 disabled:opacity-30 transition-all"
+                         >
+                            Suivant ▶
+                         </button>
+                       </div>
+                     )}
+                   </div>
+                 )}
               </div>
            </div>
         </div>

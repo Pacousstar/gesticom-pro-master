@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
 
     const validation = produitSchema.safeParse(body)
     if (!validation.success) {
-      const errors = (validation.error as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ')
+      const errors = validation.error.issues.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ')
       return NextResponse.json({ error: `Validation échouée: ${errors}` }, { status: 400 })
     }
 

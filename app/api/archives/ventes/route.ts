@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 export async function GET(req: NextRequest) {
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
         numeroFactureOrigine,
         date: new Date(date),
         magasinId: rawMagasinId,
-        entiteId: session.entiteId,
+        entiteId: await getEntiteId(session),
         utilisateurId: session.userId,
         clientId: (rawClientId && !isNaN(rawClientId)) ? rawClientId : null,
         clientLibre,

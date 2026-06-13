@@ -4,8 +4,8 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { getBilanForYear } from '../route'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { multiSheetToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   try {
@@ -137,40 +137,14 @@ export async function GET(request: NextRequest) {
       { Indicateur: 'TN (Trésorerie Nette)', Valeur: tn, Interprétation: tnLabel },
     ]
 
-    const wsActif = XLSX.utils.json_to_sheet(actifRows.length ? actifRows : [{ Compte: '', Libellé: '', 'Montant N': '', 'Montant N-1': '' }])
-    const wsPassif = XLSX.utils.json_to_sheet(passifRows.length ? passifRows : [{ Compte: '', Libellé: '', 'Montant N': '', 'Montant N-1': '' }])
-    const wsRatios = XLSX.utils.json_to_sheet(ratioRows)
-
-    const colWidths = [
-      { wch: 15 }, // Compte
-      { wch: 50 }, // Libellé
-      { wch: 18 }, // Montant N
-      { wch: 18 }, // Montant N-1
-    ]
-    wsActif['!cols'] = colWidths
-    wsPassif['!cols'] = colWidths
-
-    const ratioColWidths = [
-      { wch: 45 }, // Indicateur
-      { wch: 18 }, // Valeur
-      { wch: 55 }, // Interprétation
-    ]
-    wsRatios['!cols'] = ratioColWidths
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, wsActif, 'Bilan Actif')
-    XLSX.utils.book_append_sheet(wb, wsPassif, 'Bilan Passif')
-    XLSX.utils.book_append_sheet(wb, wsRatios, 'Ratios')
-
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    const buf = await multiSheetToBuffer([
+      { name: 'Bilan Actif', rows: actifRows.length ? actifRows as any[] : [{ Compte: '', Libellé: '', 'Montant N': '', 'Montant N-1': '' }] },
+      { name: 'Bilan Passif', rows: passifRows.length ? passifRows as any[] : [{ Compte: '', Libellé: '', 'Montant N': '', 'Montant N-1': '' }] },
+      { name: 'Ratios', rows: ratioRows },
+    ])
 
     const filename = `bilan_${annee}.xlsx`
-    return new NextResponse(buf, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('Export Excel bilan:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel du bilan' }, { status: 500 })

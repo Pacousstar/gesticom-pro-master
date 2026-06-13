@@ -3,8 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -97,16 +97,7 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'N°': '', Date: '', Magasin: '', Fournisseur: '', 'N° Camion': '', Montant: '', Paiement: '', 'Statut paiement': '', 'Reste à payer': '' }])
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Achats')
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
+  const buf = await rowsToBuffer(rows as any[], 'Achats')
   const filename = `achats_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')
-  return new NextResponse(buf, {
-    headers: {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    },
-  })
+  return makeResponse(buf, filename)
 }

@@ -1,20 +1,18 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
-import { 
-  ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X, 
-  Search, Scan, Camera, Edit2, Pencil, Trash, CreditCard, Wallet, UserPlus, 
-  AlertTriangle, Calculator, FileText, ChevronRight, HelpCircle, XCircle, ShoppingCart, Percent
+import { Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X, 
+  Search, Pencil, CreditCard, Wallet, 
+  AlertTriangle, XCircle
 } from 'lucide-react'
-import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
+import { generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import PrintPreview from '@/components/print/PrintPreview'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import { formatDate } from '@/lib/format-date'
 import {
   montantLigneTTC,

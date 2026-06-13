@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { prisma } from '@/lib/db'
 
 /**
  * POST : Envoyer une notification push à un utilisateur

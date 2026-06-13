@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, Loader2, Building2, Percent } from 'lucide-react'
+import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, Loader2, Building2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { estModeBanque } from '@/lib/banque'
@@ -156,7 +156,7 @@ export default function VenteRapidePage() {
 
     // Blocage Prix Minimum (PVM)
     const pMin = (p as any).prixMinimum || 0
-    const pu = p.prixVente || p.prixAchat || 0
+    const pu = p.prixVente ?? 0
     if (pMin > 0 && pu < pMin) {
       showError(`🚨 PRIX INSUFFISANT : Le prix de vente minimum autorisé pour ${p.designation} est de ${pMin.toLocaleString('fr-FR')} FCFA.`)
       return
@@ -166,7 +166,7 @@ export default function VenteRapidePage() {
       if (existing) {
         return prev.map(l => l.produitId === p.id ? { ...l, quantite: l.quantite + 1, montant: (l.quantite + 1) * l.prixUnitaire - l.remise } : l)
       }
-      const pu = p.prixVente || p.prixAchat || 0
+      const pu = p.prixVente ?? 0
       return [...prev, { produitId: p.id, designation: p.designation, quantite: 1, prixUnitaire: pu, remise: 0, remiseType: 'MONTANT' as const, remiseInput: '', montant: pu }]
     })
     showSuccess(`Ajouté : ${p.designation}`)

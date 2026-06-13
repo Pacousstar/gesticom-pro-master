@@ -5,19 +5,15 @@ import { useParams, useRouter } from 'next/navigation'
 import { 
   ArrowLeft, 
   Loader2, 
-  Printer, 
-  Download,
-  Calendar,
+  Printer,
   Wallet,
   TrendingUp,
   History,
   Info,
-  ChevronRight,
   Truck,
   DollarSign,
   X,
   CheckCircle,
-  CreditCard,
   Pencil,
   Trash2
 } from 'lucide-react'
@@ -30,6 +26,7 @@ interface Operation {
   libelle: string
   reference?: string
   date: string
+  createdAt?: string
   debit: number
   credit: number
   mode?: string
@@ -457,9 +454,11 @@ export default function CompteCourantFournisseurPage() {
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-tighter">
                         {op.date === '1970-01-01T00:00:00.000Z' ? '—' : new Date(op.date).toLocaleDateString('fr-FR')}
                       </p>
-                      {op.date !== '1970-01-01T00:00:00.000Z' && (
+                      {(op.date !== '1970-01-01T00:00:00.000Z' || op.createdAt) && (
                         <p className="text-[10px] font-medium text-gray-400">
-                          {new Date(op.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(op.date).getHours() === 0 && new Date(op.date).getMinutes() === 0 && op.createdAt
+                            ? new Date(op.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+                            : new Date(op.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       )}
                     </div>

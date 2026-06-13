@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { requirePermission } from '@/lib/require-role'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()

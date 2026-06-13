@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const data = depenses.map((d) => ({
+    const data: any[] = depenses.map((d) => ({
       Date: new Date(d.date).toLocaleDateString('fr-FR'),
       Catégorie: d.categorie,
       Libellé: d.libelle,
@@ -63,34 +63,21 @@ export async function GET(request: NextRequest) {
       Utilisateur: d.utilisateur.nom,
     }))
 
-    const worksheet = XLSX.utils.json_to_sheet(data)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Dépenses')
-
-    const colWidths = [
-      { wch: 12 }, { wch: 20 }, { wch: 30 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 20 },
-    ]
-    worksheet['!cols'] = colWidths
-
     const totalMontant = depenses.reduce((s, d) => s + d.montant, 0)
     const totalMontantPaye = depenses.reduce((s, d) => s + (d.montantPaye || 0), 0)
-    XLSX.utils.sheet_add_aoa(worksheet, [
-      ['Total', '', '', '', totalMontant, totalMontantPaye, '', '', ''],
-      ['', '', '', '', '', '', '', '', ''],
-      ['Récapitulatif', '', '', '', '', '', '', '', ''],
-      ['Total Montant', '', '', '', totalMontant, '', '', '', ''],
-      ['Total Montant payé', '', '', '', '', totalMontantPaye, '', '', ''],
-    ], { origin: data.length + 3 })
+    data.push(
+      { Date: '', Catégorie: '', Libellé: '', Magasin: '', Montant: '', 'Montant payé': '', 'Mode paiement': '', Bénéficiaire: '', Utilisateur: '' },
+      { Date: '', Catégorie: '', Libellé: '', Magasin: '', Montant: '', 'Montant payé': '', 'Mode paiement': '', Bénéficiaire: '', Utilisateur: '' },
+      { Date: 'Total', Catégorie: '', Libellé: '', Magasin: '', Montant: totalMontant, 'Montant payé': totalMontantPaye, 'Mode paiement': '', Bénéficiaire: '', Utilisateur: '' },
+      { Date: '', Catégorie: '', Libellé: '', Magasin: '', Montant: '', 'Montant payé': '', 'Mode paiement': '', Bénéficiaire: '', Utilisateur: '' },
+      { Date: 'Récapitulatif', Catégorie: '', Libellé: '', Magasin: '', Montant: '', 'Montant payé': '', 'Mode paiement': '', Bénéficiaire: '', Utilisateur: '' },
+      { Date: 'Total Montant', Catégorie: '', Libellé: '', Magasin: '', Montant: totalMontant, 'Montant payé': '', 'Mode paiement': '', Bénéficiaire: '', Utilisateur: '' },
+      { Date: 'Total Montant payé', Catégorie: '', Libellé: '', Magasin: '', Montant: '', 'Montant payé': totalMontantPaye, 'Mode paiement': '', Bénéficiaire: '', Utilisateur: '' },
+    )
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    const buf = await rowsToBuffer(data as any[], 'Dépenses')
     const filename = `depenses-${new Date().toISOString().split('T')[0]}.xlsx`
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (error) {
     console.error('GET /api/depenses/export-excel:', error)
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })

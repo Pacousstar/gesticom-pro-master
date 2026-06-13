@@ -10,7 +10,6 @@ import {
   Users,
   AlertTriangle,
   ArrowUp,
-  ArrowDown,
   ArrowUpRight,
   ArrowDownRight,
   LayoutGrid,

@@ -65,7 +65,8 @@ export default function MobileDashboardPage() {
   const trend = calcTrend(data?.transactionsJour || 0, data?.transactionsHier || 0)
 
   return (
-    <div className="h-screen w-screen bg-gray-950 text-white flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-black flex items-center justify-center p-4">
+      <div className="relative h-[90vh] max-h-[820px] w-full max-w-sm bg-gray-950 text-white flex flex-col overflow-hidden rounded-[3rem] border-4 border-gray-800 shadow-2xl shadow-orange-500/10">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-2">
@@ -277,6 +278,7 @@ export default function MobileDashboardPage() {
         {page > 0 && <button onClick={() => setPage(p => p - 1)} className="pointer-events-auto bg-gray-800/80 p-2 rounded-full text-white"><ChevronLeft className="h-6 w-6" /></button>}
         {page < PAGES.length - 1 && <button onClick={() => setPage(p => p + 1)} className="pointer-events-auto bg-gray-800/80 p-2 rounded-full text-white"><ChevronRight className="h-6 w-6" /></button>}
       </div>
+    </div>
     </div>
   )
 }

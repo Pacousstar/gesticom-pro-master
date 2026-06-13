@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Loader2, Download, Filter, Wallet, FileText, Landmark, Printer } from 'lucide-react'
+import { Search, Loader2, Filter, Wallet, FileText, Landmark, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'

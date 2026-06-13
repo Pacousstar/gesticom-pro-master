@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
-import { logModification, getIpAddress } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
 import {
   getDatabaseFilePath,
   ensureBackupDir,
   backupFileName,
-  createBackup,
 } from '@/lib/sauvegarde-db'
 
 /**

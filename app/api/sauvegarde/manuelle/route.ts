@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { createBackup, getBackupDir } from '@/lib/sauvegarde-db'
 import { requirePermission } from '@/lib/require-role'
 import { logAction, getIpAddress } from '@/lib/audit'
 import path from 'path'
@@ -12,6 +11,8 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
+    const mod = await import('@/lib/sauvegarde' + '-db')
+    const { createBackup, getBackupDir } = mod
     const backupName = await createBackup()
     const backupDir = getBackupDir()
 

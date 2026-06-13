@@ -3,8 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX = require('xlsx-prototype-pollution-fixed')
+
+import { rowsToBuffer, makeResponse } from '@/lib/excel'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -73,23 +73,9 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Code: '', Désignation: '', Catégorie: '', 'Prix achat': '', 'PAMP': '', 'Prix vente': '', 'Prix Min.': '', 'Stock Actuel': '', 'Valeur Achat': '', 'Valeur Vente': '', 'Date Création': '' }])
-    ws['!cols'] = [
-      { wch: 15 }, { wch: 40 }, { wch: 20 }, { wch: 12 }, { wch: 12 },
-      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
-    ]
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Produits')
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
+    const buf = await rowsToBuffer(rows as any[], 'Produits')
     const filename = `produits_${new Date().toISOString().slice(0, 10)}.xlsx`
-    return new NextResponse(buf, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    })
+    return makeResponse(buf, filename)
   } catch (e) {
     console.error('GET /api/produits/export:', e)
     return NextResponse.json(

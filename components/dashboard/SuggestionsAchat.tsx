@@ -1,6 +1,5 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { Loader2, CalendarClock } from 'lucide-react'
 import Link from 'next/link'
 import useSWR from 'swr'
