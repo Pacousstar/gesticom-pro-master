@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, ArrowLeft, Scale, Printer, FileSpreadsheet, Plus, DollarSign, FileText, X, Check } from 'lucide-react'
+import { Loader2, ArrowLeft, Scale, Printer, FileSpreadsheet, Plus, DollarSign, FileText, X, Check, Pencil } from 'lucide-react'
 
 interface Transaction {
   id: string
@@ -25,6 +25,9 @@ interface Detail {
   solde: number
 }
 
+interface MagasinOption { id: number; nom: string }
+interface BanqueOption { id: number; libelle: string }
+
 export default function CompteCourantDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -33,7 +36,17 @@ export default function CompteCourantDetailPage() {
   const [showReglement, setShowReglement] = useState(false)
   const [regMontant, setRegMontant] = useState('')
   const [regMode, setRegMode] = useState('ESPECES')
+  const [regCaisse, setRegCaisse] = useState(false)
+  const [regBanque, setRegBanque] = useState(false)
+  const [regMagasinId, setRegMagasinId] = useState('')
+  const [regBanqueId, setRegBanqueId] = useState('')
+  const [magasins, setMagasins] = useState<MagasinOption[]>([])
+  const [banques, setBanques] = useState<BanqueOption[]>([])
   const [savingReg, setSavingReg] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
+  const [editNom, setEditNom] = useState('')
+  const [editNcc, setEditNcc] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const printRef = useRef<HTMLDivElement>(null)
 
   const fmt = (n: number) => `${n.toLocaleString('fr-FR')} FCFA`
@@ -48,7 +61,11 @@ export default function CompteCourantDetailPage() {
     }
   }
 
-  useEffect(() => { fetchDetail() }, [params.id])
+  useEffect(() => {
+    fetchDetail()
+    fetch('/api/magasins?actif=true').then(r => r.ok && r.json()).then(d => setMagasins(d || [])).catch(() => {})
+    fetch('/api/banques?actif=true').then(r => r.ok && r.json()).then(d => setBanques(d || [])).catch(() => {})
+  }, [params.id])
 
   const totalDebit = data?.transactions.filter(t => t.montantSigne > 0).reduce((s, t) => s + t.montant, 0) || 0
   const totalCredit = data?.transactions.filter(t => t.montantSigne < 0).reduce((s, t) => s + t.montant, 0) || 0
@@ -59,20 +76,29 @@ export default function CompteCourantDetailPage() {
     if (!montant || montant <= 0) return
     setSavingReg(true)
     try {
+      const body: any = {
+        compteCourantId: data?.id,
+        montant,
+        modePaiement: regMode,
+        clientId: data?.client?.id,
+        fournisseurId: data?.fournisseur?.id,
+        payeDepuisCaisse: regCaisse,
+        payeDepuisBanque: regBanque,
+      }
+      if (regCaisse) body.magasinId = Number(regMagasinId)
+      if (regBanque) body.banqueId = Number(regBanqueId)
       const res = await fetch('/api/comptes-courants/reglement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          compteCourantId: data?.id,
-          montant,
-          modePaiement: regMode,
-          clientId: data?.client?.id,
-          fournisseurId: data?.fournisseur?.id,
-        }),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         setShowReglement(false)
         setRegMontant('')
+        setRegCaisse(false)
+        setRegBanque(false)
+        setRegMagasinId('')
+        setRegBanqueId('')
         fetchDetail()
       } else {
         const err = await res.json()
@@ -80,6 +106,27 @@ export default function CompteCourantDetailPage() {
       }
     } finally {
       setSavingReg(false)
+    }
+  }
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingEdit(true)
+    try {
+      const res = await fetch(`/api/comptes-courants/${data?.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nom: editNom, ncc: editNcc }),
+      })
+      if (res.ok) {
+        setShowEdit(false)
+        fetchDetail()
+      } else {
+        const err = await res.json()
+        alert(err.error || 'Erreur lors de la modification')
+      }
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -147,6 +194,10 @@ export default function CompteCourantDetailPage() {
             className="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm transition-colors">
             <Plus className="mr-2 h-4 w-4" /> Nouveau Règlement
           </button>
+          <button onClick={() => { setEditNom(data.nom); setEditNcc(data.ncc || ''); setShowEdit(true) }}
+            className="inline-flex items-center px-4 py-2 bg-blue-600/30 hover:bg-blue-600/50 text-white rounded-md text-sm transition-colors">
+            <Pencil className="mr-2 h-4 w-4" /> Modifier
+          </button>
           <button onClick={handlePrint}
             className="inline-flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-md text-sm transition-colors">
             <Printer className="mr-2 h-4 w-4" /> Relevé
@@ -198,6 +249,39 @@ export default function CompteCourantDetailPage() {
           )}
         </div>
 
+        {/* Edit Modal */}
+        {showEdit && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-white/10">
+              <h3 className="text-lg font-bold mb-4">Modifier le Compte Courant</h3>
+              <form onSubmit={handleEdit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Nom</label>
+                  <input type="text" value={editNom} onChange={e => setEditNom(e.target.value)} required
+                    className="w-full bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">NCC</label>
+                  <input type="text" value={editNcc} onChange={e => setEditNcc(e.target.value)}
+                    className="w-full bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white"
+                    placeholder="Numéro de compte" />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button type="submit" disabled={savingEdit}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50">
+                    {savingEdit ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Check className="mr-2 h-4 w-4" />}
+                    Enregistrer
+                  </button>
+                  <button type="button" onClick={() => setShowEdit(false)}
+                    className="inline-flex items-center px-4 py-2 bg-white/10 text-white rounded-md text-sm hover:bg-white/20">
+                    Annuler
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Règlement Modal */}
         {showReglement && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -219,6 +303,33 @@ export default function CompteCourantDetailPage() {
                     <option value="VIREMENT">Virement</option>
                     <option value="CHEQUE">Chèque</option>
                   </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={regCaisse} onChange={e => setRegCaisse(e.target.checked)}
+                      className="rounded border-white/20 bg-white/10" />
+                    <span className="text-sm">Payer depuis la caisse</span>
+                  </label>
+                  {regCaisse && (
+                    <select value={regMagasinId} onChange={e => setRegMagasinId(e.target.value)} required
+                      className="w-full bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white">
+                      <option value="">Choisir un point de vente</option>
+                      {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                    </select>
+                  )}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={regBanque} onChange={e => setRegBanque(e.target.checked)}
+                      className="rounded border-white/20 bg-white/10" />
+                    <span className="text-sm">Payer depuis la banque</span>
+                  </label>
+                  {regBanque && (
+                    <select value={regBanqueId} onChange={e => setRegBanqueId(e.target.value)} required
+                      className="w-full bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white">
+                      <option value="">Choisir un compte bancaire</option>
+                      {banques.map(b => <option key={b.id} value={b.id}>{b.libelle}</option>)}
+                    </select>
+                  )}
+                  <p className="text-xs text-gray-400">Si ni caisse ni banque coché, le règlement sera enregistré en compte courant d&apos;associé (455).</p>
                 </div>
                 <div className="flex gap-2 pt-2">
                   <button type="submit" disabled={savingReg}

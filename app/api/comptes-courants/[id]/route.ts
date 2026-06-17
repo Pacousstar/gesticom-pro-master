@@ -35,6 +35,30 @@ export async function GET(
   return NextResponse.json({ ...cc, transactions, solde })
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const entiteId = await getEntiteId(session)
+
+  const id = Number((await params).id)
+  const cc = await prisma.compteCourant.findUnique({ where: { id } })
+  if (!cc) return NextResponse.json({ error: 'Introuvable.' }, { status: 404 })
+  if (cc.entiteId !== entiteId) return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
+
+  const body = await request.json()
+  const data: any = {}
+  if (body.nom !== undefined) data.nom = String(body.nom).trim()
+  if (body.ncc !== undefined) data.ncc = String(body.ncc).trim() || null
+  if (body.clientId !== undefined) data.clientId = body.clientId ? Number(body.clientId) : null
+  if (body.fournisseurId !== undefined) data.fournisseurId = body.fournisseurId ? Number(body.fournisseurId) : null
+
+  const updated = await prisma.compteCourant.update({ where: { id }, data })
+  return NextResponse.json(updated)
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
