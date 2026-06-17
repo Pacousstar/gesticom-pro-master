@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
     // 1. Débit 401 (réduit la dette fournisseur)
     await tx.ecritureComptable.create({
       data: {
+        numero: `${numeroEcriture}-D`,
         date: new Date(),
         journalId: journalOD.id,
         piece: cc.code,
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
     // 2. Crédit 411 (réduit la créance client)
     await tx.ecritureComptable.create({
       data: {
+        numero: `${numeroEcriture}-C`,
         date: new Date(),
         journalId: journalOD.id,
         piece: cc.code,

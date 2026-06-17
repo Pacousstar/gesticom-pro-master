@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
           await enregistrerOperationBancaire({
             banqueId: body.banqueId ? Number(body.banqueId) : null,
             entiteId,
+            date: new Date(),
             type: 'REGLEMENT_CLIENT',
             libelle: `Règlement CC Client #${compteCourantId}`,
             montant: montantFinal,
@@ -150,6 +151,7 @@ export async function POST(request: NextRequest) {
           await enregistrerOperationBancaire({
             banqueId: body.banqueId ? Number(body.banqueId) : null,
             entiteId,
+            date: new Date(),
             type: 'REGLEMENT_FOURNISSEUR',
             libelle: `Règlement CC Fournisseur #${compteCourantId}`,
             montant: montantFinal,

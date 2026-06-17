@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
   }
 
+  const entiteId = await getEntiteId(session)
+
   const existing = await prisma.ecritureComptable.findFirst({
     where: { referenceType: 'LETTRAGE_CC', referenceId: regId, reference: String(compteCourantId) },
   })
@@ -32,15 +35,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Déjà lettré.' })
   }
 
+  const journal = await prisma.journal.findFirst({ where: { code: 'OD' } })
+  if (!journal) return NextResponse.json({ error: 'Journal OD introuvable.' }, { status: 500 })
+
+  const compte = await prisma.planCompte.findFirst({ where: { numero: '455' } })
+  if (!compte) return NextResponse.json({ error: 'Compte 455 introuvable.' }, { status: 500 })
+
   await prisma.ecritureComptable.create({
     data: {
+      numero: `LETT-CC-${compteCourantId}-${Date.now()}`,
       date: new Date(),
+      journalId: journal.id,
+      compteId: compte.id,
       libelle: `Lettrage règlement #${regId} - Compte courant #${compteCourantId}`,
       debit: 0,
       credit: 0,
       referenceType: 'LETTRAGE_CC',
       referenceId: regId,
       reference: String(compteCourantId),
+      utilisateurId: session.userId,
+      entiteId,
     },
   })
 

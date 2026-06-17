@@ -1,7 +1,7 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
 ; Version 3.23.2 - Production Finale
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "3.35.0"
+#define MyAppVersion "3.35.3"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "node.exe"
@@ -46,7 +46,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; IMPORTANT: Recopie du serveur standalone (optimisé par Next.js)
-Source: ".next\standalone\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.d.ts, *.ts, *.map, *.bak, *.tmp"
+Source: ".next\standalone\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.d.ts, *.ts, *.map, *.bak, *.tmp, *.exe, GestiCom-Pro-*-Setup.exe"
 
 ; Recopie des fichiers statiques essentiels pour le rendu UI (Poids plume)
 Source: ".next\static\*"; DestDir: "{app}\.next\static"; Flags: ignoreversion recursesubdirs createallsubdirs
