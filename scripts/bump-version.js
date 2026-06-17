@@ -85,6 +85,14 @@ function main() {
     env = env.replace(/^NEXT_PUBLIC_APP_VERSION=.*$/m, `NEXT_PUBLIC_APP_VERSION=${newV}`)
     fs.writeFileSync(path.join(root, envFile), env, 'utf8')
   }
+
+  // public/sw.js — change le cache name pour forcer le navigateur à détecter la mise à jour
+  const swPath = path.join(root, 'public', 'sw.js')
+  if (fs.existsSync(swPath)) {
+    let sw = fs.readFileSync(swPath, 'utf8')
+    sw = sw.replace(/^const CACHE_NAME = '.*'$/m, `const CACHE_NAME = 'gesticom-${newV}'`)
+    fs.writeFileSync(swPath, sw, 'utf8')
+  }
   
   console.log(`[bump-version] ${oldV} -> ${newV} ✅`)
   

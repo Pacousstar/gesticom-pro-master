@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gesticom-v3'
+const CACHE_NAME = 'gesticom-3.35.0'
 
 const PRECACHE_URLS = [
   '/',
@@ -24,8 +24,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-      if (response.status === 200 && event.request.url.startsWith(self.location.origin)) {
+    caches.match(event.request).then((cached) => cached || fetch(event.request.url, { redirect: 'follow' }).then((response) => {
+      if (response.ok && event.request.url.startsWith(self.location.origin) && !response.redirected) {
         const clone = response.clone()
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
       }
