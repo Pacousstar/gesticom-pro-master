@@ -42,10 +42,17 @@ const essentials = [
   'node.exe',                     // runtime Node.js
   'nssm.exe',                     // NSSM
   'LANCER-SILENCIEUX.vbs',        // launcher VBS
-  '.next/standalone/server.js',   // standalone Next.js
 ]
 for (const f of essentials) {
   check(fs.existsSync(path.join(root, f)), `${f} présent`)
+}
+
+// 2b. Vérification optionnelle standalone (peut ne pas exister avant build)
+const standaloneServer = path.join(root, '.next', 'standalone', 'server.js')
+if (fs.existsSync(standaloneServer)) {
+  console.log('  ✓ .next/standalone/server.js présent')
+} else {
+  console.log('  ~ .next/standalone/server.js absent (normal si premier build)')
 }
 
 // 3. GestiCom-Install.iss cohérent
@@ -70,7 +77,7 @@ if (fs.existsSync(vbsPath)) {
   const vbs = fs.readFileSync(vbsPath, 'utf8')
   check(vbs.includes('net start GestiComPro'), 'Contient net start')
   check(vbs.includes('http://localhost:3001'), 'URL 3001 présente')
-  check(vbs.includes('rundll32 url.dll,FileProtocolHandler'), 'Ouverture navigateur')
+  check(vbs.includes('ShellApp.ShellExecute'), 'Ouverture navigateur')
 }
 
 console.log(`\n${errors === 0 ? '✓ Toutes les vérifications passées' : `✘ ${errors} erreur(s) détectée(s)`}`)

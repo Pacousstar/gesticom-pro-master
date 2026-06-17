@@ -598,7 +598,7 @@ export default function DashboardLayoutClient({
                                 onClick={() => setSidebarOpen(false)}
                               >
                                 <Icon className={`h-5 w-5 transition-colors ${isActive ? 'text-white' : 'text-white/70 group-hover:text-white'}`} />
-                                <span className="truncate group-hover:whitespace-normal uppercase tracking-tight">{navItem.name}</span>
+                                <span className="truncate text-white group-hover:whitespace-normal uppercase tracking-tight">{navItem.name}</span>
                                 
                                 {navItem.key && sidebarCounters[navItem.key] !== undefined && (
                                   <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-black ${isActive ? 'bg-white text-orange-600' : 'bg-orange-500/20 text-orange-400 group-hover:bg-orange-500 group-hover:text-white'}`}>

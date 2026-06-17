@@ -326,20 +326,44 @@ export function getPrintStyles(format: 'TICKET' | 'A4' = 'TICKET'): string {
 }
 
 /**
+ * Imprime du HTML dans une iframe cachée (immunisé contre les bloqueurs de popups)
+ */
+export function printHtml(html: string, title: string = 'Document'): void {
+  if (typeof window === 'undefined') return
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'absolute'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = 'none'
+  iframe.style.top = '-9999px'
+  iframe.style.left = '-9999px'
+  iframe.title = title
+  document.body.appendChild(iframe)
+  const doc = iframe.contentDocument || iframe.contentWindow!.document
+  doc.open()
+  doc.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>${title}</title></head><body>${html}</body></html>`)
+  doc.close()
+  setTimeout(() => {
+    try { iframe.contentWindow?.print() } catch (e) {}
+    setTimeout(() => {
+      try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe) } catch (e) {}
+    }, 3000)
+  }, 500)
+}
+
+/**
  * Imprimer un document avec un template
  */
 export async function printDocument(templateId: number | null, type: 'VENTE' | 'ACHAT' | 'BON_COMMANDE', data: TemplateData, format: 'TICKET' | 'A4' = 'TICKET'): Promise<void> {
   if (typeof window === 'undefined') return
 
   try {
-    // Récupérer les paramètres de l'entreprise
     const paramsRes = await fetch('/api/parametres')
     let entrepriseData: any = {}
     if (paramsRes.ok) {
       entrepriseData = await paramsRes.json()
     }
 
-    // Récupérer le template
     let templateContent = ''
     let logo = ''
 
@@ -352,12 +376,10 @@ export async function printDocument(templateId: number | null, type: 'VENTE' | '
       }
     }
 
-    // Si pas de template, utiliser le template par défaut approprié
     if (!templateContent) {
       templateContent = format === 'A4' ? getDefaultA4Template(type) : getDefaultTemplate(type)
     }
 
-    // Ajouter les données de l'entreprise aux données du template
     data.ENTREPRISE_NOM = entrepriseData.nomEntreprise || data.ENTREPRISE_NOM || 'GESTICOM PRO'
     data.ENTREPRISE_CONTACT = entrepriseData.contact || data.ENTREPRISE_CONTACT || ''
     data.ENTREPRISE_LOCALISATION = entrepriseData.localisation || data.ENTREPRISE_LOCALISATION || ''
@@ -366,8 +388,6 @@ export async function printDocument(templateId: number | null, type: 'VENTE' | '
     data.ENTREPRISE_PIED_DE_PAGE = entrepriseData.piedDePage || data.ENTREPRISE_PIED_DE_PAGE || ''
     data.ENTREPRISE_MENTION_SPECIALE = entrepriseData.mentionSpeciale || 'Les produits sortis ne sont plus repris. Veuillez exiger votre facture.'
 
-    // Traitement du Logo (Respect de la règle : logo uniquement si présent ou paramètres)
-    // Sécurisé contre XSS
     let logoUrl = logo || entrepriseData.logoLocal || entrepriseData.logo
     const safeLogoUrl = sanitizeUrl(logoUrl)
     if (safeLogoUrl) {
@@ -376,38 +396,10 @@ export async function printDocument(templateId: number | null, type: 'VENTE' | '
        data.ENTREPRISE_LOGO = ''
     }
 
-    // Remplacer les variables
     const html = replaceTemplateVariables(templateContent, data)
-    
-    // Fenêtre d'impression
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) {
-      alert('Popups bloqués.')
-      return
-    }
-
     const printStyles = getPrintStyles(format)
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>${data.NUMERO || 'Document'}</title>
-          <style>${printStyles}</style>
-        </head>
-        <body>
-          ${html}
-        </body>
-      </html>
-    `)
-
-    printWindow.document.close()
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print()
-        printWindow.close()
-      }, 500)
-    }
+    const fullHtml = `<style>${printStyles}</style>${html}`
+    printHtml(fullHtml, data.NUMERO || 'Document')
   } catch (error) {
     console.error('Erreur:', error)
   }

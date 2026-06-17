@@ -349,12 +349,13 @@ export default function ClientsPage() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
-            className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20"
+            onClick={() => handlePrintAll('PORTEFEUILLE')}
+            disabled={isPrinting}
+            className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 disabled:opacity-50"
             title="Imprimer la liste des clients (selon filtres)"
           >
-            <Printer className="h-4 w-4" />
-            Imprimer
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+            {isPrinting ? 'Préparation...' : 'Imprimer'}
           </button>
           <button
             onClick={() => openForm()}
@@ -597,7 +598,7 @@ export default function ClientsPage() {
                     <th className="px-4 py-3 text-right text-xs font-black uppercase text-orange-700 bg-orange-50 italic border-x border-orange-100">Dette Période</th>
                   )}
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Solde Global {dateFin && `au ${new Date(dateFin).toLocaleDateString()}`}</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -724,7 +725,7 @@ export default function ClientsPage() {
               @media print {
                 body * { visibility: hidden; }
                 #printable-history, #printable-history * { visibility: visible; }
-                #printable-history { position: absolute; left: 0; top: 0; width: 100%; height: auto; overflow: visible !important; }
+                #printable-history { position: relative; left: auto; top: auto; width: 100%; height: auto; overflow: visible !important; }
                 .no-print { display: none !important; }
               }
             ` }} />
@@ -770,8 +771,8 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* Liste des Factures - Design Professionnel */}
-                <div className="space-y-4">
+                {/* Liste des Factures - Design Professionnel (écran) */}
+                <div className="space-y-4 print:hidden">
                   <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest border-l-4 border-blue-600 pl-3">Détail chronologique</h3>
                   {historyData.map((h, i) => (
                     <div key={i} className="border-2 border-gray-100 rounded-2xl p-5 bg-white hover:border-blue-200 hover:shadow-xl transition-all group relative overflow-hidden">
@@ -828,9 +829,72 @@ export default function ClientsPage() {
                   ))}
                 </div>
 
-                {/* Pied de page Impression */}
-                <div className="hidden print:block mt-12 border-t pt-4 text-center text-[10px] text-gray-500 italic">
-                    Généré par GestiCom Pro - Logiciel de Gestion Commerciale Expert.
+                {/* Contenu impression paginé */}
+                <div className="hidden print:block">
+                  {(() => {
+                    const totalFacture = historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0)
+                    const totalPaye = historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)
+                    const reste = totalFacture - totalPaye
+                    const chunks = paginateForPrint(historyData)
+
+                    return chunks.map((chunk, index, allChunks) => (
+                      <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                        <ListPrintWrapper
+                          title="Historique des Factures"
+                          subtitle={`Client : ${selectedHistory.nom}`}
+                          pageNumber={index + 1}
+                          totalPages={allChunks.length}
+                          kpis={[
+                            { label: 'Total Facturé', value: `${totalFacture.toLocaleString()} F` },
+                            { label: 'Total Payé', value: `${totalPaye.toLocaleString()} F` },
+                            { label: 'Reste à Payer', value: `${reste.toLocaleString()} F`, color: reste > 0 ? 'text-red-700' : 'text-emerald-700' },
+                            { label: 'Nbre Factures', value: `${historyData.length}` },
+                          ]}
+                        >
+                          <table className="w-full text-[14px] border-collapse border border-gray-300">
+                            <thead>
+                              <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                                <th className="border border-gray-300 px-3 py-3 text-left">N° Facture</th>
+                                <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
+                                <th className="border border-gray-300 px-3 py-3 text-left">Statut</th>
+                                <th className="border border-gray-300 px-3 py-3 text-right">Montant Total</th>
+                                <th className="border border-gray-300 px-3 py-3 text-right">Montant Payé</th>
+                                <th className="border border-gray-300 px-3 py-3 text-right">Reste</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {chunk.map((h: any, idx: number) => (
+                                <tr key={idx} className="border-b border-gray-200">
+                                  <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{h.numero || '-'}</td>
+                                  <td className="border border-gray-300 px-3 py-2">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
+                                  <td className="border border-gray-300 px-3 py-2">
+                                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                      {h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'}
+                                    </span>
+                                  </td>
+                                  <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
+                                  <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(h.montantTotal - (h.montantPaye || 0)) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                                    {(Math.max(0, h.montantTotal - (h.montantPaye || 0))).toLocaleString()} F
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            {index === allChunks.length - 1 && (
+                              <tfoot>
+                                <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
+                                  <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAL GÉNÉRAL</td>
+                                  <td className="border border-gray-300 px-3 py-4 text-right">{totalFacture.toLocaleString()} F</td>
+                                  <td className="border border-gray-300 px-3 py-4 text-right">{totalPaye.toLocaleString()} F</td>
+                                  <td className="border border-gray-300 px-3 py-4 text-right">{reste.toLocaleString()} F</td>
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </ListPrintWrapper>
+                      </div>
+                    ))
+                  })()}
                 </div>
               </div>
             )}

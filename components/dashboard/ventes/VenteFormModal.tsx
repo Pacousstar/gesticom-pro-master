@@ -55,6 +55,7 @@ export default function VenteFormModal({
     pointsGagnes: 0,
     typeVente: 'LIVRAISON_IMMEDIATE',
     dateLivraison: '',
+    retraitDiffere: false,
   })
   const [ajoutProduit, setAjoutProduit] = useState({
     produitId: '', quantite: '1', prixUnitaire: '', recherche: '', tvaPerc: '', remise: '', remiseType: 'MONTANT' as 'MONTANT' | 'POURCENT',
@@ -210,6 +211,7 @@ export default function VenteFormModal({
       })),
       typeVente: formData.typeVente,
       dateLivraison: formData.typeVente === 'COMMANDE' ? formData.dateLivraison || undefined : undefined,
+      retraitDiffere: formData.typeVente !== 'COMMANDE' ? formData.retraitDiffere : false,
     }
 
     try {
@@ -224,7 +226,7 @@ export default function VenteFormModal({
           date: new Date().toLocaleDateString('en-CA'),
           magasinId: '', clientId: '', clientLibre: '', modePaiement: 'ESPECES', montantPaye: '',
           reglements: [{ mode: 'ESPECES', montant: '' }], banqueId: '', remiseGlobale: '', observation: '', numeroBon: '',
-          lignes: [], pointsGagnes: 0, typeVente: 'LIVRAISON_IMMEDIATE', dateLivraison: '',
+          lignes: [], pointsGagnes: 0, typeVente: 'LIVRAISON_IMMEDIATE', dateLivraison: '', retraitDiffere: false,
         })
         setAddLignesPopupOpen(false)
         setPopupLignes([])
@@ -540,6 +542,12 @@ export default function VenteFormModal({
                   <input type="date" value={formData.dateLivraison} onChange={(e) => setFormData(f => ({ ...f, dateLivraison: e.target.value }))} className="w-full rounded-lg border border-blue-200 px-3 py-2 focus:border-blue-500 focus:outline-none" />
                 </div>
               )}
+              {formData.typeVente === 'LIVRAISON_IMMEDIATE' && (
+                <div className="flex items-center gap-2 pt-1">
+                  <input type="checkbox" id="retraitDiffere" checked={formData.retraitDiffere} onChange={(e) => setFormData(f => ({ ...f, retraitDiffere: e.target.checked }))} className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+                  <label htmlFor="retraitDiffere" className="text-sm font-medium text-gray-700">Retrait différé (paiement immédiat, retrait plus tard)</label>
+                </div>
+              )}
             </div>
           </div>
 
@@ -682,7 +690,7 @@ export default function VenteFormModal({
                 date: new Date().toLocaleDateString('en-CA'), magasinId: '', clientId: '', clientLibre: '',
                 modePaiement: 'ESPECES', montantPaye: '', reglements: [{ mode: 'ESPECES', montant: '' }],
                 banqueId: '', remiseGlobale: '', observation: '', numeroBon: '', lignes: [], pointsGagnes: 0,
-                typeVente: 'LIVRAISON_IMMEDIATE', dateLivraison: '',
+                typeVente: 'LIVRAISON_IMMEDIATE', dateLivraison: '', retraitDiffere: false,
               })}} className="rounded-lg border-2 border-gray-400 bg-gray-200 px-4 py-2 font-medium text-gray-900 hover:bg-gray-300">
                 Annuler
               </button>

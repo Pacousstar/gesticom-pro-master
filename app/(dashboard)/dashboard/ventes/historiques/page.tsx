@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Archive, Plus, Loader2, Trash2, Search, Filter, X } from 'lucide-react'
+import { Archive, Plus, Loader2, Trash2, Search, Filter, X, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
+import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+import { paginateForPrint } from '@/lib/print-helpers'
 import { formatDate } from '@/lib/format-date'
 import { montantLigneTTC } from '@/lib/calculs-commerciaux'
 
@@ -29,6 +31,8 @@ export default function AnciennesVentesPage() {
   const [pagination, setPagination] = useState<any | null>(null)
   const [totals, setTotals] = useState<any | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
+  const [allVentesForPrint, setAllVentesForPrint] = useState<any[]>([])
   const { success: showSuccess, error: showError } = useToast()
 
   const [formData, setFormData] = useState({
@@ -58,6 +62,27 @@ export default function AnciennesVentesPage() {
         setTotals(response.totals || null)
       })
       .finally(() => setLoading(false))
+  }
+
+  const handlePrintAll = async () => {
+    setIsPrinting(true)
+    try {
+      const params = new URLSearchParams({ page: '1', limit: '10000' })
+      if (dateDebut) params.set('dateDebut', dateDebut)
+      if (dateFin) params.set('dateFin', dateFin)
+      if (filterClientId) params.set('clientId', filterClientId)
+      const res = await fetch('/api/ventes-historiques?' + params.toString())
+      if (res.ok) {
+        const d = await res.json()
+        setAllVentesForPrint(d.data || [])
+        setTimeout(() => { window.print(); setIsPrinting(false) }, 500)
+      } else {
+        setIsPrinting(false)
+      }
+    } catch (e) {
+      console.error(e)
+      setIsPrinting(false)
+    }
   }
 
   useEffect(() => {
@@ -181,12 +206,24 @@ export default function AnciennesVentesPage() {
             📋 Ventes/Factures antérieures à GestiCom — <span className="font-semibold text-emerald-300">Enregistrement authentique avec impact sur le stock, les soldes et la comptabilité.</span>
           </p>
         </div>
-        <button
-          onClick={() => setForm(true)}
-          className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 shadow"
-        >
-          <Plus className="h-4 w-4" /> Ancienne vente
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handlePrintAll}
+            disabled={isPrinting}
+            className="no-print flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+            title="Imprimer la liste des anciennes ventes"
+          >
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+            {isPrinting ? 'Préparation...' : 'Imprimer'}
+          </button>
+          <button
+            onClick={() => setForm(true)}
+            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 shadow"
+          >
+            <Plus className="h-4 w-4" /> Ancienne vente
+          </button>
+        </div>
       </div>
 
       {/* Barre de filtres */}
@@ -413,7 +450,7 @@ export default function AnciennesVentesPage() {
               ✅ Enregistrement validé — Impact stock et comptabilité effectué.
             </p>
             <div className="text-sm text-gray-600 space-y-1">
-              <p><strong>Date :</strong> {formatDate(detailVente.date)}</p>
+              <p><strong>Date :</strong> {formatDate(detailVente.date, { includeTime: true })}</p>
               <p><strong>Client :</strong> {detailVente.client?.nom || detailVente.clientLibre || '—'}</p>
               <p><strong>Magasin :</strong> {(detailVente.magasin as any)?.code || detailVente.magasinId || '—'}</p>
               <p><strong>Paiement :</strong> {detailVente.modePaiement}</p>
@@ -449,6 +486,60 @@ export default function AnciennesVentesPage() {
           </div>
         </div>
       )}
+      {/* RENDU IMPRESSION */}
+      <div className="hidden print:block">
+        {(() => {
+          if (!allVentesForPrint.length) return null
+          const today = new Date().toLocaleDateString('fr-FR', {
+            day: '2-digit', month: 'long', year: 'numeric'
+          })
+          const pages = paginateForPrint(allVentesForPrint, { otherPagesSize: 20 })
+          return pages.map((pageData, pageIdx) => (
+            <div key={pageIdx} className="print-page">
+              <ListPrintWrapper
+                title="Anciennes Ventes"
+                subtitle={`GestiCom Pro • ${today}`}
+                pageNumber={pageIdx + 1}
+                totalPages={pages.length}
+              >
+                <table className="min-w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1 text-left">N°</th>
+                      <th className="border p-1 text-left">Date</th>
+                      <th className="border p-1 text-left">Client</th>
+                      <th className="border p-1 text-left">Magasin</th>
+                      <th className="border p-1 text-right">Montant</th>
+                      <th className="border p-1 text-left">Paiement</th>
+                      <th className="border p-1 text-left">Statut</th>
+                      <th className="border p-1 text-right">Payé</th>
+                      <th className="border p-1 text-right">Reste</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageData.map((v: any) => {
+                      const rp = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
+                      return (
+                        <tr key={v.id || v.numero}>
+                          <td className="border p-1">{v.numero}</td>
+                          <td className="border p-1">{formatDate(v.date, { includeTime: false })}</td>
+                          <td className="border p-1">{v.client?.nom || v.clientLibre || '—'}</td>
+                          <td className="border p-1">{(v.magasin as any)?.code || v.magasinId || '—'}</td>
+                          <td className="border p-1 text-right">{Number(v.montantTotal).toLocaleString('fr-FR')} F</td>
+                          <td className="border p-1">{v.modePaiement}</td>
+                          <td className="border p-1">{v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit'}</td>
+                          <td className="border p-1 text-right">{(v.montantPaye || 0).toLocaleString('fr-FR')} F</td>
+                          <td className="border p-1 text-right">{rp > 0 ? rp.toLocaleString('fr-FR') + ' F' : '-'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </ListPrintWrapper>
+            </div>
+          ))
+        })()}
+      </div>
     </div>
   )
 }

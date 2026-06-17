@@ -14,9 +14,11 @@ function getIntensity(montant: number, max: number): string {
 export default function CalendarHeatmap({
   data,
   mois,
+  dark,
 }: {
   data: Array<{ jour: number; montant: number }>
   mois: string
+  dark?: boolean
 }) {
   const now = new Date()
   const annee = now.getFullYear()
@@ -50,6 +52,7 @@ export default function CalendarHeatmap({
               key={j.jour}
               title={`${j.jour} ${mois} ${annee} : ${(j.montant || 0).toLocaleString('fr-FR')} FCFA`}
               className={`h-7 w-full rounded-sm flex items-center justify-center text-[9px] font-bold transition-colors cursor-default ${getIntensity(j.montant || 0, maxMontant)} ${j.montant && j.montant >= maxMontant * 0.75 ? 'text-white' : 'text-gray-700'}`}
+              style={{ color: (!j.montant || j.montant < maxMontant * 0.75) && dark ? '#d1d5db' : undefined }}
             >
               {j.jour}
             </div>

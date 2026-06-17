@@ -281,7 +281,7 @@ export default function CompteCourantClientPage() {
       const json = await res.json()
       if (!json || json.length === 0) { showError("Aucune facture à imprimer."); return }
 
-      const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles } = await import('@/lib/print-templates')
+      const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles, printHtml } = await import('@/lib/print-templates')
       const logoPath = params?.logoLocal || params?.logo
       const logoHTML = logoPath ? `<img src="${logoPath}" alt="Logo" style="max-width:150px;height:auto;display:block"/>` : ''
 
@@ -307,14 +307,10 @@ export default function CompteCourantClientPage() {
           MODE_PAIEMENT: vente.modePaiement || 'ESPECES', OBSERVATION: vente.observation || ''
         })
         const pageBreak = idx < json.length - 1 ? '<div style="page-break-after:always"></div>' : ''
-        return `<div class="print-document">${html}</div>${pageBreak}`
+        return `${html}${pageBreak}`
       }).join('')
 
-      const pw = window.open('', '_blank')
-      if (!pw) { alert('Autorisez les popups dans votre navigateur.'); return }
-      pw.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Factures - ${data?.client?.nom}</title><style>${getPrintStyles('A4')}</style></head><body>${allPagesHTML}</body></html>`)
-      pw.document.close()
-      pw.onload = () => { setTimeout(() => { pw.print(); pw.close() }, 300) }
+      printHtml(`<style>${getPrintStyles('A4')}</style>${allPagesHTML}`, `Factures - ${data?.client?.nom || 'Client'}`)
     } catch (e) {
       showError("Erreur lors de la préparation de l'impression.")
     } finally {

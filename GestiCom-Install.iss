@@ -1,7 +1,7 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
 ; Version 3.23.2 - Production Finale
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "3.33.5"
+#define MyAppVersion "3.35.0"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "node.exe"
@@ -60,10 +60,11 @@ Source: "prisma\migrations\*"; DestDir: "{app}\prisma\migrations"; Flags: ignore
 ; Moteur Node.js
 Source: "node.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; IMPORTANT: Tous les packages Prisma nécessaires pour la CLI (migration, seed, debug)
+; IMPORTANT: Tous les packages nécessaires pour la CLI et le seed (migration, seed, debug)
 ; Ces packages ne sont PAS inclus dans le standalone Next.js, ils sont copiés depuis le projet.
 Source: "node_modules\prisma\*"; DestDir: "{app}\node_modules\prisma"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "node_modules\@prisma\*"; DestDir: "{app}\node_modules\@prisma"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "node_modules\bcryptjs\*"; DestDir: "{app}\node_modules\bcryptjs"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Configuration environnementale (.env) : ne jamais écraser en MAJ (préserve secrets/config prod)
 Source: ".env"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall

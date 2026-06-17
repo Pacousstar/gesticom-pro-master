@@ -22,6 +22,7 @@ const csp = [
 
 const nextConfig = {
   output: 'standalone',
+  allowedDevOrigins: ['10.100.239.92', '10.78.185.92', 'localhost'],
   env: {
     NEXT_PUBLIC_APP_VERSION: pkgVersion,
   },

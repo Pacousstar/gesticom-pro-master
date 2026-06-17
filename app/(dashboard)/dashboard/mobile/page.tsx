@@ -57,7 +57,7 @@ export default function MobileDashboardPage() {
   }
 
   if (loading) return (
-    <div className="flex h-screen items-center justify-center bg-gray-950">
+    <div className="flex flex-1 items-center justify-center bg-gray-950">
       <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full" />
     </div>
   )
@@ -65,9 +65,7 @@ export default function MobileDashboardPage() {
   const trend = calcTrend(data?.transactionsJour || 0, data?.transactionsHier || 0)
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
-      <div className="relative h-[90vh] max-h-[820px] w-full max-w-sm bg-gray-950 text-white flex flex-col overflow-hidden rounded-[3rem] border-4 border-gray-800 shadow-2xl shadow-orange-500/10">
-      {/* Header */}
+    <> {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-2">
           <Smartphone className="h-5 w-5 text-orange-400" />
@@ -84,7 +82,7 @@ export default function MobileDashboardPage() {
 
       {/* Pages swipeable */}
       <div className="flex-1 overflow-hidden" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <div className="h-full flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${page * 100}%)`, width: `${PAGES.length * 100}%` }}>
+        <div className="h-full flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${page * (100 / PAGES.length)}%)`, width: `${PAGES.length * 100}%` }}>
           {/* Page 1: KPI */}
           <div className="h-full w-full p-4 overflow-y-auto" style={{ width: `${100 / PAGES.length}%` }}>
             <div className="space-y-3">
@@ -149,11 +147,11 @@ export default function MobileDashboardPage() {
             <div className="space-y-6">
               <div className="rounded-2xl bg-gray-900 border border-gray-800 p-5">
                 <h3 className="font-black text-sm text-gray-300 mb-4 uppercase tracking-wider">CA par catégorie</h3>
-                <DonutChart data={data?.caParCategorie || []} total={data?.caMois || 0} />
+                <DonutChart data={data?.caParCategorie || []} total={data?.caMois || 0} dark />
               </div>
               <div className="rounded-2xl bg-gray-900 border border-gray-800 p-5">
                 <h3 className="font-black text-sm text-gray-300 mb-4 uppercase tracking-wider">Heatmap mensuelle</h3>
-                <CalendarHeatmap data={data?.caJournalier || []} mois={new Intl.DateTimeFormat('fr-FR', { month: 'long' }).format(new Date())} />
+                <CalendarHeatmap data={data?.caJournalier || []} mois={new Intl.DateTimeFormat('fr-FR', { month: 'long' }).format(new Date())} dark />
               </div>
             </div>
           </div>
@@ -267,18 +265,19 @@ export default function MobileDashboardPage() {
       </div>
 
       {/* Navigation dots */}
-      <div className="flex items-center justify-center gap-1.5 py-3 bg-gray-900 border-t border-gray-800 shrink-0">
+      <div className="flex items-center justify-center gap-2 py-3 bg-gray-900 border-t border-gray-800 shrink-0">
         {PAGES.map((p, i) => (
-          <button key={p.id} onClick={() => setPage(i)} className={`h-2.5 rounded-full transition-all ${i === page ? 'w-8 bg-orange-500' : 'w-2.5 bg-gray-600'}`} />
+          <button key={p.id} onClick={() => setPage(i)} className={`transition-all ${i === page ? 'bg-orange-500 text-white px-3 py-1 rounded-full text-[10px] font-bold' : 'bg-gray-800 text-gray-300 px-2 py-1 rounded-full text-[10px] font-bold hover:bg-gray-700'}`}>
+            {p.label}
+          </button>
         ))}
       </div>
 
       {/* Arrows for desktop/non-touch */}
-      <div className="absolute inset-y-1/2 left-0 right-0 pointer-events-none flex items-center justify-between px-2">
-        {page > 0 && <button onClick={() => setPage(p => p - 1)} className="pointer-events-auto bg-gray-800/80 p-2 rounded-full text-white"><ChevronLeft className="h-6 w-6" /></button>}
-        {page < PAGES.length - 1 && <button onClick={() => setPage(p => p + 1)} className="pointer-events-auto bg-gray-800/80 p-2 rounded-full text-white"><ChevronRight className="h-6 w-6" /></button>}
+      <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 pointer-events-none flex items-center justify-between px-2">
+        {page > 0 && <button onClick={() => setPage(p => p - 1)} className="pointer-events-auto bg-gray-800/80 p-3 rounded-full text-white shadow-lg"><ChevronLeft className="h-6 w-6" /></button>}
+        {page < PAGES.length - 1 && <button onClick={() => setPage(p => p + 1)} className="pointer-events-auto bg-gray-800/80 p-3 rounded-full text-white shadow-lg"><ChevronRight className="h-6 w-6" /></button>}
       </div>
-    </div>
-    </div>
+    </>
   )
 }

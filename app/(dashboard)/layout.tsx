@@ -59,6 +59,7 @@ export default async function DashboardLayout({
       </DashboardLayoutClient>
     )
   } catch (e) {
+    if ((e as any)?.digest?.startsWith?.('NEXT_REDIRECT')) throw e
     console.error('DashboardLayout error:', e)
     redirect('/login?error=session')
   }

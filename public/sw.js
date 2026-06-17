@@ -30,6 +30,6 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
       }
       return response
-    }).catch(() => caches.match('/') as Promise<Response>))
+    }).catch(() => caches.match('/')))
   )
 })

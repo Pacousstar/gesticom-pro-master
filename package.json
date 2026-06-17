@@ -1,11 +1,11 @@
 {
   "name": "gesticom",
-  "version": "3.33.5",
+  "version": "3.35.0",
   "private": true,
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev -H 0.0.0.0",
     "dev:legacy": "next dev",
-    "build": "node scripts/prebuild-check.js && node scripts/bump-version.js && node node_modules/prisma/build/index.js generate && node node_modules/next/dist/bin/next build",
+    "build": "node scripts/prebuild-check.js && node scripts/bump-version.js && node node_modules/prisma/build/index.js generate && node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && node scripts/build-wrapper.js",
     "bump:version": "node scripts/bump-version.js",
     "build:installer": "npm run bump:version && npm run build",
     "clean": "node scripts/clean.js",

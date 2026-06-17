@@ -2,7 +2,7 @@
 
 import { memo } from 'react'
 import {
-  DollarSign, Wallet, Eye, RotateCcw, XCircle, Trash2, Loader2, Pencil, Truck,
+  DollarSign, Wallet, Eye, RotateCcw, XCircle, Trash2, Loader2, Pencil, Truck, ShoppingBag,
 } from 'lucide-react'
 import { formatDate } from '@/lib/format-date'
 
@@ -21,11 +21,13 @@ interface VenteTableRowProps {
   onDelete: (v: any) => void
   onEditModal?: (v: any) => void
   onDeliver?: (v: any) => void
+  onRetrait?: (v: any) => void
+  retraitant?: number | null
 }
 
 function VenteTableRowInner({
   v, userRole, annulant, supprimant, loadingDetail, livrant,
-  onEdit, onPay, onView, onReturn, onCancel, onDelete, onEditModal, onDeliver,
+  onEdit, onPay, onView, onReturn, onCancel, onDelete, onEditModal, onDeliver, onRetrait, retraitant,
 }: VenteTableRowProps) {
   const resteAPayer = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
 
@@ -47,12 +49,30 @@ function VenteTableRowInner({
         {Number(v.montantTotal).toLocaleString('fr-FR')} F
       </td>
       <td className="px-4 py-3">
-        {v.typeVente === 'COMMANDE' ? (
-          <span className={`rounded px-2 py-0.5 text-xs font-medium ${
-            v.dateLivraison ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-          }`}>
-            {v.dateLivraison ? 'Livrée' : 'Commande'}
-          </span>
+        {v.typeVente === 'COMMANDE' ? (() => {
+          const lignesList = v.lignes || []
+          const totalQte = lignesList.reduce((s: number, l: any) => s + Number(l.quantite || 0), 0)
+          const totalLivree = lignesList.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
+          const reste = totalQte - totalLivree
+          if (v.dateLivraison || reste <= 0) {
+            return <span className="rounded px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-700">Soldée</span>
+          }
+          if (totalLivree > 0) {
+            return (
+              <div className="flex flex-col gap-0.5">
+                <span className="rounded px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">Commande</span>
+                <span className="text-[10px] text-gray-500 font-medium">Livré: {totalLivree} / Reste: {reste}</span>
+              </div>
+            )
+          }
+          return <span className="rounded px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800">Commande</span>
+        })() : v.retraitDiffere && !v.dateRetrait ? (
+          <div className="flex flex-col gap-0.5">
+            <span className="rounded px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">À retirer</span>
+            <span className="text-[10px] text-gray-500 font-medium">Payé, retrait en attente</span>
+          </div>
+        ) : v.retraitDiffere && v.dateRetrait ? (
+          <span className="rounded px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-700">Retiré</span>
         ) : (
           <span className="rounded px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">
             Directe
@@ -109,6 +129,16 @@ function VenteTableRowInner({
               title="Livrer la commande"
             >
               {livrant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+            </button>
+          )}
+          {v.retraitDiffere && !v.dateRetrait && v.statut !== 'ANNULEE' && onRetrait && (
+            <button
+              onClick={() => onRetrait(v)}
+              disabled={retraitant === v.id}
+              className="rounded p-1.5 text-amber-600 hover:bg-amber-100 disabled:opacity-50"
+              title="Retirer la marchandise"
+            >
+              {retraitant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
             </button>
           )}
           {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && v.statut !== 'ANNULEE' && onEditModal && (

@@ -274,12 +274,13 @@ export default function FournisseursPage() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
-            className="no-print flex items-center gap-2 rounded-xl bg-white/10 px-6 py-3 text-sm font-black text-white hover:bg-white/20 border border-white/20 uppercase tracking-widest"
+            onClick={handlePrintAll}
+            disabled={isPrinting}
+            className="no-print flex items-center gap-2 rounded-xl bg-white/10 px-6 py-3 text-sm font-black text-white hover:bg-white/20 border border-white/20 uppercase tracking-widest disabled:opacity-50"
             title="Imprimer la liste des fournisseurs (selon filtres)"
           >
-            <Printer className="h-4 w-4" />
-            Imprimer
+            {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
+            {isPrinting ? 'Préparation...' : 'Imprimer'}
           </button>
           <button
             onClick={() => openForm()}
@@ -547,7 +548,7 @@ export default function FournisseursPage() {
                   <th className="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Localisation</th>
                   <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Engagement Initial</th>
                   <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 bg-slate-100 italic">Net à Payer</th>
-                  <th className="px-6 py-4 text-center text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Gestion</th>
+                  <th className="px-6 py-4 text-center text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 bg-white">
@@ -655,7 +656,7 @@ export default function FournisseursPage() {
               @media print {
                 body * { visibility: hidden; }
                 #printable-fournisseur-history, #printable-fournisseur-history * { visibility: visible; }
-                #printable-fournisseur-history { position: absolute; left: 0; top: 0; width: 100%; height: auto; overflow: visible !important; }
+                #printable-fournisseur-history { position: relative; left: auto; top: auto; width: 100%; height: auto; overflow: visible !important; }
                 #printable-fournisseur-history > div { overflow: visible !important; height: auto !important; }
                 .no-print { display: none !important; }
               }
@@ -744,7 +745,7 @@ export default function FournisseursPage() {
                                onClick={async () => {
                                  let entreprise: any = {}
                                 try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch (_) {}
-                                 const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles } = await import('@/lib/print-templates')
+                                  const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles, printHtml } = await import('@/lib/print-templates')
                                  const lignesHTML = generateLignesHTML((h.lignes || []).map((l: any) => ({ designation: l.produit?.designation || l.designation, quantite: l.quantite, prixUnitaire: l.prixUnitaire, montant: l.montant })))
                                  const template = getDefaultA4Template('ACHAT')
                                  const logoPath = entreprise.logoLocal || entreprise.logo
@@ -763,11 +764,7 @@ export default function FournisseursPage() {
                                    RESTE: `${Math.max(0, h.montantTotal - (h.montantPaye || 0)).toLocaleString()} FCFA`,
                                    MODE_PAIEMENT: h.modePaiement || 'ESPECES', OBSERVATION: h.observation || ''
                                  })
-                                 const pw = window.open('', '_blank')
-                                 if (!pw) { alert('Autorisez les popups.'); return }
-                                 pw.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Facture ${h.numero}</title><style>${getPrintStyles('A4')}</style></head><body><div class="print-document">${html}</div></body></html>`)
-                                 pw.document.close()
-                                 pw.onload = () => { setTimeout(() => { pw.print(); pw.close() }, 250) }
+                                  printHtml(`<style>${getPrintStyles('A4')}</style>${html}`, `Facture ${h.numero}`)
                                }}
                                className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-2.5 py-1.5 rounded-lg hover:bg-orange-50 hover:text-orange-700 transition-all font-bold tracking-tighter"
                              >

@@ -317,23 +317,13 @@ if (!schemaSyncOk) {
 // ═══════════════════════════════════════════════════════════════════════
 
 const nodeModulesPath = path.join(projectRoot, 'node_modules');
+const standaloneNodeModules = path.join(projectRoot, '.next', 'standalone', 'node_modules');
 process.env.NODE_PATH = [
   nodeModulesPath,
+  standaloneNodeModules,
   ...(process.env.NODE_PATH || '').split(path.delimiter).filter(Boolean),
 ].join(path.delimiter);
 require('module').Module._initPaths();
-
-if (!fs.existsSync(path.join(nodeModulesPath, 'bcryptjs'))) {
-  l('bcryptjs manquant → installation des dépendances...');
-  try {
-    execSync('npm install --omit=dev --no-audit --no-fund', {
-      cwd: projectRoot, stdio: 'pipe', timeout: 120000, windowsHide: true,
-    });
-    l('  Dépendances installées');
-  } catch (err) {
-    e('  npm install échoué: ' + (err.stderr || err.message));
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════
 //  3. SEED : crée Entite/Magasin/Admin UNIQUEMENT si base vierge
@@ -365,8 +355,13 @@ try {
           }
           const users = await prisma.utilisateur.count();
           if (users === 0) {
-            const bcrypt = require('bcryptjs');
-            const hash = await bcrypt.hash('Admin@123', 10);
+            let hash;
+            try {
+              const bcrypt = require('bcryptjs');
+              hash = await bcrypt.hash('Admin@123', 10);
+            } catch (_) {
+              hash = '\$2a\$10\$8K1p/a0dL1LXMIgoEDFrwOfMQkf9Rn6bm1FZwOJK3dN6nFP3sGjOS'; // bcrypt hash for 'Admin@123'
+            }
             await prisma.utilisateur.create({ data: { login: 'admin', nom: 'Super Admin', email: 'admin@gesticom.local', motDePasse: hash, role: 'SUPER_ADMIN', entiteId: (await prisma.entite.findFirst()).id, actif: true } });
             console.log('Admin créé (repli)');
           }
@@ -447,6 +442,15 @@ nextServer.stderr.pipe(errStream);
 nextServer.on('error', (er) => e(`Erreur fork: ${er.message}`));
 
 l(`Fork réussi, PID: ${nextServer.pid}`);
+
+// 5. VÉRIFICATION bcryptjs : non-bloquante, le serveur est déjà lancé
+if (!fs.existsSync(path.join(nodeModulesPath, 'bcryptjs'))) {
+  if (fs.existsSync(path.join(standaloneNodeModules, 'bcryptjs'))) {
+    l('bcryptjs trouvé dans standalone/node_modules');
+  } else {
+    l('bcryptjs manquant (le serveur tourne déjà, fallback hash OK)');
+  }
+}
 
 // Attendre que le serveur écoute vraiment, puis marquer .migrated
 waitForServer((ok) => {

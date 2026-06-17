@@ -8,9 +8,11 @@ const COULEURS = [
 export default function DonutChart({
   data,
   total,
+  dark,
 }: {
   data: Array<{ categorie: string; montant: number }>
   total: number
+  dark?: boolean
 }) {
   if (!data.length || !total) {
     return (
@@ -57,10 +59,10 @@ export default function DonutChart({
             />
           )
         })}
-        <text x="70" y="70" textAnchor="middle" dominantBaseline="middle" className="text-lg font-black fill-gray-800">
+        <text x="70" y="70" textAnchor="middle" dominantBaseline="middle" className="text-lg font-black" fill={dark ? '#f3f4f6' : '#424242'}>
           {total.toLocaleString('fr-FR')}
         </text>
-        <text x="70" y="86" textAnchor="middle" dominantBaseline="middle" className="text-[8px] fill-gray-400 font-bold uppercase">
+        <text x="70" y="86" textAnchor="middle" dominantBaseline="middle" className="text-[8px] font-bold uppercase" fill={dark ? '#9e9e9e' : '#bdbdbd'}>
           FCFA
         </text>
       </svg>
@@ -71,8 +73,8 @@ export default function DonutChart({
           return (
             <div key={i} className="flex items-center gap-2 text-xs">
               <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: COULEURS[i % COULEURS.length] }} />
-              <span className="font-bold text-gray-700 truncate">{d.categorie}</span>
-              <span className="ml-auto font-black text-gray-900">{pct}%</span>
+              <span className="font-bold truncate" style={{ color: dark ? '#d1d5db' : '#616161' }}>{d.categorie}</span>
+              <span className="ml-auto font-black" style={{ color: dark ? '#f3f4f6' : '#212121' }}>{pct}%</span>
             </div>
           )
         })}

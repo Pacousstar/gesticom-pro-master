@@ -7,19 +7,17 @@ export default function ErrorInitializer() {
     function sendError(error: unknown, source: string) {
       const message = error instanceof Error ? error.message : String(error)
       const stack = error instanceof Error ? error.stack : undefined
-      try {
-        fetch('/api/errors/log', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message,
-            stack,
-            source,
-            url: window.location.href,
-            level: 'error',
-          }),
-        })
-      } catch {}
+      fetch('/api/errors/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          stack,
+          source,
+          url: window.location.href,
+          level: 'error',
+        }),
+      }).catch(() => {})
     }
 
     const origOnError = window.onerror

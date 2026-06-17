@@ -155,6 +155,20 @@ export default function ModificationVenteModal({
     setFormData(f => ({ ...f, lignes: f.lignes.filter((_, i) => i !== index) }))
   }
 
+  const handleUpdateLigne = (index: number, field: keyof Ligne, value: string | number) => {
+    setFormData(f => {
+      const lignes = [...f.lignes]
+      const l = { ...lignes[index], [field]: value }
+      const q = Number(l.quantite) || 0
+      const pu = Number(l.prixUnitaire) || 0
+      const tv = Number(l.tva) || 0
+      const rm = Number(l.remise) || 0
+      l.montant = Math.round((q * pu - rm) * (1 + tv / 100))
+      lignes[index] = l
+      return { ...f, lignes }
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (formData.lignes.length === 0) {
@@ -215,8 +229,8 @@ export default function ModificationVenteModal({
   const totalFinal = totalLignes - (Number(formData.remiseGlobale) || 0)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="flex h-full max-h-[95vh] w-full max-w-5xl flex-col rounded-[2.5rem] bg-white shadow-2xl overflow-hidden text-gray-900">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-8 sm:pt-12 backdrop-blur-sm overflow-y-auto">
+      <div className="flex w-full max-w-5xl xl:max-w-6xl flex-col rounded-[2.5rem] bg-white shadow-2xl overflow-hidden text-gray-900 my-auto">
         {/* HEADER */}
         <div className="flex items-center justify-between bg-orange-600 px-8 py-6 text-white text-3xl font-black uppercase italic tracking-tighter">
           <div className="flex items-center gap-3">
@@ -343,20 +357,54 @@ export default function ModificationVenteModal({
                 <thead>
                   <tr className="bg-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky top-0">
                     <th className="px-4 py-3 text-left">Produit</th>
-                    <th className="px-4 py-3 text-center">Quantité</th>
-                    <th className="px-4 py-3 text-right">Prix Vente</th>
-                    <th className="px-4 py-3 text-right">TVA</th>
-                    <th className="px-4 py-3 text-right">Montant TTC</th>
-                    <th className="px-4 py-3 text-center">Actions</th>
+                    <th className="px-4 py-3 text-center w-20">Quantité</th>
+                    <th className="px-4 py-3 text-right w-28">Prix Vente</th>
+                    <th className="px-4 py-3 text-right w-20">TVA</th>
+                    <th className="px-4 py-3 text-right w-24">Remise</th>
+                    <th className="px-4 py-3 text-right w-28">Montant TTC</th>
+                    <th className="px-4 py-3 text-center w-16">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {formData.lignes.map((l, i) => (
                     <tr key={i} className="text-sm font-bold text-gray-700 hover:bg-orange-50/50 transition-colors">
-                      <td className="px-4 py-3">{l.designation}</td>
-                      <td className="px-4 py-3 text-center">{l.quantite}</td>
-                      <td className="px-4 py-3 text-right">{l.prixUnitaire.toLocaleString()} F</td>
-                      <td className="px-4 py-3 text-right text-gray-400">{l.tva || 0}%</td>
+                      <td className="px-4 py-3 text-xs">{l.designation}</td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min="1"
+                          value={l.quantite}
+                          onChange={e => handleUpdateLigne(i, 'quantite', Number(e.target.value))}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-center text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min="0"
+                          value={l.prixUnitaire}
+                          onChange={e => handleUpdateLigne(i, 'prixUnitaire', Number(e.target.value))}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-right text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min="0"
+                          value={l.tva || 0}
+                          onChange={e => handleUpdateLigne(i, 'tva', Number(e.target.value))}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-center text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min="0"
+                          value={l.remise || 0}
+                          onChange={e => handleUpdateLigne(i, 'remise', Number(e.target.value))}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-right text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                        />
+                      </td>
                       <td className="px-4 py-3 text-right font-black">{l.montant.toLocaleString()} F</td>
                       <td className="px-4 py-3 text-center">
                         <button

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type JSX } from 'react'
 import {
   ChevronDown, ChevronRight, Printer, BookOpen, ShoppingCart, Package, Users,
   Briefcase, Calculator, FileBarChart, Settings, LayoutDashboard, AlertTriangle,
@@ -726,6 +726,21 @@ const captureImages: Record<string, string> = {
   'CAPTURE : interface principale avec annotations': '/captures/accueil.png',
   'CAPTURE : Dashboard complet avec KPI': '/captures/dashboard.png',
   'CAPTURE : zone d\'alertes du dashboard': '/captures/dashboard-alertes.png',
+  'CAPTURE : formulaire de nouvelle vente': '/captures/formulaire-de-nouvelle-vente.png',
+  'CAPTURE : impression liste des ventes': '/captures/impression-liste-des-ventes.png',
+  'CAPTURE : liste des ventes avec filtres appliqués': '/captures/liste-des-ventes-avec-filtres-appliqués.png',
+  'CAPTURE : formulaire de nouvel achat': '/captures/achat-formulaire.png',
+  'CAPTURE : impression liste des achats': '/captures/achat-impression.png',
+  'CAPTURE : liste des achats avec filtres': '/captures/achat-liste.png',
+  'CAPTURE : page Stock avec code couleur': '/captures/stock-page.png',
+  'CAPTURE : écran d\'inventaire': '/captures/stock-inventaire.png',
+  'CAPTURE : page Stock': '/captures/stock-liste-Impression.png',
+  'CAPTURE : page des paiements clients': '/captures/paiement-clients.png',
+  'CAPTURE : soldes clients': '/captures/soldes-clients.png',
+  'CAPTURE : détail client': '/captures/client-detail.png',
+  'CAPTURE : compte courant fournisseur': '/captures/fournisseur-compte.png',
+  'CAPTURE : liste fournisseurs': '/captures/fournisseur-liste.png',
+  'CAPTURE : écritures comptables': '/captures/ecritures-comptables.png',
   'CAPTURE : bilan comptable': '/captures/compta-bilan.png',
   'CAPTURE : grand livre': '/captures/compta-grand-livre.png',
   'CAPTURE : rapports généraux': '/captures/rapports-generaux.png',

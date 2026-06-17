@@ -31,8 +31,10 @@ export default function NouveauCompteCourantPage() {
   const [fournisseurId, setFournisseurId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const { data: clients } = useSWR<ClientOption[]>('/api/clients', fetcher)
-  const { data: fournisseurs } = useSWR<FournisseurOption[]>('/api/fournisseurs', fetcher)
+  const { data: clientsRaw } = useSWR('/api/clients', fetcher)
+  const { data: fournisseursRaw } = useSWR('/api/fournisseurs', fetcher)
+  const clients: ClientOption[] = clientsRaw?.data ?? []
+  const fournisseurs: FournisseurOption[] = fournisseursRaw?.data ?? []
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

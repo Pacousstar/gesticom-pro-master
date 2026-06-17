@@ -79,6 +79,13 @@ function main() {
   iss = iss.replace(/#define MyAppVersion\s+"[^"]+"/, `#define MyAppVersion "${newV}"`)
   fs.writeFileSync(issPath, iss, 'utf8')
   
+  // .env (dev + prod)
+  for (const envFile of ['.env', '.env.production', '.env.local'].filter(f => fs.existsSync(path.join(root, f)))) {
+    let env = fs.readFileSync(path.join(root, envFile), 'utf8')
+    env = env.replace(/^NEXT_PUBLIC_APP_VERSION=.*$/m, `NEXT_PUBLIC_APP_VERSION=${newV}`)
+    fs.writeFileSync(path.join(root, envFile), env, 'utf8')
+  }
+  
   console.log(`[bump-version] ${oldV} -> ${newV} ✅`)
   
   // Afficher la progression

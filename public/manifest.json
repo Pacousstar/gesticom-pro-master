@@ -2,7 +2,7 @@
   "name": "GestiCom Pro",
   "short_name": "GestiCom",
   "description": "Gestion de Commerce Professionnel - Stocks, Ventes, Achats, Comptabilité",
-  "start_url": "/dashboard",
+  "start_url": "/dashboard/mobile",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#f97316",

@@ -1,6 +1,7 @@
 Const ForAppending = 8
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set WshShell = CreateObject("WScript.Shell")
+Set ShellApp = CreateObject("Shell.Application")
 
 appDir = fso.GetParentFolderName(WScript.ScriptFullName)
 logFile = appDir & "\GestiComService.out"
@@ -29,7 +30,7 @@ httpReady.open "GET", "http://127.0.0.1:3001/", False
 httpReady.Send
 If httpReady.Status = 200 Then
   Log "Serveur deja en ligne, ouverture navigateur"
-  WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
+  ShellApp.ShellExecute "http://localhost:3001", "", "", "open", 1
   WScript.Quit
 End If
 On Error GoTo 0
@@ -82,7 +83,7 @@ For i = 1 To maxAttempts
 Next
 
 If serveurPret Then
-  WshShell.Run "rundll32 url.dll,FileProtocolHandler http://localhost:3001", 0, False
+  ShellApp.ShellExecute "http://localhost:3001", "", "", "open", 1
   Log "Application ouverte dans le navigateur"
 Else
   Err "Serveur non disponible apres " & maxAttempts & " tentatives"

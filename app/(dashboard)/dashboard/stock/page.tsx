@@ -1254,7 +1254,7 @@ export default function StockPage() {
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Qté init.</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Seuil</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Date entrée</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">

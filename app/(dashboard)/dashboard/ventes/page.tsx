@@ -8,7 +8,7 @@ import VenteFormModal from '@/components/dashboard/ventes/VenteFormModal'
 import ModificationVenteModal from '@/components/dashboard/ventes/ModificationVenteModal'
 import {
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X, 
-  Search, Edit2, Wallet, AlertTriangle, XCircle, RotateCcw, CreditCard
+  Search, Edit2, Wallet, AlertTriangle, XCircle, RotateCcw, CreditCard, Truck
 } from 'lucide-react'
 import { generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import PrintPreview from '@/components/print/PrintPreview'
@@ -53,6 +53,7 @@ export default function VentesPage() {
   const [annulant, setAnnulant] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [livrant, setLivrant] = useState<number | null>(null)
+  const [retraitant, setRetraitant] = useState<number | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
   const [userRole, setUserRole] = useState<string>('')
   const [detailVente, setDetailVente] = useState<{
@@ -126,6 +127,10 @@ export default function VentesPage() {
   const [retourBanqueId, setRetourBanqueId] = useState('')
   const [savingRetour, setSavingRetour] = useState(false)
   const [deletingRetourId, setDeletingRetourId] = useState<number | null>(null)
+
+  const [deliverVente, setDeliverVente] = useState<{ id: number; numero: string; lignes: Array<{ produitId: number; designation: string; quantite: number; quantiteLivree: number; prixUnitaire: number; montant: number }> } | null>(null)
+  const [deliverQtys, setDeliverQtys] = useState<Record<number, number>>({})
+  const [savingDeliver, setSavingDeliver] = useState(false)
 
   useEffect(() => {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { 
@@ -445,19 +450,35 @@ export default function VentesPage() {
     }
   }
 
-  const handleLivrer = async (v: { id: number; numero: string }) => {
-    if (!confirm(`Livrer la commande ${v.numero} ? Le stock sera déduit.`)) return
-    setLivrant(v.id)
+  const handleLivrer = (v: any) => {
+    if (!v.lignes) return
+    const initial: Record<number, number> = {}
+    v.lignes.forEach((l: any) => {
+      const reste = l.quantite - (l.quantiteLivree || 0)
+      if (reste > 0) initial[l.produitId] = reste
+    })
+    setDeliverQtys(initial)
+    setDeliverVente(v)
+  }
+
+  const confirmDeliver = async () => {
+    if (!deliverVente) return
+    setSavingDeliver(true)
+    setLivrant(deliverVente.id)
     try {
-      const res = await fetch(`/api/ventes/${v.id}`, {
+      const lignesLivrees = Object.entries(deliverQtys)
+        .filter(([, q]) => Number(q) > 0)
+        .map(([produitId, quantite]) => ({ produitId: Number(produitId), quantite: Number(quantite) }))
+      const res = await fetch(`/api/ventes/${deliverVente.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'LIVRER' }),
+        body: JSON.stringify({ action: 'LIVRER', lignes: lignesLivrees }),
       })
       if (res.ok) {
-        showSuccess('Commande livrée avec succès.')
+        setDeliverVente(null)
+        showSuccess('Livraison effectuée avec succès.')
         fetchVentes()
-        if (detailVente?.id === v.id) handleVoirDetail(v.id)
+        if (detailVente?.id === deliverVente.id) handleVoirDetail(deliverVente.id)
       } else {
         const d = await res.json()
         showError(d.error || 'Erreur lors de la livraison.')
@@ -466,6 +487,31 @@ export default function VentesPage() {
       showError(formatApiError(e))
     } finally {
       setLivrant(null)
+      setSavingDeliver(false)
+    }
+  }
+
+  const handleRetrait = async (v: { id: number; numero: string }) => {
+    if (!confirm(`Confirmer le retrait de la marchandise pour ${v.numero} ? Le stock sera déduit.`)) return
+    setRetraitant(v.id)
+    try {
+      const res = await fetch(`/api/ventes/${v.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RETRAIT' }),
+      })
+      if (res.ok) {
+        showSuccess('Retrait effectué avec succès.')
+        fetchVentes()
+        if (detailVente?.id === v.id) handleVoirDetail(v.id)
+      } else {
+        const d = await res.json()
+        showError(d.error || 'Erreur lors du retrait.')
+      }
+    } catch (e) {
+      showError(formatApiError(e))
+    } finally {
+      setRetraitant(null)
     }
   }
 
@@ -1038,7 +1084,7 @@ export default function VentesPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Statut paiement</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Reste à payer</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Statut</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -1059,6 +1105,8 @@ export default function VentesPage() {
                     onCancel={handleAnnuler}
                     onDelete={handleSupprimer}
                     onDeliver={handleLivrer}
+                    onRetrait={handleRetrait}
+                    retraitant={retraitant}
                   />
                 ))}
               </tbody>
@@ -1546,6 +1594,74 @@ export default function VentesPage() {
           </div>
         </div>
       )}
+
+      {deliverVente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="mb-1 text-lg font-bold text-gray-900">
+              Livraison — {deliverVente.numero}
+            </h2>
+            <p className="mb-4 text-sm text-gray-500">
+              Ajustez les quantités à livrer par produit.
+            </p>
+            <div className="mb-4 max-h-[50vh] overflow-y-auto space-y-3">
+              {deliverVente.lignes
+                .filter((l: any) => l.quantite - (l.quantiteLivree || 0) > 0)
+                .map((l: any) => {
+                  const reste = l.quantite - (l.quantiteLivree || 0)
+                  return (
+                    <div key={l.produitId} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">{l.designation}</p>
+                        <p className="text-xs text-gray-400">Commandé: {l.quantite} / Reste: {reste}</p>
+                      </div>
+                      <div className="ml-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeliverQtys(prev => ({ ...prev, [l.produitId]: Math.max(0, (prev[l.produitId] || reste) - 1) }))}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                        >−</button>
+                        <input
+                          type="number"
+                          min={0}
+                          max={reste}
+                          value={deliverQtys[l.produitId] ?? reste}
+                          onChange={(e) => setDeliverQtys(prev => ({ ...prev, [l.produitId]: Math.min(reste, Math.max(0, Number(e.target.value) || 0)) }))}
+                          className="w-16 rounded-lg border border-gray-300 px-2 py-1 text-center text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setDeliverQtys(prev => ({ ...prev, [l.produitId]: Math.min(reste, (prev[l.produitId] || reste) + 1) }))}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                        >+</button>
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+            <div className="mb-4 flex items-center justify-between rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-800">
+              <span>Total à livrer</span>
+              <span>{Object.values(deliverQtys).reduce((s: number, q: any) => s + Number(q || 0), 0)} article(s)</span>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setDeliverVente(null)}
+                disabled={savingDeliver}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >Annuler</button>
+              <button
+                onClick={confirmDeliver}
+                disabled={savingDeliver || Object.values(deliverQtys).every((q: any) => Number(q || 0) <= 0)}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingDeliver ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+                Livrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="hidden print:block">
         {(() => {
           if (!allVentesForPrint.length) return null

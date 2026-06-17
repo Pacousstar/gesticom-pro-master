@@ -119,8 +119,9 @@ function LoginForm() {
       // Réinitialiser les tentatives en cas de succès
       setAttempts(0)
       
-      router.push(data.redirect || from)
-      router.refresh()
+      const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      const target = isMobile && (!data.redirect || data.redirect === '/dashboard') ? '/dashboard/mobile' : (data.redirect || from)
+      window.location.href = target
     } catch {
       const newAttempts = attempts + 1
       setAttempts(newAttempts)
