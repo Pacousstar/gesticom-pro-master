@@ -32,6 +32,7 @@ export const COMPTES_DEFAUT = {
   // CLASSE 5 - TRÉSORERIE
   CAISSE: '531', // Caisse
   BANQUE: '521', // Banque (corrigé de 512 à 521)
+  ASSOCIE_COURANT: '455', // Associés - Comptes courants (paiements directs du dirigeant)
   
   // CLASSE 6 - CHARGES
   ACHATS_MARCHANDISES: '601', // Achats de marchandises
@@ -474,11 +475,7 @@ export async function comptabiliserLivraisonCommande(data: {
 }, tx?: TxClient) {
   const p = tx || prisma
 
-  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
-  await p.ecritureComptable.deleteMany({
-    where: { referenceType: 'COMMANDE_LIVRAISON', referenceId: data.venteId }
-  })
-
+  // Note : Pas de deleteMany ici — les livraisons partielles doivent s'accumuler
   const journalVentes = await getOrCreateJournal('VE', 'Journal des Ventes', 'VENTES', tx)
   const journalOD = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const compteVentes = await getOrCreateCompte('701', 'Ventes de marchandises', '7', 'PRODUITS', tx)
@@ -608,7 +605,7 @@ export async function comptabiliserAchat(data: {
   entiteId?: number
   utilisateurId: number
   magasinId: number
-  reglements?: { mode: string; montant: number }[]
+  reglements?: { mode: string; montant: number; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean }[]
   lignes?: { produitId: number; designation: string; quantite: number; prixUnitaire: number; tva?: number; remise?: number }[]
 }, tx?: TxClient) {
   const p = tx || prisma
@@ -743,6 +740,9 @@ export async function comptabiliserAchat(data: {
   if (data.reglements && data.reglements.length > 0) {
     for (const reg of data.reglements) {
       if (reg.montant <= 0) continue
+
+      const payeCaisse = reg.payeDepuisCaisse ?? true   // défaut = ancien comportement
+      const payeBanque = reg.payeDepuisBanque ?? true    // défaut = ancien comportement
       await comptabiliserReglementAchat({
         achatId: data.achatId,
         numeroAchat: data.numeroAchat,
@@ -751,7 +751,8 @@ export async function comptabiliserAchat(data: {
         modePaiement: reg.mode,
         utilisateurId: data.utilisateurId,
         entiteId: data.entiteId,
-        magasinId: data.magasinId
+        magasinId: data.magasinId,
+        paiementDirect: !payeCaisse && !payeBanque,
       }, tx)
     }
   }
@@ -771,6 +772,7 @@ export async function comptabiliserReglementAchat(data: {
   entiteId?: number
   magasinId?: number | null
   banqueId?: number | null
+  paiementDirect?: boolean
 }, tx?: TxClient) {
   const p = tx || prisma
 
@@ -793,28 +795,41 @@ export async function comptabiliserReglementAchat(data: {
   
   // Déterminer le compte de trésorerie dynamiquement
   let compteTresorerie: { id: number }
-  const m = (data.modePaiement || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  const isCash = m === 'ESPECES' || m === 'CASH' || m === 'ESPECE'
-  
-  if (isCash) {
-    compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+
+  if (data.paiementDirect) {
+    // Paiement direct par le dirigeant : créditer le compte courant associé (455)
+    compteTresorerie = await getOrCreateCompte(
+      COMPTES_DEFAUT.ASSOCIE_COURANT,
+      'Associés - Comptes courants',
+      '4',
+      'PASSIF',
+      tx
+    )
   } else {
-    // Mobile Money, Chèque, Virement : rechercher le compte spécifique de la banque si disponible
-    if (data.banqueId) {
-      const banque = await p.banque.findUnique({ where: { id: data.banqueId }, include: { compte: true } })
-      if (banque?.compteId && banque.compte) {
-        compteTresorerie = { id: banque.compte.id }
-      } else if (banque?.compteId) {
-        compteTresorerie = { id: banque.compteId }
+    const m = (data.modePaiement || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const isCash = m === 'ESPECES' || m === 'CASH' || m === 'ESPECE'
+  
+    if (isCash) {
+      compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+    } else {
+      // Mobile Money, Chèque, Virement : rechercher le compte spécifique de la banque si disponible
+      if (data.banqueId) {
+        const banque = await p.banque.findUnique({ where: { id: data.banqueId }, include: { compte: true } })
+        if (banque?.compteId && banque.compte) {
+          compteTresorerie = { id: banque.compte.id }
+        } else if (banque?.compteId) {
+          compteTresorerie = { id: banque.compteId }
+        } else {
+          compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+        }
       } else {
         compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
       }
-    } else {
-      compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
     }
   }
   
   // Écriture : Débit Fournisseurs (réduit la dette), Crédit Caisse/Banque (sortie d'argent)
+  // ou Crédit 455 (Compte courant associé) en paiement direct
   const referenceId = data.reglementId || data.achatId || 0
 
   await createEcriture({

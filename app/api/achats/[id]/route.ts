@@ -189,6 +189,8 @@ export async function PATCH(
     if (action === 'PAGEMENT') {
       const montantReglement = Math.max(0, Number(body?.montant) || 0)
       const modePaiement = (body?.modePaiement || 'ESPECES').toUpperCase()
+      const payeDepuisCaisse = body?.payeDepuisCaisse === true
+      const payeDepuisBanque = body?.payeDepuisBanque === true
       // CREDIT = dette à terme, ne peut pas être ajouté via un règlement (c'est une créance fournisseur)
       if (modePaiement === 'CREDIT') {
         return NextResponse.json({ error: 'Le mode CREDIT représente une dette à terme. Utilisez un véritable mode de paiement.' }, { status: 400 })
@@ -262,8 +264,8 @@ const reglAchat = await tx.reglementAchat.create({
             }
           })
 
-        // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque)
-        if (estModeEspeces(modePaiement)) {
+        // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque) — optionnelle
+        if (payeDepuisCaisse && estModeEspeces(modePaiement)) {
           await enregistrerMouvementCaisse({
             magasinId: achat.magasinId,
             type: 'SORTIE',
@@ -274,7 +276,8 @@ const reglAchat = await tx.reglementAchat.create({
             date: dateReglement,
           }, tx)
           await recalculerSoldeCaisse(achat.magasinId, tx)
-        } else if (estModeBanque(modePaiement)) {
+        }
+        if (payeDepuisBanque) {
           if (!banqueId || !Number.isFinite(banqueId)) {
             throw new Error('Banque requise pour les règlements non espèces.')
           }
@@ -301,6 +304,7 @@ const reglAchat = await tx.reglementAchat.create({
           utilisateurId: session!.userId,
           magasinId: achat.magasinId,
           entiteId: achat.entiteId,
+          paiementDirect: !payeDepuisCaisse && !payeDepuisBanque,
         }, tx)
 
         return up
@@ -314,12 +318,18 @@ const reglAchat = await tx.reglementAchat.create({
     if (action === 'FULL_UPDATE') {
       const { fournisseurId, date, magasinId, observation, lignes, modePaiement, reglements, fournisseurLibre, fraisApproche } = body
       
+      const preCheck = await prisma.achat.findUnique({ where: { id }, select: { updatedAt: true } })
+      if (!preCheck) return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
+      
       const result = await prisma.$transaction(async (tx: any) => {
         const oldAchat = await tx.achat.findUnique({
           where: { id },
           include: { lignes: true, reglements: true }
         })
         if (!oldAchat) throw new Error("Achat introuvable")
+        if (oldAchat.updatedAt.getTime() !== preCheck.updatedAt.getTime()) {
+          throw new Error("Conflit de concurrence : Cet achat a été modifié par un autre utilisateur. Veuillez recharger et réessayer.")
+        }
         if (oldAchat.statut === 'ANNULEE') throw new Error("Achat annulé ne peut plus être modifié")
 
         // VERROU COMPTABLE : Interdiction de modifier un achat de plus de 24h (Sauf Super_Admin)
@@ -354,7 +364,14 @@ const reglAchat = await tx.reglementAchat.create({
 
         const regsData = Array.isArray(reglements) && reglements.length > 0
           ? reglements
-          : oldAchat.reglements.map((r: any) => ({ mode: r.modePaiement, montant: r.montant, banqueId: r.banqueId }))
+          : oldAchat.reglements.map((r: any) => ({ 
+              mode: r.modePaiement, 
+              montant: r.montant, 
+              banqueId: r.banqueId,
+              // Par défaut rétrocompatible : les anciens règlements ont été physiquement exécutés
+              payeDepuisCaisse: estModeEspeces(r.modePaiement),
+              payeDepuisBanque: true,
+            }))
 
         if (regsData.length > 0) {
           await tx.reglementAchat.deleteMany({ where: { achatId: id } })
@@ -365,6 +382,7 @@ const reglAchat = await tx.reglementAchat.create({
           where: { 
             OR: [
               { motif: `RÈGLEMENT ACHAT ${oldAchat.numero}` },
+              { motif: `ANNULATION ACHAT ${oldAchat.numero}` },
             ]
           } 
         })
@@ -558,8 +576,8 @@ const reglAchat = await tx.reglementAchat.create({
                 montant: mntR,
               }
             })
-            // Synchro physique trésorerie
-            if (estModeEspeces(modeR)) {
+            // Synchro physique trésorerie — optionnelle
+            if (r.payeDepuisCaisse && estModeEspeces(modeR)) {
               await enregistrerMouvementCaisse({
                 magasinId: updated.magasinId,
                 type: 'SORTIE',
@@ -570,7 +588,8 @@ const reglAchat = await tx.reglementAchat.create({
                 date: updated.date,
               }, tx)
               await recalculerSoldeCaisse(updated.magasinId, tx)
-            } else if (estModeBanque(modeR)) {
+            }
+            if (r.payeDepuisBanque) {
               const { enregistrerOperationBancaire } = await import('@/lib/banque')
               await enregistrerOperationBancaire({
                 banqueId: r.banqueId ? Number(r.banqueId) : null,
@@ -600,7 +619,7 @@ const reglAchat = await tx.reglementAchat.create({
           utilisateurId: session!.userId,
           magasinId: updated.magasinId,
           entiteId: updated.entiteId,
-          reglements: regsData.map((r: any) => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+          reglements: regsData.map((r: any) => ({ mode: r.mode, montant: Number(r.montant) || 0, payeDepuisCaisse: r.payeDepuisCaisse, payeDepuisBanque: r.payeDepuisBanque })),
           lignes: updated.lignes,
         }, tx)
 

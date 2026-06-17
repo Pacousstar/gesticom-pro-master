@@ -9,7 +9,7 @@ import { requireRole } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
-import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import { deleteEcrituresByReference, deleteEcrituresByReferenceForIds } from '@/lib/delete-ecritures'
 
 export async function POST(
   _request: NextRequest,
@@ -98,18 +98,18 @@ export async function POST(
         data: { statut: 'ANNULE' }
       })
 
-      const reglements = a.reglements || []
-      const totalEspeces = reglements.filter((r) => estModeEspeces(r.modePaiement)).reduce((s, r) => s + (r.montant || 0), 0)
-        || (estModeEspeces(a.modePaiement) ? (a.montantPaye || 0) : 0)
-      const totalBanque = reglements.filter((r) => estModeBanque(r.modePaiement)).reduce((s, r) => s + (r.montant || 0), 0)
-        || (estModeBanque(a.modePaiement) ? (a.montantPaye || 0) : 0)
+      // Détection des mouvements physiques existants (caisse/banque)
+      const caisseExistant = await tx.caisse.findMany({
+        where: { motif: { contains: `RÈGLEMENT ACHAT ${a.numero}` } }
+      })
+      const totalEspecesReel = caisseExistant.reduce((s, c) => s + c.montant, 0)
 
-      if (totalEspeces > 0) {
+      if (totalEspecesReel > 0) {
         await enregistrerMouvementCaisse({
           magasinId: a.magasinId,
           type: 'ENTREE',
           motif: `ANNULATION ACHAT ${a.numero}`,
-          montant: totalEspeces,
+          montant: totalEspecesReel,
           utilisateurId: session.userId,
           entiteId: a.entiteId,
           date: dateOperation,
@@ -117,10 +117,10 @@ export async function POST(
         await recalculerSoldeCaisse(a.magasinId, tx)
       }
 
-      if (totalBanque > 0) {
-        const opsBancaires = await tx.operationBancaire.findMany({
-          where: { reference: a.numero }
-        })
+      const opsBancaires = await tx.operationBancaire.findMany({
+        where: { reference: a.numero }
+      })
+      if (opsBancaires.length > 0) {
         for (const op of opsBancaires) {
           const estSortie = ['RETRAIT', 'VIREMENT_SORTANT', 'FRAIS', 'REGLEMENT_FOURNISSEUR', 'ACHAT', 'SORTIE'].includes(op.type.toUpperCase())
           const banque = await tx.banque.findUnique({ where: { id: op.banqueId } })
@@ -152,6 +152,9 @@ export async function POST(
 
       await deleteEcrituresByReference('ACHAT', id, tx)
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
+      if (a.reglements.length > 0) {
+        await deleteEcrituresByReferenceForIds('ACHAT_REGLEMENT', a.reglements.map(r => r.id), tx)
+      }
       await deleteEcrituresByReference('ACHAT_STOCK', id, tx)
 
       await logSuppression(

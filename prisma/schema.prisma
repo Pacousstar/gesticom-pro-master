@@ -34,6 +34,7 @@ model Entite {
   utilisateurs          Utilisateur[]
   ventes                Vente[]
   retours               Retour[]
+  comptesCourants       CompteCourant[]
 }
 
 model Utilisateur {
@@ -247,10 +248,30 @@ model Client {
   ventes         Vente[]
   retours        Retour[]
   entite         Entite               @relation(fields: [entiteId], references: [id])
+  compteCourant  CompteCourant?       @relation("ClientCompteCourant")
 
   @@index([actif])
   @@index([entiteId])
   @@index([type])
+}
+
+model CompteCourant {
+  id              Int         @id @default(autoincrement())
+  code            String      @unique
+  nom             String
+  ncc             String?
+  entiteId        Int
+  clientId        Int?        @unique
+  fournisseurId   Int?        @unique
+  actif           Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  client          Client?     @relation("ClientCompteCourant", fields: [clientId], references: [id], onDelete: SetNull)
+  fournisseur     Fournisseur? @relation("FournisseurCompteCourant", fields: [fournisseurId], references: [id], onDelete: SetNull)
+  entite          Entite      @relation(fields: [entiteId], references: [id])
+
+  @@index([entiteId])
+  @@index([actif])
 }
 
 model Fournisseur {
@@ -274,6 +295,7 @@ model Fournisseur {
   entite                Entite?               @relation(fields: [entiteId], references: [id])
   produits              Produit[]
   reglements            ReglementAchat[]
+  compteCourant         CompteCourant?        @relation("FournisseurCompteCourant")
 }
 
 model ReglementVente {
@@ -434,6 +456,8 @@ model Vente {
   estHistorique       Boolean               @default(false)
   typeVente           String                @default("LIVRAISON_IMMEDIATE")
   dateLivraison       DateTime?
+  retraitDiffere      Boolean               @default(false)
+  dateRetrait         DateTime?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   reglements          ReglementVente[]
@@ -454,22 +478,25 @@ model Vente {
   @@index([statutPaiement])
   @@index([typeVente])
   @@index([dateLivraison])
+  @@index([retraitDiffere])
+  @@index([dateRetrait])
 }
 
 model VenteLigne {
-  id           Int      @id @default(autoincrement())
-  venteId      Int
-  produitId    Int
-  designation  String
-  quantite     Float
-  prixUnitaire Float
-  coutUnitaire Float    @default(0)
-  tva          Float    @default(0)
-  remise       Float    @default(0)
-  montant      Float
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  produit      Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
+  id             Int      @id @default(autoincrement())
+  venteId        Int
+  produitId      Int
+  designation    String
+  quantite       Float
+  quantiteLivree Float    @default(0)
+  prixUnitaire   Float
+  coutUnitaire   Float    @default(0)
+  tva            Float    @default(0)
+  remise         Float    @default(0)
+  montant        Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  produit        Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
   vente        Vente    @relation(fields: [venteId], references: [id], onDelete: Cascade)
 
   @@index([venteId])

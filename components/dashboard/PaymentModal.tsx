@@ -27,6 +27,8 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
   const [montant, setMontant] = useState<string>('')
   const [modePaiement, setModePaiement] = useState('ESPECES')
   const [observation, setObservation] = useState('')
+  const [payeDepuisCaisse, setPayeDepuisCaisse] = useState(false)
+  const [payeDepuisBanque, setPayeDepuisBanque] = useState(false)
   const { success: showSuccess, error: showError } = useToast()
 
   useEffect(() => {
@@ -53,7 +55,9 @@ const handleSubmit = async (e: React.FormEvent) => {
         modePaiement, 
         observation,
         magasinId: selectedMagasinId ? Number(selectedMagasinId) : null,
-        banqueId: selectedBanqueId ? Number(selectedBanqueId) : null
+        banqueId: selectedBanqueId ? Number(selectedBanqueId) : null,
+        payeDepuisCaisse,
+        payeDepuisBanque,
       }
 
       if (type === 'VENTE') {
@@ -69,7 +73,7 @@ const handleSubmit = async (e: React.FormEvent) => {
          return showError('Veuillez sélectionner un magasin (Caisse) pour ce règlement libre.')
       }
 
-      if (isBankMode(modePaiement) && !selectedBanqueId) {
+      if (payeDepuisBanque && isBankMode(modePaiement) && !selectedBanqueId) {
          setLoading(false)
          return showError('Veuillez sélectionner une banque pour ce mode de paiement.')
       }
@@ -207,6 +211,27 @@ const handleSubmit = async (e: React.FormEvent) => {
               </select>
             </div>
           )}
+
+          {modePaiement === 'ESPECES' && (
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={payeDepuisCaisse}
+                onChange={(e) => setPayeDepuisCaisse(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Payé depuis la caisse
+            </label>
+          )}
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={payeDepuisBanque}
+              onChange={(e) => setPayeDepuisBanque(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Payé depuis la banque
+          </label>
 
           <div className="pt-4 flex gap-3">
             <button

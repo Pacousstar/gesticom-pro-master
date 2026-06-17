@@ -38,7 +38,7 @@ export default function ModificationAchatModal({
     fournisseurId: '',
     fournisseurLibre: '',
     modePaiement: 'ESPECES',
-    reglements: [{ mode: 'ESPECES', montant: '' }] as { mode: string; montant: string }[],
+    reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }] as { mode: string; montant: string; payeDepuisCaisse: boolean; payeDepuisBanque: boolean }[],
     banqueId: '',
     fraisApproche: '',
     observation: '',
@@ -57,7 +57,7 @@ export default function ModificationAchatModal({
 
   const { success: showSuccess, error: showError } = useToast()
   const [banques, setBanques] = useState<any[]>([])
-  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
+  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()) && (r as any).payeDepuisBanque === true)
 
   useEffect(() => {
     if (isOpen && achatId) {
@@ -101,7 +101,7 @@ export default function ModificationAchatModal({
         fournisseurId: mAchat.fournisseurId ? String(mAchat.fournisseurId) : '',
         fournisseurLibre: mAchat.fournisseurLibre || '',
         modePaiement: mAchat.modePaiement || 'ESPECES',
-        reglements: mAchat.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode, montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: String(mAchat.montantPaye || 0) }],
+        reglements: mAchat.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode, montant: String(r.montant), payeDepuisCaisse: true, payeDepuisBanque: true })) || [{ mode: 'ESPECES', montant: String(mAchat.montantPaye || 0), payeDepuisCaisse: false, payeDepuisBanque: false }],
         banqueId: '',
         fraisApproche: String(mAchat.fraisApproche || '0'),
         observation: mAchat.observation || '',
@@ -153,6 +153,20 @@ export default function ModificationAchatModal({
     setFormData(f => ({ ...f, lignes: f.lignes.filter((_, i) => i !== index) }))
   }
 
+  const handleUpdateLigne = (index: number, field: keyof Ligne, value: string | number) => {
+    setFormData(f => {
+      const lignes = [...f.lignes]
+      const l = { ...lignes[index], [field]: value }
+      const q = Number(l.quantite) || 0
+      const pu = Number(l.prixUnitaire) || 0
+      const tv = Number(l.tva) || 0
+      const rm = Number(l.remise) || 0
+      l.montant = Math.round((q * pu - rm) * (1 + tv / 100))
+      lignes[index] = l
+      return { ...f, lignes }
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (formData.lignes.length === 0) {
@@ -179,7 +193,7 @@ export default function ModificationAchatModal({
           observation: formData.observation || null,
           fraisApproche: Number(formData.fraisApproche) || 0,
           modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
-          reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+          reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0, payeDepuisCaisse: (r as any).payeDepuisCaisse === true, payeDepuisBanque: (r as any).payeDepuisBanque === true })),
           banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
           lignes: formData.lignes.map(l => ({
             produitId: l.produitId,
@@ -212,8 +226,8 @@ export default function ModificationAchatModal({
   const totalFinal = totalLignes + (Number(formData.fraisApproche) || 0)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="flex h-full max-h-[95vh] w-full max-w-5xl flex-col rounded-[2.5rem] bg-white shadow-2xl overflow-hidden text-gray-900">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-8 sm:pt-12 backdrop-blur-sm overflow-y-auto">
+      <div className="flex w-full max-w-5xl xl:max-w-6xl flex-col rounded-[2.5rem] bg-white shadow-2xl overflow-hidden text-gray-900 my-auto">
         {/* HEADER */}
         <div className="flex items-center justify-between bg-blue-700 px-8 py-6 text-white text-3xl font-black uppercase italic tracking-tighter">
           <div className="flex items-center gap-3">
@@ -340,20 +354,54 @@ export default function ModificationAchatModal({
                   <thead>
                     <tr className="bg-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky top-0">
                       <th className="px-4 py-3 text-left">Produit</th>
-                      <th className="px-4 py-3 text-center">Quantité</th>
-                      <th className="px-4 py-3 text-right">Prix Achat</th>
-                      <th className="px-4 py-3 text-right">TVA</th>
-                      <th className="px-4 py-3 text-right">Montant TTC</th>
-                      <th className="px-4 py-3 text-center">Actions</th>
+                      <th className="px-4 py-3 text-center w-20">Quantité</th>
+                      <th className="px-4 py-3 text-right w-28">Prix Achat</th>
+                      <th className="px-4 py-3 text-right w-20">TVA</th>
+                      <th className="px-4 py-3 text-right w-24">Remise</th>
+                      <th className="px-4 py-3 text-right w-28">Montant TTC</th>
+                      <th className="px-4 py-3 text-center w-16">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {formData.lignes.map((l, i) => (
                       <tr key={i} className="text-sm font-bold text-gray-700 hover:bg-blue-50/50 transition-colors">
-                        <td className="px-4 py-3">{l.designation}</td>
-                        <td className="px-4 py-3 text-center">{l.quantite}</td>
-                        <td className="px-4 py-3 text-right">{l.prixUnitaire.toLocaleString()} F</td>
-                        <td className="px-4 py-3 text-right text-gray-400">{l.tva || 0}%</td>
+                        <td className="px-4 py-3 text-xs">{l.designation}</td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            min="1"
+                            value={l.quantite}
+                            onChange={e => handleUpdateLigne(i, 'quantite', Number(e.target.value))}
+                            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-center text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            min="0"
+                            value={l.prixUnitaire}
+                            onChange={e => handleUpdateLigne(i, 'prixUnitaire', Number(e.target.value))}
+                            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-right text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            min="0"
+                            value={l.tva || 0}
+                            onChange={e => handleUpdateLigne(i, 'tva', Number(e.target.value))}
+                            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-center text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            min="0"
+                            value={l.remise || 0}
+                            onChange={e => handleUpdateLigne(i, 'remise', Number(e.target.value))}
+                            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-right text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                        </td>
                         <td className="px-4 py-3 text-right font-black">{l.montant.toLocaleString()} F</td>
                         <td className="px-4 py-3 text-center">
                           <button
@@ -402,56 +450,86 @@ export default function ModificationAchatModal({
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Règlements</label>
                        <button
                          type="button"
-                         onClick={() => setFormData(f => ({ ...f, reglements: [...f.reglements, { mode: 'ESPECES', montant: '' }] }))}
+                          onClick={() => setFormData(f => ({ ...f, reglements: [...f.reglements, { mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }] }))}
                          className="text-[10px] font-black text-blue-600 hover:text-blue-800 uppercase tracking-widest"
                        >
                          + Ajouter un règlement
                        </button>
                      </div>
-                     {formData.reglements.map((r, idx) => (
-                       <div key={idx} className="flex items-end gap-3">
-                         <div className="space-y-1 flex-1">
-                           <select
-                             value={r.mode}
-                             onChange={e => {
-                               const newRegs = [...formData.reglements]
-                               newRegs[idx] = { ...newRegs[idx], mode: e.target.value }
-                               setFormData(f => ({ ...f, reglements: newRegs }))
-                             }}
-                             className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
-                           >
-                             <option value="ESPECES">Espèces</option>
-                             <option value="MOBILE_MONEY">Mobile Money</option>
-                             <option value="CHEQUE">Chèque</option>
-                             <option value="VIREMENT">Virement</option>
-                             <option value="CREDIT">A crédit</option>
-                           </select>
-                         </div>
-                         <div className="space-y-1 flex-1">
-                           <input
-                             type="number"
-                             min="0"
-                             value={r.montant}
-                             onChange={e => {
-                               const newRegs = [...formData.reglements]
-                               newRegs[idx] = { ...newRegs[idx], montant: e.target.value }
-                               setFormData(f => ({ ...f, reglements: newRegs }))
-                             }}
-                             placeholder="Montant"
-                             className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-extrabold focus:ring-2 focus:ring-blue-500 outline-none text-blue-600"
-                           />
-                         </div>
-                         {formData.reglements.length > 1 && (
-                           <button
-                             type="button"
-                             onClick={() => setFormData(f => ({ ...f, reglements: f.reglements.filter((_, i) => i !== idx) }))}
-                             className="rounded-lg p-2 text-rose-500 hover:bg-rose-50 transition-colors"
-                           >
-                             <Trash2 className="h-4 w-4" />
-                           </button>
-                         )}
-                       </div>
-                     ))}
+                      {formData.reglements.map((r, idx) => (
+                        <div key={idx} className="flex flex-wrap items-end gap-3">
+                          <div className="space-y-1 flex-1 min-w-[140px]">
+                            <select
+                              value={r.mode}
+                              onChange={e => {
+                                const newRegs = [...formData.reglements]
+                                newRegs[idx] = { ...newRegs[idx], mode: e.target.value }
+                                setFormData(f => ({ ...f, reglements: newRegs }))
+                              }}
+                              className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                            >
+                              <option value="ESPECES">Espèces</option>
+                              <option value="MOBILE_MONEY">Mobile Money</option>
+                              <option value="CHEQUE">Chèque</option>
+                              <option value="VIREMENT">Virement</option>
+                              <option value="CREDIT">A crédit</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1 flex-1 min-w-[100px]">
+                            <input
+                              type="number"
+                              min="0"
+                              value={r.montant}
+                              onChange={e => {
+                                const newRegs = [...formData.reglements]
+                                newRegs[idx] = { ...newRegs[idx], montant: e.target.value }
+                                setFormData(f => ({ ...f, reglements: newRegs }))
+                              }}
+                              placeholder="Montant"
+                              className="w-full rounded-xl border-gray-200 bg-gray-100 px-4 py-2 text-sm font-extrabold focus:ring-2 focus:ring-blue-500 outline-none text-blue-600"
+                            />
+                          </div>
+                          {r.mode === 'ESPECES' && (
+                            <label className="flex items-center gap-1 text-[11px] font-bold text-gray-500 cursor-pointer select-none whitespace-nowrap pb-1">
+                              <input
+                                type="checkbox"
+                                checked={(r as any).payeDepuisCaisse}
+                                onChange={e => {
+                                  const newRegs = [...formData.reglements]
+                                  newRegs[idx] = { ...newRegs[idx], payeDepuisCaisse: e.target.checked }
+                                  setFormData(f => ({ ...f, reglements: newRegs }))
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              Caisse
+                            </label>
+                          )}
+                          {r.mode !== 'CREDIT' && (
+                            <label className="flex items-center gap-1 text-[11px] font-bold text-gray-500 cursor-pointer select-none whitespace-nowrap pb-1">
+                              <input
+                                type="checkbox"
+                                checked={(r as any).payeDepuisBanque}
+                                onChange={e => {
+                                  const newRegs = [...formData.reglements]
+                                  newRegs[idx] = { ...newRegs[idx], payeDepuisBanque: e.target.checked }
+                                  setFormData(f => ({ ...f, reglements: newRegs }))
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              Banque
+                            </label>
+                          )}
+                          {formData.reglements.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setFormData(f => ({ ...f, reglements: f.reglements.filter((_, i) => i !== idx) }))}
+                              className="rounded-lg p-2 text-rose-500 hover:bg-rose-50 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
                      {needsBanque && (
                        <div className="space-y-1">
                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Compte bancaire</label>

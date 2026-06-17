@@ -21,6 +21,8 @@ export async function POST(request: NextRequest) {
     const montant = Math.max(0, Number(body.montant))
     const modePaiement = body.modePaiement || 'ESPECES'
     const observation = body.observation || (achatId ? `Règlement achat` : `Acompte fournisseur`)
+    const payeDepuisCaisse = body.payeDepuisCaisse === true
+    const payeDepuisBanque = body.payeDepuisBanque === true
 
     const dateStr = body.date || null
     let dateReglement = new Date()
@@ -131,8 +133,8 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // ✅ COMPTEUR CAISSE GLOBAL
-      if (estModeEspeces(modePaiement)) {
+      // ✅ SYNCHRO PHYSIQUE (caisse/banque) — optionnelle
+      if (payeDepuisCaisse && estModeEspeces(modePaiement)) {
         await enregistrerMouvementCaisse({
           magasinId: Number(body.magasinId),
           type: 'SORTIE',
@@ -143,23 +145,21 @@ export async function POST(request: NextRequest) {
           date: dateReglement,
         }, tx)
         await recalculerSoldeCaisse(Number(body.magasinId), tx)
-      } else {
-        // ✅ SYNCHRO BANQUE : Sortie de fonds
-        const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
-        if (estModeBanque(modePaiement)) {
-          await enregistrerOperationBancaire({
-            banqueId: body.banqueId ? Number(body.banqueId) : null,
-            entiteId,
-            date: dateReglement,
-            type: 'REGLEMENT_FOURNISSEUR',
-            libelle: `Règlement Achat ${a?.numero || ''} - ${observation}`,
-            montant,
-            utilisateurId: session.userId,
-            reference: a?.numero || `PAY-${Date.now()}`,
-            beneficiaire: a?.fournisseur?.nom || a?.fournisseurLibre || fournisseur?.nom || null,
-            observation: `Paiement via ${modePaiement}`
-          }, tx)
-        }
+      }
+      if (payeDepuisBanque) {
+        const { enregistrerOperationBancaire } = await import('@/lib/banque')
+        await enregistrerOperationBancaire({
+          banqueId: body.banqueId ? Number(body.banqueId) : null,
+          entiteId,
+          date: dateReglement,
+          type: 'REGLEMENT_FOURNISSEUR',
+          libelle: `Règlement Achat ${a?.numero || ''} - ${observation}`,
+          montant,
+          utilisateurId: session.userId,
+          reference: a?.numero || `REG-A-${reglement.id}`,
+          beneficiaire: a?.fournisseur?.nom || a?.fournisseurLibre || fournisseur?.nom || null,
+          observation: `Paiement via ${modePaiement}`
+        }, tx)
       }
 
       // ✅ COMPTABILISATION
@@ -172,7 +172,8 @@ export async function POST(request: NextRequest) {
         modePaiement,
         entiteId,
         utilisateurId: session.userId,
-        magasinId: body.magasinId ? Number(body.magasinId) : undefined
+        magasinId: body.magasinId ? Number(body.magasinId) : undefined,
+        paiementDirect: !payeDepuisCaisse && !payeDepuisBanque,
       }, tx)
 
       return reglement

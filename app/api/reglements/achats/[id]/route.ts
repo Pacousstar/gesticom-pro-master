@@ -121,6 +121,8 @@ export async function PATCH(
     const entiteId = await getEntiteId(session)
     const body = await request.json()
     const { montant, modePaiement, date, observation } = body
+    const payeDepuisCaisse = body.payeDepuisCaisse === true
+    const payeDepuisBanque = body.payeDepuisBanque === true
 
     const old = await prisma.reglementAchat.findUnique({
       where: { id },
@@ -171,7 +173,7 @@ export async function PATCH(
           date: date ? new Date(date) : undefined,
           observation: observation || undefined,
         },
-        include: { achat: true }
+        include: { achat: { include: { fournisseur: { select: { nom: true } } } } }
       })
 
       if (updated.achatId) {
@@ -215,16 +217,33 @@ export async function PATCH(
         }
       }
 
-      if (['CHEQUE', 'VIREMENT', 'MOBILE_MONEY'].includes(updated.modePaiement)) {
-        const banque = await tx.banque.findFirst({ where: { actif: true, entiteId } })
-        if (banque) {
-          const diff = (updated.montant - old.montant)
-          // Paiement fournisseur = sortie -> augmenter le soldeActuel réduit l'impact, donc on décrémente de la diff
-          await tx.banque.update({
-            where: { id: banque.id },
-            data: { soldeActuel: { decrement: diff } }
-          })
-        }
+      if (payeDepuisCaisse && estModeEspeces(updated.modePaiement)) {
+        const { enregistrerMouvementCaisse } = await import('@/lib/caisse')
+        await enregistrerMouvementCaisse({
+          magasinId: updated.achat?.magasinId || 1,
+          type: 'SORTIE',
+          motif: `Règlement Achat ${updated.achat?.numero || updated.id}`,
+          montant: updated.montant,
+          utilisateurId: session.userId,
+          entiteId: updated.entiteId ?? entiteId ?? 1,
+          date: updated.date,
+        }, tx)
+        await recalculerSoldeCaisse(updated.achat?.magasinId || 1, tx)
+      }
+      if (payeDepuisBanque) {
+        const banqueId = body?.banqueId ? Number(body.banqueId) : null
+        const { enregistrerOperationBancaire } = await import('@/lib/banque')
+        await enregistrerOperationBancaire({
+          banqueId,
+          entiteId: updated.entiteId ?? entiteId ?? 1,
+          date: updated.date,
+          type: 'REGLEMENT_FOURNISSEUR',
+          libelle: `Règlement Achat ${updated.achat?.numero || updated.id}`,
+          montant: updated.montant,
+          utilisateurId: session.userId,
+          reference: updated.achat?.numero || `REG-A-${updated.id}`,
+          beneficiaire: updated.achat?.fournisseur?.nom || updated.achat?.fournisseurLibre || null,
+        }, tx)
       }
 
       const { comptabiliserReglementAchat } = await import('@/lib/comptabilisation')
@@ -236,7 +255,8 @@ export async function PATCH(
         montant: updated.montant,
         modePaiement: updated.modePaiement,
         utilisateurId: session.userId,
-        entiteId: updated.entiteId ?? undefined
+        entiteId: updated.entiteId ?? undefined,
+        paiementDirect: !payeDepuisCaisse && !payeDepuisBanque,
       }, tx)
 
       return updated

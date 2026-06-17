@@ -89,6 +89,7 @@ const navigation = [
       { name: 'Relevés de comptes', href: '/dashboard/fournisseurs/releves', icon: FileText, permission: 'fournisseurs:view', key: 'relevesFournisseurs' },
       { name: 'Soldes Fournisseurs', href: '/dashboard/fournisseurs/soldes', icon: FileText, permission: 'fournisseurs:view', key: 'soldesFournisseurs' },
       { name: 'Paiements Fournisseurs', href: '/dashboard/fournisseurs/paiements', icon: Wallet, permission: 'fournisseurs:view', key: 'paiementsFournisseurs' },
+      { name: 'Comptes Courants', href: '/dashboard/comptes-courants', icon: ArrowRightLeft, permission: 'achats:view', key: 'comptesCourants' },
     ]
   },
   {

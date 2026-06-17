@@ -85,7 +85,7 @@ export default function AchatsPage() {
     fournisseurLibre: '',
     modePaiement: 'ESPECES',
     montantPaye: '',
-    reglements: [{ mode: 'ESPECES', montant: '' }] as { mode: string; montant: string }[], // Multi-Paiement
+    reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }] as { mode: string; montant: string; payeDepuisCaisse: boolean; payeDepuisBanque: boolean }[], // Multi-Paiement
     banqueId: '',
     numeroCamion: '',
     fraisApproche: '',
@@ -121,7 +121,7 @@ export default function AchatsPage() {
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
-  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
+  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0], payeDepuisCaisse: false, payeDepuisBanque: false })
   const [submitting, setSubmitting] = useState(false)
   const [savingReglement, setSavingReglement] = useState(false)
   const [formFournisseurSearch, setFormFournisseurSearch] = useState('')
@@ -430,7 +430,7 @@ export default function AchatsPage() {
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalHTNet: 0, totalAchatTTC: 0 }
   )
   const total = montantTotalAchatSommeLignes([totalAchatTTC])
-  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
+  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()) && (r as any).payeDepuisBanque === true)
 
   // Récupérer le templateId par défaut pour ACHAT
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
@@ -555,7 +555,7 @@ export default function AchatsPage() {
       fournisseurId: formData.fournisseurId ? Number(formData.fournisseurId) : null,
       fournisseurLibre: formData.fournisseurLibre.trim() || null,
       modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
-      reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+      reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0, payeDepuisCaisse: (r as any).payeDepuisCaisse === true, payeDepuisBanque: (r as any).payeDepuisBanque === true })),
       banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
       fraisApproche: Number(formData.fraisApproche) || 0,
       numeroCamion: formData.numeroCamion.trim() || null,
@@ -633,7 +633,7 @@ export default function AchatsPage() {
       fournisseurLibre: '',
       modePaiement: 'ESPECES',
       montantPaye: '',
-      reglements: [{ mode: 'ESPECES', montant: '' }],
+      reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }],
       banqueId: '',
       numeroCamion: '',
       fraisApproche: '',
@@ -710,12 +710,14 @@ export default function AchatsPage() {
             ? Number(reglementData.banqueId)
             : undefined,
           date: reglementData.date,
+          payeDepuisCaisse: reglementData.payeDepuisCaisse === true,
+          payeDepuisBanque: reglementData.payeDepuisBanque === true,
         }),
       })
       if (res.ok) {
         showSuccess('Règlement enregistré avec succès.')
         setShowReglement(null)
-        setReglementData({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
+        setReglementData({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0], payeDepuisCaisse: false, payeDepuisBanque: false })
         fetchAchats()
         if (detailAchat?.id === showReglement.id) {
           handleVoirDetail(showReglement.id)
@@ -752,7 +754,7 @@ export default function AchatsPage() {
             Imprimer
           </button>
           <button
-            onClick={() => { setEditingAchatId(null); setFormData({ date: new Date().toLocaleDateString('en-CA'), magasinId: '', fournisseurId: '', fournisseurLibre: '', modePaiement: 'ESPECES', montantPaye: '', reglements: [{ mode: 'ESPECES', montant: '' }], banqueId: '', numeroCamion: '', fraisApproche: '', observation: '', lignes: [] }); setForm(true) }}
+            onClick={() => { setEditingAchatId(null); setFormData({ date: new Date().toLocaleDateString('en-CA'), magasinId: '', fournisseurId: '', fournisseurLibre: '', modePaiement: 'ESPECES', montantPaye: '', reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }], banqueId: '', numeroCamion: '', fraisApproche: '', observation: '', lignes: [] }); setForm(true) }}
             className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-3 text-sm font-bold text-white hover:bg-orange-700 shadow-lg shadow-orange-900/20 transition-all hover:scale-105"
             title="Nouvel achat (Ctrl+N)"
           >
@@ -1160,7 +1162,7 @@ export default function AchatsPage() {
                       </h3>
                       <button
                         type="button"
-                        onClick={() => setFormData(f => ({ ...f, reglements: [...f.reglements, { mode: 'ESPECES', montant: '' }] }))}
+                        onClick={() => setFormData(f => ({ ...f, reglements: [...f.reglements, { mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }] }))}
                         className="text-[10px] font-bold bg-orange-200 text-orange-800 px-2 py-1 rounded hover:bg-orange-300 transition-colors"
                       >
                         + AJOUTER UN MODE
@@ -1169,7 +1171,7 @@ export default function AchatsPage() {
 
                     <div className="space-y-3">
                       {formData.reglements.map((reg, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div key={idx} className="flex flex-wrap items-center gap-2">
                           <select
                             value={reg.mode}
                             onChange={(e) => {
@@ -1177,7 +1179,7 @@ export default function AchatsPage() {
                               newRegs[idx].mode = e.target.value
                               setFormData(f => ({ ...f, reglements: newRegs }))
                             }}
-                            className="flex-1 rounded-lg border border-orange-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none bg-white font-bold"
+                            className="flex-1 min-w-[140px] rounded-lg border border-orange-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none bg-white font-bold"
                           >
                             <option value="ESPECES">ESPECES</option>
                             <option value="MOBILE_MONEY">MOBILE MONEY</option>
@@ -1194,8 +1196,38 @@ export default function AchatsPage() {
                               newRegs[idx].montant = e.target.value
                               setFormData(f => ({ ...f, reglements: newRegs }))
                             }}
-                            className="w-32 rounded-lg border border-orange-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none bg-white font-black"
+                            className="w-28 rounded-lg border border-orange-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none bg-white font-black"
                           />
+                          {reg.mode === 'ESPECES' && (
+                            <label className="flex items-center gap-1 text-[11px] font-bold text-gray-600 cursor-pointer select-none whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={reg.payeDepuisCaisse}
+                                onChange={(e) => {
+                                  const newRegs = [...formData.reglements]
+                                  newRegs[idx].payeDepuisCaisse = e.target.checked
+                                  setFormData(f => ({ ...f, reglements: newRegs }))
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              Caisse
+                            </label>
+                          )}
+                          {reg.mode !== 'CREDIT' && (
+                            <label className="flex items-center gap-1 text-[11px] font-bold text-gray-600 cursor-pointer select-none whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={reg.payeDepuisBanque}
+                                onChange={(e) => {
+                                  const newRegs = [...formData.reglements]
+                                  newRegs[idx].payeDepuisBanque = e.target.checked
+                                  setFormData(f => ({ ...f, reglements: newRegs }))
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              Banque
+                            </label>
+                          )}
                           {formData.reglements.length > 1 && (
                             <button
                               type="button"
@@ -1529,7 +1561,7 @@ export default function AchatsPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Paiement</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Statut paiement</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Reste à payer</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -1884,6 +1916,29 @@ export default function AchatsPage() {
                   className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
                 />
               </div>
+
+              {reglementData.modePaiement === 'ESPECES' && (
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={reglementData.payeDepuisCaisse}
+                    onChange={(e) => setReglementData(prev => ({ ...prev, payeDepuisCaisse: e.target.checked }))}
+                    className="rounded border-gray-300"
+                  />
+                  Payé depuis la caisse
+                </label>
+              )}
+              {reglementData.modePaiement !== 'CREDIT' && (
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={reglementData.payeDepuisBanque}
+                    onChange={(e) => setReglementData(prev => ({ ...prev, payeDepuisBanque: e.target.checked }))}
+                    className="rounded border-gray-300"
+                  />
+                  Payé depuis la banque
+                </label>
+              )}
 
               {['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(reglementData.modePaiement).toUpperCase()) && (
                 <div>

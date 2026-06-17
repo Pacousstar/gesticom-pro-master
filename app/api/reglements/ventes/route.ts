@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
             libelle: `Règlement Vente ${v?.numero || ''} - ${observation}`,
             montant,
             utilisateurId: session.userId,
-            reference: v?.numero || `REG-${Date.now()}`,
+            reference: v?.numero || `REG-${reglement.id}`,
             beneficiaire: client?.nom || v?.clientLibre || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)

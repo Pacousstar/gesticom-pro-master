@@ -110,24 +110,30 @@ export async function DELETE(
       await deleteEcrituresByReference('COMMANDE_LIVRAISON', id, tx)
 
       // 2/3. Stock
-      const estCommandeNonLivree = v.typeVente === 'COMMANDE' && !v.dateLivraison
-      if (!estCommandeNonLivree) {
+      const totalLivree = v.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
+      const estCommande = v.typeVente === 'COMMANDE'
+      const stockPasDeduit = (estCommande && totalLivree === 0) || (v.retraitDiffere && !v.dateRetrait)
+      const stockADeduire = !stockPasDeduit
+      if (stockADeduire) {
         await tx.mouvement.deleteMany({
-            where: {
-              OR: [
-                { observation: `Annulation vente ${v.numero}` },
-                { observation: `Vente ${v.numero}` },
-                { observation: `Modif Vente ${v.numero}` },
-                { observation: `Livraison commande ${v.numero}` },
-              ]
-            }
-          })
+          where: {
+            OR: [
+              { observation: `Annulation vente ${v.numero}` },
+              { observation: `Vente ${v.numero}` },
+              { observation: `Modif Vente ${v.numero}` },
+              { observation: `Livraison commande ${v.numero}` },
+            ]
+          }
+        })
         if (v.statut !== 'ANNULEE') {
           for (const l of v.lignes) {
-            await tx.stock.updateMany({
-              where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
-              data: { quantite: { increment: l.quantite } },
-            })
+            const qteARembourser = estCommande ? (l.quantiteLivree || 0) : l.quantite
+            if (qteARembourser > 0) {
+              await tx.stock.updateMany({
+                where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
+                data: { quantite: { increment: qteARembourser } },
+              })
+            }
           }
         }
       }
@@ -235,12 +241,106 @@ export async function PATCH(
         return NextResponse.json({ error: 'Seules les ventes sur commande peuvent être livrées.' }, { status: 400 })
       }
       if (vente.dateLivraison) {
-        return NextResponse.json({ error: 'Cette commande a déjà été livrée.' }, { status: 400 })
+        return NextResponse.json({ error: 'Cette commande a déjà été intégralement livrée.' }, { status: 400 })
+      }
+
+      const lignesPayload = Array.isArray(body?.lignes) ? body.lignes : null
+      const maintenant = new Date()
+      await prisma.$transaction(async (tx) => {
+        let montantTotalLivraison = 0
+        const lignesLivrees: any[] = []
+        const deliveredMap = new Map<number, number>()
+
+        for (const l of vente.lignes) {
+          const resteALivrer = l.quantite - (l.quantiteLivree || 0)
+          if (resteALivrer <= 0) continue
+
+          let qteALivrer = lignesPayload
+            ? Math.min(Math.max(0, Number(lignesPayload.find((p: any) => p.produitId === l.produitId)?.quantite) || 0), resteALivrer)
+            : resteALivrer
+
+          if (qteALivrer <= 0) continue
+
+          const st = await tx.stock.findUnique({
+            where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId: vente.magasinId, entiteId: vente.entiteId } }
+          })
+          if ((st?.quantite ?? 0) < qteALivrer) {
+            throw new Error(`Stock insuffisant pour ${l.designation} (${st?.quantite || 0} dispo, ${qteALivrer} requis).`)
+          }
+          await tx.stock.update({
+            where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId: vente.magasinId, entiteId: vente.entiteId } },
+            data: { quantite: { decrement: qteALivrer } },
+          })
+          await tx.mouvement.create({
+            data: {
+              type: 'SORTIE', produitId: l.produitId, magasinId: vente.magasinId,
+              entiteId: vente.entiteId, utilisateurId: session!.userId,
+              quantite: qteALivrer, dateOperation: maintenant,
+              observation: `Livraison commande ${vente.numero}`,
+            },
+          })
+          await tx.venteLigne.update({
+            where: { id: l.id },
+            data: { quantiteLivree: { increment: qteALivrer } },
+          })
+
+          const montantLigne = (l.montant / l.quantite) * qteALivrer
+          montantTotalLivraison += montantLigne
+          lignesLivrees.push({
+            produitId: l.produitId, designation: l.designation,
+            quantite: qteALivrer, prixUnitaire: l.prixUnitaire,
+            coutUnitaire: l.coutUnitaire, tva: l.tva, remise: l.remise,
+          })
+          deliveredMap.set(l.produitId, qteALivrer)
+        }
+
+        if (lignesLivrees.length === 0) {
+          throw new Error('Aucune ligne à livrer.')
+        }
+
+        const toutesLivrees = vente.lignes.every((l: any) => {
+          const already = l.quantiteLivree || 0
+          const just = deliveredMap.get(l.produitId) || 0
+          return (already + just) >= l.quantite
+        })
+
+        if (toutesLivrees) {
+          await tx.vente.update({ where: { id }, data: { dateLivraison: maintenant } })
+        }
+
+        const { comptabiliserLivraisonCommande } = await import('@/lib/comptabilisation')
+        await comptabiliserLivraisonCommande({
+          venteId: id, numeroVente: vente.numero, date: maintenant,
+          montantTotal: montantTotalLivraison, entiteId: vente.entiteId,
+          utilisateurId: session!.userId, magasinId: vente.magasinId,
+          lignes: lignesLivrees,
+        }, tx)
+      }, { timeout: 20000 })
+
+      revalidatePath('/dashboard/ventes')
+      revalidatePath('/api/ventes')
+      const msg = lignesPayload ? 'Livraison partielle effectuée avec succès.' : 'Commande livrée avec succès.'
+      return NextResponse.json({ success: true, message: msg })
+    }
+
+    if (action === 'RETRAIT') {
+      const vente = await prisma.vente.findUnique({
+        where: { id },
+        include: { lignes: true, magasin: true }
+      })
+      if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
+      if (!vente.retraitDiffere) {
+        return NextResponse.json({ error: 'Cette vente n\'est pas à retrait différé.' }, { status: 400 })
+      }
+      if (vente.dateRetrait) {
+        return NextResponse.json({ error: 'Cette vente a déjà été retirée.' }, { status: 400 })
       }
 
       const maintenant = new Date()
       await prisma.$transaction(async (tx) => {
-        // Déduire le stock
+        let montantTotalRetrait = 0
+        const lignesRetirees: any[] = []
+
         for (const l of vente.lignes) {
           const st = await tx.stock.findUnique({
             where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId: vente.magasinId, entiteId: vente.entiteId } }
@@ -254,39 +354,36 @@ export async function PATCH(
           })
           await tx.mouvement.create({
             data: {
-              type: 'SORTIE',
-              produitId: l.produitId,
-              magasinId: vente.magasinId,
-              entiteId: vente.entiteId,
-              utilisateurId: session!.userId,
-              quantite: l.quantite,
-              dateOperation: maintenant,
-              observation: `Livraison commande ${vente.numero}`,
+              type: 'SORTIE', produitId: l.produitId, magasinId: vente.magasinId,
+              entiteId: vente.entiteId, utilisateurId: session!.userId,
+              quantite: l.quantite, dateOperation: maintenant,
+              observation: `Retrait vente ${vente.numero}`,
             },
           })
+
+          const montantLigne = l.montant
+          montantTotalRetrait += montantLigne
+          lignesRetirees.push({
+            produitId: l.produitId, designation: l.designation,
+            quantite: l.quantite, prixUnitaire: l.prixUnitaire,
+            coutUnitaire: l.coutUnitaire, tva: l.tva, remise: l.remise,
+          })
         }
-        // Marquer la livraison
-        const delivered = await tx.vente.update({
-          where: { id },
-          data: { dateLivraison: maintenant },
-        })
-        // Comptabilisation : reprise avance (4191) + reconnaissance revenu (701) + sortie stock (603/311)
+
         const { comptabiliserLivraisonCommande } = await import('@/lib/comptabilisation')
         await comptabiliserLivraisonCommande({
-          venteId: id,
-          numeroVente: vente.numero,
-          date: maintenant,
-          montantTotal: vente.montantTotal,
-          entiteId: vente.entiteId,
-          utilisateurId: session!.userId,
-          magasinId: vente.magasinId,
-          lignes: vente.lignes,
+          venteId: id, numeroVente: vente.numero, date: maintenant,
+          montantTotal: montantTotalRetrait, entiteId: vente.entiteId,
+          utilisateurId: session!.userId, magasinId: vente.magasinId,
+          lignes: lignesRetirees,
         }, tx)
+
+        await tx.vente.update({ where: { id }, data: { dateRetrait: maintenant } })
       }, { timeout: 20000 })
 
       revalidatePath('/dashboard/ventes')
       revalidatePath('/api/ventes')
-      return NextResponse.json({ success: true, message: 'Commande livrée avec succès.' })
+      return NextResponse.json({ success: true, message: 'Vente retirée avec succès.' })
     }
 
     if (action === 'PAGEMENT') {
@@ -417,7 +514,7 @@ export async function PATCH(
           }, tx)
         }
 
-        const isCommandeNonLivree = vente.typeVente === 'COMMANDE' && !vente.dateLivraison
+        const isCommandeNonLivree = (vente.typeVente === 'COMMANDE' && !vente.dateLivraison) || (vente.retraitDiffere && !vente.dateRetrait)
         const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
         await comptabiliserReglementVente({
           reglementId: reglement.id,
@@ -443,12 +540,18 @@ export async function PATCH(
     if (action === 'FULL_UPDATE') {
       const { clientId, date, magasinId, observation, lignes, modePaiement, reglements, clientLibre, remiseGlobale, fraisApproche } = body
       
+      const preCheck = await prisma.vente.findUnique({ where: { id }, select: { updatedAt: true } })
+      if (!preCheck) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
+      
       const result = await prisma.$transaction(async (tx: any) => {
         const oldVente = await tx.vente.findUnique({
           where: { id },
           include: { lignes: true, reglements: true }
         })
         if (!oldVente) throw new Error("Vente introuvable")
+        if (oldVente.updatedAt.getTime() !== preCheck.updatedAt.getTime()) {
+          throw new Error("Conflit de concurrence : Cette vente a été modifiée par un autre utilisateur. Veuillez recharger et réessayer.")
+        }
         if (oldVente.statut === 'ANNULEE') throw new Error("Vente annulée ne peut plus être modifiée")
 
         // VERROU COMPTABLE : Interdiction de modifier une vente de plus de 24h (Sauf Super_Admin)
@@ -457,22 +560,29 @@ export async function PATCH(
           throw new Error("Verrou Comptable : Cette vente date de plus de 24h. Modification interdite pour garantir l'intégrité des calculs. Veuillez contacter le Super Administrateur ou procéder à une Annulation.")
         }
 
-        const estCommandeNonLivree = oldVente.typeVente === 'COMMANDE' && !oldVente.dateLivraison
+        const totalLivreeVente = oldVente.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
+        const stockPasDeduit = (oldVente.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (oldVente.retraitDiffere && !oldVente.dateRetrait)
+        const estCommandeNonLivree = stockPasDeduit
+        const estCommande = oldVente.typeVente === 'COMMANDE'
 
         // 1. Rollback stocks (uniquement si stock déjà déduit)
         if (!estCommandeNonLivree) {
           for (const l of oldVente.lignes) {
-            await tx.stock.updateMany({
-              where: { produitId: l.produitId, magasinId: oldVente.magasinId, entiteId: oldVente.entiteId },
-              data: { quantite: { increment: l.quantite } }
-            })
+            const qteARembourser = estCommande ? (l.quantiteLivree || 0) : l.quantite
+            if (qteARembourser > 0) {
+              await tx.stock.updateMany({
+                where: { produitId: l.produitId, magasinId: oldVente.magasinId, entiteId: oldVente.entiteId },
+                data: { quantite: { increment: qteARembourser } }
+              })
+            }
           }
           await tx.mouvement.deleteMany({
              where: {
                OR: [
                  { observation: `Annulation vente ${oldVente.numero}` },
                  { observation: `Vente ${oldVente.numero}` },
-                 { observation: `Modif Vente ${oldVente.numero}` }
+                 { observation: `Modif Vente ${oldVente.numero}` },
+                 { observation: `Livraison commande ${oldVente.numero}` },
                ]
              }
            })
@@ -642,6 +752,24 @@ export async function PATCH(
                 observation: `Modif Vente ${updated.numero}`,
               }
             })
+          }
+        }
+
+        // 5b. Points de fidélité
+        if (updated.clientId || oldVente.clientId) {
+          const oldPts = pointsFideliteDepuisEncaissement(oldVente.montantPaye || 0)
+          const newPts = pointsFideliteDepuisEncaissement(updated.montantPaye || 0)
+          if (oldVente.clientId && oldPts > 0) {
+            const oldCli = await tx.client.findUnique({ where: { id: oldVente.clientId }, select: { code: true } })
+            if (oldCli && oldCli.code !== 'PASSAGE' && oldCli.code !== 'ANONYME') {
+              await tx.client.update({ where: { id: oldVente.clientId }, data: { pointsFidelite: { decrement: oldPts } } }).catch(() => {})
+            }
+          }
+          if (updated.clientId && newPts > 0) {
+            const newCli = await tx.client.findUnique({ where: { id: updated.clientId }, select: { code: true } })
+            if (newCli && newCli.code !== 'PASSAGE' && newCli.code !== 'ANONYME') {
+              await tx.client.update({ where: { id: updated.clientId }, data: { pointsFidelite: { increment: newPts } } }).catch(() => {})
+            }
           }
         }
 

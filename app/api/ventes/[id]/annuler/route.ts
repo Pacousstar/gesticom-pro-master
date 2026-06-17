@@ -9,7 +9,7 @@ import { requireRole } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
-import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
+import { deleteEcrituresByReference, deleteEcrituresByReferenceForIds } from '@/lib/delete-ecritures'
 import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
 
 export async function POST(
@@ -59,25 +59,31 @@ export async function POST(
       // VERROU DE CLÔTURE (Au sein de la transaction pour Atomicité + Performance)
       await verifierCloture(v.date, session, tx)
 
-      const estCommandeNonLivree = v.typeVente === 'COMMANDE' && !v.dateLivraison
+      const totalLivreeVente = v.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
+      const stockPasDeduit = (v.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (v.retraitDiffere && !v.dateRetrait)
+      const estCommandeNonLivree = stockPasDeduit
+      const estCommande = v.typeVente === 'COMMANDE'
 
       if (!estCommandeNonLivree) {
         for (const l of v.lignes) {
-          await tx.stock.updateMany({
-            where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
-            data: { quantite: { increment: l.quantite } },
-          })
-          await tx.mouvement.create({
-            data: {
-              type: 'ENTREE',
-              produitId: l.produitId,
-              magasinId: v.magasinId,
-              entiteId: v.entiteId,
-              utilisateurId: session.userId,
-              quantite: l.quantite,
-              observation: `Annulation vente ${v.numero}`,
-            },
-          })
+          const qteARembourser = estCommande ? (l.quantiteLivree || 0) : l.quantite
+          if (qteARembourser > 0) {
+            await tx.stock.updateMany({
+              where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
+              data: { quantite: { increment: qteARembourser } },
+            })
+            await tx.mouvement.create({
+              data: {
+                type: 'ENTREE',
+                produitId: l.produitId,
+                magasinId: v.magasinId,
+                entiteId: v.entiteId,
+                utilisateurId: session.userId,
+                quantite: qteARembourser,
+                observation: `Annulation vente ${v.numero}`,
+              },
+            })
+          }
         }
       }
 
@@ -156,6 +162,9 @@ export async function POST(
       // 5. Supprimer toutes les écritures comptables
       await deleteEcrituresByReference('VENTE', id, tx)
       await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
+      if (v.reglements.length > 0) {
+        await deleteEcrituresByReferenceForIds('VENTE_REGLEMENT', v.reglements.map(r => r.id), tx)
+      }
       await deleteEcrituresByReference('VENTE_STOCK', id, tx)
       await deleteEcrituresByReference('VENTE_FRAIS', id, tx)
       await deleteEcrituresByReference('COMMANDE_LIVRAISON', id, tx)

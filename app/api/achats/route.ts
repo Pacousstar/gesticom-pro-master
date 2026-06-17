@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
 
     let montantPaye = 0
     let autoReglementComplet = false
-    let listReglements: { mode: string; montant: number }[] = []
+    let listReglements: { mode: string; montant: number; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean }[] = []
 
     if (reglementsPayload.length > 0) {
       for (const r of reglementsPayload) {
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
         const mode = String(r.mode).toUpperCase()
         if (amt > 0 && mode !== 'CREDIT') {
           // CREDIT = dette à terme, on ne crée PAS de règlement
-          listReglements.push({ mode, montant: amt })
+          listReglements.push({ mode, montant: amt, payeDepuisCaisse: r.payeDepuisCaisse === true, payeDepuisBanque: r.payeDepuisBanque === true })
           montantPaye += amt
         }
       }
@@ -321,9 +321,9 @@ let montantFactureHT = 0
         error: `Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse l'achat (${montantTotal.toLocaleString()} F).`
       }, { status: 400 })
     }
-    const needsBanque = listReglements.some((r) => estModeBanque(r.mode))
+    const needsBanque = listReglements.some((r) => estModeBanque(r.mode) && r.payeDepuisBanque === true)
     if (needsBanque && !Number(body?.banqueId)) {
-      return NextResponse.json({ error: 'Banque requise pour les règlements non espèces.' }, { status: 400 })
+      return NextResponse.json({ error: 'Banque requise pour les règlements cochés "Payé depuis la banque".' }, { status: 400 })
     }
 
     
@@ -447,12 +447,12 @@ let montantFactureHT = 0
 
       // 3. Règlement(s) automatique(s) - MULTI-PAIEMENT
       let resteReglement = montantTotal
-      const reglementsEffectifs: { mode: string; montant: number }[] = []
+      const reglementsEffectifs: { mode: string; montant: number; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean }[] = []
       for (const reg of listReglements) {
         const montantReg = Math.min(reg.montant, resteReglement)
         if (montantReg <= 0) continue
         resteReglement -= montantReg
-        reglementsEffectifs.push({ mode: reg.mode, montant: montantReg })
+        reglementsEffectifs.push({ mode: reg.mode, montant: montantReg, payeDepuisCaisse: reg.payeDepuisCaisse, payeDepuisBanque: reg.payeDepuisBanque })
 
         const reglAchat = await tx.reglementAchat.create({
           data: {
@@ -475,8 +475,8 @@ let montantFactureHT = 0
           }
         })
 
-        // 4. Synchronisation physique trésorerie (caisse / banque)
-        if (estModeEspeces(reg.mode)) {
+        // 4. Synchronisation physique trésorerie (caisse / banque) — optionnelle
+        if (reg.payeDepuisCaisse && estModeEspeces(reg.mode)) {
           await enregistrerMouvementCaisse({
             magasinId,
             type: 'SORTIE',
@@ -487,7 +487,8 @@ let montantFactureHT = 0
             date: dateAchat,
           }, tx)
           await recalculerSoldeCaisse(magasinId, tx)
-        } else if (estModeBanque(reg.mode)) {
+        }
+        if (reg.payeDepuisBanque) {
           const { enregistrerOperationBancaire } = await import('@/lib/banque')
           await enregistrerOperationBancaire({
             banqueId: body?.banqueId ? Number(body.banqueId) : null,

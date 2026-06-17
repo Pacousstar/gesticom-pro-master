@@ -100,6 +100,13 @@ export default function CaissePage() {
         // Utiliser les stats de la page pour la cohérence visuelle, mais garder les stats globales si pas de filtre
         setStatsPeriod(res.stats || { totalEntrees: 0, totalSorties: 0, solde: 0 })
       })
+      .catch((e) => {
+        console.error('fetchOperations error:', e)
+        setOperations([])
+        setTotalEntries(0)
+        setTotalPages(0)
+        setStatsPeriod({ totalEntrees: 0, totalSorties: 0, solde: 0 })
+      })
       .finally(() => setLoading(false))
 
     // Les stats (consolidation) restent globales pour la période filtrée

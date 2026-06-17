@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
   const searchNumeroBon = request.nextUrl.searchParams.get('numeroBon')?.trim()
   const searchClient = request.nextUrl.searchParams.get('clientSearch')?.trim()
   const typeVenteFilter = request.nextUrl.searchParams.get('typeVente')?.trim()
+  const suiviFilter = request.nextUrl.searchParams.get('type') === 'suivi'
 
   const entiteIdFilter = await getEntiteIdOrAll(session)
   const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
@@ -79,6 +80,13 @@ export async function GET(request: NextRequest) {
   // Filtre par type de vente
   if (typeVenteFilter && ['LIVRAISON_IMMEDIATE', 'COMMANDE'].includes(typeVenteFilter)) {
     where.typeVente = typeVenteFilter
+  }
+
+  // Filtre suivi : commandes + retraits différés
+  if (suiviFilter) {
+    const suiviOr: Prisma.VenteWhereInput = { OR: [{ typeVente: 'COMMANDE' }, { retraitDiffere: true }] }
+    const existingAnd = Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND] : [])
+    where.AND = [...existingAnd, suiviOr]
   }
 
   const [ventes, total, aggregates] = await Promise.all([
@@ -160,6 +168,7 @@ export async function POST(request: NextRequest) {
     const observation = body?.observation != null ? String(body.observation).trim() || null : null
     const numeroBon = body?.numeroBon != null ? String(body.numeroBon).trim() || null : null
     const estVenteRapide = body?.estVenteRapide === true
+    const retraitDiffere = body?.retraitDiffere === true
     const typeVente = ['LIVRAISON_IMMEDIATE', 'COMMANDE'].includes(String(body?.typeVente || 'LIVRAISON_IMMEDIATE'))
       ? String(body.typeVente) : 'LIVRAISON_IMMEDIATE'
     const livrerLe = body?.dateLivraison != null ? (() => {
@@ -392,7 +401,7 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      if (typeVente !== 'COMMANDE') {
+      if (typeVente !== 'COMMANDE' && !retraitDiffere) {
         for (const l of lignesValides) {
           const st = await tx.stock.findUnique({ 
             where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } } 
@@ -420,6 +429,8 @@ export async function POST(request: NextRequest) {
           statutPaiement,
           estVenteRapide,
           typeVente,
+          retraitDiffere,
+          dateRetrait: null,
           dateLivraison: (typeVente === 'COMMANDE' && body?.dateLivraison) ? livrerLe : null,
           modePaiement: listReglements.length > 1 ? 'MULTI' : (listReglements[0]?.mode || modePaiementPrincipal),
           observation,
@@ -441,7 +452,7 @@ export async function POST(request: NextRequest) {
         include: { client: { select: { nom: true } }, lignes: true, magasin: { select: { code: true, nom: true } } },
       })
 
-      if (typeVente !== 'COMMANDE') {
+      if (typeVente !== 'COMMANDE' && !retraitDiffere) {
         for (const l of lignesValides) {
           await tx.stock.update({
             where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId, entiteId } },
@@ -520,8 +531,8 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // COMMANDE avec paiement : comptabiliser l'avance client (4191) dès la création du règlement
-        if (typeVente === 'COMMANDE') {
+        // COMMANDE ou retrait différé : comptabiliser l'avance client (4191) dès la création du règlement
+        if (typeVente === 'COMMANDE' || retraitDiffere) {
           const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
           await comptabiliserReglementVente({
             reglementId: rv.id,
@@ -538,7 +549,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (typeVente !== 'COMMANDE') {
+      if (typeVente !== 'COMMANDE' && !retraitDiffere) {
         await comptabiliserVente({
           venteId: v.id,
           numeroVente: num,

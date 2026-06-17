@@ -1,9 +1,9 @@
 {
   "name": "gesticom",
-  "version": "3.32.3",
+  "version": "3.33.5",
   "private": true,
   "scripts": {
-    "dev": "node node_modules/next/dist/bin/next dev",
+    "dev": "node node_modules/next/dist/bin/next dev -H 0.0.0.0",
     "dev:legacy": "next dev",
     "build": "node scripts/prebuild-check.js && node scripts/bump-version.js && node node_modules/prisma/build/index.js generate && node node_modules/next/dist/bin/next build",
     "bump:version": "node scripts/bump-version.js",
