@@ -741,8 +741,8 @@ export async function comptabiliserAchat(data: {
     for (const reg of data.reglements) {
       if (reg.montant <= 0) continue
 
-      const payeCaisse = reg.payeDepuisCaisse ?? true   // défaut = ancien comportement
-      const payeBanque = reg.payeDepuisBanque ?? true    // défaut = ancien comportement
+      const payeCaisse = reg.payeDepuisCaisse ?? false   // défaut = paiement direct (compte 455)
+      const payeBanque = reg.payeDepuisBanque ?? false    // défaut = paiement direct (compte 455)
       await comptabiliserReglementAchat({
         achatId: data.achatId,
         numeroAchat: data.numeroAchat,
