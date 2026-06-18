@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
@@ -172,10 +171,7 @@ export async function POST(request: NextRequest) {
       },
     })
     // Invalider le cache pour affichage immédiat
-    revalidatePath('/dashboard/fournisseurs')
-    revalidatePath('/api/fournisseurs')
-
-    return NextResponse.json(f)
+            return NextResponse.json(f)
   } catch (e: any) {
     console.error('POST /api/fournisseurs:', e)
     if (e?.code === 'P2002') {

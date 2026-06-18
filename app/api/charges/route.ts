@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { comptabiliserCharge } from '@/lib/comptabilisation'
@@ -262,10 +261,7 @@ await enregistrerOperationBancaire({
       return c
     }, { timeout: 20000 })
 
-    revalidatePath('/dashboard/charges')
-    revalidatePath('/api/charges')
-
-    return NextResponse.json(charge)
+            return NextResponse.json(charge)
   } catch (e: any) {
     console.error('POST /api/charges:', e)
     if (e.message?.includes('DOUBLE_TRANSACTION')) {

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
@@ -104,10 +103,7 @@ export async function PATCH(
       ipAddress
     )
 
-    revalidatePath('/dashboard/produits')
-    revalidatePath('/api/produits')
-
-    return NextResponse.json(p)
+            return NextResponse.json(p)
   } catch (e: unknown) {
     const err = e as { code?: string }
     if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })
@@ -166,11 +162,7 @@ export async function DELETE(
       ipAddress
     )
 
-    revalidatePath('/dashboard/produits')
-    revalidatePath('/api/produits')
-    revalidatePath('/api/produits/stats')
-
-    return NextResponse.json({ success: true, softDeleted: true })
+                return NextResponse.json({ success: true, softDeleted: true })
   } catch (e: unknown) {
     const err = e as { code?: string }
     if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })
@@ -216,10 +208,7 @@ export async function POST(
         ipAddress
       )
 
-      revalidatePath('/dashboard/produits')
-      revalidatePath('/api/produits')
-
-      return NextResponse.json({ success: true, restored: true })
+                  return NextResponse.json({ success: true, restored: true })
     } catch (e: unknown) {
       const err = e as { code?: string }
       if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })

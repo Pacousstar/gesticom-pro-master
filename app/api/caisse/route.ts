@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { comptabiliserCaisse } from '@/lib/comptabilisation'
@@ -203,10 +202,7 @@ export async function POST(request: NextRequest) {
       })
     }, { timeout: 20000 })
 
-    revalidatePath('/dashboard/caisse')
-    revalidatePath('/api/caisse')
-
-    return NextResponse.json(result)
+            return NextResponse.json(result)
   } catch (e) {
     console.error('POST /api/caisse:', e)
     return NextResponse.json(

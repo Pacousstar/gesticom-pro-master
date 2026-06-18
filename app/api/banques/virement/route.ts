@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
-import { revalidatePath } from 'next/cache'
 import { requirePermission } from '@/lib/require-role'
 
 /**
@@ -104,10 +103,7 @@ await enregistrerOperationBancaire({
       return { success: true }
     }, { timeout: 15000 })
 
-    revalidatePath('/dashboard/banques')
-    revalidatePath('/dashboard/caisse')
-
-    return NextResponse.json(result)
+            return NextResponse.json(result)
   } catch (e: any) {
     console.error('[API VIREMENT ERROR]', e)
     return NextResponse.json({ error: e.message || 'Erreur lors du virement.' }, { status: 500 })

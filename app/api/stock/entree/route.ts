@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logModification, getIpAddress } from '@/lib/audit'
@@ -165,10 +164,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Invalider le cache pour affichage immédiat
-    revalidatePath('/dashboard/stock')
-    revalidatePath('/api/stock')
-
-    return NextResponse.json(updatedStock)
+            return NextResponse.json(updatedStock)
   } catch (e: any) {
     console.error('POST /api/stock/entree:', e)
     if (e.message?.includes('DOUBLE_TRANSACTION')) {

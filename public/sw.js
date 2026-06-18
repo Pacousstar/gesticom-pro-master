@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gesticom-3.35.3'
+const CACHE_NAME = 'gesticom-3.35.5'
 
 const PRECACHE_URLS = [
   '/',

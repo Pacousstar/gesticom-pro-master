@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import type { Session } from '@/lib/auth'
 import { prisma } from '@/lib/db'
@@ -161,11 +160,7 @@ export async function DELETE(
     }, { timeout: 30000 })
     
     // Invalider le cache pour affichage immédiat
-    revalidatePath('/dashboard/achats')
-    revalidatePath('/dashboard/stock')
-    revalidatePath('/api/achats')
-    
-    return NextResponse.json({ success: true })
+                return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/achats/[id]:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
@@ -310,9 +305,7 @@ const reglAchat = await tx.reglementAchat.create({
         return up
       })
 
-      revalidatePath('/dashboard/achats')
-      revalidatePath('/api/achats')
-      return NextResponse.json(updatedAchat)
+                  return NextResponse.json(updatedAchat)
     }
 
     if (action === 'FULL_UPDATE') {
@@ -629,9 +622,7 @@ const reglAchat = await tx.reglementAchat.create({
       // 8. LOG D'AUDIT (hors transaction pour éviter les conflits de client Prisma)
       await logModification(session!, 'ACHAT', result.updated.id, `Mise à jour complète de la facture ${result.updated.numero}`, result.oldAchat, result.updated, getIpAddress(request))
 
-      revalidatePath('/dashboard/achats')
-      revalidatePath('/api/achats')
-      return NextResponse.json(result.updated)
+                  return NextResponse.json(result.updated)
     }
 
     return NextResponse.json({ error: 'Action non reconnue.' }, { status: 400 })

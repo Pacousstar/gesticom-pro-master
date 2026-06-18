@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logSuppression, getIpAddress } from '@/lib/audit'
@@ -87,10 +86,7 @@ export async function DELETE(
     // 7. LOG D'AUDIT (hors transaction)
     await logSuppression(session, 'RETOUR', id, `Suppression retour ${retour.numero}`, { numero: retour.numero, montant: retour.montantTotal }, getIpAddress(_request))
 
-    revalidatePath('/dashboard/ventes')
-    revalidatePath('/api/retours')
-
-    return NextResponse.json({ success: true })
+            return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/retours/[id]:', e)
     return NextResponse.json({ error: (e as Error).message || 'Erreur serveur.' }, { status: 500 })

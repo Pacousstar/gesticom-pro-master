@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
@@ -196,10 +195,7 @@ export async function POST(request: NextRequest) {
       return reglement
     }, { timeout: 20000 })
 
-    revalidatePath('/dashboard/ventes')
-    revalidatePath('/dashboard/clients')
-    
-    return NextResponse.json(res)
+            return NextResponse.json(res)
   } catch (error: any) {
     console.error('Erreur Règlement Vente:', error)
     if (error.message?.includes('DOUBLE_TRANSACTION')) {

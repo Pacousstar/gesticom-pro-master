@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
@@ -153,9 +152,7 @@ export async function POST(
       return achat
     })
 
-    revalidatePath('/dashboard/achats')
-    revalidatePath('/dashboard/commandes-fournisseurs')
-    return NextResponse.json(results)
+            return NextResponse.json(results)
   } catch (e) {
     console.error('POST /api/commandes-fournisseurs/transformer:', e)
     return NextResponse.json({ error: 'Erreur lors de la transformation.' }, { status: 500 })

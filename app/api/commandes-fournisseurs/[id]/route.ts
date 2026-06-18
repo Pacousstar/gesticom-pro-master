@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
@@ -86,8 +85,7 @@ export async function PATCH(
       })
     }
 
-    revalidatePath('/dashboard/commandes-fournisseurs')
-    return NextResponse.json({ success: true })
+        return NextResponse.json({ success: true })
   } catch (e) {
     return handleApiError(e)
   }
@@ -124,8 +122,7 @@ export async function DELETE(
 
     await prisma.commandeFournisseurLigne.deleteMany({ where: { commandeId: id } })
     await prisma.commandeFournisseur.delete({ where: { id } })
-    revalidatePath('/dashboard/commandes-fournisseurs')
-    return NextResponse.json({ success: true })
+        return NextResponse.json({ success: true })
   } catch (e) {
     return handleApiError(e)
   }

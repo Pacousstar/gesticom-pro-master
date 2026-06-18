@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
@@ -207,10 +206,7 @@ export async function DELETE(
     }, { timeout: 30000 })
     
     // Invalider le cache pour affichage immédiat
-    revalidatePath('/dashboard/ventes')
-    revalidatePath('/api/ventes')
-    
-    return NextResponse.json({ success: true })
+            return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/ventes/[id]:', e)
     return NextResponse.json({ error: (e as Error).message || 'Erreur serveur.' }, { status: 500 })
@@ -317,9 +313,7 @@ export async function PATCH(
         }, tx)
       }, { timeout: 20000 })
 
-      revalidatePath('/dashboard/ventes')
-      revalidatePath('/api/ventes')
-      const msg = lignesPayload ? 'Livraison partielle effectuée avec succès.' : 'Commande livrée avec succès.'
+                  const msg = lignesPayload ? 'Livraison partielle effectuée avec succès.' : 'Commande livrée avec succès.'
       return NextResponse.json({ success: true, message: msg })
     }
 
@@ -381,9 +375,7 @@ export async function PATCH(
         await tx.vente.update({ where: { id }, data: { dateRetrait: maintenant } })
       }, { timeout: 20000 })
 
-      revalidatePath('/dashboard/ventes')
-      revalidatePath('/api/ventes')
-      return NextResponse.json({ success: true, message: 'Vente retirée avec succès.' })
+                  return NextResponse.json({ success: true, message: 'Vente retirée avec succès.' })
     }
 
     if (action === 'PAGEMENT') {
@@ -532,9 +524,7 @@ export async function PATCH(
         return updatedVente
       }, { timeout: 20000 })
 
-      revalidatePath('/dashboard/ventes')
-      revalidatePath('/api/ventes')
-      return NextResponse.json(result)
+                  return NextResponse.json(result)
     }
 
     if (action === 'FULL_UPDATE') {
@@ -877,9 +867,7 @@ export async function PATCH(
       // 8. LOG D'AUDIT (hors transaction pour éviter les conflits de client Prisma)
       await logModification(session!, 'VENTE', result.updated.id, `Mise à jour complète de la facture ${result.updated.numero}`, result.oldVente, result.updated, getIpAddress(request))
 
-      revalidatePath('/dashboard/ventes')
-      revalidatePath('/api/ventes')
-      return NextResponse.json(result.updated)
+                  return NextResponse.json(result.updated)
     }
 
     return NextResponse.json({ error: 'Action non reconnue.' }, { status: 400 })

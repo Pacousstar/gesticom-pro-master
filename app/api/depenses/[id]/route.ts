@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
@@ -242,10 +241,7 @@ export async function PATCH(
       await recalculerSoldeCaisse(mId)
     }
 
-    revalidatePath('/dashboard/depenses')
-    revalidatePath('/api/depenses')
-
-    return NextResponse.json(depense)
+            return NextResponse.json(depense)
   } catch (e) {
     console.error('PATCH /api/depenses/[id]:', e)
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Erreur serveur.' }, { status: 500 })
@@ -332,10 +328,7 @@ await prisma.$transaction(async (tx) => {
       await recalculerSoldeCaisse(magasinIdCaisse)
     }
 
-    revalidatePath('/dashboard/depenses')
-    revalidatePath('/api/depenses')
-
-    return NextResponse.json({ success: true })
+            return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/depenses/[id]:', e)
     const errorMsg = e instanceof Error ? e.message : 'Erreur lors de la suppression.'

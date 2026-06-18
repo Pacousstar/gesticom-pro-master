@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
@@ -197,10 +196,7 @@ export async function POST(request: NextRequest) {
     }, { timeout: 20000 })
 
     // Invalider le cache
-    revalidatePath('/dashboard/stock')
-    revalidatePath('/api/stock')
-
-    // Logger l'action
+            // Logger l'action
     await logModification(
         session,
         'TRANSFERT',

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
@@ -222,10 +221,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return retour
     }, { timeout: 20000 })
 
-    revalidatePath('/dashboard/ventes')
-    revalidatePath('/api/ventes')
-
-    return NextResponse.json(retour)
+            return NextResponse.json(retour)
   } catch (e) {
     return handleApiError(e)
   }

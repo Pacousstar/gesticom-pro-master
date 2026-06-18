@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
@@ -144,8 +143,7 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    revalidatePath('/dashboard/commandes-fournisseurs')
-    return NextResponse.json(commande)
+        return NextResponse.json(commande)
   } catch (e) {
     console.error('POST /api/commandes-fournisseurs:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

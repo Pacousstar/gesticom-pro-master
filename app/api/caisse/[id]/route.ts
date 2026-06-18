@@ -105,11 +105,7 @@ export async function DELETE(
     })
 
     // P3-C : Invalider le cache pour affichage immédiat
-    const { revalidatePath } = await import('next/cache')
-    revalidatePath('/dashboard/caisse')
-    revalidatePath('/api/caisse')
-
-    return NextResponse.json({ success: true })
+                return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/caisse/[id]:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

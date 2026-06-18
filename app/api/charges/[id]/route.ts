@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
@@ -307,10 +306,7 @@ export async function DELETE(
       await recalculerSoldeCaisse(magasinIdCaisse)
     }
 
-    revalidatePath('/dashboard/charges')
-    revalidatePath('/api/charges')
-
-    return NextResponse.json({ success: true })
+            return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE /api/charges/[id]:', e)
     const errorMsg = e instanceof Error ? e.message : 'Erreur lors de la suppression.'

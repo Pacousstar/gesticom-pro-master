@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
@@ -263,10 +262,7 @@ export async function POST(request: NextRequest) {
 
     await logAction(session, 'CREATION', 'VENTE', `Enregistrement vente historique ${num}`, vente.id, body)
 
-    revalidatePath('/dashboard/ventes/historiques')
-    revalidatePath('/dashboard/stock')
-    revalidatePath('/api/ventes/historiques')
-    return NextResponse.json(vente)
+                return NextResponse.json(vente)
   } catch (e) {
     console.error('POST /api/ventes-historiques:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

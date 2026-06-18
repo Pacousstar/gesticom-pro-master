@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { comptabiliserAchat } from '@/lib/comptabilisation'
@@ -525,11 +524,7 @@ let montantFactureHT = 0
     }, { timeout: 20000 })
 
     // Invalider le cache pour affichage immédiat
-    revalidatePath('/dashboard/achats')
-    revalidatePath('/dashboard/stock')
-    revalidatePath('/api/achats')
-
-    return NextResponse.json(achat)
+                return NextResponse.json(achat)
   } catch (e: any) {
     console.error('POST /api/achats:', e)
     if (e.message?.includes('DOUBLE_TRANSACTION')) {

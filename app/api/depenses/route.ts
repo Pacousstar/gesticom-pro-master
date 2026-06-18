@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
@@ -268,10 +267,7 @@ export async function POST(request: NextRequest) {
       return d
     }, { timeout: 20000 })
 
-    revalidatePath('/dashboard/depenses')
-    revalidatePath('/api/depenses')
-
-    return NextResponse.json(depense)
+            return NextResponse.json(depense)
   } catch (e: any) {
     console.error('POST /api/depenses:', e)
     if (e.message?.includes('DOUBLE_TRANSACTION')) {

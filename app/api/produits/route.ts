@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logCreation, getIpAddress } from '@/lib/audit'
@@ -276,13 +275,7 @@ export async function POST(request: NextRequest) {
       ipAddress
     )
 
-    revalidatePath('/dashboard/produits')
-    revalidatePath('/dashboard/stock')
-    revalidatePath('/api/produits')
-    revalidatePath('/api/produits/stats')
-    revalidatePath('/api/produits/categories')
-
-    return NextResponse.json(result)
+                        return NextResponse.json(result)
   } catch (e) {
     console.error('POST /api/produits:', e)
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

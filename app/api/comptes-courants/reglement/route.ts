@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { comptabiliserReglementVente, comptabiliserReglementAchat } from '@/lib/comptabilisation'
@@ -180,8 +179,7 @@ export async function POST(request: NextRequest) {
       throw new Error('Aucun client ou fournisseur lié.')
     }, { timeout: 20000 })
 
-    revalidatePath('/dashboard/comptes-courants')
-    return NextResponse.json(res)
+        return NextResponse.json(res)
   } catch (error: any) {
     console.error('Erreur Règlement CC:', error)
     if (error.message?.includes('DOUBLE_TRANSACTION')) {

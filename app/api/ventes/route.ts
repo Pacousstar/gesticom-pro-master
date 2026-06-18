@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
@@ -569,10 +568,7 @@ export async function POST(request: NextRequest) {
       return v
     }, { timeout: 20000 })
 
-    revalidatePath('/dashboard/ventes')
-    revalidatePath('/api/ventes')
-
-    return NextResponse.json(vente)
+            return NextResponse.json(vente)
   } catch (e) {
     return handleApiError(e)
   }

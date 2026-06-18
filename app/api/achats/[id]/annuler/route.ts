@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { verifierCloture } from '@/lib/cloture'
@@ -166,10 +165,7 @@ export async function POST(
         getIpAddress(_request)
       )
 
-      revalidatePath('/dashboard/achats')
-      revalidatePath('/api/achats')
-
-      return NextResponse.json({ ok: true })
+                  return NextResponse.json({ ok: true })
     })
   } catch (e) {
     console.error('POST /api/achats/[id]/annuler:', e)
