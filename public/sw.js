@@ -1,8 +1,6 @@
-const CACHE_NAME = 'gesticom-3.35.5'
+const CACHE_NAME = 'gesticom-3.35.6'
 
 const PRECACHE_URLS = [
-  '/',
-  '/dashboard',
   '/manifest.json',
   '/icon-192x192.png',
   '/icon-512x512.png',
