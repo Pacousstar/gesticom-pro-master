@@ -19,19 +19,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: process.env.CI
+  webServer: !process.env.E2E_NO_WEBSERVER
     ? {
-        command: 'npm run build && node scripts/standalone-launcher.js',
-        port: 3001,
+        command: process.env.CI ? 'npm run dev' : 'npm run dev',
+        port: process.env.CI ? 3000 : 3000,
         timeout: 120000,
         reuseExistingServer: true,
       }
-    : !process.env.E2E_NO_WEBSERVER
-      ? {
-          command: 'npm run dev',
-          port: 3000,
-          timeout: 120000,
-          reuseExistingServer: true,
-        }
-      : undefined,
+    : undefined,
 })

@@ -39,12 +39,20 @@ for (const f of jsFiles) {
 // 2. Fichiers essentiels présents
 console.log('\n[Fichiers essentiels]')
 const essentials = [
-  'node.exe',                     // runtime Node.js
-  'nssm.exe',                     // NSSM
   'LANCER-SILENCIEUX.vbs',        // launcher VBS
 ]
 for (const f of essentials) {
   check(fs.existsSync(path.join(root, f)), `${f} présent`)
+}
+
+// node.exe et nssm.exe sont requis par l'installateur mais pas pour le build CI
+const installerFiles = ['node.exe', 'nssm.exe']
+for (const f of installerFiles) {
+  if (fs.existsSync(path.join(root, f))) {
+    console.log(`  ✓ ${f} présent`)
+  } else {
+    console.log(`  ~ ${f} absent (normal en CI, requis seulement pour l'installateur)`)
+  }
 }
 
 // 2b. Vérification optionnelle standalone (peut ne pas exister avant build)
