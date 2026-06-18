@@ -311,7 +311,7 @@ export default function SuiviVentesPage() {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+      <div className="overflow-x-auto rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 no-print">
         <table className="w-full text-sm whitespace-nowrap">
           <thead className="text-left text-xs uppercase text-white/60 border-b border-white/10">
             <tr>

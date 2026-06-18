@@ -143,6 +143,27 @@ const addColumnStmts = [
   'ALTER TABLE "AchatLigne" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
   'ALTER TABLE "ReglementVente" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
   'ALTER TABLE "ReglementAchat" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // soldeCaisse (Magasin)
+  'ALTER TABLE "Magasin" ADD COLUMN "soldeCaisse" REAL NOT NULL DEFAULT 0;',
+  // rolesSupplementaires (Utilisateur)
+  'ALTER TABLE "Utilisateur" ADD COLUMN "rolesSupplementaires" TEXT;',
+  // typeVente, dateLivraison, retraitDiffere (Vente)
+  'ALTER TABLE "Vente" ADD COLUMN "typeVente" TEXT NOT NULL DEFAULT \'LIVRAISON_IMMEDIATE\';',
+  'ALTER TABLE "Vente" ADD COLUMN "dateLivraison" DATETIME;',
+  'ALTER TABLE "Vente" ADD COLUMN "retraitDiffere" INTEGER NOT NULL DEFAULT 0;',
+  // quantiteLivree, tva, remise (VenteLigne)
+  'ALTER TABLE "VenteLigne" ADD COLUMN "quantiteLivree" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
+  // estRembourse (Retour)
+  'ALTER TABLE "Retour" ADD COLUMN "estRembourse" INTEGER NOT NULL DEFAULT 0;',
+  // tva, remise (RetourLigne)
+  'ALTER TABLE "RetourLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "RetourLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
+  // tva, remise (AchatLigne)
+  'ALTER TABLE "AchatLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "AchatLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
+  // coutUnitaire NOT NULL (déjà ajouté nullable plus haut, on le laisse)
   // dateOperation
   'ALTER TABLE "Vente" ADD COLUMN "dateOperation" DATETIME;',
   'ALTER TABLE "Achat" ADD COLUMN "dateOperation" DATETIME;',
@@ -207,6 +228,8 @@ const fixNullStmts = [
   'UPDATE "ReglementVente" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
   'UPDATE "Fournisseur" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
   'UPDATE "Client" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+  'UPDATE "VenteLigne" SET "coutUnitaire" = 0 WHERE "coutUnitaire" IS NULL;',
+  'UPDATE "AchatLigne" SET "coutUnitaire" = 0 WHERE "coutUnitaire" IS NULL;',
   `UPDATE "Produit" SET "actif" = 1 WHERE "actif" IS NULL;`,
   `UPDATE "Produit" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,
   `UPDATE "Client" SET "entiteId" = ${fixEntiteId} WHERE "entiteId" IS NULL OR "entiteId" = 0;`,

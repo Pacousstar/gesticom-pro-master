@@ -1,6 +1,6 @@
 {
   "name": "gesticom",
-  "version": "3.38.4",
+  "version": "3.39.2",
   "private": true,
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev -H 127.0.0.1",

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gesticom-3.38.4'
+const CACHE_NAME = 'gesticom-3.39.2'
 
 const PRECACHE_URLS = [
   '/manifest.json',

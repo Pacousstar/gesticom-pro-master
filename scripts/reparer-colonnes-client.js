@@ -1,7 +1,3 @@
-/**
- * Script de réparation pour colonnes manquantes sur installation client.
- * À exécuter dans C:\GestiComPro : node scripts\reparer-colonnes-client.js
- */
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
@@ -35,8 +31,62 @@ function execOne(sql) {
 l('=== RÉPARATION DES COLONNES MANQUANTES ===\n');
 l('Base de données : ' + dbPath);
 
-// 1. ALTER TABLE pour les colonnes manquantes
 const alters = [
+  // updatedAt avec DEFAULT pour éviter NOT NULL sans valeur
+  'ALTER TABLE "Achat" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "AchatLigne" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "Caisse" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "Charge" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "Client" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "Depense" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "EcritureComptable" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "Mouvement" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "PrintTemplate" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "ReglementAchat" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "ReglementVente" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "Vente" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  // entiteId
+  'ALTER TABLE "Produit" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Client" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Fournisseur" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Stock" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Utilisateur" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Magasin" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Caisse" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Vente" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Achat" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Mouvement" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Banque" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Charge" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "Depense" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "OperationBancaire" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "EcritureComptable" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "AchatLigne" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "ReglementVente" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  'ALTER TABLE "ReglementAchat" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
+  // soldeCaisse
+  'ALTER TABLE "Magasin" ADD COLUMN "soldeCaisse" REAL NOT NULL DEFAULT 0;',
+  // rolesSupplementaires
+  'ALTER TABLE "Utilisateur" ADD COLUMN "rolesSupplementaires" TEXT;',
+  // typeVente, dateLivraison, retraitDiffere
+  'ALTER TABLE "Vente" ADD COLUMN "typeVente" TEXT NOT NULL DEFAULT \'LIVRAISON_IMMEDIATE\';',
+  'ALTER TABLE "Vente" ADD COLUMN "dateLivraison" DATETIME;',
+  'ALTER TABLE "Vente" ADD COLUMN "retraitDiffere" INTEGER NOT NULL DEFAULT 0;',
+  // quantiteLivree, tva, remise (VenteLigne)
+  'ALTER TABLE "VenteLigne" ADD COLUMN "quantiteLivree" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
+  // estRembourse (Retour)
+  'ALTER TABLE "Retour" ADD COLUMN "estRembourse" INTEGER NOT NULL DEFAULT 0;',
+  // tva, remise (RetourLigne)
+  'ALTER TABLE "RetourLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "RetourLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
+  // tva, remise (AchatLigne)
+  'ALTER TABLE "AchatLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "AchatLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
   // PrintTemplate
   'ALTER TABLE "PrintTemplate" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
   // ReglementVente
@@ -45,17 +95,26 @@ const alters = [
   // ReglementAchat
   'ALTER TABLE "ReglementAchat" ADD COLUMN "rapproche" INTEGER NOT NULL DEFAULT 0;',
   'ALTER TABLE "ReglementAchat" ADD COLUMN "banqueId" INTEGER;',
-  'ALTER TABLE "ReglementAchat" ADD COLUMN "updatedAt" DATETIME;',
-  // VenteLigne
+  // VenteLigne createdAt
   'ALTER TABLE "VenteLigne" ADD COLUMN "createdAt" DATETIME;',
-  // AchatLigne
+  // AchatLigne createdAt
   'ALTER TABLE "AchatLigne" ADD COLUMN "createdAt" DATETIME;',
-  // Vente
+  // Vente dateOperation
   'ALTER TABLE "Vente" ADD COLUMN "dateOperation" DATETIME;',
-  // Achat
+  // Achat dateOperation
   'ALTER TABLE "Achat" ADD COLUMN "dateOperation" DATETIME;',
-  // Caisse
+  // Caisse dateOperation
   'ALTER TABLE "Caisse" ADD COLUMN "dateOperation" DATETIME;',
+  // coutUnitaire
+  'ALTER TABLE "AchatLigne" ADD COLUMN "coutUnitaire" REAL;',
+  'ALTER TABLE "VenteLigne" ADD COLUMN "coutUnitaire" REAL;',
+  // numeroCamion, fraisApproche, pamp
+  'ALTER TABLE "Achat" ADD COLUMN "numeroCamion" TEXT;',
+  'ALTER TABLE "Achat" ADD COLUMN "fraisApproche" REAL NOT NULL DEFAULT 0;',
+  'ALTER TABLE "Achat" ADD COLUMN "pamp" REAL NOT NULL DEFAULT 0;',
+  // createdAt
+  'ALTER TABLE "ReglementVente" ADD COLUMN "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
+  'ALTER TABLE "ReglementAchat" ADD COLUMN "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
 ];
 
 let added = 0, exists = 0, failed = 0;
@@ -67,7 +126,6 @@ for (const sql of alters) {
 }
 l(`\nRésultat : ${added} ajoutées, ${exists} déjà présentes, ${failed} échecs\n`);
 
-// 2. Correction des données NULL (via better-sqlite3 pour fiabilité)
 l('Correction des données NULL...');
 let fixed = 0;
 try {
@@ -84,6 +142,19 @@ try {
     ['Caisse', 'updatedAt', null],
     ['Charge', 'updatedAt', null],
     ['ReglementAchat', 'updatedAt', null],
+    ['ReglementVente', 'updatedAt', null],
+    ['Vente', 'updatedAt', null],
+    ['VenteLigne', 'updatedAt', null],
+    ['Achat', 'updatedAt', null],
+    ['AchatLigne', 'updatedAt', null],
+    ['Depense', 'updatedAt', null],
+    ['EcritureComptable', 'updatedAt', null],
+    ['Mouvement', 'updatedAt', null],
+    ['PrintTemplate', 'updatedAt', null],
+    ['Fournisseur', 'updatedAt', null],
+    ['Client', 'updatedAt', null],
+    ['VenteLigne', 'coutUnitaire', null],
+    ['AchatLigne', 'coutUnitaire', null],
   ];
   for (const [table, col, src] of upd) {
     try {
@@ -92,12 +163,11 @@ try {
         : `UPDATE "${table}" SET "${col}" = CURRENT_TIMESTAMP WHERE "${col}" IS NULL`;
       const r = db.prepare(sql).run();
       if (r.changes > 0) { fixed += r.changes; l(`  ${table}.${col}: ${r.changes} corrigé(s)`); }
-    } catch (e) { /* column likely doesn't exist, ignore */ }
+    } catch (e) { }
   }
   db.close();
 } catch (e) {
   l('  better-sqlite3 non disponible, fallback prisma db execute...');
-  // Fallback
   const fixes = [
     'UPDATE "Vente" SET "dateOperation" = "date" WHERE "dateOperation" IS NULL;',
     'UPDATE "Vente" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;',
@@ -109,49 +179,52 @@ try {
     'UPDATE "Caisse" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
     'UPDATE "Charge" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
     'UPDATE "ReglementAchat" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+    'UPDATE "ReglementVente" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+    'UPDATE "Vente" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+    'UPDATE "VenteLigne" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+    'UPDATE "Achat" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+    'UPDATE "AchatLigne" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;',
+    'UPDATE "VenteLigne" SET "coutUnitaire" = 0 WHERE "coutUnitaire" IS NULL;',
+    'UPDATE "AchatLigne" SET "coutUnitaire" = 0 WHERE "coutUnitaire" IS NULL;',
   ];
   for (const sql of fixes) { if (execOne(sql) === true) fixed++; }
 }
 l(`  ${fixed} lignes corrigées\n`);
 
-// 3. Finaliser avec prisma db push
 l('Finalisation avec prisma db push...');
 try {
   const out = execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss`, {
     cwd: projectRoot, env: { ...process.env, DATABASE_URL: 'file:' + dbPath },
     stdio: 'pipe', timeout: 120000,
   });
-  l('✅ prisma db push OK — base à jour');
+  l('  prisma db push OK — base à jour');
 } catch (err) {
   const stderr = (err.stderr || '').toString().trim();
   const stdout = (err.stdout || '').toString().trim();
   const msg = stderr || stdout || err.message || 'Erreur inconnue';
-  l('❌ prisma db push a échoué');
-  l('   ' + msg.split('\n').slice(0, 3).join(' | ').substring(0, 200));
-  // Si le problème est des updatedAt NULL, les corriger en force
+  l('  prisma db push a échoué');
+  l('  ' + msg.split('\n').slice(0, 3).join(' | ').substring(0, 200));
   if (msg.includes('updatedAt') && msg.includes('NULL')) {
-    l('   → Tentative de correction des updatedAt NULL via better-sqlite3...');
+    l('  Tentative de correction des updatedAt NULL via better-sqlite3...');
     try {
       const s = require('better-sqlite3');
       const d = new s(dbPath);
-      for (const t of ['Caisse', 'Charge', 'ReglementAchat']) {
+      for (const t of ['Caisse', 'Charge', 'ReglementAchat', 'ReglementVente', 'Vente', 'VenteLigne', 'Achat', 'AchatLigne', 'Depense', 'EcritureComptable', 'Mouvement', 'PrintTemplate', 'Fournisseur', 'Client']) {
         const r = d.prepare(`UPDATE "${t}" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL`).run();
-        if (r.changes > 0) l(`     ${t}: ${r.changes} corrigé(s)`);
+        if (r.changes > 0) l(`    ${t}: ${r.changes} corrigé(s)`);
       }
       d.close();
-      // Re-tenter
       execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss`, {
         cwd: projectRoot, env: { ...process.env, DATABASE_URL: 'file:' + dbPath },
         stdio: 'pipe', timeout: 120000,
       });
-      l('✅ prisma db push OK après correction');
+      l('  prisma db push OK après correction');
     } catch (e2) {
-      l('❌ Toujours en échec après correction');
+      l('  Toujours en échec après correction');
     }
   }
 }
 
-// Cleanup
 try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch {}
 
 l('\n=== RÉPARATION TERMINÉE ===');

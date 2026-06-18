@@ -15,7 +15,7 @@ model Entite {
   localisation          String
   active                Boolean               @default(true)
   createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   achats                Achat[]
   archiveSoldes         ArchiveSoldeClient[]
   archiveVentes         ArchiveVente[]
@@ -52,7 +52,7 @@ model Utilisateur {
   lastLoginAt               DateTime?
   loginCount                Int                   @default(0)
   createdAt                 DateTime              @default(now())
-  updatedAt                 DateTime              @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   achats                    Achat[]
   archiveSoldes             ArchiveSoldeClient[]
   archiveVentes             ArchiveVente[]
@@ -87,7 +87,7 @@ model Magasin {
   estDepotPrincipal     Boolean               @default(false)
   soldeCaisse           Float                 @default(0)
   createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   achats                Achat[]
   archiveVentes         ArchiveVente[]
   operationsCaisse      Caisse[]
@@ -119,7 +119,7 @@ model Produit {
   seuilMin        Int                        @default(5)
   actif           Boolean                    @default(true)
   createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   fournisseurId   Int?
   entiteId        Int                        @default(1)
   prixMinimum     Float?                     @default(0)
@@ -150,7 +150,7 @@ model Stock {
   quantiteInitiale Float    @default(0)
   entiteId         Int      @default(1)
   createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   entite           Entite   @relation(fields: [entiteId], references: [id])
   produit          Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
   magasin          Magasin  @relation(fields: [magasinId], references: [id])
@@ -175,7 +175,7 @@ model Mouvement {
   referenceTransfertId Int?
   dateOperation        DateTime    @default(now())
   createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   produit              Produit     @relation(fields: [produitId], references: [id], onDelete: Cascade)
   magasin              Magasin     @relation(fields: [magasinId], references: [id])
   entite               Entite      @relation(fields: [entiteId], references: [id])
@@ -242,7 +242,7 @@ model Client {
   ncc            String?
   actif          Boolean              @default(true)
   createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   entiteId       Int                  @default(1)
   archiveSoldes  ArchiveSoldeClient[]
   archiveVentes  ArchiveVente[]
@@ -267,7 +267,7 @@ model CompteCourant {
   fournisseurId   Int?        @unique
   actif           Boolean     @default(true)
   createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   client          Client?     @relation("ClientCompteCourant", fields: [clientId], references: [id], onDelete: SetNull)
   fournisseur     Fournisseur? @relation("FournisseurCompteCourant", fields: [fournisseurId], references: [id], onDelete: SetNull)
   entite          Entite      @relation(fields: [entiteId], references: [id])
@@ -289,7 +289,7 @@ model Fournisseur {
   avoirInitial          Float                 @default(0)
   actif                 Boolean               @default(true)
   createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   numeroCamion          String?
   entiteId              Int?                  @default(1)
   achats                Achat[]
@@ -352,7 +352,7 @@ model ReglementAchat {
   utilisateurId       Int
   observation         String?
   createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   entiteId            Int?                  @default(1)
   achat               Achat?                @relation(fields: [achatId], references: [id], onDelete: Restrict)
   fournisseur         Fournisseur?          @relation(fields: [fournisseurId], references: [id], onDelete: Restrict)
@@ -391,7 +391,7 @@ model Caisse {
   observation   String?
   sousType      String      @default("MANUEL")
   createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   entiteId      Int         @default(1)
   magasin       Magasin     @relation(fields: [magasinId], references: [id])
   utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
@@ -427,7 +427,7 @@ model Parametre {
   fideliteActive      Boolean   @default(false)
   fideliteSeuilPoints Int       @default(100)
   fideliteTauxRemise  Float     @default(5)
-  updatedAt           DateTime  @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   logoLocal           String?
   registreCommerce    String?
   mentionSpeciale     String?   @default("Les produits sortis du magasin ne seront plus repris. Veuillez exiger votre facture avant de partir.")
@@ -460,7 +460,7 @@ model Vente {
   dateLivraison       DateTime?
   retraitDiffere      Boolean               @default(false)
   createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   reglements          ReglementVente[]
   client              Client?               @relation(fields: [clientId], references: [id], onDelete: Restrict)
   magasin             Magasin               @relation(fields: [magasinId], references: [id])
@@ -496,7 +496,7 @@ model VenteLigne {
   remise         Float    @default(0)
   montant        Float
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   produit        Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
   vente        Vente    @relation(fields: [venteId], references: [id], onDelete: Cascade)
 
@@ -553,7 +553,7 @@ model Retour {
   observation     String?
   estRembourse    Boolean      @default(false)
   createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   lignes          RetourLigne[]
 
   @@index([venteId])
@@ -599,7 +599,7 @@ model Achat {
   observation         String?
   dateOperation       DateTime              @default(now())
   createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   fournisseur         Fournisseur?          @relation(fields: [fournisseurId], references: [id], onDelete: Restrict)
   magasin             Magasin               @relation(fields: [magasinId], references: [id])
   entite              Entite                @relation(fields: [entiteId], references: [id])
@@ -627,7 +627,7 @@ model AchatLigne {
   remise       Float    @default(0)
   montant      Float
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   produit      Produit  @relation(fields: [produitId], references: [id], onDelete: Cascade)
   achat        Achat    @relation(fields: [achatId], references: [id], onDelete: Cascade)
 
@@ -651,7 +651,7 @@ model Charge {
   pieceJustificative String?
   banqueId           Int?
   createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   magasin            Magasin?    @relation(fields: [magasinId], references: [id])
   entite             Entite      @relation(fields: [entiteId], references: [id])
   utilisateur        Utilisateur @relation(fields: [utilisateurId], references: [id])
@@ -681,7 +681,7 @@ model Depense {
   observation        String?
   banqueId           Int?
   createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   magasin            Magasin?    @relation(fields: [magasinId], references: [id])
   entite             Entite      @relation(fields: [entiteId], references: [id])
   utilisateur        Utilisateur @relation(fields: [utilisateurId], references: [id])
@@ -705,7 +705,7 @@ model Banque {
   compteId       Int?
   actif          Boolean             @default(true)
   createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   entite         Entite              @relation(fields: [entiteId], references: [id])
   compte         PlanCompte?         @relation(fields: [compteId], references: [id])
   charges        Charge[]
@@ -732,7 +732,7 @@ model OperationBancaire {
   observation   String?
   entiteId      Int         @default(1)
   createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   banque        Banque      @relation(fields: [banqueId], references: [id], onDelete: Cascade)
   utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
   entite        Entite      @relation(fields: [entiteId], references: [id])
@@ -771,7 +771,7 @@ model PlanCompte {
   type      String
   actif     Boolean             @default(true)
   createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   banques   Banque[]
   ecritures EcritureComptable[]
 
@@ -786,7 +786,7 @@ model Journal {
   type      String
   actif     Boolean             @default(true)
   createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   ecritures EcritureComptable[]
 
   @@index([code])
@@ -807,7 +807,7 @@ model EcritureComptable {
   referenceId   Int?
   utilisateurId Int
   createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   entiteId      Int?        @default(1)
   journal       Journal     @relation(fields: [journalId], references: [id])
   compte        PlanCompte  @relation(fields: [compteId], references: [id])
@@ -831,7 +831,7 @@ model PrintTemplate {
   actif      Boolean  @default(true)
   entiteId   Int
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([type])
   @@index([actif])
@@ -844,7 +844,7 @@ model DashboardPreference {
   widgets       String?
   periode       String?
   createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
 }
 
@@ -916,7 +916,7 @@ model CommandeFournisseur {
   observation      String?
   statut           String                     @default("BROUILLON")
   createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   utilisateur      Utilisateur                @relation(fields: [utilisateurId], references: [id])
   entite           Entite                     @relation(fields: [entiteId], references: [id])
   magasin          Magasin                    @relation(fields: [magasinId], references: [id])
@@ -974,5 +974,6 @@ model Licence {
   typeEssai     Boolean   @default(false)
   debutEssai    DateTime?
   createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 }
+
