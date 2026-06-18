@@ -43,6 +43,9 @@ export default function ModificationVenteModal({
     remiseGlobale: '',
     observation: '',
     numeroBon: '',
+    typeVente: 'LIVRAISON_IMMEDIATE',
+    dateLivraison: '',
+    retraitDiffere: false,
     lignes: [] as Ligne[]
   })
 
@@ -107,6 +110,9 @@ export default function ModificationVenteModal({
         remiseGlobale: String(mVente.remiseGlobale || '0'),
         observation: mVente.observation || '',
         numeroBon: mVente.numeroBon || '',
+        typeVente: mVente.typeVente || 'LIVRAISON_IMMEDIATE',
+        dateLivraison: mVente.dateLivraison ? mVente.dateLivraison.split('T')[0] : '',
+        retraitDiffere: mVente.retraitDiffere === true,
         lignes: mVente.lignes.map((l: any) => ({
           produitId: l.produitId,
           designation: l.designation,
@@ -194,9 +200,12 @@ export default function ModificationVenteModal({
           clientLibre: formData.clientLibre || null,
           observation: formData.observation || null,
           numeroBon: formData.numeroBon || null,
+          typeVente: formData.typeVente || undefined,
+          dateLivraison: formData.dateLivraison || undefined,
+          retraitDiffere: formData.retraitDiffere === true,
           remiseGlobale: Number(formData.remiseGlobale) || 0,
           modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
-          reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+          reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0, banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined })),
           banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
           lignes: formData.lignes.map(l => ({
             produitId: l.produitId,
@@ -280,6 +289,15 @@ export default function ModificationVenteModal({
                   <option value="">Client Occasionnel</option>
                   {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
                 </select>
+                {!formData.clientId && (
+                  <input
+                    type="text"
+                    value={formData.clientLibre}
+                    onChange={e => setFormData(f => ({ ...f, clientLibre: e.target.value }))}
+                    placeholder="Nom du client occasionnel"
+                    className="mt-1 w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                )}
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Mode Paiement</label>
@@ -294,6 +312,55 @@ export default function ModificationVenteModal({
                   <option value="MOBILE_MONEY">MOBILE MONEY</option>
                   <option value="CREDIT">A CREDIT</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Type de vente, livraison, bon */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Type de vente</label>
+                <select
+                  value={formData.typeVente}
+                  onChange={e => setFormData(f => ({ ...f, typeVente: e.target.value }))}
+                  className="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                >
+                  <option value="LIVRAISON_IMMEDIATE">Livraison immédiate</option>
+                  <option value="COMMANDE">Vente sur commande</option>
+                </select>
+              </div>
+              {formData.typeVente === 'COMMANDE' && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Date livraison prévue</label>
+                  <input
+                    type="date"
+                    value={formData.dateLivraison}
+                    onChange={e => setFormData(f => ({ ...f, dateLivraison: e.target.value }))}
+                    className="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                </div>
+              )}
+              {formData.typeVente === 'LIVRAISON_IMMEDIATE' && (
+                <div className="space-y-1 flex items-end pb-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.retraitDiffere}
+                      onChange={e => setFormData(f => ({ ...f, retraitDiffere: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-[11px] font-bold text-gray-500">Retrait différé</span>
+                  </label>
+                </div>
+              )}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">N° Bon</label>
+                <input
+                  type="text"
+                  value={formData.numeroBon}
+                  onChange={e => setFormData(f => ({ ...f, numeroBon: e.target.value }))}
+                  placeholder="Numéro de bon"
+                  className="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                />
               </div>
             </div>
 

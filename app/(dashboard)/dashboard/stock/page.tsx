@@ -703,19 +703,21 @@ export default function StockPage() {
   }
 
   const handleDeleteStock = async () => {
-    if (!deletingStock || !deletingStock.id) return
+    if (!deletingStock) return
     setIsDeleting(true)
     try {
-      const res = await fetch(`/api/stock/${deletingStock.id}`, { method: 'DELETE' })
-      if (res.ok) {
-        setDeletingStock(null)
-        refetch()
-        showSuccess('Ligne de stock supprimée avec succès.')
+      if (deletingStock.id) {
+        const res = await fetch(`/api/stock/${deletingStock.id}`, { method: 'DELETE' })
+        if (!res.ok) { const d = await res.json(); showError(d.error || 'Erreur'); return }
+        showSuccess('Ligne de stock supprimée.')
       } else {
-        const d = await res.json()
-        showError(d.error || 'Erreur lors de la suppression.')
+        const res = await fetch(`/api/produits/${deletingStock.produit.id}`, { method: 'DELETE' })
+        if (!res.ok) { const d = await res.json(); showError(d.error || 'Erreur'); return }
+        showSuccess('Produit archivé (aucun stock à supprimer).')
       }
-    } catch (e) {
+      setDeletingStock(null)
+      refetch()
+    } catch {
       showError('Erreur réseau lors de la suppression.')
     } finally {
       setIsDeleting(false)
@@ -1293,15 +1295,13 @@ export default function StockPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                          {s.id != null && (
-                            <button
-                              onClick={() => setDeletingStock(s)}
-                              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
-                              title="Supprimer cette ligne de stock"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => setDeletingStock(s)}
+                            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
+                            title={s.id ? "Supprimer cette ligne de stock" : "Archiver ce produit"}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1656,11 +1656,12 @@ export default function StockPage() {
               <div className="rounded-full bg-red-100 p-2">
                 <AlertTriangle className="h-6 w-6" />
               </div>
-              <h3 className="text-lg font-bold">Supprimer le stock ?</h3>
+              <h3 className="text-lg font-bold">{deletingStock.id ? 'Supprimer le stock ?' : 'Archiver le produit ?'}</h3>
             </div>
             <p className="mb-6 text-sm text-gray-600">
-              Voulez-vous supprimer la ligne de stock pour **{deletingStock.produit.designation}** dans **{deletingStock.magasin.nom}** ?
-              Cette action est définitive.
+              {deletingStock.id
+                ? `Voulez-vous supprimer la ligne de stock pour **${deletingStock.produit.designation}** dans **${deletingStock.magasin.nom}** ? Cette action est définitive.`
+                : `Ce produit n'a pas de stock enregistré. Voulez-vous archiver **${deletingStock.produit.designation}** ? Il disparaîtra de la liste.`}
             </p>
             <div className="flex gap-3">
               <button

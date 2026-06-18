@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Archive, Plus, Loader2, Trash2, Search, Filter, X, Printer } from 'lucide-react'
+import { Archive, Plus, Loader2, Trash2, Search, Filter, X, Printer, ArrowLeft, ShoppingBag } from 'lucide-react'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/useToast'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
@@ -34,6 +36,8 @@ export default function AnciennesVentesPage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [allVentesForPrint, setAllVentesForPrint] = useState<any[]>([])
   const { success: showSuccess, error: showError } = useToast()
+  const pathname = usePathname()
+  const router = useRouter()
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -47,6 +51,13 @@ export default function AnciennesVentesPage() {
   const [ajoutProduit, setAjoutProduit] = useState({
     produitId: '', quantite: '1', prixUnitaire: '', tva: '', remise: '', recherche: ''
   })
+
+  const kpiTotals = {
+    total: pagination?.total || ventes.length,
+    montantTotal: totals?.montantTotal || ventes.reduce((s, v) => s + Number(v.montantTotal || 0), 0),
+    montantPaye: totals?.montantPaye || ventes.reduce((s, v) => s + Number(v.montantPaye || 0), 0),
+    reste: (totals?.montantTotal || ventes.reduce((s, v) => s + Number(v.montantTotal || 0), 0)) - (totals?.montantPaye || ventes.reduce((s, v) => s + Number(v.montantPaye || 0), 0)),
+  }
 
   const fetchVentes = (page?: number) => {
     setLoading(true)
@@ -194,24 +205,30 @@ export default function AnciennesVentesPage() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-amber-500 to-amber-700 text-white p-4 md:p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
       {/* En-tête */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-            <Archive className="h-8 w-8" />
-            Anciennes Ventes
-          </h1>
-          <p className="mt-1 text-white/80 text-sm">
-            📋 Ventes/Factures antérieures à GestiCom — <span className="font-semibold text-emerald-300">Enregistrement authentique avec impact sur le stock, les soldes et la comptabilité.</span>
-          </p>
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.back()} className="rounded-lg bg-white/10 hover:bg-white/20 p-2 transition-colors">
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Archive className="h-6 w-6" />
+              Anciennes Ventes
+            </h1>
+            <p className="mt-1 text-white/80 text-xs font-bold uppercase tracking-widest">
+              Ventes et factures antérieures à GestiCom
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handlePrintAll}
             disabled={isPrinting}
-            className="no-print flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+            className="no-print flex items-center gap-2 rounded-lg bg-white/20 hover:bg-white/30 border border-white/20 backdrop-blur-sm px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
             title="Imprimer la liste des anciennes ventes"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
@@ -219,55 +236,116 @@ export default function AnciennesVentesPage() {
           </button>
           <button
             onClick={() => setForm(true)}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 shadow"
+            className="flex items-center gap-2 rounded-lg bg-white/20 hover:bg-white/30 border border-white/20 backdrop-blur-sm px-4 py-2 text-sm font-medium text-white shadow transition-colors"
           >
             <Plus className="h-4 w-4" /> Ancienne vente
           </button>
         </div>
       </div>
 
+      {/* Sous-navigation ventes */}
+      <div className="flex flex-wrap gap-1 no-print">
+        {[
+          { href: '/dashboard/ventes', label: 'Ventes' },
+          { href: '/dashboard/ventes/toute', label: 'Toutes' },
+          { href: '/dashboard/ventes/rapide', label: 'Rapide' },
+          { href: '/dashboard/ventes/commandes', label: 'Commandes' },
+          { href: '/dashboard/ventes/retours', label: 'Retours' },
+          { href: '/dashboard/ventes/retraits', label: 'Retraits' },
+          { href: '/dashboard/ventes/suivi', label: 'Suivi' },
+          { href: '/dashboard/ventes/historiques', label: 'Historiques' },
+        ].map((tab) => {
+          const active = pathname === tab.href
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                active
+                  ? 'bg-white text-amber-700 shadow-md'
+                  : 'bg-white/15 text-white/80 hover:bg-white/25 hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </Link>
+          )
+        })}
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-white/20">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-white/70">Total ventes</p>
+            <Archive className="h-5 w-5 text-white/60" />
+          </div>
+          <p className="text-2xl font-bold mt-1 text-white">{kpiTotals.total}</p>
+        </div>
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-emerald-300/40">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-white/70">Montant total</p>
+            <ShoppingBag className="h-5 w-5 text-emerald-300" />
+          </div>
+          <p className="text-2xl font-bold mt-1 text-emerald-200">{kpiTotals.montantTotal.toLocaleString('fr-FR')} F</p>
+        </div>
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-green-300/40">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-white/70">Encaissé</p>
+            <ShoppingBag className="h-5 w-5 text-green-300" />
+          </div>
+          <p className="text-2xl font-bold mt-1 text-green-200">{kpiTotals.montantPaye.toLocaleString('fr-FR')} F</p>
+        </div>
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-amber-300/40">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-white/70">Reste à encaisser</p>
+            <ShoppingBag className="h-5 w-5 text-amber-300" />
+          </div>
+          <p className="text-2xl font-bold mt-1 text-amber-200">{kpiTotals.reste.toLocaleString('fr-FR')} F</p>
+        </div>
+      </div>
+
       {/* Barre de filtres */}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 p-3">
         <div>
-          <label className="block text-xs font-medium text-gray-700">Du</label>
+          <label className="block text-xs font-medium text-white/70">Du</label>
           <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)}
-            className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+            className="mt-1 rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-2 py-1.5 text-sm text-white" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700">Au</label>
+          <label className="block text-xs font-medium text-white/70">Au</label>
           <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)}
-            className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+            className="mt-1 rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-2 py-1.5 text-sm text-white" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700">Client</label>
+          <label className="block text-xs font-medium text-white/70">Client</label>
           <select value={filterClientId} onChange={e => setFilterClientId(e.target.value)}
-            className="mt-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm min-w-[150px]">
+            className="mt-1 rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-2 py-1.5 text-sm text-white min-w-[150px]">
             <option value="">Tous les clients</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
           </select>
         </div>
         <button onClick={() => { setCurrentPage(1); fetchVentes(1); }}
-          className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-600">
+          className="rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30">
           <Filter className="h-4 w-4 inline mr-1" />Filtrer
         </button>
         <button onClick={() => { setDateDebut(''); setDateFin(''); setFilterClientId(''); setCurrentPage(1); fetchVentes(1); }}
-          className="rounded-lg border-2 border-amber-400 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-200">
+          className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium text-white/80 hover:bg-white/20">
           Réinitialiser
         </button>
       </div>
 
       {/* Recherche */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
         <input type="text" placeholder="Rechercher par N°, client, magasin..."
           value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm focus:border-amber-500 focus:outline-none shadow-sm" />
+          className="w-full rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 pl-10 pr-4 py-2.5 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30" />
       </div>
 
       {/* Encart d'alerte */}
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-start gap-3">
-        <Archive className="h-5 w-5 mt-0.5 flex-shrink-0 text-emerald-500" />
-        <span>
+      <div className="rounded-xl bg-white/15 backdrop-blur-sm px-4 py-3 text-sm text-white flex items-start gap-3 border border-white/20">
+        <Archive className="h-5 w-5 mt-0.5 flex-shrink-0 text-white/60" />
+        <span className="text-white/90">
           <strong>Note :</strong> Les enregistrements dans ce menu <strong>impactent le stock et la comptabilité</strong>.
           Ils servent à rattraper les ventes/factures existantes avant l'adoption de GestiCom tout en maintenant l'intégrité de vos comptes.
         </span>
@@ -539,6 +617,7 @@ export default function AnciennesVentesPage() {
             </div>
           ))
         })()}
+      </div>
       </div>
     </div>
   )

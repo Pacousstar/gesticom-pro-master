@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     prisma.fournisseur.count({ where }),
     prisma.fournisseur.findMany({
       where,
-      orderBy: { nom: 'asc' },
+      orderBy: { createdAt: 'desc' },
       select: { id: true, code: true, nom: true, telephone: true, email: true, ncc: true, localisation: true, numeroCamion: true, soldeInitial: true, avoirInitial: true },
       skip,
       take: limit,

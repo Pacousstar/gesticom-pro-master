@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, ArrowLeft, Scale, Printer, FileSpreadsheet, Plus, DollarSign, FileText, X, Check, Pencil } from 'lucide-react'
+import { Loader2, ArrowLeft, Scale, Printer, FileSpreadsheet, Plus, DollarSign, FileText, X, Check, Pencil, Info, ExternalLink } from 'lucide-react'
 
 interface Transaction {
   id: string
@@ -47,6 +47,13 @@ export default function CompteCourantDetailPage() {
   const [editNom, setEditNom] = useState('')
   const [editNcc, setEditNcc] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [showFactures, setShowFactures] = useState(false)
+  const [factures, setFactures] = useState<any[]>([])
+  const [facturesLoading, setFacturesLoading] = useState(false)
+  const [clientsList, setClientsList] = useState<{ id: number; nom: string }[]>([])
+  const [fournisseursList, setFournisseursList] = useState<{ id: number; nom: string }[]>([])
+  const [editClientId, setEditClientId] = useState('')
+  const [editFournisseurId, setEditFournisseurId] = useState('')
   const printRef = useRef<HTMLDivElement>(null)
 
   const fmt = (n: number) => `${n.toLocaleString('fr-FR')} FCFA`
@@ -65,6 +72,8 @@ export default function CompteCourantDetailPage() {
     fetchDetail()
     fetch('/api/magasins?actif=true').then(r => r.ok && r.json()).then(d => setMagasins(d || [])).catch(() => {})
     fetch('/api/banques?actif=true').then(r => r.ok && r.json()).then(d => setBanques(d || [])).catch(() => {})
+    fetch('/api/clients?limit=10000').then(r => r.ok && r.json()).then(d => setClientsList(d?.data || d || [])).catch(() => {})
+    fetch('/api/fournisseurs?limit=10000').then(r => r.ok && r.json()).then(d => setFournisseursList(d?.data || d || [])).catch(() => {})
   }, [params.id])
 
   const totalDebit = data?.transactions.filter(t => t.montantSigne > 0).reduce((s, t) => s + t.montant, 0) || 0
@@ -116,7 +125,12 @@ export default function CompteCourantDetailPage() {
       const res = await fetch(`/api/comptes-courants/${data?.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nom: editNom, ncc: editNcc }),
+        body: JSON.stringify({
+          nom: editNom,
+          ncc: editNcc,
+          clientId: editClientId ? Number(editClientId) : null,
+          fournisseurId: editFournisseurId ? Number(editFournisseurId) : null,
+        }),
       })
       if (res.ok) {
         setShowEdit(false)
@@ -132,24 +146,89 @@ export default function CompteCourantDetailPage() {
 
   const handlePrint = () => window.print()
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     if (!data) return
-    const csv = [
-      ['Date', 'Libellé', 'Débit (+)', 'Crédit (-)', 'Solde'].join(','),
-      ...data.transactions.map(t => [
-        new Date(t.date).toLocaleDateString('fr-FR'),
-        `"${t.libelle}"`,
-        t.montantSigne > 0 ? t.montant : '',
-        t.montantSigne < 0 ? t.montant : '',
-      ].join(','))
-    ].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    let rb = 0
+    const rows = data.transactions.map(t => {
+      rb += t.montantSigne
+      return { ...t, runningBalance: rb }
+    })
+
+    const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+    const thead = `<tr style="background:#ED6A30;color:#ffffff;text-align:center;font-weight:bold">
+      <th style="padding:8px 12px">Date</th>
+      <th style="padding:8px 12px;text-align:left">Libellé</th>
+      <th style="padding:8px 12px">Débit (+)</th>
+      <th style="padding:8px 12px">Crédit (−)</th>
+      <th style="padding:8px 12px">Solde</th>
+    </tr>`
+
+    const tbody = rows.map((t, i) => {
+      const bg = i % 2 === 0 ? '#1a1a2e' : '#16213e'
+      const date = new Date(t.date).toLocaleDateString('fr-FR')
+      const time = new Date(t.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      const debit = t.montantSigne > 0 ? fmt(t.montant) : ''
+      const credit = t.montantSigne < 0 ? fmt(t.montant) : ''
+      const solde = fmt(Math.abs(t.runningBalance)) + (t.runningBalance >= 0 ? ' D' : ' C')
+      const soldeColor = t.runningBalance >= 0 ? '#34d399' : '#f87171'
+      return `<tr style="background:${bg}">
+        <td style="padding:6px 12px;color:#ccc;white-space:nowrap">${escHtml(date)}<br><span style="font-size:10px;color:#888">${escHtml(time)}</span></td>
+        <td style="padding:6px 12px;color:#ddd;max-width:300px">${escHtml(t.libelle)}</td>
+        <td style="padding:6px 12px;text-align:right;color:#fb923c;white-space:nowrap">${debit}</td>
+        <td style="padding:6px 12px;text-align:right;color:#34d399;white-space:nowrap">${credit}</td>
+        <td style="padding:6px 12px;text-align:right;color:${soldeColor};font-weight:bold;white-space:nowrap">${escHtml(solde)}</td>
+      </tr>`
+    }).join('\n')
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Compte Courant ${escHtml(data.nom)}</title></head>
+<body style="font-family:Segoe UI,Arial,sans-serif;font-size:13px;margin:0;padding:20px;background:#0f0f23">
+<table style="border-collapse:collapse;width:100%">
+<thead>${thead}</thead>
+<tbody>${tbody}</tbody>
+</table>
+<p style="color:#888;font-size:11px;margin-top:12px">Compte Courant ${escHtml(data.nom)} (${escHtml(data.code)}) — Solde net : ${fmt(Math.abs(data.solde))} ${data.solde >= 0 ? 'Débiteur' : 'Créditeur'}</p>
+</body>
+</html>`
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `CompteCourant_${data.nom}_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `CompteCourant_${data.nom}_${new Date().toISOString().slice(0, 10)}.xls`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleShowFactures = async () => {
+    setShowFactures(true)
+    setFacturesLoading(true)
+    setFactures([])
+    try {
+      const results: any[] = []
+      if (data?.client) {
+        const r = await fetch(`/api/ventes?clientId=${data.client.id}&limit=500`)
+        if (r.ok) {
+          const json = await r.json()
+          const items = Array.isArray(json) ? json : json.ventes || json.data || []
+          results.push(...items.map((v: any) => ({ ...v, _type: 'VENTE' })))
+        }
+      }
+      if (data?.fournisseur) {
+        const r = await fetch(`/api/achats?fournisseurId=${data.fournisseur.id}&limit=500`)
+        if (r.ok) {
+          const json = await r.json()
+          const items = Array.isArray(json) ? json : json.achats || json.data || []
+          results.push(...items.map((a: any) => ({ ...a, _type: 'ACHAT' })))
+        }
+      }
+      results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      setFactures(results)
+    } catch { } finally {
+      setFacturesLoading(false)
+    }
   }
 
   const handleLettrage = async (transactionId: string) => {
@@ -171,7 +250,14 @@ export default function CompteCourantDetailPage() {
     return <div className="p-6 text-center text-gray-500">Compte courant introuvable.</div>
   }
 
-  let runningBalance = 0
+  // Pre-calc running balance from chronological order (API returns desc)
+  const transactionsWithBalance = (() => {
+    const asc = [...data.transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    let rb = 0
+    const balMap = new Map<string, number>()
+    for (const t of asc) { rb += t.montantSigne; balMap.set(t.id, rb) }
+    return data.transactions.map(t => ({ ...t, runningBalance: balMap.get(t.id) || 0 }))
+  })()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
@@ -184,7 +270,7 @@ export default function CompteCourantDetailPage() {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-white">Compte Courant {data.nom}</h1>
-            <p className="text-sm text-gray-400">{data.code}{data.ncc ? ` · NCC: ${data.ncc}` : ''}</p>
+            <p className="text-sm text-white">{data.code}{data.ncc ? ` · NCC: ${data.ncc}` : ''}</p>
           </div>
         </div>
 
@@ -194,7 +280,7 @@ export default function CompteCourantDetailPage() {
             className="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm transition-colors">
             <Plus className="mr-2 h-4 w-4" /> Nouveau Règlement
           </button>
-          <button onClick={() => { setEditNom(data.nom); setEditNcc(data.ncc || ''); setShowEdit(true) }}
+          <button onClick={() => { setEditNom(data.nom); setEditNcc(data.ncc || ''); setEditClientId(data.client?.id ? String(data.client.id) : ''); setEditFournisseurId(data.fournisseur?.id ? String(data.fournisseur.id) : ''); setShowEdit(true) }}
             className="inline-flex items-center px-4 py-2 bg-blue-600/30 hover:bg-blue-600/50 text-white rounded-md text-sm transition-colors">
             <Pencil className="mr-2 h-4 w-4" /> Modifier
           </button>
@@ -202,7 +288,7 @@ export default function CompteCourantDetailPage() {
             className="inline-flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-md text-sm transition-colors">
             <Printer className="mr-2 h-4 w-4" /> Relevé
           </button>
-          <button
+          <button onClick={handleShowFactures}
             className="inline-flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-md text-sm transition-colors">
             <FileText className="mr-2 h-4 w-4" /> Détail Factures
           </button>
@@ -214,20 +300,43 @@ export default function CompteCourantDetailPage() {
 
         {/* Summary Cards */}
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/10">
-            <p className="text-sm font-medium text-gray-400 mb-2">Total Débit (Achats/Ventes)</p>
+          <div className="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/10 group relative">
+            <p className="text-sm font-medium text-white mb-1">Total Débit</p>
             <p className="text-3xl font-bold text-orange-400">{fmt(totalDebit)}</p>
+            <p className="text-[11px] text-white mt-1">Ventes + Encaissements</p>
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Info className="h-4 w-4 text-gray-500" />
+            </div>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
+              <div className="bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                Somme des montants en Débit (ce qui est dû au CC).
+                <br />Ventes et encaissements clients augmentent le débit.
+              </div>
+            </div>
           </div>
-          <div className="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/10">
-            <p className="text-sm font-medium text-gray-400 mb-2">Total Crédit (Règlements)</p>
+          <div className="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/10 group relative">
+            <p className="text-sm font-medium text-white mb-1">Total Crédit</p>
             <p className="text-3xl font-bold text-emerald-400">{fmt(totalCredit)}</p>
+            <p className="text-[11px] text-white mt-1">Achats + Paiements</p>
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Info className="h-4 w-4 text-gray-500" />
+            </div>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
+              <div className="bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                Somme des montants en Crédit (ce qui est payé par le CC).
+                <br />Achats et paiements fournisseurs augmentent le crédit.
+              </div>
+            </div>
           </div>
           <div className="bg-white/10 backdrop-blur rounded-xl p-6 border border-white/10">
-            <p className="text-sm font-medium text-gray-400 mb-2">Solde Net Final</p>
+            <p className="text-sm font-medium text-white mb-1">Solde Net</p>
             <p className={`text-3xl font-bold ${data.solde >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {fmt(Math.abs(data.solde))}
             </p>
-            {Math.abs(data.solde) < 1 && <p className="text-xs text-emerald-400 mt-2">Le compte est soldé</p>}
+            <p className={`text-xs mt-1 ${data.solde >= 0 ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+              {data.solde >= 0 ? 'Débit (la personne doit au CC)' : 'Crédit (le CC doit à la personne)'}
+            </p>
+            {Math.abs(data.solde) < 1 && <p className="text-xs text-emerald-400 mt-2">✓ Compte soldé</p>}
           </div>
         </div>
 
@@ -235,16 +344,16 @@ export default function CompteCourantDetailPage() {
         <div className="grid gap-4 md:grid-cols-2">
           {data.client && (
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-              <p className="text-sm text-gray-400 mb-1">Client lié</p>
+              <p className="text-sm text-white mb-1">Client lié</p>
               <p className="font-medium">{data.client.nom}</p>
-              <p className="text-xs text-gray-500">{data.client.code} · {data.client.telephone}</p>
+              <p className="text-xs text-white">{data.client.code} · {data.client.telephone}</p>
             </div>
           )}
           {data.fournisseur && (
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-              <p className="text-sm text-gray-400 mb-1">Fournisseur lié</p>
+              <p className="text-sm text-white mb-1">Fournisseur lié</p>
               <p className="font-medium">{data.fournisseur.nom}</p>
-              <p className="text-xs text-gray-500">{data.fournisseur.code} · {data.fournisseur.telephone}</p>
+              <p className="text-xs text-white">{data.fournisseur.code} · {data.fournisseur.telephone}</p>
             </div>
           )}
         </div>
@@ -265,6 +374,22 @@ export default function CompteCourantDetailPage() {
                   <input type="text" value={editNcc} onChange={e => setEditNcc(e.target.value)}
                     className="w-full bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white"
                     placeholder="Numéro de compte" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Client lié</label>
+                  <select value={editClientId} onChange={e => setEditClientId(e.target.value)}
+                    className="w-full bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white">
+                    <option value="">Aucun client</option>
+                    {clientsList.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Fournisseur lié</label>
+                  <select value={editFournisseurId} onChange={e => setEditFournisseurId(e.target.value)}
+                    className="w-full bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white">
+                    <option value="">Aucun fournisseur</option>
+                    {fournisseursList.map(f => <option key={f.id} value={f.id}>{f.nom}</option>)}
+                  </select>
                 </div>
                 <div className="flex gap-2 pt-2">
                   <button type="submit" disabled={savingEdit}
@@ -363,7 +488,7 @@ export default function CompteCourantDetailPage() {
             <Scale className="mr-2 h-4 w-4" />
             Compenser (écriture comptable)
           </button>
-          <button onClick={handleExportCSV}
+          <button onClick={handleExportExcel}
             className="inline-flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-md text-sm transition-colors">
             <FileSpreadsheet className="mr-2 h-4 w-4" />
             Exporter Excel
@@ -374,50 +499,68 @@ export default function CompteCourantDetailPage() {
         <div className="bg-white/5 backdrop-blur rounded-xl border border-white/10 overflow-hidden">
           <div className="p-4 border-b border-white/10 flex items-center justify-between">
             <h3 className="font-bold">Détail chronologique des opérations</h3>
-            <span className="text-xs text-gray-400">{data.transactions.length} Événements</span>
+            <span className="text-xs text-white">{data.transactions.length} Événements</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-gray-400 text-xs">
-                  <th className="text-left py-3 px-4">Date</th>
-                  <th className="text-left py-3 px-4">Libellé / Réf</th>
-                  <th className="text-right py-3 px-4">Débit (+)</th>
-                  <th className="text-right py-3 px-4">Crédit (-)</th>
-                  <th className="text-right py-3 px-4">Solde Progressif</th>
-                  <th className="text-center py-3 px-4">Action</th>
+                <tr className="border-b border-white/10 text-white text-xs uppercase tracking-wider">
+                  <th className="text-left py-3 px-4 font-medium">Date</th>
+                  <th className="text-left py-3 px-4 font-medium">Libellé</th>
+                  <th className="text-right py-3 px-4 font-medium">Débit (+)</th>
+                  <th className="text-right py-3 px-4 font-medium">Crédit (−)</th>
+                  <th className="text-right py-3 px-4 font-medium">Solde</th>
+                  <th className="text-center py-3 px-4 font-medium">Lettrage</th>
                 </tr>
               </thead>
               <tbody>
-                {data.transactions.map(t => {
-                  runningBalance += t.montantSigne
+                {transactionsWithBalance.map((t, i) => {
+                  const isEven = i % 2 === 0
                   return (
-                    <tr key={t.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                      <td className="py-3 px-4 whitespace-nowrap text-white/80">
-                        {new Date(t.date).toLocaleDateString('fr-FR')}
+                    <tr key={t.id}
+                      className={`border-b border-white/5 transition-colors ${isEven ? 'bg-white/5' : 'bg-transparent'} hover:bg-white/10`}>
+                      <td className="py-2.5 px-4 whitespace-nowrap text-white/80 align-top">
+                        <span>{new Date(t.date).toLocaleDateString('fr-FR')}</span>
                         <br /><span className="text-[10px] text-gray-500">
                           {new Date(t.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-white/90">{t.libelle}</td>
-                      <td className="py-3 px-4 text-right text-orange-400 font-medium">
-                        {t.montantSigne > 0 ? fmt(t.montant) : '—'}
+                      <td className="py-2.5 px-4 text-white/90 max-w-[260px]">
+                        <span className="block truncate" title={t.libelle}>{t.libelle}</span>
+                        <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded ${
+                          t.type === 'ACHAT' ? 'bg-orange-600/40 text-white'
+                          : t.type === 'VENTE' ? 'bg-blue-600/40 text-white'
+                          : t.type === 'PAIEMENT_FOURNISSEUR' ? 'bg-purple-600/40 text-white'
+                          : t.type === 'ENCAISSEMENT_CLIENT' ? 'bg-emerald-600/40 text-white'
+                          : t.type === 'COMPENSATION' ? 'bg-cyan-600/40 text-white'
+                          : 'bg-gray-600/40 text-white'
+                        }`}>
+                          {t.type === 'ACHAT' ? 'Achat'
+                          : t.type === 'VENTE' ? 'Vente'
+                          : t.type === 'PAIEMENT_FOURNISSEUR' ? 'Paiement'
+                          : t.type === 'ENCAISSEMENT_CLIENT' ? 'Encaissement'
+                          : t.type === 'COMPENSATION' ? 'Compensation'
+                          : t.type}
+                        </span>
                       </td>
-                      <td className="py-3 px-4 text-right text-emerald-400 font-medium">
-                        {t.montantSigne < 0 ? fmt(t.montant) : '—'}
+                      <td className="py-2.5 px-4 text-right text-orange-400 font-medium align-top whitespace-nowrap">
+                        {t.montantSigne > 0 ? fmt(t.montant) : <span className="text-gray-600">—</span>}
                       </td>
-                      <td className={`py-3 px-4 text-right font-bold ${runningBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {fmt(Math.abs(runningBalance))}
-                        <span className="text-xs ml-1">{runningBalance >= 0 ? 'D' : 'C'}</span>
+                      <td className="py-2.5 px-4 text-right text-emerald-400 font-medium align-top whitespace-nowrap">
+                        {t.montantSigne < 0 ? fmt(t.montant) : <span className="text-gray-600">—</span>}
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className={`py-2.5 px-4 text-right font-bold align-top whitespace-nowrap ${t.runningBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {fmt(Math.abs(t.runningBalance))}
+                        <span className="text-[10px] ml-1 opacity-70">{t.runningBalance >= 0 ? 'D' : 'C'}</span>
+                      </td>
+                      <td className="py-2.5 px-4 text-center align-top">
                         {t.referenceType === 'REGLEMENT_VENTE' || t.referenceType === 'REGLEMENT_ACHAT' ? (
                           <button onClick={() => handleLettrage(t.id)}
-                            className="text-xs px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded transition-colors">
+                            className="text-xs px-2 py-1 bg-blue-600/50 hover:bg-blue-600/70 text-white rounded transition-colors whitespace-nowrap">
                             Lettrer
                           </button>
                         ) : (
-                          <span className="text-xs text-gray-600">—</span>
+                          <span className="text-[10px] text-gray-600">—</span>
                         )}
                       </td>
                     </tr>
@@ -429,10 +572,76 @@ export default function CompteCourantDetailPage() {
         </div>
 
         {/* Comportement du solde */}
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10 text-sm text-gray-400 leading-relaxed">
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10 text-sm text-white leading-relaxed">
           <p className="font-medium text-white mb-1">Comportement du solde</p>
           Toutes les ventes validées augmentent le Débit (ce que le client doit). Les règlements et acomptes augmentent le Crédit (ce qu'il a payé). Le résultat positif (D) indique une dette restante, le négatif (C) indique un avoir client.
         </div>
+
+        {/* Détail Factures Modal */}
+        {showFactures && (
+          <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 pt-6 pb-6 overflow-y-auto">
+            <div className="bg-gray-800 rounded-xl w-full max-w-3xl border border-white/10 flex flex-col my-auto">
+              <div className="flex items-center justify-between p-4 border-b border-white/10">
+                <h3 className="text-lg font-bold">Factures liées</h3>
+                <button onClick={() => setShowFactures(false)}
+                  className="p-1 hover:bg-white/10 rounded transition-colors">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="overflow-y-auto flex-1 p-4">
+                {facturesLoading ? (
+                  <div className="flex justify-center py-12"><Loader2 className="animate-spin h-6 w-6" /></div>
+                ) : factures.length === 0 ? (
+                  <p className="text-center text-gray-500 py-12">Aucune facture trouvée.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-white/10">
+                        <th className="text-left py-2 px-3 font-medium">Date</th>
+                        <th className="text-left py-2 px-3 font-medium">Type</th>
+                        <th className="text-left py-2 px-3 font-medium">Référence</th>
+                        <th className="text-right py-2 px-3 font-medium">Montant</th>
+                        <th className="text-center py-2 px-3 font-medium">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {factures.map((f, i) => (
+                        <tr key={`${f._type}-${f.id}`}
+                          className={`border-b border-white/5 ${i % 2 === 0 ? 'bg-white/5' : 'bg-transparent'}`}>
+                          <td className="py-2 px-3 whitespace-nowrap text-white/80">
+                            {new Date(f.date).toLocaleDateString('fr-FR')}
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                              f._type === 'VENTE' ? 'bg-blue-600/20 text-blue-300' : 'bg-orange-600/20 text-orange-300'
+                            }`}>
+                              {f._type}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-white/90">{f.numero || f.reference || '-'}</td>
+                          <td className="py-2 px-3 text-right text-white/90 whitespace-nowrap">
+                            {fmt(f.montantTotal || f.montant || 0)}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                              f.statut === 'VALIDE' || f.statut === 'LIVREE' || f.statut === 'PAYEE' || f.statut === 'PARTIELLE'
+                                ? 'bg-emerald-600/20 text-emerald-300'
+                                : f.statut === 'ANNULEE'
+                                ? 'bg-red-600/20 text-red-300'
+                                : 'bg-gray-600/20 text-gray-400'
+                            }`}>
+                              {f.statut || '-'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Print Styles */}
         <style>{`

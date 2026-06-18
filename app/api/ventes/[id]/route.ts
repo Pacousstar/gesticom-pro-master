@@ -32,7 +32,7 @@ export async function GET(
     where: { id },
     include: {
       magasin: { select: { id: true, code: true, nom: true, localisation: true } },
-      client: { select: { id: true, nom: true, telephone: true, type: true, adresse: true, ncc: true } },
+      client: { select: { id: true, code: true, nom: true, telephone: true, type: true, adresse: true, ncc: true } },
       lignes: {
         include: { produit: { select: { id: true, code: true, designation: true } } },
       },
@@ -111,7 +111,7 @@ export async function DELETE(
       // 2/3. Stock
       const totalLivree = v.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
       const estCommande = v.typeVente === 'COMMANDE'
-      const stockPasDeduit = (estCommande && totalLivree === 0) || (v.retraitDiffere && !v.dateRetrait)
+      const stockPasDeduit = (estCommande || v.retraitDiffere) && totalLivree === 0
       const stockADeduire = !stockPasDeduit
       if (stockADeduire) {
         await tx.mouvement.deleteMany({
@@ -121,12 +121,13 @@ export async function DELETE(
               { observation: `Vente ${v.numero}` },
               { observation: `Modif Vente ${v.numero}` },
               { observation: `Livraison commande ${v.numero}` },
+              { observation: `Retrait vente ${v.numero}` },
             ]
           }
         })
         if (v.statut !== 'ANNULEE') {
           for (const l of v.lignes) {
-            const qteARembourser = estCommande ? (l.quantiteLivree || 0) : l.quantite
+            const qteARembourser = estCommande || v.retraitDiffere ? (l.quantiteLivree || 0) : l.quantite
             if (qteARembourser > 0) {
               await tx.stock.updateMany({
                 where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },
@@ -317,7 +318,7 @@ export async function PATCH(
       return NextResponse.json({ success: true, message: msg })
     }
 
-    if (action === 'RETRAIT') {
+    if (action === 'RETRAIT_PARTIEL') {
       const vente = await prisma.vente.findUnique({
         where: { id },
         include: { lignes: true, magasin: true }
@@ -326,56 +327,108 @@ export async function PATCH(
       if (!vente.retraitDiffere) {
         return NextResponse.json({ error: 'Cette vente n\'est pas à retrait différé.' }, { status: 400 })
       }
-      if (vente.dateRetrait) {
-        return NextResponse.json({ error: 'Cette vente a déjà été retirée.' }, { status: 400 })
+
+      const lignesRetrait: { produitId: number; quantite: number }[] = body?.lignes || []
+      if (!lignesRetrait.length) {
+        return NextResponse.json({ error: 'Aucune ligne à retirer.' }, { status: 400 })
       }
 
       const maintenant = new Date()
-      await prisma.$transaction(async (tx) => {
+      let dateRetrait = maintenant
+      if (body?.date) {
+        const d = new Date(body.date)
+        if (!Number.isNaN(d.getTime())) {
+          dateRetrait = d
+          if (String(body.date).length <= 10) {
+            dateRetrait.setHours(maintenant.getHours(), maintenant.getMinutes(), maintenant.getSeconds())
+          }
+        }
+      }
+
+      return await prisma.$transaction(async (tx) => {
         let montantTotalRetrait = 0
         const lignesRetirees: any[] = []
+        const lignesUpdate: { id: number; quantiteLivree: number }[] = []
 
-        for (const l of vente.lignes) {
-          const st = await tx.stock.findUnique({
-            where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId: vente.magasinId, entiteId: vente.entiteId } }
-          })
-          if ((st?.quantite ?? 0) < l.quantite) {
-            throw new Error(`Stock insuffisant pour ${l.designation} (${st?.quantite || 0} dispo, ${l.quantite} requis).`)
+        for (const lr of lignesRetrait) {
+          const ligne = vente.lignes.find((l: any) => l.produitId === lr.produitId)
+          if (!ligne) throw new Error(`Produit ID ${lr.produitId} introuvable dans la vente.`)
+
+          const restant = ligne.quantite - (ligne.quantiteLivree || 0)
+          if (lr.quantite <= 0) throw new Error('Quantité invalide.')
+          if (lr.quantite > restant) {
+            throw new Error(`Quantité retirée (${lr.quantite}) > restant à retirer (${restant}) pour ${ligne.designation}.`)
           }
+
+          const st = await tx.stock.findUnique({
+            where: { produitId_magasinId_entiteId: { produitId: lr.produitId, magasinId: vente.magasinId, entiteId: vente.entiteId } }
+          })
+          if ((st?.quantite ?? 0) < lr.quantite) {
+            throw new Error(`Stock insuffisant pour ${ligne.designation} (${st?.quantite || 0} dispo, ${lr.quantite} requis).`)
+          }
+
           await tx.stock.update({
-            where: { produitId_magasinId_entiteId: { produitId: l.produitId, magasinId: vente.magasinId, entiteId: vente.entiteId } },
-            data: { quantite: { decrement: l.quantite } },
+            where: { produitId_magasinId_entiteId: { produitId: lr.produitId, magasinId: vente.magasinId, entiteId: vente.entiteId } },
+            data: { quantite: { decrement: lr.quantite } },
           })
           await tx.mouvement.create({
             data: {
-              type: 'SORTIE', produitId: l.produitId, magasinId: vente.magasinId,
+              type: 'SORTIE', produitId: lr.produitId, magasinId: vente.magasinId,
               entiteId: vente.entiteId, utilisateurId: session!.userId,
-              quantite: l.quantite, dateOperation: maintenant,
+              quantite: lr.quantite, dateOperation: dateRetrait,
               observation: `Retrait vente ${vente.numero}`,
             },
           })
 
-          const montantLigne = l.montant
+          const nouvelleQteLivree = (ligne.quantiteLivree || 0) + lr.quantite
+          lignesUpdate.push({ id: ligne.id, quantiteLivree: nouvelleQteLivree })
+
+          const ratio = lr.quantite / ligne.quantite
+          const montantLigne = ligne.montant * ratio
           montantTotalRetrait += montantLigne
           lignesRetirees.push({
-            produitId: l.produitId, designation: l.designation,
-            quantite: l.quantite, prixUnitaire: l.prixUnitaire,
-            coutUnitaire: l.coutUnitaire, tva: l.tva, remise: l.remise,
+            produitId: lr.produitId, designation: ligne.designation,
+            quantite: lr.quantite, prixUnitaire: ligne.prixUnitaire,
+            coutUnitaire: ligne.coutUnitaire, tva: ligne.tva, remise: ligne.remise,
           })
         }
 
+        for (const lu of lignesUpdate) {
+          await tx.venteLigne.update({ where: { id: lu.id }, data: { quantiteLivree: lu.quantiteLivree } })
+        }
+
+        const lastNum = await tx.retraitPartiel.findFirst({
+          where: { entiteId: vente.entiteId }, orderBy: { id: 'desc' }, select: { numero: true }
+        })
+        const nextNum = lastNum ? String(Number(lastNum.numero) + 1).padStart(6, '0') : '000001'
+
+        await tx.retraitPartiel.create({
+          data: {
+            numero: nextNum,
+            venteId: id,
+            date: dateRetrait,
+            utilisateurId: session!.userId,
+            entiteId: vente.entiteId,
+            lignes: {
+              create: lignesRetirees.map((l: any) => ({
+                produitId: l.produitId, designation: l.designation,
+                quantite: l.quantite, prixUnitaire: l.prixUnitaire,
+                montant: l.prixUnitaire * l.quantite,
+              }))
+            }
+          }
+        })
+
         const { comptabiliserLivraisonCommande } = await import('@/lib/comptabilisation')
         await comptabiliserLivraisonCommande({
-          venteId: id, numeroVente: vente.numero, date: maintenant,
+          venteId: id, numeroVente: vente.numero, date: dateRetrait,
           montantTotal: montantTotalRetrait, entiteId: vente.entiteId,
           utilisateurId: session!.userId, magasinId: vente.magasinId,
           lignes: lignesRetirees,
         }, tx)
 
-        await tx.vente.update({ where: { id }, data: { dateRetrait: maintenant } })
+        return NextResponse.json({ success: true, message: `Retrait partiel effectué (${lignesRetrait.length} produit(s)).` })
       }, { timeout: 20000 })
-
-                  return NextResponse.json({ success: true, message: 'Vente retirée avec succès.' })
     }
 
     if (action === 'PAGEMENT') {
@@ -399,7 +452,8 @@ export async function PATCH(
           client: { select: { nom: true } },
           magasin: true,
           reglements: { select: { id: true, modePaiement: true } },
-          ReglementVenteLigne: { select: { reglementId: true, montant: true } }
+          ReglementVenteLigne: { select: { reglementId: true, montant: true } },
+          lignes: true,
         }
       })
 
@@ -506,7 +560,10 @@ export async function PATCH(
           }, tx)
         }
 
-        const isCommandeNonLivree = (vente.typeVente === 'COMMANDE' && !vente.dateLivraison) || (vente.retraitDiffere && !vente.dateRetrait)
+        const totalLivreePaiement = vente.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
+        const totalQte = vente.lignes.reduce((s: number, l: any) => s + Number(l.quantite || 0), 0)
+        const retraitDiffereNonFini = vente.retraitDiffere && totalLivreePaiement < totalQte
+        const isCommandeNonLivree = (vente.typeVente === 'COMMANDE' && !vente.dateLivraison) || retraitDiffereNonFini
         const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
         await comptabiliserReglementVente({
           reglementId: reglement.id,
@@ -528,7 +585,7 @@ export async function PATCH(
     }
 
     if (action === 'FULL_UPDATE') {
-      const { clientId, date, magasinId, observation, lignes, modePaiement, reglements, clientLibre, remiseGlobale, fraisApproche } = body
+      const { clientId, date, magasinId, observation, lignes, modePaiement, reglements, clientLibre, remiseGlobale, fraisApproche, typeVente, dateLivraison, retraitDiffere, banqueId } = body
       
       const preCheck = await prisma.vente.findUnique({ where: { id }, select: { updatedAt: true } })
       if (!preCheck) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
@@ -551,14 +608,13 @@ export async function PATCH(
         }
 
         const totalLivreeVente = oldVente.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
-        const stockPasDeduit = (oldVente.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (oldVente.retraitDiffere && !oldVente.dateRetrait)
+        const stockPasDeduit = (oldVente.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (oldVente.retraitDiffere && totalLivreeVente === 0)
         const estCommandeNonLivree = stockPasDeduit
-        const estCommande = oldVente.typeVente === 'COMMANDE'
 
         // 1. Rollback stocks (uniquement si stock déjà déduit)
         if (!estCommandeNonLivree) {
           for (const l of oldVente.lignes) {
-            const qteARembourser = estCommande ? (l.quantiteLivree || 0) : l.quantite
+            const qteARembourser = l.quantiteLivree || 0
             if (qteARembourser > 0) {
               await tx.stock.updateMany({
                 where: { produitId: l.produitId, magasinId: oldVente.magasinId, entiteId: oldVente.entiteId },
@@ -573,6 +629,7 @@ export async function PATCH(
                  { observation: `Vente ${oldVente.numero}` },
                  { observation: `Modif Vente ${oldVente.numero}` },
                  { observation: `Livraison commande ${oldVente.numero}` },
+                 { observation: `Retrait vente ${oldVente.numero}` },
                ]
              }
            })
@@ -710,6 +767,9 @@ export async function PATCH(
             montantTotal: totalFinal,
             fraisApproche: finalFrais,
             remiseGlobale: globalRem,
+            typeVente: typeVente || oldVente.typeVente,
+            dateLivraison: dateLivraison ? new Date(dateLivraison) : oldVente.typeVente === 'LIVRAISON_IMMEDIATE' ? null : oldVente.dateLivraison,
+            retraitDiffere: retraitDiffere === true,
             montantPaye: Math.min(totalFinal, mntPaye),
             statutPaiement: mntPaye >= totalFinal ? 'PAYE' : mntPaye > 0 ? 'PARTIEL' : 'CREDIT',
             lignes: {

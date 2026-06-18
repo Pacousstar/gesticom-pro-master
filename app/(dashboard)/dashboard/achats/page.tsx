@@ -205,7 +205,10 @@ export default function AchatsPage() {
   const refetchProduits = () => {
     fetch('/api/produits?complet=1')
       .then((r) => (r.ok ? r.json() : []))
-      .then((res) => setProduits(Array.isArray(res) ? res : []))
+      .then((res) => {
+        const arr = Array.isArray(res) ? res : []
+        setProduits(arr.map((p: any) => p.produit || p))
+      })
   }
 
   useEffect(() => {
@@ -555,7 +558,7 @@ export default function AchatsPage() {
       fournisseurId: formData.fournisseurId ? Number(formData.fournisseurId) : null,
       fournisseurLibre: formData.fournisseurLibre.trim() || null,
       modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
-      reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0, payeDepuisCaisse: (r as any).payeDepuisCaisse === true, payeDepuisBanque: (r as any).payeDepuisBanque === true })),
+      reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0, payeDepuisCaisse: (r as any).payeDepuisCaisse === true, payeDepuisBanque: (r as any).payeDepuisBanque === true, banqueId: (r as any).payeDepuisBanque && formData.banqueId ? Number(formData.banqueId) : undefined })),
       banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
       fraisApproche: Number(formData.fraisApproche) || 0,
       numeroCamion: formData.numeroCamion.trim() || null,

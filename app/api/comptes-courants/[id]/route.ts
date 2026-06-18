@@ -103,7 +103,7 @@ async function getTransactions(
     const achats = await prisma.achat.findMany({
       where: { fournisseurId, statut: { not: 'ANNULEE' } },
       select: { id: true, date: true, numero: true, montantTotal: true },
-      orderBy: { date: 'asc' },
+      orderBy: { date: 'desc' },
     })
     for (const a of achats) {
       rows.push({
@@ -120,7 +120,7 @@ async function getTransactions(
     const paiements = await prisma.reglementAchat.findMany({
       where: { fournisseurId, statut: 'VALIDE', modePaiement: { not: 'CREDIT' } },
       select: { id: true, date: true, montant: true, modePaiement: true, observation: true },
-      orderBy: { date: 'asc' },
+      orderBy: { date: 'desc' },
     })
     for (const p of paiements) {
       rows.push({
@@ -139,7 +139,7 @@ async function getTransactions(
     const ventes = await prisma.vente.findMany({
       where: { clientId, statut: { not: 'ANNULEE' } },
       select: { id: true, date: true, numero: true, montantTotal: true },
-      orderBy: { date: 'asc' },
+      orderBy: { date: 'desc' },
     })
     for (const v of ventes) {
       rows.push({
@@ -156,7 +156,7 @@ async function getTransactions(
     const encaissements = await prisma.reglementVente.findMany({
       where: { clientId, statut: 'VALIDE', modePaiement: { not: 'CREDIT' } },
       select: { id: true, date: true, montant: true, modePaiement: true, observation: true },
-      orderBy: { date: 'asc' },
+      orderBy: { date: 'desc' },
     })
     for (const e of encaissements) {
       rows.push({
@@ -175,7 +175,7 @@ async function getTransactions(
   const compensations = await prisma.ecritureComptable.findMany({
     where: { referenceType: 'COMPENSATION_CC', referenceId: compteCourantId },
     select: { date: true, libelle: true, debit: true, credit: true, reference: true },
-    orderBy: { date: 'asc' },
+    orderBy: { date: 'desc' },
   })
 
   // Une compensation génère 2 lignes (débit 401, crédit 411) avec le même montant
@@ -196,7 +196,7 @@ async function getTransactions(
     })
   }
 
-  rows.sort((a, b) => a.date.getTime() - b.date.getTime())
+  rows.sort((a, b) => b.date.getTime() - a.date.getTime())
 
   return rows
 }

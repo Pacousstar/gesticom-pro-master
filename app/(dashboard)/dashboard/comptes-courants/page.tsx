@@ -181,33 +181,35 @@ export default function ComptesCourantsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map(cc => (
-            <div key={cc.id} className="bg-white/5 backdrop-blur rounded-xl p-6 border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
+            <div key={cc.id} className="bg-white/5 backdrop-blur rounded-xl p-5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
               onClick={() => router.push(`/dashboard/comptes-courants/${cc.id}`)}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold text-white">{cc.nom}</p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-white truncate">{cc.nom}</p>
                   <p className="text-xs text-gray-400">{cc.code}</p>
-                  {cc.ncc && <p className="text-xs text-gray-500">NCC: {cc.ncc}</p>}
+                  {cc.ncc && <p className="text-xs text-gray-500 truncate" title={`NCC: ${cc.ncc}`}>NCC: {cc.ncc}</p>}
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <p className={`text-lg font-bold ${cc.solde >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     {fmt(Math.abs(cc.solde))}
                   </p>
-                  <p className="text-xs text-gray-400">{cc.solde >= 0 ? 'Créance' : 'Dette'}</p>
+                  <p className={`text-[11px] ${cc.solde >= 0 ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+                    {cc.solde >= 0 ? 'Débiteur' : 'Créditeur'}
+                  </p>
                 </div>
               </div>
-              <div className="mt-3 flex gap-2 text-xs text-gray-400">
-                {cc.client && <span className="bg-blue-600/20 text-blue-300 px-2 py-0.5 rounded">Client: {cc.client.nom}</span>}
-                {cc.fournisseur && <span className="bg-orange-600/20 text-orange-300 px-2 py-0.5 rounded">Fournisseur: {cc.fournisseur.nom}</span>}
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {cc.client && <span className="text-[10px] bg-blue-600/20 text-blue-300 px-2 py-0.5 rounded truncate max-w-full" title={`Client: ${cc.client.nom}`}>Client: {cc.client.nom}</span>}
+                {cc.fournisseur && <span className="text-[10px] bg-orange-600/20 text-orange-300 px-2 py-0.5 rounded truncate max-w-full" title={`Fournisseur: ${cc.fournisseur.nom}`}>Fournisseur: {cc.fournisseur.nom}</span>}
               </div>
               <div className="mt-3 flex gap-2">
                 <button onClick={e => { e.stopPropagation(); router.push(`/dashboard/comptes-courants/${cc.id}`) }}
-                  className="text-xs inline-flex items-center px-2 py-1 bg-white/10 hover:bg-white/20 rounded transition-colors">
+                  className="text-xs inline-flex items-center px-2.5 py-1.5 bg-white/10 hover:bg-white/20 rounded transition-colors">
                   <ArrowLeftRight className="mr-1 h-3 w-3" /> Détail
                 </button>
                 <button onClick={e => { e.stopPropagation(); deleteCompte(cc.id) }}
-                  className="text-xs inline-flex items-center px-2 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-300 rounded transition-colors">
+                  className="text-xs inline-flex items-center px-2.5 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 rounded transition-colors">
                   <Trash2 className="mr-1 h-3 w-3" /> Supprimer
                 </button>
               </div>

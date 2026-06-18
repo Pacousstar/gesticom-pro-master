@@ -71,6 +71,7 @@ model Utilisateur {
   entite                    Entite                @relation(fields: [entiteId], references: [id])
   ventes                    Vente[]
   retours                   Retour[]
+  retraitsPartiels          RetraitPartiel[]
 
   @@index([entiteId])
   @@index([actif])
@@ -131,6 +132,7 @@ model Produit {
   transfertLignes TransfertLigne[]
   ventesLignes    VenteLigne[]
   retourLignes    RetourLigne[]
+  retraitsLignes  RetraitPartielLigne[]
 
   @@index([designation])
   @@index([categorie])
@@ -457,7 +459,6 @@ model Vente {
   typeVente           String                @default("LIVRAISON_IMMEDIATE")
   dateLivraison       DateTime?
   retraitDiffere      Boolean               @default(false)
-  dateRetrait         DateTime?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   reglements          ReglementVente[]
@@ -468,6 +469,7 @@ model Vente {
   lignes              VenteLigne[]
   ReglementVenteLigne ReglementVenteLigne[]
   retours             Retour[]
+  retraitsPartiels    RetraitPartiel[]
 
   @@index([date])
   @@index([numero])
@@ -479,7 +481,6 @@ model Vente {
   @@index([typeVente])
   @@index([dateLivraison])
   @@index([retraitDiffere])
-  @@index([dateRetrait])
 }
 
 model VenteLigne {
@@ -501,6 +502,37 @@ model VenteLigne {
 
   @@index([venteId])
   @@index([produitId])
+}
+
+model RetraitPartiel {
+  id            Int                  @id @default(autoincrement())
+  numero        String               @unique
+  venteId       Int
+  date          DateTime             @default(now())
+  utilisateurId Int
+  entiteId      Int
+  createdAt     DateTime             @default(now())
+  vente         Vente                @relation(fields: [venteId], references: [id], onDelete: Cascade)
+  utilisateur   Utilisateur          @relation(fields: [utilisateurId], references: [id])
+  lignes        RetraitPartielLigne[]
+
+  @@index([venteId])
+  @@index([date])
+  @@index([entiteId])
+}
+
+model RetraitPartielLigne {
+  id               Int            @id @default(autoincrement())
+  retraitPartielId Int
+  produitId        Int
+  designation      String
+  quantite         Float
+  prixUnitaire     Float
+  montant          Float
+  produit          Produit        @relation(fields: [produitId], references: [id], onDelete: Restrict)
+  retraitPartiel   RetraitPartiel @relation(fields: [retraitPartielId], references: [id], onDelete: Cascade)
+
+  @@index([retraitPartielId])
 }
 
 model Retour {

@@ -195,7 +195,7 @@ export async function GET(request: NextRequest) {
         produit: { select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, prixVente: true, prixMinimum: true } },
         magasin: { select: { id: true, code: true, nom: true } },
       },
-      orderBy: [{ produit: { designation: 'asc' } }],
+      orderBy: { createdAt: 'desc' },
       skip: exportAll ? 0 : skip,
       take: exportAll ? undefined : limit,
     }),

@@ -40,6 +40,7 @@ export default function ModificationAchatModal({
     modePaiement: 'ESPECES',
     reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }] as { mode: string; montant: string; payeDepuisCaisse: boolean; payeDepuisBanque: boolean }[],
     banqueId: '',
+    numeroCamion: '',
     fraisApproche: '',
     observation: '',
     lignes: [] as Ligne[]
@@ -101,8 +102,9 @@ export default function ModificationAchatModal({
         fournisseurId: mAchat.fournisseurId ? String(mAchat.fournisseurId) : '',
         fournisseurLibre: mAchat.fournisseurLibre || '',
         modePaiement: mAchat.modePaiement || 'ESPECES',
-        reglements: mAchat.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode, montant: String(r.montant), payeDepuisCaisse: true, payeDepuisBanque: true })) || [{ mode: 'ESPECES', montant: String(mAchat.montantPaye || 0), payeDepuisCaisse: false, payeDepuisBanque: false }],
+        reglements: mAchat.reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode, montant: String(r.montant), payeDepuisCaisse: r.payeDepuisCaisse === true, payeDepuisBanque: r.payeDepuisBanque === true })) || [{ mode: 'ESPECES', montant: String(mAchat.montantPaye || 0), payeDepuisCaisse: false, payeDepuisBanque: false }],
         banqueId: '',
+        numeroCamion: mAchat.numeroCamion || '',
         fraisApproche: String(mAchat.fraisApproche || '0'),
         observation: mAchat.observation || '',
         lignes: mAchat.lignes.map((l: any) => ({
@@ -191,9 +193,10 @@ export default function ModificationAchatModal({
           fournisseurId: formData.fournisseurId ? Number(formData.fournisseurId) : null,
           fournisseurLibre: formData.fournisseurLibre || null,
           observation: formData.observation || null,
+          numeroCamion: formData.numeroCamion || null,
           fraisApproche: Number(formData.fraisApproche) || 0,
           modePaiement: formData.reglements.length > 1 ? 'MULTI' : (formData.reglements[0]?.mode || 'ESPECES'),
-          reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0, payeDepuisCaisse: (r as any).payeDepuisCaisse === true, payeDepuisBanque: (r as any).payeDepuisBanque === true })),
+          reglements: formData.reglements.map(r => ({ mode: r.mode, montant: Number(r.montant) || 0, payeDepuisCaisse: (r as any).payeDepuisCaisse === true, payeDepuisBanque: (r as any).payeDepuisBanque === true, banqueId: (r as any).payeDepuisBanque && formData.banqueId ? Number(formData.banqueId) : undefined })),
           banqueId: needsBanque && formData.banqueId ? Number(formData.banqueId) : undefined,
           lignes: formData.lignes.map(l => ({
             produitId: l.produitId,
@@ -292,6 +295,18 @@ export default function ModificationAchatModal({
                   <option value="CREDIT">A CREDIT</option>
                 </select>
               </div>
+            </div>
+
+            {/* N° Camion */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">N° de Camion</label>
+              <input
+                type="text"
+                value={formData.numeroCamion}
+                onChange={e => setFormData(f => ({ ...f, numeroCamion: e.target.value }))}
+                placeholder="Ex: LG 4422 A"
+                className="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+              />
             </div>
 
             {/* AJOUT ARTICLE */}

@@ -66,14 +66,29 @@ function VenteTableRowInner({
             )
           }
           return <span className="rounded px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800">Commande</span>
-        })() : v.retraitDiffere && !v.dateRetrait ? (
-          <div className="flex flex-col gap-0.5">
-            <span className="rounded px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">À retirer</span>
-            <span className="text-[10px] text-gray-500 font-medium">Payé, retrait en attente</span>
-          </div>
-        ) : v.retraitDiffere && v.dateRetrait ? (
-          <span className="rounded px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-700">Retiré</span>
-        ) : (
+        })() : v.retraitDiffere ? (() => {
+          const lignesList = v.lignes || []
+          const totalQte = lignesList.reduce((s: number, l: any) => s + Number(l.quantite || 0), 0)
+          const totalLivree = lignesList.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
+          const reste = totalQte - totalLivree
+          if (reste <= 0) {
+            return <span className="rounded px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-700">Retiré</span>
+          }
+          if (totalLivree > 0) {
+            return (
+              <div className="flex flex-col gap-0.5">
+                <span className="rounded px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">Retrait partiel</span>
+                <span className="text-[10px] text-gray-500 font-medium">Retiré: {totalLivree} / Reste: {reste}</span>
+              </div>
+            )
+          }
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span className="rounded px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">À retirer</span>
+              <span className="text-[10px] text-gray-500 font-medium">Payé, retrait en attente</span>
+            </div>
+          )
+        })() : (
           <span className="rounded px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">
             Directe
           </span>
@@ -131,16 +146,22 @@ function VenteTableRowInner({
               {livrant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
             </button>
           )}
-          {v.retraitDiffere && !v.dateRetrait && v.statut !== 'ANNULEE' && onRetrait && (
-            <button
-              onClick={() => onRetrait(v)}
-              disabled={retraitant === v.id}
-              className="rounded p-1.5 text-amber-600 hover:bg-amber-100 disabled:opacity-50"
-              title="Retirer la marchandise"
-            >
-              {retraitant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
-            </button>
-          )}
+          {v.retraitDiffere && v.statut !== 'ANNULEE' && onRetrait && (() => {
+            const lignesList = v.lignes || []
+            const totalQte = lignesList.reduce((s: number, l: any) => s + Number(l.quantite || 0), 0)
+            const totalLivree = lignesList.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
+            if (totalLivree >= totalQte) return null
+            return (
+              <button
+                onClick={() => onRetrait(v)}
+                disabled={retraitant === v.id}
+                className="rounded p-1.5 text-amber-600 hover:bg-amber-100 disabled:opacity-50"
+                title="Retirer la marchandise"
+              >
+                {retraitant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
+              </button>
+            )
+          })()}
           {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && v.statut !== 'ANNULEE' && onEditModal && (
             <button
               onClick={() => onEditModal(v)}

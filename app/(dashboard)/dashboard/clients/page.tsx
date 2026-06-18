@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/swr-fetcher'
@@ -66,6 +66,7 @@ export default function ClientsPage() {
   const [dateFin, setDateFin] = useState('')
   const [printType, setPrintType] = useState<'PORTEFEUILLE' | 'REPERTOIRE'>('PORTEFEUILLE')
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [historyForPrint, setHistoryForPrint] = useState<any[]>([])
 
   useEffect(() => {
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => {})
@@ -99,6 +100,7 @@ export default function ClientsPage() {
   }, [q, dateDebut, dateFin])
 
   const handlePrintAll = async (type: 'PORTEFEUILLE' | 'REPERTOIRE') => {
+    setHistoryForPrint([])
     setPrintType(type)
     setIsPrinting(true)
     try {
@@ -695,7 +697,7 @@ export default function ClientsPage() {
       </div>
 
       {selectedHistory && (
-        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full">
+        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full no-print">
           {/* Header avec Dégradé Professionnel - Fixed */}
           <div className="pt-24 flex-none p-4 border-b flex items-center justify-between bg-gradient-to-r from-blue-700 to-blue-900 text-white print:hidden min-h-[100px]">
             <div>
@@ -707,7 +709,14 @@ export default function ClientsPage() {
             </div>
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => window.print()}
+                onClick={() => {
+                  if (historyData.length === 0) return
+                  setHistoryForPrint(historyData)
+                  setTimeout(() => {
+                    window.print()
+                    setTimeout(() => setHistoryForPrint([]), 5000)
+                  }, 500)
+                }}
                 className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
               >
                 <Download className="h-4 w-4" />
@@ -720,16 +729,6 @@ export default function ClientsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 pb-20" id="printable-history">
-            {/* Style d'impression caché à l'écran */}
-            <style dangerouslySetInnerHTML={{ __html: `
-              @media print {
-                body * { visibility: hidden; }
-                #printable-history, #printable-history * { visibility: visible; }
-                #printable-history { position: relative; left: auto; top: auto; width: 100%; height: auto; overflow: visible !important; }
-                .no-print { display: none !important; }
-              }
-            ` }} />
-
             {loadingHistory ? (
               <div className="flex flex-col items-center justify-center h-64 gap-3 no-print">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
@@ -742,13 +741,6 @@ export default function ClientsPage() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* En-tête Impression (Visible uniquement à l'impression) */}
-                <div className="hidden print:block border-b-2 border-gray-900 pb-4 mb-6">
-                    <h1 className="text-2xl font-bold uppercase">Historique des Facturations</h1>
-                    <p className="text-lg font-medium">Client : {selectedHistory.nom}</p>
-                    <p className="text-sm text-gray-600 italic">Édité le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}</p>
-                </div>
-
                 {/* Synthèse Financière (Les Compteurs) */}
                 <div className="grid grid-cols-3 gap-4 mb-8">
                   <div className="bg-gray-900 rounded-xl p-4 text-white shadow-lg border-b-4 border-blue-500">
@@ -829,73 +821,6 @@ export default function ClientsPage() {
                   ))}
                 </div>
 
-                {/* Contenu impression paginé */}
-                <div className="hidden print:block">
-                  {(() => {
-                    const totalFacture = historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0)
-                    const totalPaye = historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)
-                    const reste = totalFacture - totalPaye
-                    const chunks = paginateForPrint(historyData)
-
-                    return chunks.map((chunk, index, allChunks) => (
-                      <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-                        <ListPrintWrapper
-                          title="Historique des Factures"
-                          subtitle={`Client : ${selectedHistory.nom}`}
-                          pageNumber={index + 1}
-                          totalPages={allChunks.length}
-                          kpis={[
-                            { label: 'Total Facturé', value: `${totalFacture.toLocaleString()} F` },
-                            { label: 'Total Payé', value: `${totalPaye.toLocaleString()} F` },
-                            { label: 'Reste à Payer', value: `${reste.toLocaleString()} F`, color: reste > 0 ? 'text-red-700' : 'text-emerald-700' },
-                            { label: 'Nbre Factures', value: `${historyData.length}` },
-                          ]}
-                        >
-                          <table className="w-full text-[14px] border-collapse border border-gray-300">
-                            <thead>
-                              <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                                <th className="border border-gray-300 px-3 py-3 text-left">N° Facture</th>
-                                <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-                                <th className="border border-gray-300 px-3 py-3 text-left">Statut</th>
-                                <th className="border border-gray-300 px-3 py-3 text-right">Montant Total</th>
-                                <th className="border border-gray-300 px-3 py-3 text-right">Montant Payé</th>
-                                <th className="border border-gray-300 px-3 py-3 text-right">Reste</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {chunk.map((h: any, idx: number) => (
-                                <tr key={idx} className="border-b border-gray-200">
-                                  <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{h.numero || '-'}</td>
-                                  <td className="border border-gray-300 px-3 py-2">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
-                                  <td className="border border-gray-300 px-3 py-2">
-                                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                      {h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'}
-                                    </span>
-                                  </td>
-                                  <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
-                                  <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(h.montantTotal - (h.montantPaye || 0)) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                                    {(Math.max(0, h.montantTotal - (h.montantPaye || 0))).toLocaleString()} F
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                            {index === allChunks.length - 1 && (
-                              <tfoot>
-                                <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
-                                  <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAL GÉNÉRAL</td>
-                                  <td className="border border-gray-300 px-3 py-4 text-right">{totalFacture.toLocaleString()} F</td>
-                                  <td className="border border-gray-300 px-3 py-4 text-right">{totalPaye.toLocaleString()} F</td>
-                                  <td className="border border-gray-300 px-3 py-4 text-right">{reste.toLocaleString()} F</td>
-                                </tr>
-                              </tfoot>
-                            )}
-                          </table>
-                        </ListPrintWrapper>
-                      </div>
-                    ))
-                  })()}
-                </div>
               </div>
             )}
           </div>
@@ -914,7 +839,7 @@ export default function ClientsPage() {
           invoices={paymentModal.invoices}
         />
       )}
-      <div className="hidden print:block">
+      {historyForPrint.length === 0 && (<div className="hidden print:block">
         {(() => {
           const dataToPrint = allClientsForPrint.length > 0 ? allClientsForPrint : list
           const chunks = paginateForPrint(dataToPrint, { firstPageSize: 18, otherPagesSize: 23 })
@@ -1020,7 +945,114 @@ export default function ClientsPage() {
             </div>
           ))
         })()}
-      </div>
+      </div>)}
+
+      {/* Impression Historique (hors modal) */}
+      {historyForPrint.length > 0 && (
+        <div className="hidden print:block" id="printable-history-factures">
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              .no-print { display: none !important; }
+              body * { visibility: hidden; }
+              #printable-history-factures, #printable-history-factures * { visibility: visible; }
+              #printable-history-factures { position: relative; width: 100%; height: auto; overflow: visible; }
+              .page-break { page-break-after: always; }
+            }
+          `}} />
+          {(() => {
+            const totalFacture = historyForPrint.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0)
+            const totalPaye = historyForPrint.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)
+            const reste = totalFacture - totalPaye
+            const chunks = paginateForPrint(historyForPrint)
+
+            return chunks.map((chunk: any[], index: number, allChunks: any[][]) => (
+              <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                <ListPrintWrapper
+                  title="Historique des Factures"
+                  subtitle={`Client : ${selectedHistory?.nom}`}
+                  pageNumber={index + 1}
+                  totalPages={allChunks.length}
+                  kpis={[
+                    { label: 'Total Facturé', value: `${totalFacture.toLocaleString()} F` },
+                    { label: 'Total Payé', value: `${totalPaye.toLocaleString()} F` },
+                    { label: 'Reste à Payer', value: `${reste.toLocaleString()} F`, color: reste > 0 ? 'text-red-700' : 'text-emerald-700' },
+                    { label: 'Nbre Factures', value: `${historyForPrint.length}` },
+                  ]}
+                >
+                  <table className="w-full text-[14px] border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                        <th className="border border-gray-300 px-3 py-3 text-left">N° Facture</th>
+                        <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
+                        <th className="border border-gray-300 px-3 py-3 text-left">Statut</th>
+                        <th className="border border-gray-300 px-3 py-3 text-right">Montant Total</th>
+                        <th className="border border-gray-300 px-3 py-3 text-right">Montant Payé</th>
+                        <th className="border border-gray-300 px-3 py-3 text-right">Reste</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {chunk.map((h: any, idx: number) => (
+                        <Fragment key={idx}>
+                          <tr className="border-b border-gray-200">
+                            <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{h.numero || '-'}</td>
+                            <td className="border border-gray-300 px-3 py-2">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
+                            <td className="border border-gray-300 px-3 py-2">
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'}
+                              </span>
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
+                            <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(h.montantTotal - (h.montantPaye || 0)) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                              {(Math.max(0, h.montantTotal - (h.montantPaye || 0))).toLocaleString()} F
+                            </td>
+                          </tr>
+                          {h.lignes && h.lignes.length > 0 && (
+                            <tr className="no-page-break-inside">
+                              <td colSpan={6} className="border border-gray-300 px-3 py-1 bg-gray-50">
+                                <table className="w-full text-[11px] border-collapse">
+                                  <thead>
+                                    <tr className="text-gray-500 uppercase font-bold text-[10px]">
+                                      <th className="px-2 py-1 text-left w-10">Qté</th>
+                                      <th className="px-2 py-1 text-left">Désignation</th>
+                                      <th className="px-2 py-1 text-right">P.U.</th>
+                                      <th className="px-2 py-1 text-right">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {h.lignes.map((l: any, li: number) => (
+                                      <tr key={li} className="border-t border-gray-200">
+                                        <td className="px-2 py-1 text-center font-bold">{l.quantite}</td>
+                                        <td className="px-2 py-1">{l.produit?.designation || l.designation || '-'}</td>
+                                        <td className="px-2 py-1 text-right">{(l.prixUnitaire || 0).toLocaleString()} F</td>
+                                        <td className="px-2 py-1 text-right font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                    {index === allChunks.length - 1 && (
+                      <tfoot>
+                        <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
+                          <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAL GÉNÉRAL</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{totalFacture.toLocaleString()} F</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{totalPaye.toLocaleString()} F</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{reste.toLocaleString()} F</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </ListPrintWrapper>
+              </div>
+            ))
+          })()}
+        </div>
+      )}
 
     </div>
   )

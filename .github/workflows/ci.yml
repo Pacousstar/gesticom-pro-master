@@ -19,11 +19,14 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run lint
+      - name: Setup test database
+        run: DATABASE_URL="file:./prisma/test.db" npx prisma db push --force-reset --accept-data-loss
 
       - run: npx tsc --noEmit
 
       - run: npm test
+        env:
+          DATABASE_URL: "file:./prisma/test.db"
 
   e2e:
     runs-on: ubuntu-latest
@@ -37,17 +40,23 @@ jobs:
 
       - run: npm ci
 
-      - run: npx playwright install --with-deps chromium
-
-      - name: Start dev server
+      - name: Setup e2e database
         run: |
           DATABASE_URL="file:./prisma/test-e2e.db" npx prisma db push --force-reset --accept-data-loss
           DATABASE_URL="file:./prisma/test-e2e.db" npx prisma db seed
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Start dev server
+        run: |
           DATABASE_URL="file:./prisma/test-e2e.db" npm run dev &
           sleep 15
           curl --retry 10 --retry-delay 3 --retry-connrefused http://localhost:3000/login
 
       - run: npm run test:e2e
+        env:
+          DATABASE_URL: "file:./prisma/test-e2e.db"
 
       - uses: actions/upload-artifact@v4
         if: failure()

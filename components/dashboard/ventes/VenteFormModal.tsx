@@ -545,7 +545,7 @@ export default function VenteFormModal({
               {formData.typeVente === 'LIVRAISON_IMMEDIATE' && (
                 <div className="flex items-center gap-2 pt-1">
                   <input type="checkbox" id="retraitDiffere" checked={formData.retraitDiffere} onChange={(e) => setFormData(f => ({ ...f, retraitDiffere: e.target.checked }))} className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
-                  <label htmlFor="retraitDiffere" className="text-sm font-medium text-gray-700">Retrait différé (paiement immédiat, retrait plus tard)</label>
+                  <label htmlFor="retraitDiffere" className="text-sm font-medium text-gray-700">Retrait partiel (paiement immédiat, retraits multiples)</label>
                 </div>
               )}
             </div>

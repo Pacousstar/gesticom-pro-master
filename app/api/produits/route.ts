@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
   if (complet) {
     const produits = await prisma.produit.findMany({
       where: baseWhere,
-      orderBy: [{ categorie: 'asc' }, { code: 'asc' }],
+      orderBy: { createdAt: 'desc' },
       include: {
         stocks: {
           select: { magasinId: true, quantite: true }
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
       where: searchWhere,
       skip,
       take: limit,
-      orderBy: [{ categorie: 'asc' }, { code: 'asc' }],
+      orderBy: { createdAt: 'desc' },
       include: {
         stocks: {
           select: { id: true, magasinId: true, quantite: true }

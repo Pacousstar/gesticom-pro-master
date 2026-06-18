@@ -309,7 +309,7 @@ const reglAchat = await tx.reglementAchat.create({
     }
 
     if (action === 'FULL_UPDATE') {
-      const { fournisseurId, date, magasinId, observation, lignes, modePaiement, reglements, fournisseurLibre, fraisApproche } = body
+      const { fournisseurId, date, magasinId, observation, lignes, modePaiement, reglements, fournisseurLibre, fraisApproche, numeroCamion } = body
       
       const preCheck = await prisma.achat.findUnique({ where: { id }, select: { updatedAt: true } })
       if (!preCheck) return NextResponse.json({ error: 'Achat introuvable.' }, { status: 404 })
@@ -468,6 +468,7 @@ const reglAchat = await tx.reglementAchat.create({
             observation: observation || null,
             montantTotal: totalFinal,
             fraisApproche: fApprocheTotal,
+            numeroCamion: numeroCamion || null,
             montantPaye: Math.min(totalFinal, mntPaye),
             statutPaiement: mntPaye >= totalFinal ? 'PAYE' : mntPaye > 0 ? 'PARTIEL' : 'CREDIT',
             modePaiement: regsData.length > 1 ? 'MULTI' : (regsData[0]?.mode || modePaiement || oldAchat.modePaiement),

@@ -59,13 +59,11 @@ export async function POST(
       await verifierCloture(v.date, session, tx)
 
       const totalLivreeVente = v.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
-      const stockPasDeduit = (v.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (v.retraitDiffere && !v.dateRetrait)
-      const estCommandeNonLivree = stockPasDeduit
-      const estCommande = v.typeVente === 'COMMANDE'
+      const stockPasDeduit = (v.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (v.retraitDiffere && totalLivreeVente === 0)
 
-      if (!estCommandeNonLivree) {
+      if (!stockPasDeduit) {
         for (const l of v.lignes) {
-          const qteARembourser = estCommande ? (l.quantiteLivree || 0) : l.quantite
+          const qteARembourser = l.quantiteLivree || 0
           if (qteARembourser > 0) {
             await tx.stock.updateMany({
               where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import SuppressionConfirmModal from '@/components/SuppressionConfirmModal'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { VenteTableRow } from '@/components/dashboard/ventes/VenteTableRow'
 import VenteFormModal from '@/components/dashboard/ventes/VenteFormModal'
 import ModificationVenteModal from '@/components/dashboard/ventes/ModificationVenteModal'
@@ -33,6 +34,8 @@ type Produit = {
   stocks: Array<{ magasinId: number; quantite: number }>; prixAchat?: number | null 
 }
 export default function VentesPage() {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const openIdParam = searchParams.get('open')
   const [magasins, setMagasins] = useState<Magasin[]>([])
@@ -53,7 +56,6 @@ export default function VentesPage() {
   const [annulant, setAnnulant] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [livrant, setLivrant] = useState<number | null>(null)
-  const [retraitant, setRetraitant] = useState<number | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
   const [userRole, setUserRole] = useState<string>('')
   const [detailVente, setDetailVente] = useState<{
@@ -492,27 +494,7 @@ export default function VentesPage() {
   }
 
   const handleRetrait = async (v: { id: number; numero: string }) => {
-    if (!confirm(`Confirmer le retrait de la marchandise pour ${v.numero} ? Le stock sera déduit.`)) return
-    setRetraitant(v.id)
-    try {
-      const res = await fetch(`/api/ventes/${v.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'RETRAIT' }),
-      })
-      if (res.ok) {
-        showSuccess('Retrait effectué avec succès.')
-        fetchVentes()
-        if (detailVente?.id === v.id) handleVoirDetail(v.id)
-      } else {
-        const d = await res.json()
-        showError(d.error || 'Erreur lors du retrait.')
-      }
-    } catch (e) {
-      showError(formatApiError(e))
-    } finally {
-      setRetraitant(null)
-    }
+    router.push(`/dashboard/ventes/retraits?venteId=${v.id}`)
   }
 
   const refreshBanques = async () => {
@@ -864,6 +846,34 @@ export default function VentesPage() {
         </div>
       </div>
 
+      {/* Sous-navigation ventes */}
+      <div className="flex flex-wrap gap-1 no-print">
+        {[
+          { href: '/dashboard/ventes', label: 'Ventes' },
+          { href: '/dashboard/ventes/toute', label: 'Toutes' },
+          { href: '/dashboard/ventes/rapide', label: 'Rapide' },
+          { href: '/dashboard/ventes/commandes', label: 'Commandes' },
+          { href: '/dashboard/ventes/retours', label: 'Retours' },
+          { href: '/dashboard/ventes/retraits', label: 'Retraits' },
+          { href: '/dashboard/ventes/suivi', label: 'Suivi' },
+          { href: '/dashboard/ventes/historiques', label: 'Historiques' },
+        ].map((tab) => {
+          const active = pathname === tab.href
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                active
+                  ? 'bg-orange-500 text-white shadow-md'
+                  : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </Link>
+          )
+        })}
+      </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
         <div>
@@ -1106,7 +1116,6 @@ export default function VentesPage() {
                     onDelete={handleSupprimer}
                     onDeliver={handleLivrer}
                     onRetrait={handleRetrait}
-                    retraitant={retraitant}
                   />
                 ))}
               </tbody>
@@ -1153,8 +1162,7 @@ export default function VentesPage() {
                 {detailVente.statut !== 'ANNULEE' && (
                   <button
                     onClick={() => {
-                      setEditingVenteId(detailVente.id)
-                      setForm(true)
+                      setEditingVenteModalId(detailVente.id)
                       setDetailVente(null)
                     }}
                     className="rounded-lg border-2 border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 flex items-center gap-1.5"

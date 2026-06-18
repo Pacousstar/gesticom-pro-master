@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
   const searchClient = request.nextUrl.searchParams.get('clientSearch')?.trim()
   const typeVenteFilter = request.nextUrl.searchParams.get('typeVente')?.trim()
   const suiviFilter = request.nextUrl.searchParams.get('type') === 'suivi'
+  const retraitsFilter = request.nextUrl.searchParams.get('retraits') === 'true'
 
   const entiteIdFilter = await getEntiteIdOrAll(session)
   const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
@@ -88,11 +89,16 @@ export async function GET(request: NextRequest) {
     where.AND = [...existingAnd, suiviOr]
   }
 
+  // Filtre retraits : uniquement les ventes à retrait différé
+  if (retraitsFilter) {
+    where.retraitDiffere = true
+  }
+
   const [ventes, total, aggregates] = await Promise.all([
     prisma.vente.findMany({
       where,
-      skip,
-      take: limit,
+      skip: retraitsFilter ? undefined : skip,
+      take: retraitsFilter ? undefined : limit,
       orderBy: [{ createdAt: 'desc' }],
       include: {
         magasin: { select: { code: true, nom: true } },
@@ -429,7 +435,6 @@ export async function POST(request: NextRequest) {
           estVenteRapide,
           typeVente,
           retraitDiffere,
-          dateRetrait: null,
           dateLivraison: (typeVente === 'COMMANDE' && body?.dateLivraison) ? livrerLe : null,
           modePaiement: listReglements.length > 1 ? 'MULTI' : (listReglements[0]?.mode || modePaiementPrincipal),
           observation,

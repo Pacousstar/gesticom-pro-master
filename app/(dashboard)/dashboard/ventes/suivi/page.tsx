@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, X, Filter, Loader2, Truck, ShoppingBag, Printer } from 'lucide-react'
+import { Search, X, Filter, Loader2, Truck, ShoppingBag, Printer, ExternalLink, ArrowLeft } from 'lucide-react'
+import { useRouter, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { VenteTableRow } from '@/components/dashboard/ventes/VenteTableRow'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
@@ -12,6 +14,7 @@ import { useToast } from '@/hooks/useToast'
 
 export default function SuiviVentesPage() {
   const { success: showSuccess, error: showError } = useToast()
+  const pathname = usePathname()
 
   const [ventes, setVentes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -24,13 +27,13 @@ export default function SuiviVentesPage() {
   const [dateFin, setDateFin] = useState('')
   const [searchNumero, setSearchNumero] = useState('')
   const [searchClient, setSearchClient] = useState('')
+  const router = useRouter()
   const [statutSuivi, setStatutSuivi] = useState('')
 
   const [detailVente, setDetailVente] = useState<any>(null)
   const [loadingDetail, setLoadingDetail] = useState<number | null>(null)
   const [annulant, setAnnulant] = useState<number | null>(null)
   const [livrant, setLivrant] = useState<number | null>(null)
-  const [retraitant, setRetraitant] = useState<number | null>(null)
 
   const [deliverVente, setDeliverVente] = useState<any>(null)
   const [deliverQtys, setDeliverQtys] = useState<Record<number, number>>({})
@@ -126,15 +129,8 @@ export default function SuiviVentesPage() {
     finally { setLivrant(null); setSavingDeliver(false) }
   }
 
-  const handleRetrait = async (v: { id: number; numero: string }) => {
-    if (!confirm(`Confirmer le retrait de ${v.numero} ? Le stock sera déduit.`)) return
-    setRetraitant(v.id)
-    try {
-      const res = await fetch(`/api/ventes/${v.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'RETRAIT' }) })
-      if (res.ok) { showSuccess('Retrait effectué.'); fetchVentes(); if (detailVente?.id === v.id) handleVoirDetail(v.id) }
-      else { const d = await res.json(); showError(d.error || 'Erreur') }
-    } catch (e) { showError(formatApiError(e)) }
-    finally { setRetraitant(null) }
+  const handleRetrait = (v: { id: number }) => {
+    router.push(`/dashboard/ventes/retraits?venteId=${v.id}`)
   }
 
   const handlePrintAll = async () => {
@@ -161,18 +157,19 @@ export default function SuiviVentesPage() {
 
   const computedStatus = (v: any): string => {
     if (v.statut === 'ANNULEE') return 'annulee'
+    const totalQ = v.lignes?.reduce((s: number, l: any) => s + Number(l.quantite || 0), 0) || 0
+    const totalL = v.lignes?.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0) || 0
     if (v.typeVente === 'COMMANDE') {
-      const totalQ = v.lignes?.reduce((s: number, l: any) => s + Number(l.quantite || 0), 0) || 0
-      const totalL = v.lignes?.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0) || 0
       if (v.dateLivraison || totalL >= totalQ) return 'soldee'
       if (totalL > 0) return 'partiel'
       return 'en_attente'
     }
     if (v.retraitDiffere) {
-      if (v.dateRetrait) return 'retire'
+      if (totalL >= totalQ) return 'soldee'
+      if (totalL > 0) return 'partiel'
       return 'en_attente'
     }
-    return 'en_attente'
+    return 'soldee'
   }
 
   const stats = ventes.reduce((acc, v) => {
@@ -180,7 +177,6 @@ export default function SuiviVentesPage() {
     if (s === 'en_attente') { if (v.typeVente === 'COMMANDE') acc.commandesEnAttente++; else acc.retraitsEnAttente++ }
     else if (s === 'partiel') acc.partiel++
     else if (s === 'soldee') acc.soldees++
-    else if (s === 'retire') acc.retires++
     return acc
   }, { commandesEnAttente: 0, retraitsEnAttente: 0, partiel: 0, soldees: 0, retires: 0 })
 
@@ -189,9 +185,8 @@ export default function SuiviVentesPage() {
   const formatStatutSuivi = (v: any) => {
     const s = computedStatus(v)
     if (s === 'en_attente') return v.typeVente === 'COMMANDE' ? 'Commande en attente' : 'Retrait en attente'
-    if (s === 'partiel') return 'Livraison partielle'
+    if (s === 'partiel') return v.typeVente === 'COMMANDE' ? 'Livraison partielle' : 'Retrait partiel'
     if (s === 'soldee') return 'Soldée'
-    if (s === 'retire') return 'Retiré'
     if (s === 'annulee') return 'Annulée'
     return ''
   }
@@ -200,103 +195,136 @@ export default function SuiviVentesPage() {
     const s = computedStatus(v)
     if (s === 'en_attente') return v.typeVente === 'COMMANDE' ? 'bg-purple-100 text-purple-800' : 'bg-amber-100 text-amber-800'
     if (s === 'partiel') return 'bg-blue-100 text-blue-800'
-    if (s === 'soldee') return 'bg-gray-200 text-gray-700'
-    if (s === 'retire') return 'bg-green-100 text-green-800'
+    if (s === 'soldee') return 'bg-green-100 text-green-800'
     return 'bg-red-100 text-red-800'
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-          <Truck className="h-5 w-5 text-blue-600" />
-          Suivi des commandes et retraits
-        </h1>
-        <button
-          type="button"
-          onClick={handlePrintAll}
-          disabled={isPrinting}
-          className="no-print flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 disabled:opacity-50"
-          title="Imprimer la liste de suivi"
-        >
-          {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-          {isPrinting ? 'Préparation...' : 'Imprimer'}
-        </button>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-indigo-700 text-white p-4 md:p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.push('/dashboard/ventes')} className="rounded-lg bg-white/10 hover:bg-white/20 p-2 transition-colors">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Truck className="h-5 w-5" />
+              Suivi des commandes et retraits
+            </h1>
+          </div>
+          <button
+            type="button"
+            onClick={handlePrintAll}
+            disabled={isPrinting}
+            className="no-print flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 disabled:opacity-50"
+            title="Imprimer la liste de suivi"
+          >
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+            {isPrinting ? 'Préparation...' : 'Imprimer'}
+          </button>
+        </div>
+
+        {/* Sous-navigation ventes */}
+        <div className="flex flex-wrap gap-1 no-print">
+          {[
+            { href: '/dashboard/ventes', label: 'Ventes' },
+            { href: '/dashboard/ventes/toute', label: 'Toutes' },
+            { href: '/dashboard/ventes/rapide', label: 'Rapide' },
+            { href: '/dashboard/ventes/commandes', label: 'Commandes' },
+            { href: '/dashboard/ventes/retours', label: 'Retours' },
+            { href: '/dashboard/ventes/retraits', label: 'Retraits' },
+            { href: '/dashboard/ventes/suivi', label: 'Suivi' },
+            { href: '/dashboard/ventes/historiques', label: 'Historiques' },
+          ].map((tab) => {
+            const active = pathname === tab.href
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                  active
+                    ? 'bg-white text-indigo-700 shadow-md'
+                    : 'bg-white/15 text-white/80 hover:bg-white/25 hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </Link>
+            )
+          })}
+        </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="rounded-xl bg-purple-50 border border-purple-200 p-3">
-          <p className="text-xs text-purple-600 font-medium">Commandes en attente</p>
-          <p className="text-2xl font-bold text-purple-700">{stats.commandesEnAttente}</p>
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-purple-300/40">
+          <p className="text-xs text-purple-200 font-medium">Commandes en attente</p>
+          <p className="text-2xl font-bold text-purple-200">{stats.commandesEnAttente}</p>
         </div>
-        <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
-          <p className="text-xs text-amber-600 font-medium">Retraits en attente</p>
-          <p className="text-2xl font-bold text-amber-700">{stats.retraitsEnAttente}</p>
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-amber-300/40">
+          <p className="text-xs text-amber-200 font-medium">Retraits en attente</p>
+          <p className="text-2xl font-bold text-amber-200">{stats.retraitsEnAttente}</p>
         </div>
-        <div className="rounded-xl bg-blue-50 border border-blue-200 p-3">
-          <p className="text-xs text-blue-600 font-medium">Livraisons partielles</p>
-          <p className="text-2xl font-bold text-blue-700">{stats.partiel}</p>
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-blue-300/40">
+          <p className="text-xs text-blue-200 font-medium">Livraisons partielles</p>
+          <p className="text-2xl font-bold text-blue-200">{stats.partiel}</p>
         </div>
-        <div className="rounded-xl bg-green-50 border border-green-200 p-3">
-          <p className="text-xs text-green-600 font-medium">Terminées</p>
-          <p className="text-2xl font-bold text-green-700">{stats.soldees + stats.retires}</p>
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-green-300/40">
+          <p className="text-xs text-green-200 font-medium">Terminées</p>
+          <p className="text-2xl font-bold text-green-200">{stats.soldees}</p>
         </div>
-        <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
-          <p className="text-xs text-gray-600 font-medium">Total</p>
-          <p className="text-2xl font-bold text-gray-700">{ventes.length}</p>
+        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-white/20">
+          <p className="text-xs text-white/70 font-medium">Total</p>
+          <p className="text-2xl font-bold text-white">{ventes.length}</p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 items-end">
+      <div className="flex flex-wrap gap-2 items-end rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 p-3">
         <div className="flex-1 min-w-[120px]">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Statut</label>
-          <select value={statutSuivi} onChange={e => setStatutSuivi(e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none">
-            <option value="">Tous les statuts</option>
-            <option value="en_attente">En attente</option>
-            <option value="partiel">Livraison partielle</option>
-            <option value="soldee">Soldée</option>
-            <option value="retire">Retiré</option>
-            <option value="annulee">Annulée</option>
+          <label className="block text-xs font-medium text-white/70 mb-1">Statut</label>
+          <select value={statutSuivi} onChange={e => setStatutSuivi(e.target.value)} className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30">
+            <option value="" className="text-gray-900">Tous les statuts</option>
+            <option value="en_attente" className="text-gray-900">En attente</option>
+            <option value="partiel" className="text-gray-900">Partiel</option>
+            <option value="soldee" className="text-gray-900">Soldée / Retiré</option>
+            <option value="annulee" className="text-gray-900">Annulée</option>
           </select>
         </div>
         <div className="flex-1 min-w-[120px]">
-          <label className="block text-xs font-medium text-gray-500 mb-1">N° facture</label>
+          <label className="block text-xs font-medium text-white/70 mb-1">N° facture</label>
           <div className="relative">
-            <input type="text" value={searchNumero} onChange={e => setSearchNumero(e.target.value)} placeholder="Rechercher..." className="w-full rounded-lg border border-gray-200 pl-8 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input type="text" value={searchNumero} onChange={e => setSearchNumero(e.target.value)} placeholder="Rechercher..." className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 pl-8 pr-3 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
           </div>
         </div>
         <div className="flex-1 min-w-[120px]">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Client</label>
-          <input type="text" value={searchClient} onChange={e => setSearchClient(e.target.value)} placeholder="Nom, code..." className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          <label className="block text-xs font-medium text-white/70 mb-1">Client</label>
+          <input type="text" value={searchClient} onChange={e => setSearchClient(e.target.value)} placeholder="Nom, code..." className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30" />
         </div>
         <div className="min-w-[100px]">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Du</label>
-          <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          <label className="block text-xs font-medium text-white/70 mb-1">Du</label>
+          <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30 [color-scheme:dark]" />
         </div>
         <div className="min-w-[100px]">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Au</label>
-          <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          <label className="block text-xs font-medium text-white/70 mb-1">Au</label>
+          <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30 [color-scheme:dark]" />
         </div>
-        <button onClick={() => { setCurrentPage(1); fetchVentes(1) }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 flex items-center gap-1.5">
+        <button onClick={() => { setCurrentPage(1); fetchVentes(1) }} className="rounded-lg bg-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/30 flex items-center gap-1.5">
           <Filter className="h-4 w-4" /> Filtrer
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
         <table className="w-full text-sm whitespace-nowrap">
-          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+          <thead className="text-left text-xs uppercase text-white/60 border-b border-white/10">
             <tr>
-              <th className="px-4 py-3">N°</th>
-              <th className="px-4 py-3">Bon</th>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Code</th>
-              <th className="px-4 py-3">Client</th>
-              <th className="px-4 py-3">Mag.</th>
-              <th className="px-4 py-3 text-right">Montant</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Paiement</th>
-              <th className="px-4 py-3">Statut</th>
+              <th className="px-4 py-3 font-medium">N°</th>
+              <th className="px-4 py-3 font-medium">Bon</th>
+              <th className="px-4 py-3 font-medium">Date</th>
+              <th className="px-4 py-3 font-medium">Code</th>
+              <th className="px-4 py-3 font-medium">Client</th>
+              <th className="px-4 py-3 font-medium">Mag.</th>
+              <th className="px-4 py-3 font-medium text-right">Montant</th>
+              <th className="px-4 py-3 font-medium">Type</th>
+              <th className="px-4 py-3 font-medium">Paiement</th>
+              <th className="px-4 py-3 font-medium">Statut</th>
               <th className="px-4 py-3 text-right">Reste</th>
               <th className="px-4 py-3">État</th>
               <th className="px-4 py-3">Actions</th>
@@ -313,7 +341,7 @@ export default function SuiviVentesPage() {
                 annulant={annulant} supprimant={supprimant} loadingDetail={loadingDetail} livrant={livrant}
                 onEdit={() => {}} onPay={() => {}} onView={handleVoirDetail} onReturn={() => {}}
                 onCancel={handleAnnuler} onDelete={handleSupprimer}
-                onDeliver={handleLivrer} onRetrait={handleRetrait} retraitant={retraitant}
+                onDeliver={handleLivrer} onRetrait={handleRetrait}
               />
             ))}
           </tbody>
@@ -338,7 +366,12 @@ export default function SuiviVentesPage() {
               <p><strong>Type :</strong> {detailVente.typeVente === 'COMMANDE' ? 'Commande' : detailVente.retraitDiffere ? 'Retrait différé' : 'Directe'}</p>
               <p><strong>Paiement :</strong> {detailVente.modePaiement}</p>
               {detailVente.dateLivraison && <p><strong>Livrée le :</strong> {formatDate(detailVente.dateLivraison, { includeTime: true })}</p>}
-              {detailVente.dateRetrait && <p><strong>Retirée le :</strong> {formatDate(detailVente.dateRetrait, { includeTime: true })}</p>}
+              {detailVente.retraitDiffere && (() => {
+                const tq = detailVente.lignes?.reduce((a: number, l: any) => a + Number(l.quantite || 0), 0) || 0
+                const tl = detailVente.lignes?.reduce((a: number, l: any) => a + Number(l.quantiteLivree || 0), 0) || 0
+                if (tl >= tq) return <p><strong>Retrait :</strong> <span className="text-green-600">Complété</span></p>
+                return <p><strong>Retrait :</strong> {tl}/{tq} ({Math.round(tl/tq*100)}%)</p>
+              })()}
               {detailVente.observation && <p><strong>Observation :</strong> {detailVente.observation}</p>}
             </div>
             {detailVente.lignes?.length > 0 && (
@@ -469,6 +502,7 @@ export default function SuiviVentesPage() {
             </div>
           ))
         })()}
+      </div>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/swr-fetcher'
@@ -47,6 +47,7 @@ export default function FournisseursPage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [allFournisseursForPrint, setAllFournisseursForPrint] = useState<Fournisseur[]>([])
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [historyForPrint, setHistoryForPrint] = useState<any[]>([])
 
   useEffect(() => {
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => {})
@@ -72,6 +73,7 @@ export default function FournisseursPage() {
   }, [q])
 
   const handlePrintAll = async () => {
+    setHistoryForPrint([])
     setIsPrinting(true)
     try {
       const params = new URLSearchParams()
@@ -352,7 +354,7 @@ export default function FournisseursPage() {
         <div className="flex gap-2" />
       </div>
 
-      <div className="hidden print:block">
+      {historyForPrint.length === 0 && (<div className="hidden print:block">
         {(() => {
           const dataToPrint = allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list
           const chunks = paginateForPrint(dataToPrint)
@@ -413,7 +415,114 @@ export default function FournisseursPage() {
             </div>
           ))
         })()}
-      </div>
+      </div>)}
+
+      {/* Impression Historique (hors modal) */}
+      {historyForPrint.length > 0 && (
+        <div className="hidden print:block" id="printable-history-achats">
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              .no-print { display: none !important; }
+              body * { visibility: hidden; }
+              #printable-history-achats, #printable-history-achats * { visibility: visible; }
+              #printable-history-achats { position: relative; width: 100%; height: auto; overflow: visible; }
+              .page-break { page-break-after: always; }
+            }
+          `}} />
+          {(() => {
+            const totalAchats = historyForPrint.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0)
+            const totalPaye = historyForPrint.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)
+            const reste = totalAchats - totalPaye
+            const chunks = paginateForPrint(historyForPrint)
+
+            return chunks.map((chunk: any[], index: number, allChunks: any[][]) => (
+              <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                <ListPrintWrapper
+                  title="Historique des Achats"
+                  subtitle={`Fournisseur : ${selectedHistory?.nom}`}
+                  pageNumber={index + 1}
+                  totalPages={allChunks.length}
+                  kpis={[
+                    { label: 'Total Achats', value: `${totalAchats.toLocaleString()} F` },
+                    { label: 'Total Payé', value: `${totalPaye.toLocaleString()} F` },
+                    { label: 'Reste à Payer', value: `${reste.toLocaleString()} F`, color: reste > 0 ? 'text-red-700' : 'text-emerald-700' },
+                    { label: 'Nbre Achats', value: `${historyForPrint.length}` },
+                  ]}
+                >
+                  <table className="w-full text-[14px] border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                        <th className="border border-gray-300 px-3 py-3 text-left">N° Facture</th>
+                        <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
+                        <th className="border border-gray-300 px-3 py-3 text-left">Statut</th>
+                        <th className="border border-gray-300 px-3 py-3 text-right">Montant Total</th>
+                        <th className="border border-gray-300 px-3 py-3 text-right">Montant Payé</th>
+                        <th className="border border-gray-300 px-3 py-3 text-right">Reste</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {chunk.map((h: any, idx: number) => (
+                        <Fragment key={idx}>
+                          <tr className="border-b border-gray-200">
+                            <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{h.numero || '-'}</td>
+                            <td className="border border-gray-300 px-3 py-2">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
+                            <td className="border border-gray-300 px-3 py-2">
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
+                                {h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'}
+                              </span>
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
+                            <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(h.montantTotal - (h.montantPaye || 0)) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                              {(Math.max(0, h.montantTotal - (h.montantPaye || 0))).toLocaleString()} F
+                            </td>
+                          </tr>
+                          {h.lignes && h.lignes.length > 0 && (
+                            <tr className="no-page-break-inside">
+                              <td colSpan={6} className="border border-gray-300 px-3 py-1 bg-gray-50">
+                                <table className="w-full text-[11px] border-collapse">
+                                  <thead>
+                                    <tr className="text-gray-500 uppercase font-bold text-[10px]">
+                                      <th className="px-2 py-1 text-left w-10">Qté</th>
+                                      <th className="px-2 py-1 text-left">Désignation</th>
+                                      <th className="px-2 py-1 text-right">P.U.</th>
+                                      <th className="px-2 py-1 text-right">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {h.lignes.map((l: any, li: number) => (
+                                      <tr key={li} className="border-t border-gray-200">
+                                        <td className="px-2 py-1 text-center font-bold">{l.quantite}</td>
+                                        <td className="px-2 py-1">{l.designation || '-'}</td>
+                                        <td className="px-2 py-1 text-right">{(l.prixUnitaire || 0).toLocaleString()} F</td>
+                                        <td className="px-2 py-1 text-right font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                    {index === allChunks.length - 1 && (
+                      <tfoot>
+                        <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
+                          <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAL GÉNÉRAL</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{totalAchats.toLocaleString()} F</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{totalPaye.toLocaleString()} F</td>
+                          <td className="border border-gray-300 px-3 py-4 text-right">{reste.toLocaleString()} F</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </ListPrintWrapper>
+              </div>
+            ))
+          })()}
+        </div>
+      )}
 
       {form && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-6">
@@ -626,7 +735,7 @@ export default function FournisseursPage() {
       </div>
 
       {selectedHistory && (
-        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full">
+        <div className="fixed inset-0 right-0 z-[140] flex flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300 w-full max-w-2xl ml-auto h-full no-print">
           {/* Header avec Dégradé Professionnel - Fixed */}
           <div className="pt-24 flex-none p-4 border-b flex items-center justify-between bg-gradient-to-r from-orange-700 to-orange-900 text-white print:hidden min-h-[100px]">
             <div>
@@ -638,7 +747,14 @@ export default function FournisseursPage() {
             </div>
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => window.print()}
+                onClick={() => {
+                  if (historyData.length === 0) return
+                  setHistoryForPrint(historyData)
+                  setTimeout(() => {
+                    window.print()
+                    setTimeout(() => setHistoryForPrint([]), 5000)
+                  }, 500)
+                }}
                 className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
               >
                 <Download className="h-4 w-4" />
@@ -651,17 +767,6 @@ export default function FournisseursPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 pb-20" id="printable-fournisseur-history">
-            {/* Style d'impression caché à l'écran */}
-            <style dangerouslySetInnerHTML={{ __html: `
-              @media print {
-                body * { visibility: hidden; }
-                #printable-fournisseur-history, #printable-fournisseur-history * { visibility: visible; }
-                #printable-fournisseur-history { position: relative; left: auto; top: auto; width: 100%; height: auto; overflow: visible !important; }
-                #printable-fournisseur-history > div { overflow: visible !important; height: auto !important; }
-                .no-print { display: none !important; }
-              }
-            ` }} />
-
             {loadingHistory ? (
               <div className="flex flex-col items-center justify-center h-64 gap-3 no-print">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
@@ -783,73 +888,6 @@ export default function FournisseursPage() {
                   </div>
                 </div>
 
-                {/* Contenu impression paginé */}
-                <div className="hidden print:block">
-                  {(() => {
-                    const totalAchats = historyData.reduce((acc: number, h: any) => acc + (h.montantTotal || 0), 0)
-                    const totalPaye = historyData.reduce((acc: number, h: any) => acc + (h.montantPaye || 0), 0)
-                    const reste = totalAchats - totalPaye
-                    const chunks = paginateForPrint(historyData)
-
-                    return chunks.map((chunk, index, allChunks) => (
-                      <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-                        <ListPrintWrapper
-                          title="Historique des Achats"
-                          subtitle={`Fournisseur : ${selectedHistory.nom}`}
-                          pageNumber={index + 1}
-                          totalPages={allChunks.length}
-                          kpis={[
-                            { label: 'Total Achats', value: `${totalAchats.toLocaleString()} F` },
-                            { label: 'Total Payé', value: `${totalPaye.toLocaleString()} F` },
-                            { label: 'Reste à Payer', value: `${reste.toLocaleString()} F`, color: reste > 0 ? 'text-red-700' : 'text-emerald-700' },
-                            { label: 'Nbre Achats', value: `${historyData.length}` },
-                          ]}
-                        >
-                          <table className="w-full text-[14px] border-collapse border border-gray-300">
-                            <thead>
-                              <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                                <th className="border border-gray-300 px-3 py-3 text-left">N° Facture</th>
-                                <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-                                <th className="border border-gray-300 px-3 py-3 text-left">Statut</th>
-                                <th className="border border-gray-300 px-3 py-3 text-right">Montant Total</th>
-                                <th className="border border-gray-300 px-3 py-3 text-right">Montant Payé</th>
-                                <th className="border border-gray-300 px-3 py-3 text-right">Reste</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {chunk.map((h: any, idx: number) => (
-                                <tr key={idx} className="border-b border-gray-200">
-                                  <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{h.numero || '-'}</td>
-                                  <td className="border border-gray-300 px-3 py-2">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
-                                  <td className="border border-gray-300 px-3 py-2">
-                                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
-                                      {h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'}
-                                    </span>
-                                  </td>
-                                  <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
-                                  <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
-                                  <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(h.montantTotal - (h.montantPaye || 0)) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                                    {(Math.max(0, h.montantTotal - (h.montantPaye || 0))).toLocaleString()} F
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                            {index === allChunks.length - 1 && (
-                              <tfoot>
-                                <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
-                                  <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAL GÉNÉRAL</td>
-                                  <td className="border border-gray-300 px-3 py-4 text-right">{totalAchats.toLocaleString()} F</td>
-                                  <td className="border border-gray-300 px-3 py-4 text-right">{totalPaye.toLocaleString()} F</td>
-                                  <td className="border border-gray-300 px-3 py-4 text-right">{reste.toLocaleString()} F</td>
-                                </tr>
-                              </tfoot>
-                            )}
-                          </table>
-                        </ListPrintWrapper>
-                      </div>
-                    ))
-                  })()}
-                </div>
               </>
             )}
           </div>

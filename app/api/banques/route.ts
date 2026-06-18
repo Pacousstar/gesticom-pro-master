@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       include: {
         compte: { select: { id: true, numero: true, libelle: true } },
       },
-      orderBy: { nomBanque: 'asc' },
+      orderBy: { createdAt: 'desc' },
     })
 
     const banqueIds = banques.map(b => b.id)

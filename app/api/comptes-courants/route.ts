@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       client: { select: { id: true, nom: true, telephone: true, ncc: true } },
       fournisseur: { select: { id: true, nom: true, telephone: true, ncc: true } },
     },
-    orderBy: { nom: 'asc' },
+    orderBy: { createdAt: 'desc' },
   })
 
   const result = await Promise.all(comptes.map(async (cc) => {
