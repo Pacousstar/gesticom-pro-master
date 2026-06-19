@@ -251,6 +251,7 @@ model Client {
   retours        Retour[]
   entite         Entite               @relation(fields: [entiteId], references: [id])
   compteCourant  CompteCourant?       @relation("ClientCompteCourant")
+  relances       RelanceClient[]
 
   @@index([actif])
   @@index([entiteId])
@@ -961,6 +962,24 @@ model SystemAlerte {
   @@index([type])
   @@index([categorie])
   @@index([lu])
+}
+
+model RelanceClient {
+  id              Int      @id @default(autoincrement())
+  clientId        Int
+  date            DateTime @default(now())
+  montantDu       Float
+  canal           String   @default("EMAIL")
+  statut          String   @default("ENVOYE")
+  message         String?
+  envoyeePar      Int?
+  factureIds      String?
+  createdAt       DateTime @default(now())
+  client          Client   @relation(fields: [clientId], references: [id])
+
+  @@index([clientId])
+  @@index([date])
+  @@index([statut])
 }
 
 model Licence {

@@ -470,8 +470,8 @@ export default function DashboardPage() {
               ))
             )}
           </div>
-          <Link href="/dashboard/stock" className="mt-4 block text-center text-[9px] font-black uppercase text-gray-500 hover:text-red-600 transition-colors">
-            Voir tout le stock
+          <Link href="/dashboard/reapro" className="mt-4 block text-center text-[9px] font-black uppercase text-gray-500 hover:text-red-600 transition-colors">
+            Voir les suggestions de réapro
           </Link>
         </div>
       </div>

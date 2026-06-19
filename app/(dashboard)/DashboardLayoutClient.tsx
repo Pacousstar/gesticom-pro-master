@@ -7,8 +7,10 @@ import Image from 'next/image'
 import {
   Package,
   Warehouse,
+  Printer,
   ShoppingCart,
   ShoppingBag,
+  Send,
   Users,
   Truck,
   FileText,
@@ -76,6 +78,8 @@ const navigation = [
       { name: 'Bons de Commande', href: '/dashboard/commandes-fournisseurs', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], permission: 'commandes:view', key: 'commandes' },
       { name: 'Stocks', href: '/dashboard/stock', icon: Warehouse, permission: 'stocks:view', key: 'stocks' },
       { name: 'Magasins', href: '/dashboard/magasins', icon: Building2, permission: 'magasins:view' },
+      { name: 'Bons de Réapro', href: '/dashboard/reapro', icon: ShoppingCart, permission: 'stocks:view', key: 'reapro' },
+      { name: 'Étiquettes', href: '/dashboard/produits/etiquettes', icon: Printer, permission: 'produits:view', key: 'etiquettes' },
     ]
   },
   {
@@ -90,6 +94,7 @@ const navigation = [
       { name: 'Soldes Fournisseurs', href: '/dashboard/fournisseurs/soldes', icon: FileText, permission: 'fournisseurs:view', key: 'soldesFournisseurs' },
       { name: 'Paiements Fournisseurs', href: '/dashboard/fournisseurs/paiements', icon: Wallet, permission: 'fournisseurs:view', key: 'paiementsFournisseurs' },
       { name: 'Comptes Courants', href: '/dashboard/comptes-courants', icon: ArrowRightLeft, permission: 'achats:view', key: 'comptesCourants' },
+      { name: 'Relances Clients', href: '/dashboard/relances', icon: Send, permission: 'clients:view', key: 'relances' },
     ]
   },
   {

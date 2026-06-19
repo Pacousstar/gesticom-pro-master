@@ -196,7 +196,7 @@ export default function RetoursPage() {
                       <td className="px-4 py-3 text-right text-white font-medium">{r.montantTotal.toLocaleString('fr-FR')} F</td>
                       <td className="px-4 py-3 text-center">
                         <button onClick={() => setSelectedRetour(r)}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-white/25 hover:bg-white/40 px-3 py-1.5 text-xs font-bold text-white transition-colors border border-white/30">
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition-colors shadow-sm">
                           <FileText className="h-3.5 w-3.5" /> Détail
                         </button>
                       </td>

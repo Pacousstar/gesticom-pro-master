@@ -283,7 +283,7 @@ export default function CommandesPage() {
                         <td className="px-4 py-3 text-right text-white font-medium">{v.montantTotal.toLocaleString('fr-FR')} F</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3 justify-center">
-                            <div className="w-24 bg-white/30 rounded-full h-2.5 overflow-hidden">
+                            <div className="w-24 bg-white/80 rounded-full h-2.5 overflow-hidden">
                               <div className={`h-full rounded-full transition-all ${pctColor}`} style={{ width: `${pct}%` }} />
                             </div>
                             <span className="text-xs text-white font-bold w-16 text-right">{tl}/{tq}</span>
@@ -292,11 +292,11 @@ export default function CommandesPage() {
                         <td className="px-4 py-3 text-center">
                           {reste > 0 ? (
                             <button onClick={() => openModal(v)}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-white/25 hover:bg-white/40 px-3 py-1.5 text-xs font-bold text-white transition-colors border border-white/30">
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 px-3 py-1.5 text-xs font-bold text-white transition-colors shadow-sm">
                               <Truck className="h-3.5 w-3.5" /> Livrer
                             </button>
                           ) : (
-                            <span className="text-xs text-green-300 font-bold bg-green-900/30 px-2 py-1 rounded-lg">Livrée</span>
+                            <span className="text-xs text-white font-bold bg-emerald-600/90 px-2 py-1 rounded-lg">Livrée</span>
                           )}
                         </td>
                       </tr>
