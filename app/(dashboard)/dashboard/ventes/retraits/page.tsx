@@ -134,25 +134,24 @@ export default function RetraitsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-500 to-orange-700 text-white p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <>
+      <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => router.push('/dashboard/ventes')} className="rounded-lg bg-white/10 hover:bg-white/20 p-2 transition-colors">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <h1 className="text-2xl font-bold">
-              <ShoppingBag className="h-6 w-6 inline mr-2" />
-              Gestion des retraits
-            </h1>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Retraits</h1>
+            <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Gestion des retraits de stock</p>
           </div>
+          <button onClick={() => router.push('/dashboard/ventes')}
+            className="flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20">
+            <ArrowLeft className="h-4 w-4" /> Retour
+          </button>
         </div>
 
         {/* Success message */}
         {successMsg && (
-          <div className="rounded-xl bg-white/20 backdrop-blur-sm px-4 py-3 flex items-center gap-2 text-white font-medium">
-            <CheckCircle className="h-5 w-5" /> {successMsg}
+          <div className="rounded-xl bg-emerald-600/90 px-4 py-3 flex items-center gap-2 text-white font-medium shadow-lg">
+            <CheckCircle className="h-5 w-5 shrink-0" /> {successMsg}
           </div>
         )}
 
@@ -175,8 +174,8 @@ export default function RetraitsPage() {
                 href={tab.href}
                 className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
                   active
-                    ? 'bg-white text-orange-700 shadow-md'
-                    : 'bg-white/15 text-white/80 hover:bg-white/25 hover:text-white'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
                 }`}
               >
                 {tab.label}
@@ -186,59 +185,49 @@ export default function RetraitsPage() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-white/20">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-white/70">Total</p>
-              <Package className="h-5 w-5 text-white/60" />
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4 no-print">
+          {[
+            { label: "Total", val: stats.total.toString(), icon: Package, color: "bg-indigo-600" },
+            { label: "En attente", val: stats.pending.toString(), icon: Clock, color: "bg-amber-600" },
+            { label: "Partiel", val: stats.partial.toString(), icon: AlertTriangle, color: "bg-blue-600" },
+            { label: "Complété", val: stats.completed.toString(), icon: CheckCircle, color: "bg-emerald-600" },
+          ].map((c, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-2xl ${c.color} p-5 shadow-xl group`}>
+              <div className="relative z-10 text-white">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
+                <p className="text-2xl font-black tracking-tighter mt-1">{c.val}</p>
+              </div>
+              <c.icon className="absolute right-4 bottom-3 h-10 w-10 text-white opacity-10 group-hover:scale-110 transition-transform" />
             </div>
-            <p className="text-2xl font-bold mt-1 text-white">{stats.total}</p>
-          </div>
-          <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-amber-300/40">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-white/70">En attente</p>
-              <Clock className="h-5 w-5 text-amber-300" />
-            </div>
-            <p className="text-2xl font-bold mt-1 text-amber-200">{stats.pending}</p>
-          </div>
-          <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-blue-300/40">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-white/70">Partiel</p>
-              <AlertTriangle className="h-5 w-5 text-blue-300" />
-            </div>
-            <p className="text-2xl font-bold mt-1 text-blue-200">{stats.partial}</p>
-          </div>
-          <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-green-300/40">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-white/70">Complété</p>
-              <CheckCircle className="h-5 w-5 text-green-300" />
-            </div>
-            <p className="text-2xl font-bold mt-1 text-green-200">{stats.completed}</p>
-          </div>
+          ))}
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-3 items-center rounded-xl border border-gray-200 bg-gray-50 p-3 no-print">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher par n° facture ou client..."
-              className="w-full rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 pl-10 pr-4 py-2.5 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm"
             />
           </div>
           <div>
             <input type="date" value={dateDebut} onChange={e => { setDateDebut(e.target.value); setCurrentPage(1) }}
-              className="rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30 [color-scheme:dark]" />
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
           </div>
           <div>
             <input type="date" value={dateFin} onChange={e => { setDateFin(e.target.value); setCurrentPage(1) }}
-              className="rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30 [color-scheme:dark]" />
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
           </div>
           <div className="flex gap-2">
             {(['pending', 'partial', 'done', 'all'] as const).map(m => (
               <button key={m} onClick={() => setViewMode(m)}
-                className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${viewMode === m ? 'bg-white text-orange-700' : 'bg-white/15 text-white/80 hover:bg-white/25'}`}>
+                className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+                  viewMode === m
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 shadow-sm'
+                }`}>
                 {m === 'all' ? 'Tous' : m === 'pending' ? 'En attente' : m === 'partial' ? 'Partiel' : 'Complété'}
               </button>
             ))}
@@ -247,63 +236,63 @@ export default function RetraitsPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-white/60" />
+          <div className="flex justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
           </div>
         )}
 
         {/* Empty */}
         {!loading && filtered.length === 0 && (
-          <div className="text-center py-12 text-white/60">
-            <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p className="text-lg font-medium">Aucun retrait trouvé</p>
+          <div className="text-center py-16 bg-gray-50 rounded-xl border border-gray-200">
+            <Package className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+            <p className="text-lg font-medium text-gray-500">Aucun retrait trouvé</p>
           </div>
         )}
 
         {/* Table */}
         {!loading && filtered.length > 0 && (
-          <div className="rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 overflow-hidden">
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 text-white/60 text-xs uppercase">
-                    <th className="text-left px-4 py-3 font-medium">N° facture</th>
-                    <th className="text-left px-4 py-3 font-medium">Client</th>
-                    <th className="text-left px-4 py-3 font-medium">Date</th>
-                    <th className="text-right px-4 py-3 font-medium">Montant</th>
-                    <th className="text-center px-4 py-3 font-medium">Progrès</th>
-                    <th className="text-center px-4 py-3 font-medium">Actions</th>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 text-xs uppercase tracking-wider">
+                    <th className="text-left px-4 py-3 font-semibold">N° facture</th>
+                    <th className="text-left px-4 py-3 font-semibold">Client</th>
+                    <th className="text-left px-4 py-3 font-semibold">Date</th>
+                    <th className="text-right px-4 py-3 font-semibold">Montant</th>
+                    <th className="text-center px-4 py-3 font-semibold">Progrès</th>
+                    <th className="text-center px-4 py-3 font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/10">
+                <tbody className="divide-y divide-gray-100">
                   {paged.map(v => {
                     const tq = v.lignes.reduce((s, l) => s + l.quantite, 0)
                     const tl = v.lignes.reduce((s, l) => s + (l.quantiteLivree || 0), 0)
                     const pct = tq > 0 ? Math.round(tl / tq * 100) : 0
-                    const pctColor = pct >= 100 ? 'bg-green-400' : pct > 0 ? 'bg-amber-400' : 'bg-gray-400'
+                    const pctColor = pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-amber-400' : 'bg-gray-300'
                     const reste = tq - tl
                     return (
-                      <tr key={v.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3 font-medium text-white">{v.numero}</td>
-                        <td className="px-4 py-3 text-white/80">{v.client?.nom || v.clientLibre || 'N/A'}</td>
-                        <td className="px-4 py-3 text-white/70">{new Date(v.date).toLocaleDateString('fr-FR')}</td>
-                        <td className="px-4 py-3 text-right text-white font-medium">{v.montantTotal.toLocaleString('fr-FR')} F</td>
+                      <tr key={v.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-gray-900">{v.numero}</td>
+                        <td className="px-4 py-3 text-gray-700">{v.client?.nom || v.clientLibre || 'N/A'}</td>
+                        <td className="px-4 py-3 text-gray-500">{new Date(v.date).toLocaleDateString('fr-FR')}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-900">{v.montantTotal.toLocaleString('fr-FR')} F</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3 justify-center">
-                            <div className="w-24 bg-white/30 rounded-full h-2.5 overflow-hidden">
+                            <div className="w-24 bg-gray-200 rounded-full h-2.5 overflow-hidden">
                               <div className={`h-full rounded-full transition-all ${pctColor}`} style={{ width: `${pct}%` }} />
                             </div>
-                            <span className="text-xs text-white font-bold w-16 text-right">{tl}/{tq}</span>
+                            <span className="text-xs bg-gray-100 text-gray-700 font-bold px-2 py-0.5 rounded">{tl}/{tq}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
                           {reste > 0 ? (
                             <button onClick={() => openModal(v)}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-white/25 hover:bg-white/40 px-3 py-1.5 text-xs font-bold text-white transition-colors border border-white/30">
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 px-3 py-1.5 text-xs font-bold text-white transition-colors shadow-sm">
                               <ShoppingBag className="h-3.5 w-3.5" /> Retirer
                             </button>
                           ) : (
-                            <span className="text-xs text-green-300 font-bold bg-green-900/30 px-2 py-1 rounded-lg">Complété</span>
+                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg">Complété</span>
                           )}
                         </td>
                       </tr>
@@ -319,14 +308,18 @@ export default function RetraitsPage() {
           <div className="flex justify-center gap-2">
             {Array.from({ length: totalFilteredPages }, (_, i) => i + 1).map(p => (
               <button key={p} onClick={() => setCurrentPage(p)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${currentPage === p ? 'bg-white text-orange-700' : 'bg-white/15 text-white/80 hover:bg-white/25'}`}>
+                className={`rounded-lg px-3 py-1.5 text-sm font-bold transition-all ${
+                  currentPage === p
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 shadow-sm'
+                }`}>
                 {p}
               </button>
             ))}
           </div>
         )}
 
-        <p className="text-center text-xs text-white/40">{filtered.length} retrait(s) — Page {currentPage}/{totalFilteredPages}</p>
+        <p className="text-center text-xs text-gray-500">{filtered.length} retrait(s) — Page {currentPage}/{totalFilteredPages}</p>
       </div>
 
       {/* Modal retrait partiel */}
@@ -379,6 +372,6 @@ export default function RetraitsPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

@@ -50,6 +50,8 @@ export default function CompteCourantDetailPage() {
   const [showFactures, setShowFactures] = useState(false)
   const [factures, setFactures] = useState<any[]>([])
   const [facturesLoading, setFacturesLoading] = useState(false)
+  const [facturesPage, setFacturesPage] = useState(1)
+  const facturesPerPage = 10
   const [clientsList, setClientsList] = useState<{ id: number; nom: string }[]>([])
   const [fournisseursList, setFournisseursList] = useState<{ id: number; nom: string }[]>([])
   const [editClientId, setEditClientId] = useState('')
@@ -579,64 +581,82 @@ export default function CompteCourantDetailPage() {
 
         {/* Détail Factures Modal */}
         {showFactures && (
-          <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 pt-6 pb-6 overflow-y-auto">
-            <div className="bg-gray-800 rounded-xl w-full max-w-3xl border border-white/10 flex flex-col my-auto">
-              <div className="flex items-center justify-between p-4 border-b border-white/10">
-                <h3 className="text-lg font-bold">Factures liées</h3>
+          <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 pt-12 pb-12 overflow-y-auto">
+            <div className="bg-gray-800 rounded-xl w-full max-w-3xl border border-white/10 flex flex-col my-auto shadow-2xl">
+              <div className="flex items-center justify-between p-5 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white">Factures liées</h3>
                 <button onClick={() => setShowFactures(false)}
-                  className="p-1 hover:bg-white/10 rounded transition-colors">
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white">
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="overflow-y-auto flex-1 p-4">
+              <div className="overflow-y-auto flex-1 px-5 py-4">
                 {facturesLoading ? (
-                  <div className="flex justify-center py-12"><Loader2 className="animate-spin h-6 w-6" /></div>
+                  <div className="flex justify-center py-16"><Loader2 className="animate-spin h-8 w-8 text-white/60" /></div>
                 ) : factures.length === 0 ? (
-                  <p className="text-center text-gray-500 py-12">Aucune facture trouvée.</p>
+                  <p className="text-center text-gray-500 py-16">Aucune facture trouvée.</p>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-white/10">
-                        <th className="text-left py-2 px-3 font-medium">Date</th>
-                        <th className="text-left py-2 px-3 font-medium">Type</th>
-                        <th className="text-left py-2 px-3 font-medium">Référence</th>
-                        <th className="text-right py-2 px-3 font-medium">Montant</th>
-                        <th className="text-center py-2 px-3 font-medium">Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {factures.map((f, i) => (
-                        <tr key={`${f._type}-${f.id}`}
-                          className={`border-b border-white/5 ${i % 2 === 0 ? 'bg-white/5' : 'bg-transparent'}`}>
-                          <td className="py-2 px-3 whitespace-nowrap text-white/80">
-                            {new Date(f.date).toLocaleDateString('fr-FR')}
-                          </td>
-                          <td className="py-2 px-3">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                              f._type === 'VENTE' ? 'bg-blue-600/20 text-blue-300' : 'bg-orange-600/20 text-orange-300'
-                            }`}>
-                              {f._type}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-white/90">{f.numero || f.reference || '-'}</td>
-                          <td className="py-2 px-3 text-right text-white/90 whitespace-nowrap">
-                            {fmt(f.montantTotal || f.montant || 0)}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                              f.statut === 'VALIDE' || f.statut === 'LIVREE' || f.statut === 'PAYEE' || f.statut === 'PARTIELLE'
-                                ? 'bg-emerald-600/20 text-emerald-300'
-                                : f.statut === 'ANNULEE'
-                                ? 'bg-red-600/20 text-red-300'
-                                : 'bg-gray-600/20 text-gray-400'
-                            }`}>
-                              {f.statut || '-'}
-                            </span>
-                          </td>
+                  <>
+                    <table className="w-full text-sm mx-auto">
+                      <thead>
+                        <tr className="text-white text-xs uppercase tracking-wider border-b border-white/10">
+                          <th className="text-left py-3 px-4 font-semibold">Date</th>
+                          <th className="text-left py-3 px-4 font-semibold">Type</th>
+                          <th className="text-left py-3 px-4 font-semibold">Référence</th>
+                          <th className="text-right py-3 px-4 font-semibold">Montant</th>
+                          <th className="text-center py-3 px-4 font-semibold">Statut</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {factures.slice((facturesPage - 1) * facturesPerPage, facturesPage * facturesPerPage).map((f, i) => (
+                          <tr key={`${f._type}-${f.id}`}
+                            className={`border-b border-white/5 transition-colors ${i % 2 === 0 ? 'bg-white/5' : 'bg-transparent'} hover:bg-white/10`}>
+                            <td className="py-3 px-4 whitespace-nowrap text-white/80">
+                              {new Date(f.date).toLocaleDateString('fr-FR')}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`text-[10px] px-2 py-1 rounded font-bold ${
+                                f._type === 'VENTE' ? 'bg-blue-600/30 text-blue-200' : 'bg-orange-600/30 text-orange-200'
+                              }`}>
+                                {f._type}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-white/90 font-medium">{f.numero || f.reference || '-'}</td>
+                            <td className="py-3 px-4 text-right text-white font-bold whitespace-nowrap">
+                              {fmt(f.montantTotal || f.montant || 0)}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`text-[10px] px-2 py-1 rounded font-bold ${
+                                f.statut === 'VALIDE' || f.statut === 'LIVREE' || f.statut === 'PAYEE' || f.statut === 'PARTIELLE'
+                                  ? 'bg-emerald-600/30 text-emerald-200'
+                                  : f.statut === 'ANNULEE'
+                                  ? 'bg-red-600/30 text-red-200'
+                                  : 'bg-gray-600/30 text-gray-300'
+                              }`}>
+                                {f.statut || '-'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {factures.length > facturesPerPage && (
+                      <div className="flex justify-center items-center gap-3 mt-5 pt-4 border-t border-white/10">
+                        <button onClick={() => setFacturesPage(p => Math.max(1, p - 1))} disabled={facturesPage === 1}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white/70 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                          ← Précédent
+                        </button>
+                        <span className="text-xs text-white/50">
+                          Page {facturesPage} / {Math.ceil(factures.length / facturesPerPage)}
+                        </span>
+                        <button onClick={() => setFacturesPage(p => Math.min(Math.ceil(factures.length / facturesPerPage), p + 1))}
+                          disabled={facturesPage >= Math.ceil(factures.length / facturesPerPage)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white/70 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                          Suivant →
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

@@ -200,23 +200,22 @@ export default function SuiviVentesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-indigo-700 text-white p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => router.push('/dashboard/ventes')} className="rounded-lg bg-white/10 hover:bg-white/20 p-2 transition-colors">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Truck className="h-5 w-5" />
-              Suivi des commandes et retraits
-            </h1>
+    <>
+      <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Suivi</h1>
+            <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Suivi des commandes et retraits différés</p>
           </div>
+          <button onClick={() => router.push('/dashboard/ventes')}
+            className="flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20">
+            <ArrowLeft className="h-4 w-4" /> Retour
+          </button>
           <button
             type="button"
             onClick={handlePrintAll}
             disabled={isPrinting}
-            className="no-print flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 disabled:opacity-50"
+            className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 disabled:opacity-50"
             title="Imprimer la liste de suivi"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
@@ -243,8 +242,8 @@ export default function SuiviVentesPage() {
                 href={tab.href}
                 className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
                   active
-                    ? 'bg-white text-indigo-700 shadow-md'
-                    : 'bg-white/15 text-white/80 hover:bg-white/25 hover:text-white'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
                 }`}
               >
                 {tab.label}
@@ -253,104 +252,107 @@ export default function SuiviVentesPage() {
           })}
         </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-purple-300/40">
-          <p className="text-xs text-purple-200 font-medium">Commandes en attente</p>
-          <p className="text-2xl font-bold text-purple-200">{stats.commandesEnAttente}</p>
+        {/* KPIs */}
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-5 no-print">
+          {[
+            { label: "Commandes en attente", val: stats.commandesEnAttente.toString(), color: "bg-purple-600" },
+            { label: "Retraits en attente", val: stats.retraitsEnAttente.toString(), color: "bg-amber-600" },
+            { label: "Livraisons partielles", val: stats.partiel.toString(), color: "bg-blue-600" },
+            { label: "Terminées", val: stats.soldees.toString(), color: "bg-emerald-600" },
+            { label: "Total", val: ventes.length.toString(), color: "bg-indigo-600" },
+          ].map((c, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-2xl ${c.color} p-5 shadow-xl group`}>
+              <div className="relative z-10 text-white">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
+                <p className="text-2xl font-black tracking-tighter mt-1">{c.val}</p>
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-amber-300/40">
-          <p className="text-xs text-amber-200 font-medium">Retraits en attente</p>
-          <p className="text-2xl font-bold text-amber-200">{stats.retraitsEnAttente}</p>
-        </div>
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-blue-300/40">
-          <p className="text-xs text-blue-200 font-medium">Livraisons partielles</p>
-          <p className="text-2xl font-bold text-blue-200">{stats.partiel}</p>
-        </div>
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-green-300/40">
-          <p className="text-xs text-green-200 font-medium">Terminées</p>
-          <p className="text-2xl font-bold text-green-200">{stats.soldees}</p>
-        </div>
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-white/20">
-          <p className="text-xs text-white/70 font-medium">Total</p>
-          <p className="text-2xl font-bold text-white">{ventes.length}</p>
-        </div>
-      </div>
 
-      <div className="flex flex-wrap gap-2 items-end rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 p-3">
-        <div className="flex-1 min-w-[120px]">
-          <label className="block text-xs font-medium text-white/70 mb-1">Statut</label>
-          <select value={statutSuivi} onChange={e => setStatutSuivi(e.target.value)} className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30">
-            <option value="" className="text-gray-900">Tous les statuts</option>
-            <option value="en_attente" className="text-gray-900">En attente</option>
-            <option value="partiel" className="text-gray-900">Partiel</option>
-            <option value="soldee" className="text-gray-900">Soldée / Retiré</option>
-            <option value="annulee" className="text-gray-900">Annulée</option>
-          </select>
-        </div>
-        <div className="flex-1 min-w-[120px]">
-          <label className="block text-xs font-medium text-white/70 mb-1">N° facture</label>
-          <div className="relative">
-            <input type="text" value={searchNumero} onChange={e => setSearchNumero(e.target.value)} placeholder="Rechercher..." className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 pl-8 pr-3 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30" />
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2 items-end rounded-xl border border-gray-200 bg-gray-50 p-3 no-print">
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Statut</label>
+            <select value={statutSuivi} onChange={e => setStatutSuivi(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm">
+              <option value="">Tous les statuts</option>
+              <option value="en_attente">En attente</option>
+              <option value="partiel">Partiel</option>
+              <option value="soldee">Soldée / Retiré</option>
+              <option value="annulee">Annulée</option>
+            </select>
           </div>
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">N° facture</label>
+            <div className="relative">
+              <input type="text" value={searchNumero} onChange={e => setSearchNumero(e.target.value)} placeholder="Rechercher..."
+                className="w-full rounded-lg border border-gray-200 bg-white pl-8 pr-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            </div>
+          </div>
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Client</label>
+            <input type="text" value={searchClient} onChange={e => setSearchClient(e.target.value)} placeholder="Nom, code..."
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
+          </div>
+          <div className="min-w-[100px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Du</label>
+            <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
+          </div>
+          <div className="min-w-[100px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Au</label>
+            <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
+          </div>
+          <button onClick={() => { setCurrentPage(1); fetchVentes(1) }}
+            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 flex items-center gap-1.5 shadow-md">
+            <Filter className="h-4 w-4" /> Filtrer
+          </button>
         </div>
-        <div className="flex-1 min-w-[120px]">
-          <label className="block text-xs font-medium text-white/70 mb-1">Client</label>
-          <input type="text" value={searchClient} onChange={e => setSearchClient(e.target.value)} placeholder="Nom, code..." className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30" />
-        </div>
-        <div className="min-w-[100px]">
-          <label className="block text-xs font-medium text-white/70 mb-1">Du</label>
-          <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30 [color-scheme:dark]" />
-        </div>
-        <div className="min-w-[100px]">
-          <label className="block text-xs font-medium text-white/70 mb-1">Au</label>
-          <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-full rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30 [color-scheme:dark]" />
-        </div>
-        <button onClick={() => { setCurrentPage(1); fetchVentes(1) }} className="rounded-lg bg-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/30 flex items-center gap-1.5">
-          <Filter className="h-4 w-4" /> Filtrer
-        </button>
-      </div>
 
-      <div className="overflow-x-auto rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 no-print">
-        <table className="w-full text-sm whitespace-nowrap">
-          <thead className="text-left text-xs uppercase text-white/60 border-b border-white/10">
-            <tr>
-              <th className="px-4 py-3 font-medium">N°</th>
-              <th className="px-4 py-3 font-medium">Bon</th>
-              <th className="px-4 py-3 font-medium">Date</th>
-              <th className="px-4 py-3 font-medium">Code</th>
-              <th className="px-4 py-3 font-medium">Client</th>
-              <th className="px-4 py-3 font-medium">Mag.</th>
-              <th className="px-4 py-3 font-medium text-right">Montant</th>
-              <th className="px-4 py-3 font-medium">Type</th>
-              <th className="px-4 py-3 font-medium">Paiement</th>
-              <th className="px-4 py-3 font-medium">Statut</th>
-              <th className="px-4 py-3 text-right">Reste</th>
-              <th className="px-4 py-3">État</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {loading ? (
-              <tr><td colSpan={13} className="px-4 py-12 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" /></td></tr>
-            ) : ventesFiltrees.length === 0 ? (
-              <tr><td colSpan={13} className="px-4 py-12 text-center text-gray-400">Aucune commande ou retrait différé trouvé.</td></tr>
-            ) : ventesFiltrees.map(v => (
-              <VenteTableRow
-                key={v.id} v={v} userRole={userRole}
-                annulant={annulant} supprimant={supprimant} loadingDetail={loadingDetail} livrant={livrant}
-                onEdit={() => {}} onPay={() => {}} onView={handleVoirDetail} onReturn={() => {}}
-                onCancel={handleAnnuler} onDelete={handleSupprimer}
-                onDeliver={handleLivrer} onRetrait={handleRetrait}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {/* Table */}
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm no-print">
+          <table className="w-full text-sm whitespace-nowrap">
+            <thead className="bg-gray-50 text-xs uppercase text-gray-600 tracking-wider">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-left">N°</th>
+                <th className="px-4 py-3 font-semibold text-left">Bon</th>
+                <th className="px-4 py-3 font-semibold text-left">Date</th>
+                <th className="px-4 py-3 font-semibold text-left">Code</th>
+                <th className="px-4 py-3 font-semibold text-left">Client</th>
+                <th className="px-4 py-3 font-semibold text-left">Mag.</th>
+                <th className="px-4 py-3 font-semibold text-right">Montant</th>
+                <th className="px-4 py-3 font-semibold text-left">Type</th>
+                <th className="px-4 py-3 font-semibold text-left">Paiement</th>
+                <th className="px-4 py-3 font-semibold text-left">Statut</th>
+                <th className="px-4 py-3 font-semibold text-right">Reste</th>
+                <th className="px-4 py-3 font-semibold">État</th>
+                <th className="px-4 py-3 font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr><td colSpan={13} className="px-4 py-16 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-orange-500" /></td></tr>
+              ) : ventesFiltrees.length === 0 ? (
+                <tr><td colSpan={13} className="px-4 py-16 text-center text-gray-400">Aucune commande ou retrait différé trouvé.</td></tr>
+              ) : ventesFiltrees.map(v => (
+                <VenteTableRow
+                  key={v.id} v={v} userRole={userRole}
+                  annulant={annulant} supprimant={supprimant} loadingDetail={loadingDetail} livrant={livrant}
+                  onEdit={() => {}} onPay={() => {}} onView={handleVoirDetail} onReturn={() => {}}
+                  onCancel={handleAnnuler} onDelete={handleSupprimer}
+                  onDeliver={handleLivrer} onRetrait={handleRetrait}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {pagination && pagination.totalPages > 1 && (
-        <Pagination currentPage={pagination.page} totalPages={pagination.totalPages} onPageChange={p => { setCurrentPage(p); fetchVentes(p) }} />
-      )}
+        {pagination && pagination.totalPages > 1 && (
+          <Pagination currentPage={pagination.page} totalPages={pagination.totalPages} onPageChange={p => { setCurrentPage(p); fetchVentes(p) }} />
+        )}
 
       {detailVente && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDetailVente(null)}>
@@ -503,7 +505,7 @@ export default function SuiviVentesPage() {
           ))
         })()}
       </div>
-      </div>
     </div>
+    </>
   )
 }

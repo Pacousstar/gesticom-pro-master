@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Archive, Plus, Loader2, Trash2, Search, Filter, X, Printer, ArrowLeft, ShoppingBag } from 'lucide-react'
+import { Archive, Plus, Loader2, Trash2, Search, Filter, X, Printer, ShoppingBag, Wallet, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/useToast'
@@ -208,30 +208,20 @@ export default function AnciennesVentesPage() {
   })
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-500 to-amber-700 text-white p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <>
+      <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6">
       {/* En-tête */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="rounded-lg bg-white/10 hover:bg-white/20 p-2 transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Archive className="h-6 w-6" />
-              Anciennes Ventes
-            </h1>
-            <p className="mt-1 text-white/80 text-xs font-bold uppercase tracking-widest">
-              Ventes et factures antérieures à GestiCom
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Anciennes Ventes</h1>
+          <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Ventes et factures antérieures à GestiCom</p>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handlePrintAll}
             disabled={isPrinting}
-            className="no-print flex items-center gap-2 rounded-lg bg-white/20 hover:bg-white/30 border border-white/20 backdrop-blur-sm px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
+            className="no-print flex items-center gap-2 rounded-lg bg-white/10 border border-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 disabled:opacity-50 transition-colors"
             title="Imprimer la liste des anciennes ventes"
           >
             {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
@@ -239,7 +229,7 @@ export default function AnciennesVentesPage() {
           </button>
           <button
             onClick={() => setForm(true)}
-            className="flex items-center gap-2 rounded-lg bg-white/20 hover:bg-white/30 border border-white/20 backdrop-blur-sm px-4 py-2 text-sm font-medium text-white shadow transition-colors"
+            className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 shadow-md transition-all"
           >
             <Plus className="h-4 w-4" /> Ancienne vente
           </button>
@@ -265,8 +255,8 @@ export default function AnciennesVentesPage() {
               href={tab.href}
               className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
                 active
-                  ? 'bg-white text-amber-700 shadow-md'
-                  : 'bg-white/15 text-white/80 hover:bg-white/25 hover:text-white'
+                  ? 'bg-orange-500 text-white shadow-md'
+                  : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
               }`}
             >
               {tab.label}
@@ -276,79 +266,67 @@ export default function AnciennesVentesPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-white/20">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-white/70">Total ventes</p>
-            <Archive className="h-5 w-5 text-white/60" />
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 no-print">
+        {[
+          { label: "Total ventes", val: kpiTotals.total.toString(), icon: Archive, color: "bg-indigo-600" },
+          { label: "Montant total", val: `${kpiTotals.montantTotal.toLocaleString('fr-FR')} F`, icon: ShoppingBag, color: "bg-emerald-600" },
+          { label: "Encaissé", val: `${kpiTotals.montantPaye.toLocaleString('fr-FR')} F`, icon: Wallet, color: "bg-blue-600" },
+          { label: "Reste à encaisser", val: `${kpiTotals.reste.toLocaleString('fr-FR')} F`, icon: AlertTriangle, color: "bg-amber-600" },
+        ].map((c, i) => (
+          <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl group`}>
+            <div className="relative z-10 text-white flex flex-col justify-between h-full">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
+              <div>
+                <h3 className="text-2xl font-black tracking-tighter">{c.val}</h3>
+              </div>
+            </div>
+            <c.icon className="absolute right-4 bottom-4 h-12 w-12 text-white opacity-10 group-hover:scale-110 transition-transform" />
           </div>
-          <p className="text-2xl font-bold mt-1 text-white">{kpiTotals.total}</p>
-        </div>
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-emerald-300/40">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-white/70">Montant total</p>
-            <ShoppingBag className="h-5 w-5 text-emerald-300" />
-          </div>
-          <p className="text-2xl font-bold mt-1 text-emerald-200">{kpiTotals.montantTotal.toLocaleString('fr-FR')} F</p>
-        </div>
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-green-300/40">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-white/70">Encaissé</p>
-            <ShoppingBag className="h-5 w-5 text-green-300" />
-          </div>
-          <p className="text-2xl font-bold mt-1 text-green-200">{kpiTotals.montantPaye.toLocaleString('fr-FR')} F</p>
-        </div>
-        <div className="rounded-xl bg-white/15 backdrop-blur-sm p-4 border border-amber-300/40">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-white/70">Reste à encaisser</p>
-            <ShoppingBag className="h-5 w-5 text-amber-300" />
-          </div>
-          <p className="text-2xl font-bold mt-1 text-amber-200">{kpiTotals.reste.toLocaleString('fr-FR')} F</p>
-        </div>
+        ))}
       </div>
 
       {/* Barre de filtres */}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 p-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 no-print">
         <div>
-          <label className="block text-xs font-medium text-white/70">Du</label>
+          <label className="block text-xs font-medium text-gray-700">Du</label>
           <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)}
-            className="mt-1 rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-2 py-1.5 text-sm text-white" />
+            className="mt-1 rounded-xl border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-white/70">Au</label>
+          <label className="block text-xs font-medium text-gray-700">Au</label>
           <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)}
-            className="mt-1 rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-2 py-1.5 text-sm text-white" />
+            className="mt-1 rounded-xl border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-white/70">Client</label>
+          <label className="block text-xs font-medium text-gray-700">Client</label>
           <select value={filterClientId} onChange={e => setFilterClientId(e.target.value)}
-            className="mt-1 rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-2 py-1.5 text-sm text-white min-w-[150px]">
+            className="mt-1 rounded-xl border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm min-w-[150px]">
             <option value="">Tous les clients</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
           </select>
         </div>
         <button onClick={() => { setCurrentPage(1); fetchVentes(1); }}
-          className="rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30">
-          <Filter className="h-4 w-4 inline mr-1" />Filtrer
+          className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-orange-600 shadow-md flex items-center gap-1">
+          <Filter className="h-4 w-4" />Filtrer
         </button>
         <button onClick={() => { setDateDebut(''); setDateFin(''); setFilterClientId(''); setCurrentPage(1); fetchVentes(1); }}
-          className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium text-white/80 hover:bg-white/20">
+          className="rounded-lg bg-white border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 shadow-sm">
           Réinitialiser
         </button>
       </div>
 
       {/* Recherche */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input type="text" placeholder="Rechercher par N°, client, magasin..."
           value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 pl-10 pr-4 py-2.5 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30" />
+          className="w-full rounded-xl border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
       </div>
 
       {/* Encart d'alerte */}
-      <div className="rounded-xl bg-white/15 backdrop-blur-sm px-4 py-3 text-sm text-white flex items-start gap-3 border border-white/20">
-        <Archive className="h-5 w-5 mt-0.5 flex-shrink-0 text-white/60" />
-        <span className="text-white/90">
+      <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 flex items-start gap-3">
+        <Archive className="h-5 w-5 mt-0.5 flex-shrink-0 text-amber-500" />
+        <span>
           <strong>Note :</strong> Les enregistrements dans ce menu <strong>impactent le stock et la comptabilité</strong>.
           Ils servent à rattraper les ventes/factures existantes avant l'adoption de GestiCom tout en maintenant l'intégrité de vos comptes.
         </span>
@@ -628,7 +606,7 @@ export default function AnciennesVentesPage() {
           ))
         })()}
       </div>
-      </div>
     </div>
+    </>
   )
 }
