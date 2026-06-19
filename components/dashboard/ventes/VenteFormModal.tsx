@@ -62,7 +62,7 @@ export default function VenteFormModal({
   })
   const [addLignesPopupOpen, setAddLignesPopupOpen] = useState(false)
   const [popupLignes, setPopupLignes] = useState<Ligne[]>([])
-  const [popupAjoutProduit, setPopupAjoutProduit] = useState({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
+  const [popupAjoutProduit, setPopupAjoutProduit] = useState({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', remiseType: 'MONTANT' as 'MONTANT' | 'POURCENT', recherche: '' })
   const [submitting, setSubmitting] = useState(false)
   const [showCreateClient, setShowCreateClient] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -86,8 +86,13 @@ export default function VenteFormModal({
     const produitId = Number(ajoutProduit.produitId)
     if (!produitId) { showError('Sélectionnez un produit.'); return }
     const quantite = Number(ajoutProduit.quantite) || 1
+    const pu = Number(ajoutProduit.prixUnitaire) || 0
     const p = produits.find(x => x.id === produitId)
     if (!p) { showError('Produit introuvable.'); return }
+    let remiseVal = Number(ajoutProduit.remise) || 0
+    if (ajoutProduit.remiseType === 'POURCENT' && remiseVal > 0) {
+      remiseVal = Math.round((pu * quantite) * remiseVal / 100)
+    }
     setFormData((f) => ({
       ...f,
       lignes: [
@@ -97,9 +102,9 @@ export default function VenteFormModal({
           designation: p.designation,
           code: p.code,
           quantite,
-          prixUnitaire: Number(ajoutProduit.prixUnitaire) || 0,
+          prixUnitaire: pu,
           tvaPerc: Number(ajoutProduit.tvaPerc) || 0,
-          remise: Number(ajoutProduit.remise) || 0,
+          remise: remiseVal,
           remiseType: ajoutProduit.remiseType,
         },
       ],
@@ -230,7 +235,7 @@ export default function VenteFormModal({
         })
         setAddLignesPopupOpen(false)
         setPopupLignes([])
-        setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
+        setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', remiseType: 'MONTANT', recherche: '' })
         showSuccess(MESSAGES.VENTE_ENREGISTREE)
         onSuccess()
         onClose()
@@ -283,7 +288,7 @@ export default function VenteFormModal({
     if (!formData.lignes.length) {
       setAddLignesPopupOpen(true)
       setPopupLignes([])
-      setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
+      setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', remiseType: 'MONTANT', recherche: '' })
       return
     }
     const needsBanqueValidation = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
@@ -360,6 +365,11 @@ export default function VenteFormModal({
     const p = produits.find((x: any) => x.id === produitId)
     if (!p) { showError('Produit introuvable.'); return }
     const quantite = Number(popupAjoutProduit.quantite) || 1
+    const pu = Number(popupAjoutProduit.prixUnitaire) || 0
+    let remise = Number(popupAjoutProduit.remise) || 0
+    if (popupAjoutProduit.remiseType === 'POURCENT' && remise > 0) {
+      remise = Math.round((quantite * pu) * remise / 100)
+    }
     setPopupLignes((prev) => [
       ...prev,
       {
@@ -367,12 +377,12 @@ export default function VenteFormModal({
         designation: p.designation,
         code: p.code || '',
         quantite,
-        prixUnitaire: Number(popupAjoutProduit.prixUnitaire) || 0,
+        prixUnitaire: pu,
         tvaPerc: Number(popupAjoutProduit.tvaPerc) || 0,
-        remise: Number(popupAjoutProduit.remise) || 0,
+        remise,
       },
     ])
-    setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', recherche: '' })
+    setPopupAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tvaPerc: '0', remise: '0', remiseType: 'MONTANT', recherche: '' })
   }
 
   const removePopupLigne = (i: number) => {
@@ -721,9 +731,12 @@ export default function VenteFormModal({
               <div className="flex flex-wrap gap-2 items-end">
                 <input type="number" min="1" value={popupAjoutProduit.quantite} onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, quantite: e.target.value }))} placeholder="Qté" className="w-16 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none" />
                 <input type="number" min="0" step="1" value={popupAjoutProduit.prixUnitaire} onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, prixUnitaire: e.target.value }))} placeholder="Prix (HT)" className="w-24 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none" />
-                <input type="number" min="0" step="1" value={popupAjoutProduit.remise} onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, remise: e.target.value }))} placeholder="Remise" className="w-20 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none" />
+                <div className="flex items-center">
+                  <input type="number" min="0" step="1" value={popupAjoutProduit.remise} onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, remise: e.target.value }))} placeholder="Remise" className="w-16 rounded-l border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none" />
+                  <button type="button" onClick={() => setPopupAjoutProduit((a) => ({ ...a, remiseType: a.remiseType === 'MONTANT' ? 'POURCENT' : 'MONTANT' }))} className={`px-2 py-2 border border-l-0 border-gray-200 text-xs font-bold rounded-r transition-colors ${popupAjoutProduit.remiseType === 'POURCENT' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}>{popupAjoutProduit.remiseType === 'MONTANT' ? 'F' : '%'}</button>
+                </div>
                 <input type="number" min="0" step="0.01" value={popupAjoutProduit.tvaPerc} onChange={(e) => setPopupAjoutProduit((a) => ({ ...a, tvaPerc: e.target.value }))} placeholder="TVA %" className="w-16 rounded border border-gray-200 px-2 py-2 text-sm focus:border-orange-500 focus:outline-none bg-orange-50/30" />
-                <div className="flex flex-col gap-0.5 min-w-[80px]"><span className="text-[10px] font-bold text-orange-600 ml-1">Total TTC</span><div className="rounded border border-orange-100 bg-orange-50 px-2 py-1.5 text-xs font-bold text-orange-800">{(() => { const q = Number(popupAjoutProduit.quantite || 0); const pu = Number(popupAjoutProduit.prixUnitaire || 0); const r = Number(popupAjoutProduit.remise || 0); const t = Number(popupAjoutProduit.tvaPerc || 0); return montantLigneTTC({ quantite: q, prixUnitaire: pu, remiseLigne: r, tvaPourcent: t }).toLocaleString('fr-FR') })()} F</div></div>
+                <div className="flex flex-col gap-0.5 min-w-[80px]"><span className="text-[10px] font-bold text-orange-600 ml-1">Total TTC</span><div className="rounded border border-orange-100 bg-orange-50 px-2 py-1.5 text-xs font-bold text-orange-800">{(() => { const q = Number(popupAjoutProduit.quantite || 0); const pu = Number(popupAjoutProduit.prixUnitaire || 0); let r = Number(popupAjoutProduit.remise || 0); const t = Number(popupAjoutProduit.tvaPerc || 0); if (popupAjoutProduit.remiseType === 'POURCENT' && r > 0) { r = Math.round((q * pu) * r / 100) }; return montantLigneTTC({ quantite: q, prixUnitaire: pu, remiseLigne: r, tvaPourcent: t }).toLocaleString('fr-FR') })()} F</div></div>
                 <button type="button" onClick={addLigneInPopup} className="rounded-lg border-2 border-orange-400 bg-orange-100 px-3 py-2 text-sm font-medium text-orange-900 hover:bg-orange-200">Ajouter</button>
               </div>
               {popupLignes.length > 0 && (

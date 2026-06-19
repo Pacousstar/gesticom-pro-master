@@ -53,7 +53,8 @@ export default function ModificationAchatModal({
     quantite: '1',
     prixUnitaire: '',
     tva: '0',
-    remise: '0'
+    remise: '0',
+    remiseType: 'MONTANT' as 'MONTANT' | 'POURCENT'
   })
 
   const { success: showSuccess, error: showError } = useToast()
@@ -134,7 +135,10 @@ export default function ModificationAchatModal({
     if (q <= 0) { showError('La quantité doit être supérieure à 0.'); return }
     if (!pu || pu <= 0) { showError('Le prix unitaire doit être supérieur à 0.'); return }
     const tva = Number(ajout.tva)
-    const rem = Number(ajout.remise)
+    let rem = Number(ajout.remise)
+    if (ajout.remiseType === 'POURCENT' && rem > 0) {
+      rem = Math.round((q * pu) * rem / 100)
+    }
     const mnt = Math.round((q * pu - rem) * (1 + tva / 100))
 
     const nouvelleLigne: Ligne = {
@@ -148,7 +152,7 @@ export default function ModificationAchatModal({
     }
 
     setFormData(f => ({ ...f, lignes: [...f.lignes, nouvelleLigne] }))
-    setAjout({ produitId: '', quantite: '1', prixUnitaire: '', tva: '0', remise: '0' })
+    setAjout({ produitId: '', quantite: '1', prixUnitaire: '', tva: '0', remise: '0', remiseType: 'MONTANT' })
   }
 
   const handleRemoveLigne = (index: number) => {
@@ -344,16 +348,34 @@ export default function ModificationAchatModal({
                       className="w-full rounded-xl border-gray-200 bg-white px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">TVA (%)</label>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">TVA (%)</label>
+                  <input
+                    type="number"
+                    value={ajout.tva}
+                    onChange={e => setAjout(a => ({ ...a, tva: e.target.value }))}
+                    className="w-full rounded-xl border-gray-200 bg-white px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Remise</label>
+                  <div className="flex items-center">
                     <input
-                      type="number"
-                      value={ajout.tva}
-                      onChange={e => setAjout(a => ({ ...a, tva: e.target.value }))}
-                      className="w-full rounded-xl border-gray-200 bg-white px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                      type="number" min="0"
+                      value={ajout.remise}
+                      onChange={e => setAjout(a => ({ ...a, remise: e.target.value }))}
+                      className="w-20 rounded-l-xl border-gray-200 bg-white px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setAjout(a => ({ ...a, remiseType: a.remiseType === 'MONTANT' ? 'POURCENT' : 'MONTANT' }))}
+                      className={`px-2 py-2 border border-l-0 border-gray-200 text-xs font-bold rounded-r-xl transition-colors ${ajout.remiseType === 'POURCENT' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700'}`}
+                    >
+                      {ajout.remiseType === 'MONTANT' ? 'F' : '%'}
+                    </button>
                   </div>
-                  <button
+                </div>
+                <button
                     type="button"
                     onClick={handleAddLigne}
                     className="h-10 rounded-xl bg-gray-900 text-white font-black hover:bg-black transition-all flex items-center justify-center gap-2 px-4 shadow-md text-[10px]"

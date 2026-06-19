@@ -49,7 +49,7 @@ export default function AnciennesVentesPage() {
     lignes: [] as Ligne[],
   })
   const [ajoutProduit, setAjoutProduit] = useState({
-    produitId: '', quantite: '1', prixUnitaire: '', tva: '', remise: '', recherche: ''
+    produitId: '', quantite: '1', prixUnitaire: '', tva: '', remise: '', remiseType: 'MONTANT' as 'MONTANT' | 'POURCENT', recherche: ''
   })
 
   const kpiTotals = {
@@ -125,7 +125,10 @@ export default function AnciennesVentesPage() {
     const q = Math.max(1, Number(ajoutProduit.quantite) || 1)
     const pu = Math.max(0, Number(ajoutProduit.prixUnitaire) || 0)
     const tva = Number(ajoutProduit.tva) || 0
-    const remise = Number(ajoutProduit.remise) || 0
+    let remise = Number(ajoutProduit.remise) || 0
+    if (ajoutProduit.remiseType === 'POURCENT' && remise > 0) {
+      remise = Math.round((q * pu) * remise / 100)
+    }
     const p = produits.find(x => x.id === pid)
     if (!pid && !ajoutProduit.recherche) return
     const designation = p?.designation || ajoutProduit.recherche
@@ -134,7 +137,7 @@ export default function AnciennesVentesPage() {
       ...f,
       lignes: [...f.lignes, { produitId: pid || 0, designation, quantite: q, prixUnitaire: pu, tva, remise }]
     }))
-    setAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tva: '', remise: '', recherche: '' })
+    setAjoutProduit({ produitId: '', quantite: '1', prixUnitaire: '', tva: '', remise: '', remiseType: 'MONTANT', recherche: '' })
   }
 
   const total = formData.lignes.reduce(
@@ -442,9 +445,16 @@ export default function AnciennesVentesPage() {
                 <input type="number" min="0" placeholder="TVA %" value={ajoutProduit.tva}
                   onChange={e => setAjoutProduit(a => ({ ...a, tva: e.target.value }))}
                   className="w-16 rounded border border-gray-200 px-2 py-2 text-sm focus:border-amber-500 focus:outline-none bg-amber-50/50" />
-                <input type="number" min="0" placeholder="Remise F" value={ajoutProduit.remise}
-                  onChange={e => setAjoutProduit(a => ({ ...a, remise: e.target.value }))}
-                  className="w-20 rounded border border-gray-200 px-2 py-2 text-sm focus:border-amber-500 focus:outline-none" />
+                <div className="flex items-center">
+                  <input type="number" min="0" placeholder="Remise" value={ajoutProduit.remise}
+                    onChange={e => setAjoutProduit(a => ({ ...a, remise: e.target.value }))}
+                    className="w-16 rounded-l border border-gray-200 px-2 py-2 text-sm focus:border-amber-500 focus:outline-none" />
+                  <button type="button"
+                    onClick={() => setAjoutProduit(a => ({ ...a, remiseType: a.remiseType === 'MONTANT' ? 'POURCENT' : 'MONTANT' }))}
+                    className={`px-2 py-2 border border-l-0 border-gray-200 text-xs font-bold rounded-r transition-colors ${ajoutProduit.remiseType === 'POURCENT' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                    {ajoutProduit.remiseType === 'MONTANT' ? 'F' : '%'}
+                  </button>
+                </div>
                 <button type="button" onClick={addLigne}
                   disabled={!ajoutProduit.produitId}
                   className="rounded-lg border-2 border-amber-400 bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow hover:bg-amber-600 disabled:opacity-50 transition-colors">

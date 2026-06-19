@@ -498,19 +498,19 @@ export default function CompteCourantDetailPage() {
         {/* Transactions Table */}
         <div className="bg-white/5 backdrop-blur rounded-xl border border-white/10 overflow-hidden">
           <div className="p-4 border-b border-white/10 flex items-center justify-between">
-            <h3 className="font-bold">Détail chronologique des opérations</h3>
+            <h3 className="font-bold text-white">Détail chronologique des opérations</h3>
             <span className="text-xs text-white">{data.transactions.length} Événements</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-white text-xs uppercase tracking-wider">
-                  <th className="text-left py-3 px-4 font-medium">Date</th>
-                  <th className="text-left py-3 px-4 font-medium">Libellé</th>
-                  <th className="text-right py-3 px-4 font-medium">Débit (+)</th>
-                  <th className="text-right py-3 px-4 font-medium">Crédit (−)</th>
-                  <th className="text-right py-3 px-4 font-medium">Solde</th>
-                  <th className="text-center py-3 px-4 font-medium">Lettrage</th>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-wider">
+                  <th className="text-left py-3 px-4 font-medium text-white">Date</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Libellé</th>
+                  <th className="text-right py-3 px-4 font-medium text-white">Débit (+)</th>
+                  <th className="text-right py-3 px-4 font-medium text-white">Crédit (−)</th>
+                  <th className="text-right py-3 px-4 font-medium text-white">Solde</th>
+                  <th className="text-center py-3 px-4 font-medium text-white">Lettrage</th>
                 </tr>
               </thead>
               <tbody>
@@ -527,13 +527,13 @@ export default function CompteCourantDetailPage() {
                       </td>
                       <td className="py-2.5 px-4 text-white/90 max-w-[260px]">
                         <span className="block truncate" title={t.libelle}>{t.libelle}</span>
-                        <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded ${
-                          t.type === 'ACHAT' ? 'bg-orange-600/40 text-white'
-                          : t.type === 'VENTE' ? 'bg-blue-600/40 text-white'
-                          : t.type === 'PAIEMENT_FOURNISSEUR' ? 'bg-purple-600/40 text-white'
-                          : t.type === 'ENCAISSEMENT_CLIENT' ? 'bg-emerald-600/40 text-white'
-                          : t.type === 'COMPENSATION' ? 'bg-cyan-600/40 text-white'
-                          : 'bg-gray-600/40 text-white'
+                        <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded font-medium ${
+                          t.type === 'ACHAT' ? 'bg-orange-600 text-white'
+                          : t.type === 'VENTE' ? 'bg-blue-600 text-white'
+                          : t.type === 'PAIEMENT_FOURNISSEUR' ? 'bg-purple-600 text-white'
+                          : t.type === 'ENCAISSEMENT_CLIENT' ? 'bg-emerald-600 text-white'
+                          : t.type === 'COMPENSATION' ? 'bg-cyan-600 text-white'
+                          : 'bg-gray-600 text-white'
                         }`}>
                           {t.type === 'ACHAT' ? 'Achat'
                           : t.type === 'VENTE' ? 'Vente'
@@ -556,7 +556,7 @@ export default function CompteCourantDetailPage() {
                       <td className="py-2.5 px-4 text-center align-top">
                         {t.referenceType === 'REGLEMENT_VENTE' || t.referenceType === 'REGLEMENT_ACHAT' ? (
                           <button onClick={() => handleLettrage(t.id)}
-                            className="text-xs px-2 py-1 bg-blue-600/50 hover:bg-blue-600/70 text-white rounded transition-colors whitespace-nowrap">
+                            className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded transition-colors whitespace-nowrap border border-blue-400/30">
                             Lettrer
                           </button>
                         ) : (
