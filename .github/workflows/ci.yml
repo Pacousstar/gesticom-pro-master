@@ -55,6 +55,7 @@ jobs:
       - run: npm run test:e2e
         env:
           DATABASE_URL: "file:./prisma/test-e2e.db"
+          SESSION_SECRET: "ci-test-secret-min-32-characters-long-for-session"
           CI: "true"
 
       - uses: actions/upload-artifact@v4
