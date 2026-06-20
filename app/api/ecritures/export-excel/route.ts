@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
     const filename = `ecritures_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')
     return makeResponse(buf, filename)
   } catch (error) {
-    console.error('Export Excel écritures:', error)
+    await apiCatch(error, 'api/ecritures/export-excel')
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })
   }
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Users, Truck, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
+import Pagination from '@/components/ui/Pagination'
 
 type Tier = {
   id: number
@@ -101,6 +102,15 @@ export default function SoldesTiersPage() {
     }
   }, [clients, fournisseurs])
 
+  const [stPage, setStPage] = useState(1)
+  const itemsPerPage = 10
+  const totalPages = Math.ceil(allTiers.length / itemsPerPage)
+  const paginatedData = allTiers.slice((stPage - 1) * itemsPerPage, stPage * itemsPerPage)
+
+  useEffect(() => {
+    setStPage(1)
+  }, [searchTerm, filterType])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -150,13 +160,13 @@ export default function SoldesTiersPage() {
         <div className="bg-gray-800 rounded-xl p-4 text-white border border-gray-700">
           <p className="text-xs font-bold text-gray-300 uppercase">Total Tiers</p>
           <p className="text-3xl font-black">{clients.length + fournisseurs.length}</p>
-          <p className="text-xs text-gray-400 mt-1">{clients.length} clients, {fournisseurs.length} fournisseurs</p>
+          <p className="text-xs text-gray-300 mt-1">{clients.length} clients, {fournisseurs.length} fournisseurs</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Rechercher</label>
+          <label className="block text-sm font-medium text-white mb-1">Rechercher</label>
           <input
             type="text"
             placeholder="Nom ou code..."
@@ -166,7 +176,7 @@ export default function SoldesTiersPage() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Filtrer par type</label>
+          <label className="block text-sm font-medium text-white mb-1">Filtrer par type</label>
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value as any)}
@@ -179,11 +189,11 @@ export default function SoldesTiersPage() {
         </div>
         <div className="flex gap-2">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date début</label>
+            <label className="block text-sm font-medium text-white mb-1">Date début</label>
             <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none" />
           </div>
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date fin</label>
+            <label className="block text-sm font-medium text-white mb-1">Date fin</label>
             <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none" />
           </div>
         </div>
@@ -202,7 +212,7 @@ export default function SoldesTiersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {allTiers.map((tier) => (
+            {paginatedData.map((tier) => (
               <tr key={`${tier.typeTier}-${tier.id}`} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
                   {tier.typeTier === 'CLIENT' ? (
@@ -248,6 +258,16 @@ export default function SoldesTiersPage() {
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <Pagination
+          currentPage={stPage}
+          totalPages={totalPages}
+          itemsPerPage={itemsPerPage}
+          totalItems={allTiers.length}
+          onPageChange={setStPage}
+        />
+      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET() {
     try {
@@ -17,7 +18,7 @@ export async function GET() {
 
         return NextResponse.json(comptes)
     } catch (e) {
-        console.error('Plan Compte API Error:', e)
+        await apiCatch(e, 'api/comptabilite/comptes')
         return NextResponse.json({ error: 'Erreur lors du chargement du plan de comptes' }, { status: 500 })
     }
 }

@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { reconciliationBancaireSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -12,14 +15,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const entiteId = await getEntiteId(session)
-    const { operations, banqueId } = await request.json()
-    
-    if (!banqueId || !Array.isArray(operations)) {
+    const body = await request.json()
+    const result = validateApiRequest(reconciliationBancaireSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
+
+    if (!Array.isArray(data.operations)) {
       return NextResponse.json({ error: 'Données invalides' }, { status: 400 })
     }
 
     // RB3: Vérifier que la banque appartient à l'entité de l'utilisateur
-    const banque = await prisma.banque.findUnique({ where: { id: Number(banqueId) } })
+    const banque = await prisma.banque.findUnique({ where: { id: data.banqueId } })
     if (!banque) {
       return NextResponse.json({ error: 'Compte bancaire introuvable.' }, { status: 404 })
     }
@@ -36,7 +42,7 @@ export async function POST(request: NextRequest) {
     // Pour chaque opération du relevé, on cherche des règlements (ventes ou achats)
     // non lettrés avec le même montant et une date proche (+/- 3 jours)
 
-    const matches = await Promise.all(operations.map(async (op: any) => {
+    const matches = await Promise.all(data.operations.map(async (op: any) => {
       const montant = Math.abs(Number(op.montant))
       const dateOp = new Date(op.date)
       const dateMin = new Date(dateOp.getTime() - 3 * 24 * 60 * 60 * 1000)
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(matches)
   } catch (error) {
-    console.error('Erreur Rapprochement:', error)
+    await apiCatch(error, 'api/banques/reconcilier')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

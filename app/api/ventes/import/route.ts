@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { parseExcel } from '@/lib/excel'
 import { requireRole } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(req: NextRequest) {
     try {
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ success: true, created, total })
     } catch (error: any) {
-        console.error('[IMPORT_VENTES_ERROR]', error)
+        await apiCatch(error, 'api/ventes/import')
         return NextResponse.json({ error: error.message || "Erreur lors de l'importation" }, { status: 500 })
     }
 }

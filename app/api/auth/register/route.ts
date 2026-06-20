@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 import { logCreation, getIpAddress } from '@/lib/audit'
 import { z } from 'zod'
 import { strictPasswordSchema } from '@/lib/validations'
+import { apiCatch } from '@/lib/log-error'
 
 const registerSchema = z.object({
   login: z.string().min(3).max(50).regex(/^[a-zA-Z0-9_-]+$/, 'Le login ne peut contenir que des lettres, chiffres, tirets et underscores'),
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
       user 
     }, { status: 201 })
   } catch (e: unknown) {
-    console.error('Register error:', e)
+    await apiCatch(e, 'api/auth/register')
     let msg = 'Erreur lors de la création de l\'utilisateur.'
     if (e instanceof Error && e.message.includes('Unique constraint')) {
       msg = 'Ce login ou cet email est déjà utilisé.'

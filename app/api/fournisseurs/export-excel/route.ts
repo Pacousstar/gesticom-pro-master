@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
     const filename = `fournisseurs-${new Date().toISOString().split('T')[0]}.xlsx`
     return makeResponse(buf, filename)
   } catch (error) {
-    console.error('GET /api/fournisseurs/export-excel:', error)
+    await apiCatch(error, 'api/fournisseurs/export-excel')
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })
   }
 }

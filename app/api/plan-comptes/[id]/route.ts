@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { planCompteSchema } from '@/lib/validations'
 
 export async function GET(
   _request: NextRequest,
@@ -22,7 +25,7 @@ export async function GET(
     if (!compte) return NextResponse.json({ error: 'Compte introuvable.' }, { status: 404 })
     return NextResponse.json(compte)
   } catch (e) {
-    console.error('GET /api/plan-comptes/[id]:', e)
+    await apiCatch(e, 'api/plan-comptes/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -43,20 +46,21 @@ export async function PATCH(
 
   try {
     const body = await request.json()
+    const vres = validateApiRequest(planCompteSchema.partial(), body)
+    if (!vres.success) return vres.response
+    const planData = vres.data
     const data: Record<string, unknown> = {}
     
-    if (body?.numero != null) data.numero = String(body.numero).trim()
-    if (body?.libelle != null) data.libelle = String(body.libelle).trim()
-    if (body?.classe != null) data.classe = String(body.classe).trim()
-    if (body?.type != null && ['ACTIF', 'PASSIF', 'CHARGES', 'PRODUITS'].includes(String(body.type).toUpperCase())) {
-      data.type = String(body.type).toUpperCase()
-    }
+    if (planData.numero != null) data.numero = planData.numero
+    if (planData.libelle != null) data.libelle = planData.libelle
+    if (planData.classe != null) data.classe = planData.classe
+    if (planData.type != null) data.type = planData.type
     if (body?.actif !== undefined) data.actif = Boolean(body.actif)
 
     const compte = await prisma.planCompte.update({ where: { id }, data: data as object })
     return NextResponse.json(compte)
   } catch (e: any) {
-    console.error('PATCH /api/plan-comptes/[id]:', e)
+    await apiCatch(e, 'api/plan-comptes/[id]')
     if (e.code === 'P2002') {
       return NextResponse.json({ error: 'Ce numéro de compte existe déjà.' }, { status: 400 })
     }
@@ -82,7 +86,7 @@ export async function DELETE(
     await prisma.planCompte.update({ where: { id }, data: { actif: false } })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('DELETE /api/plan-comptes/[id]:', e)
+    await apiCatch(e, 'api/plan-comptes/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

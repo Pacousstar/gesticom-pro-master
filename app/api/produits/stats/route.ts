@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET() {
   const session = await getSession()
@@ -26,7 +27,7 @@ export async function GET() {
 
     return NextResponse.json({ total, enStock: enStockRows.length })
   } catch (e) {
-    console.error('GET /api/produits/stats:', e)
+    await apiCatch(e, 'api/produits/stats')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

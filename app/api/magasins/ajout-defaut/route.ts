@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 const POINTS_DE_VENTE: Array<{ code: string; nom: string; localisation: string }> = [
   { code: 'DANANE', nom: 'Danané', localisation: 'Danané' },
@@ -49,7 +50,7 @@ export async function POST() {
 
     return NextResponse.json({ created, skipped })
   } catch (e) {
-    console.error('POST /api/magasins/ajout-defaut:', e)
+    await apiCatch(e, 'api/magasins/ajout-defaut')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

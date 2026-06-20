@@ -7,6 +7,8 @@ import { logAction, getIpAddress } from '@/lib/audit'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { handleApiError, unauthorized, badRequest, notFound } from '@/lib/api-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { archiveVenteSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -51,6 +53,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!Number.isInteger(venteId) || venteId < 1) return badRequest('ID vente invalide.')
 
     const body = await request.json()
+    const vres = validateApiRequest(archiveVenteSchema, body)
+    if (!vres.success) return vres.response
     const lignesRetour: { produitId: number; quantite: number }[] = body.lignes || []
     const remboursement = body.remboursement !== false
     const modeRemboursement = body.modeRemboursement || 'ESPECES'

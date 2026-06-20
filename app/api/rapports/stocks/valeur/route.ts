@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: rapportValeur, totalValeur })
   } catch (error) {
-    console.error('Erreur Rapport Valeur Stock:', error)
+    await apiCatch(error, 'api/rapports/stocks/valeur')
     return NextResponse.json({ error: 'Erreur lors du calcul de la valeur du stock' }, { status: 500 })
   }
 }

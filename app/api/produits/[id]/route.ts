@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { produitSchema } from '@/lib/validations'
 
 export async function PATCH(
   _request: NextRequest,
@@ -107,7 +110,7 @@ export async function PATCH(
   } catch (e: unknown) {
     const err = e as { code?: string }
     if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })
-    console.error('PATCH /api/produits/[id]:', e)
+    await apiCatch(e, 'api/produits/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -128,15 +131,23 @@ export async function DELETE(
   try {
     const existing = await prisma.produit.findFirst({
       where: { id, entiteId: session!.entiteId },
+      include: { stocks: { select: { quantite: true } } },
     })
     if (!existing) {
       return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })
     }
 
-    // Soft-delete : archiver au lieu de supprimer
-    const p = await prisma.produit.update({
+    // Vérifier que le stock total est à zéro avant suppression définitive
+    const stockTotal = existing.stocks.reduce((sum, s) => sum + s.quantite, 0)
+    if (stockTotal > 0) {
+      return NextResponse.json({
+        error: `Impossible de supprimer : ce produit a encore ${stockTotal} unité(s) en stock. Épuisez le stock d'abord.`,
+      }, { status: 400 })
+    }
+
+    // Suppression réelle (Prisma cascade supprime la ligne de stock orpheline)
+    const p = await prisma.produit.delete({
       where: { id },
-      data: { actif: false },
     })
 
     const ipAddress = getIpAddress(_request)
@@ -144,7 +155,7 @@ export async function DELETE(
       session!,
       'PRODUIT',
       p.entiteId,
-      `Archivage du produit ${p.code} - ${p.designation}`,
+      `Suppression définitive du produit ${p.code} - ${p.designation}`,
       {
         id: p.id,
         code: p.code,
@@ -162,11 +173,11 @@ export async function DELETE(
       ipAddress
     )
 
-                return NextResponse.json({ success: true, softDeleted: true })
+    return NextResponse.json({ success: true, softDeleted: false })
   } catch (e: unknown) {
     const err = e as { code?: string }
     if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })
-    console.error('DELETE /api/produits/[id]:', e)
+    await apiCatch(e, 'api/produits/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -212,7 +223,53 @@ export async function POST(
     } catch (e: unknown) {
       const err = e as { code?: string }
       if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })
-      console.error('POST /api/produits/[id] restore:', e)
+      await apiCatch(e, 'api/produits/[id]')
+      return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+    }
+  }
+
+  if (body?.action === 'archive') {
+    try {
+      const existing = await prisma.produit.findFirst({
+        where: { id, entiteId: session!.entiteId },
+      })
+      if (!existing) {
+        return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })
+      }
+
+      const p = await prisma.produit.update({
+        where: { id },
+        data: { actif: false },
+      })
+
+      const ipAddress = getIpAddress(request)
+      await logSuppression(
+        session!,
+        'PRODUIT',
+        p.entiteId,
+        `Archivage du produit ${p.code} - ${p.designation}`,
+        {
+          id: p.id,
+          code: p.code,
+          designation: p.designation,
+          categorie: p.categorie,
+          prixAchat: p.prixAchat,
+          prixVente: p.prixVente,
+          prixMinimum: p.prixMinimum,
+          pamp: p.pamp,
+          seuilMin: p.seuilMin,
+          actif: p.actif,
+          entiteId: p.entiteId,
+          createdAt: p.createdAt?.toISOString(),
+        },
+        ipAddress
+      )
+
+      return NextResponse.json({ success: true, softDeleted: true })
+    } catch (e: unknown) {
+      const err = e as { code?: string }
+      if (err?.code === 'P2025') return NextResponse.json({ error: 'Produit introuvable.' }, { status: 404 })
+      await apiCatch(e, 'api/produits/[id]')
       return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
     }
   }

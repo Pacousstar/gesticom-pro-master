@@ -157,6 +157,7 @@ export const depenseSchema = z.object({
   banqueId: z.coerce.number().int().positive().nullable().optional(),
   pieceJustificative: z.string().max(MAX_STRING).trim().nullable().optional(),
   beneficiaire: z.string().max(MAX_STRING, 'Le bénéficiaire ne peut pas dépasser 500 caractères.').trim().nullable().optional(),
+  observation: z.string().max(MAX_TEXT, 'L\'observation ne peut pas dépasser 2000 caractères.').trim().nullable().optional(),
 })
 
 /** Vente : client, montant, remise, lignes de produits */
@@ -240,6 +241,281 @@ export const journalSchema = z.object({
   }),
 })
 
+/** Ligne d'achat */
+export const achatLigneSchema = z.object({
+  produitId: z.coerce.number().int().positive('Le produit est requis.'),
+  quantite: z.coerce.number().min(0.001, 'La quantité doit être supérieure à 0.'),
+  prixUnitaire: z.coerce.number().min(0, 'Le prix unitaire doit être positif.'),
+  tva: z.coerce.number().min(0).max(100).optional().default(0),
+  remise: z.coerce.number().min(0).optional().default(0),
+})
+
+/** Achat : magasin, fournisseur, lignes, paiement */
+export const achatSchema = z.object({
+  magasinId: z.coerce.number().int().positive('Le magasin est requis.'),
+  fournisseurId: z.coerce.number().int().positive().nullable().optional(),
+  fournisseurLibre: z.string().max(500).trim().nullable().optional(),
+  numeroCamion: z.string().max(100).trim().nullable().optional(),
+  observation: z.string().max(2000).trim().nullable().optional(),
+  fraisApproche: z.coerce.number().min(0).optional().default(0),
+  date: z.string().max(20).optional(),
+  modePaiement: z.string().max(50).optional().default('ESPECES'),
+  montantPaye: z.coerce.number().min(0).nullable().optional(),
+  reglements: z.array(z.object({
+    mode: z.string().max(50),
+    montant: z.coerce.number().min(0),
+    payeDepuisCaisse: z.boolean().optional(),
+    payeDepuisBanque: z.boolean().optional(),
+  })).optional(),
+  lignes: z.array(achatLigneSchema).min(1, 'Au moins une ligne est requise.'),
+})
+
+/** Mouvement de stock (entrée/sortie) */
+export const mouvementStockSchema = z.object({
+  magasinId: z.coerce.number().int().positive('Le magasin est requis.'),
+  produitId: z.coerce.number().int().positive('Le produit est requis.'),
+  quantite: z.coerce.number().min(0.001, 'La quantité doit être supérieure à 0.'),
+  observation: z.string().max(2000).trim().nullable().optional(),
+  date: z.string().max(20).optional(),
+  prixAchat: z.coerce.number().min(0).nullable().optional(),
+})
+
+/** Ligne de transfert */
+export const transfertLigneSchema = z.object({
+  produitId: z.coerce.number().int().positive('Le produit est requis.'),
+  quantite: z.coerce.number().min(0.001, 'La quantité doit être supérieure à 0.'),
+  designation: z.string().max(500).optional(),
+})
+
+/** Transfert de stock entre magasins */
+export const transfertSchema = z.object({
+  magasinOrigineId: z.coerce.number().int().positive('Le magasin source est requis.'),
+  magasinDestId: z.coerce.number().int().positive('Le magasin destination est requis.'),
+  observation: z.string().max(2000).trim().nullable().optional(),
+  numero: z.string().max(50).optional(),
+  lignes: z.array(transfertLigneSchema).min(1, 'Au moins une ligne est requise.'),
+})
+
+/** Règlement vente */
+export const reglementVenteSchema = z.object({
+  venteId: z.coerce.number().int().positive().nullable().optional(),
+  clientId: z.coerce.number().int().positive().nullable().optional(),
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  modePaiement: z.string().max(50),
+  magasinId: z.coerce.number().int().positive().nullable().optional(),
+  observation: z.string().max(500).trim().nullable().optional(),
+  date: z.string().max(20).optional(),
+  payeDepuisCaisse: z.boolean().optional(),
+  payeDepuisBanque: z.boolean().optional(),
+  banqueId: z.coerce.number().int().positive().nullable().optional(),
+})
+
+/** Règlement depuis compte courant */
+export const reglementCompteCourantSchema = z.object({
+  compteCourantId: z.coerce.number().int().positive('Le compte courant est requis.'),
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  modePaiement: z.string().max(50),
+  clientId: z.coerce.number().int().positive().nullable().optional(),
+  fournisseurId: z.coerce.number().int().positive().nullable().optional(),
+  payeDepuisCaisse: z.boolean().optional(),
+  payeDepuisBanque: z.boolean().optional(),
+  magasinId: z.coerce.number().int().positive().nullable().optional(),
+})
+
+/** Banque */
+export const banqueSchema = z.object({
+  numero: z.string().min(1, 'Numéro requis.').max(50).trim(),
+  nomBanque: z.string().min(1, 'Nom de la banque requis.').max(MAX_STRING).trim(),
+  libelle: z.string().min(1, 'Libellé requis.').max(MAX_STRING).trim(),
+  soldeInitial: z.coerce.number().min(0).default(0),
+  compteId: z.coerce.number().int().positive().nullable().optional(),
+})
+
+/** Opération bancaire */
+export const banqueOperationSchema = z.object({
+  banqueId: z.coerce.number().int().positive('La banque est requise.'),
+  date: z.string().min(1, 'La date est requise.'),
+  type: z.enum(['ENTREE', 'SORTIE'], { message: 'Le type doit être ENTREE ou SORTIE.' }),
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  description: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  modePaiement: z.string().max(50).optional(),
+  pieceJointe: z.string().max(MAX_STRING).trim().nullable().optional(),
+  beneficiaire: z.string().max(MAX_STRING).trim().nullable().optional(),
+  observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+})
+
+/** Caisse */
+export const caisseSchema = z.object({
+  magasinId: z.coerce.number().int().positive('Le magasin est requis.'),
+  type: z.enum(['ENTREE', 'SORTIE'], { message: 'Le type doit être ENTREE ou SORTIE.' }),
+  motif: z.string().min(1, 'Le motif est requis.').max(MAX_STRING).trim(),
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  date: z.string().optional(),
+  observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  sousType: z.enum(['MANUEL', 'PRODUIT', 'APPROVISIONNEMENT', 'CHARGE', 'RETRAIT']).default('MANUEL'),
+})
+
+/** Entité */
+export const entiteSchema = z.object({
+  code: z.string().min(1, 'Code requis.').max(20).trim().toUpperCase(),
+  nom: z.string().min(1, 'Nom requis.').max(MAX_STRING).trim(),
+  type: z.string().max(50).default('MAISON_MERE'),
+  localisation: z.string().max(MAX_STRING).trim().default('-'),
+  active: z.boolean().optional().default(true),
+})
+
+/** Plan comptable */
+export const planCompteSchema = z.object({
+  numero: z.string().min(1, 'Numéro requis.').max(20).trim(),
+  libelle: z.string().min(1, 'Libellé requis.').max(MAX_STRING).trim(),
+  classe: z.string().min(1, 'Classe requise.').max(10).trim(),
+  type: z.enum(['ACTIF', 'PASSIF', 'CHARGES', 'PRODUITS']).default('CHARGES'),
+  actif: z.boolean().optional().default(true),
+})
+
+/** Ligne de commande fournisseur */
+export const commandeFournisseurLigneSchema = z.object({
+  produitId: z.coerce.number().int().positive('Le produit est requis.'),
+  designation: z.string().max(MAX_STRING).trim().optional(),
+  quantite: z.coerce.number().min(0.001, 'La quantité doit être supérieure à 0.'),
+  prixUnitaire: z.coerce.number().min(0, 'Le prix unitaire doit être positif.'),
+  montant: z.coerce.number().min(0).optional(),
+})
+
+/** Commande fournisseur */
+export const commandeFournisseurSchema = z.object({
+  fournisseurId: z.coerce.number().int().positive().nullable().optional(),
+  fournisseurLibre: z.string().max(MAX_STRING).trim().nullable().optional(),
+  magasinId: z.coerce.number().int().positive('Le magasin est requis.'),
+  date: z.string().optional(),
+  montantTotal: z.coerce.number().min(0).optional().default(0),
+  observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  lignes: z.array(commandeFournisseurLigneSchema).min(1, 'Au moins une ligne est requise.'),
+})
+
+/** Compte courant */
+export const compteCourantSchema = z.object({
+  nom: z.string().min(1, 'Nom requis.').max(MAX_STRING).trim(),
+  ncc: z.string().max(50).trim().nullable().optional(),
+  clientId: z.coerce.number().int().positive().nullable().optional(),
+  fournisseurId: z.coerce.number().int().positive().nullable().optional(),
+}).refine(
+  (data) => data.clientId || data.fournisseurId,
+  { message: 'Client ou Fournisseur requis.', path: ['clientId'] }
+)
+
+/** Règlement achat */
+export const reglementAchatSchema = z.object({
+  achatId: z.coerce.number().int().positive().nullable().optional(),
+  fournisseurId: z.coerce.number().int().positive().nullable().optional(),
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  modePaiement: z.string().max(50),
+  date: z.string().optional(),
+  magasinId: z.coerce.number().int().positive().nullable().optional(),
+  observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  payeDepuisCaisse: z.boolean().optional(),
+  payeDepuisBanque: z.boolean().optional(),
+  banqueId: z.coerce.number().int().positive().nullable().optional(),
+})
+
+/** Inventaire stock */
+export const stockInventaireSchema = z.object({
+  magasinId: z.coerce.number().int().positive('Le magasin est requis.'),
+  date: z.string().optional(),
+  observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  lignes: z.array(z.object({
+    produitId: z.coerce.number().int().positive('Le produit est requis.'),
+    quantiteTheorique: z.coerce.number().min(0),
+    quantitePhysique: z.coerce.number().min(0, 'La quantité physique doit être positive.'),
+  })).min(1, 'Au moins une ligne est requise.'),
+})
+
+/** Vente archivée */
+export const archiveVenteSchema = z.object({
+  venteId: z.coerce.number().int().positive('La vente est requise.'),
+  motif: z.string().min(1, 'Motif requis.').max(MAX_TEXT).trim(),
+})
+
+/** Template d'impression */
+export const printTemplateSchema = z.object({
+  nom: z.string().min(1, 'Nom requis.').max(100).trim(),
+  type: z.enum(['VENTE', 'ACHAT', 'COMMANDE', 'ETIQUETTE', 'AUTRE']).default('VENTE'),
+  contenu: z.string().min(1, 'Contenu requis.').max(50000),
+  description: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  parametres: z.string().max(5000).nullable().optional(),
+})
+
+/** Email facture */
+export const emailFactureSchema = z.object({
+  venteId: z.coerce.number().int().positive('La vente est requise.'),
+  destinataire: z.string().email('Email invalide.').max(200).trim(),
+  sujet: z.string().max(200).trim().optional(),
+  message: z.string().max(MAX_TEXT).trim().nullable().optional(),
+})
+
+/** Relance */
+export const relanceSchema = z.object({
+  clientId: z.coerce.number().int().positive('Le client est requis.'),
+  type: z.enum(['SMS', 'EMAIL', 'APPEL']).default('SMS'),
+  message: z.string().max(MAX_TEXT).trim().optional(),
+})
+
+/** Notification */
+export const notificationSchema = z.object({
+  titre: z.string().min(1, 'Titre requis.').max(200).trim(),
+  message: z.string().min(1, 'Message requis.').max(MAX_TEXT).trim(),
+  type: z.string().max(50).default('INFO'),
+  lien: z.string().max(500).trim().nullable().optional(),
+  destinataireId: z.coerce.number().int().positive().nullable().optional(),
+})
+
+/** Lettrage comptes courants */
+export const lettrageSchema = z.object({
+  compteCourantId: z.coerce.number().int().positive('Le compte courant est requis.'),
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  date: z.string().optional(),
+  observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+})
+
+/** Compensation comptes courants */
+export const compensationSchema = z.object({
+  compteCourantOrigineId: z.coerce.number().int().positive('Le compte origine est requis.'),
+  compteCourantDestId: z.coerce.number().int().positive('Le compte destination est requis.'),
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  date: z.string().optional(),
+  observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+})
+
+/** Virement bancaire */
+export const virementBancaireSchema = z.object({
+  banqueOrigineId: z.coerce.number().int().positive('La banque source est requise.'),
+  banqueDestId: z.coerce.number().int().positive('La banque destination est requise.'),
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  date: z.string().optional(),
+  description: z.string().max(MAX_TEXT).trim().nullable().optional(),
+})
+
+/** Réconciliation bancaire */
+export const reconciliationBancaireSchema = z.object({
+  banqueId: z.coerce.number().int().positive('La banque est requise.'),
+  dateReleve: z.string().min(1, 'La date du relevé est requise.'),
+  soldeReleve: z.coerce.number(),
+  operations: z.array(z.object({
+    operationId: z.coerce.number().int().positive(),
+    concilie: z.boolean(),
+  })).optional(),
+})
+
+/** Réapprovisionnement */
+export const reaproSchema = z.object({
+  magasinId: z.coerce.number().int().positive('Le magasin est requis.'),
+  type: z.enum(['AUTO', 'MANUEL']).default('AUTO'),
+  lignes: z.array(z.object({
+    produitId: z.coerce.number().int().positive('Le produit est requis.'),
+    quantiteRecommande: z.coerce.number().min(1, 'La quantité doit être au moins 1.'),
+  })).min(1, 'Au moins une ligne est requise.'),
+})
+
 /** Type inféré pour le body login */
 export type LoginBody = z.infer<typeof loginSchema>
 export type RestoreBody = z.infer<typeof restoreSchema>
@@ -252,3 +528,27 @@ export type DepenseBody = z.infer<typeof depenseSchema>
 export type ChargeBody = z.infer<typeof chargeSchema>
 export type EcritureBody = z.infer<typeof ecritureSchema>
 export type JournalBody = z.infer<typeof journalSchema>
+export type AchatBody = z.infer<typeof achatSchema>
+export type MouvementStockBody = z.infer<typeof mouvementStockSchema>
+export type TransfertBody = z.infer<typeof transfertSchema>
+export type ReglementVenteBody = z.infer<typeof reglementVenteSchema>
+export type ReglementCompteCourantBody = z.infer<typeof reglementCompteCourantSchema>
+export type BanqueBody = z.infer<typeof banqueSchema>
+export type BanqueOperationBody = z.infer<typeof banqueOperationSchema>
+export type CaisseBody = z.infer<typeof caisseSchema>
+export type EntiteBody = z.infer<typeof entiteSchema>
+export type PlanCompteBody = z.infer<typeof planCompteSchema>
+export type CommandeFournisseurBody = z.infer<typeof commandeFournisseurSchema>
+export type CompteCourantBody = z.infer<typeof compteCourantSchema>
+export type ReglementAchatBody = z.infer<typeof reglementAchatSchema>
+export type StockInventaireBody = z.infer<typeof stockInventaireSchema>
+export type ArchiveVenteBody = z.infer<typeof archiveVenteSchema>
+export type PrintTemplateBody = z.infer<typeof printTemplateSchema>
+export type EmailFactureBody = z.infer<typeof emailFactureSchema>
+export type RelanceBody = z.infer<typeof relanceSchema>
+export type NotificationBody = z.infer<typeof notificationSchema>
+export type LettrageBody = z.infer<typeof lettrageSchema>
+export type CompensationBody = z.infer<typeof compensationSchema>
+export type VirementBancaireBody = z.infer<typeof virementBancaireSchema>
+export type ReconciliationBancaireBody = z.infer<typeof reconciliationBancaireSchema>
+export type ReaproBody = z.infer<typeof reaproSchema>

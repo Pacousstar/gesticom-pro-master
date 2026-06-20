@@ -10,6 +10,9 @@ import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { chargeSchema } from '@/lib/validations'
 
 export async function GET(
   _request: NextRequest,
@@ -72,42 +75,28 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const updateData: {
-      date?: Date
-      magasinId?: number | null
-      type?: string
-      beneficiaire?: string | null
-      montant?: number
-      observation?: string | null
-      modePaiement?: string
-      banqueId?: number | null
-      rubrique?: string
-    } = {}
+    const validation = validateApiRequest(chargeSchema.partial(), body)
+    if (!validation.success) return validation.response
+    const data = validation.data
 
-    if (body.date) updateData.date = new Date(body.date)
-    if (body.beneficiaire !== undefined) {
-      updateData.beneficiaire = body.beneficiaire ? String(body.beneficiaire).trim() : null
-    }
-    if (body.magasinId !== undefined) {
-      updateData.magasinId = body.magasinId != null ? Number(body.magasinId) : null
-      if (updateData.magasinId != null) {
-        const magasin = await prisma.magasin.findUnique({ where: { id: updateData.magasinId } })
+    const updateData: Record<string, unknown> = {}
+
+    if (data.date) updateData.date = new Date(data.date)
+    if (data.beneficiaire !== undefined) updateData.beneficiaire = data.beneficiaire ?? null
+    if (data.magasinId !== undefined) {
+      updateData.magasinId = data.magasinId
+      const magasinId = data.magasinId as number | undefined
+      if (magasinId != null) {
+        const magasin = await prisma.magasin.findUnique({ where: { id: magasinId } })
         if (!magasin) return NextResponse.json({ error: 'Magasin introuvable.' }, { status: 400 })
       }
     }
-    if (body.type && ['FIXE', 'VARIABLE'].includes(String(body.type).toUpperCase())) {
-      updateData.type = String(body.type).toUpperCase()
-    }
-    if (body.rubrique != null) updateData.rubrique = String(body.rubrique).trim()
-    if (body.montant != null) updateData.montant = Math.max(0, Number(body.montant))
-    if (body.observation !== undefined) updateData.observation = body.observation ? String(body.observation).trim() : null
-    if (body.modePaiement !== undefined) {
-      const modeNormalise = String(body.modePaiement).toUpperCase().trim()
-      if (['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE', 'CREDIT'].includes(modeNormalise)) {
-        updateData.modePaiement = modeNormalise
-      }
-    }
-    if (body.banqueId !== undefined) updateData.banqueId = body.banqueId != null ? Number(body.banqueId) : null
+    if (data.type) updateData.type = data.type
+    if (data.rubrique != null) updateData.rubrique = data.rubrique
+    if (data.montant != null) updateData.montant = data.montant
+    if (data.observation !== undefined) updateData.observation = data.observation ?? null
+    if (data.modePaiement) updateData.modePaiement = data.modePaiement
+    if (data.banqueId !== undefined) updateData.banqueId = data.banqueId ?? null
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'Aucune donnée à mettre à jour.' }, { status: 400 })
@@ -215,7 +204,7 @@ export async function PATCH(
 
     return NextResponse.json(charge)
   } catch (e) {
-    console.error('PATCH /api/charges/[id]:', e)
+    await apiCatch(e, 'api/charges/[id]')
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -308,7 +297,7 @@ export async function DELETE(
 
             return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/charges/[id]:', e)
+    await apiCatch(e, 'api/charges/[id]')
     const errorMsg = e instanceof Error ? e.message : 'Erreur lors de la suppression.'
     return NextResponse.json({ error: errorMsg }, { status: 500 })
   }

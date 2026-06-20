@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ results })
   } catch (e: any) {
-    console.error('Search API Error:', e)
+    await apiCatch(e, 'api/search/global')
     return NextResponse.json({ error: 'Erreur recherche' }, { status: 500 })
   }
 }

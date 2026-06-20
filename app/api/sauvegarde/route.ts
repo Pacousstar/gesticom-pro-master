@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { listBackups, createBackup } from '@/lib/sauvegarde-db'
 import { requirePermission } from '@/lib/require-role'
 import { logModification, getIpAddress } from '@/lib/audit'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET() {
   const session = await getSession()
@@ -14,7 +15,7 @@ export async function GET() {
     const backups = listBackups()
     return NextResponse.json({ backups })
   } catch (e) {
-    console.error('GET /api/sauvegarde:', e)
+    await apiCatch(e, 'api/sauvegarde')
     return NextResponse.json({ error: 'Erreur lors de la lecture des sauvegardes.' }, { status: 500 })
   }
 }
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     await logModification(session, 'SAUVEGARDE', 0, `Création sauvegarde: ${name}`, {}, { name }, getIpAddress(request))
     return NextResponse.json({ success: true, name })
   } catch (e) {
-    console.error('POST /api/sauvegarde:', e)
+    await apiCatch(e, 'api/sauvegarde')
     return NextResponse.json({ error: 'Erreur lors de la création de la sauvegarde.' }, { status: 500 })
   }
 }

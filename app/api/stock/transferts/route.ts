@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { logModification } from '@/lib/audit'
+import { transfertSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -44,7 +47,7 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (e) {
-    console.error('GET /api/stock/transferts:', e)
+    await apiCatch(e, 'api/stock/transferts')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }
@@ -58,11 +61,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { magasinOrigineId, magasinDestId, observation, lignes } = body
-    
-    if (!magasinOrigineId || !magasinDestId || !lignes || !lignes.length) {
-      return NextResponse.json({ error: 'Données manquantes' }, { status: 400 })
-    }
+
+    const validation = validateApiRequest(transfertSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
+    const { magasinOrigineId, magasinDestId, observation, lignes } = v
 
     if (magasinOrigineId === magasinDestId) {
       return NextResponse.json({ error: 'Le magasin d\'origine et de destination doivent être différents' }, { status: 400 })
@@ -70,9 +74,8 @@ export async function POST(request: NextRequest) {
 
     const entiteId = await getEntiteId(session)
 
-    // Générer un numéro de transfert unique (ou utiliser celui du client pour l'idempotence)
     const count = await prisma.transfert.count({ where: { entiteId } })
-    const numero = body.numero || `TRF-${new Date().getFullYear()}${(count + 1).toString().padStart(5, '0')}`
+    const numero = v.numero || `TRF-${new Date().getFullYear()}${(count + 1).toString().padStart(5, '0')}`
 
     const result = await prisma.$transaction(async (tx) => {
       // Bloquer les doublons par numéro (Idempotence)
@@ -208,7 +211,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (e: any) {
-    console.error('POST /api/stock/transferts:', e)
+    await apiCatch(e, 'api/stock/transferts')
     if (e.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ 
         error: 'Ce transfert a déjà été enregistré (Doublon bloqué).', 

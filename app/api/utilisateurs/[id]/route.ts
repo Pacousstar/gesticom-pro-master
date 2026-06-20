@@ -7,6 +7,7 @@ import { ROLE_PERMISSIONS, type Role, type Permission } from '@/lib/roles-permis
 import { strictPasswordSchema } from '@/lib/validations'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
+import { apiCatch } from '@/lib/log-error'
 
 const SUPER_ADMIN_PERMS: Set<string> = new Set(ROLE_PERMISSIONS.SUPER_ADMIN)
 
@@ -107,7 +108,7 @@ export async function GET(
 
     return NextResponse.json(utilisateur)
   } catch (e) {
-    console.error('GET /api/utilisateurs/[id]:', e)
+    await apiCatch(e, 'api/utilisateurs/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -309,7 +310,7 @@ export async function PATCH(
 
     return NextResponse.json(updatedUser)
   } catch (e: unknown) {
-    console.error('PATCH /api/utilisateurs/[id]:', e)
+    await apiCatch(e, 'api/utilisateurs/[id]')
     const err = e as { code?: string }
     if (err?.code === 'P2025') {
       return NextResponse.json({ error: 'Utilisateur introuvable.' }, { status: 404 })
@@ -388,7 +389,7 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Utilisateur désactivé avec succès.' })
   } catch (e: unknown) {
-    console.error('DELETE /api/utilisateurs/[id]:', e)
+    await apiCatch(e, 'api/utilisateurs/[id]')
     const err = e as { code?: string }
     if (err?.code === 'P2025') {
       return NextResponse.json({ error: 'Utilisateur introuvable.' }, { status: 404 })

@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { verifierCloture } from '@/lib/cloture'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { fournisseurSchema } from '@/lib/validations'
 
 export async function GET(
   _request: NextRequest,
@@ -48,31 +51,35 @@ export async function PATCH(
     }
 
     const body = await request.json()
+    const result = validateApiRequest(fournisseurSchema.partial(), body)
+    if (!result.success) return result.response
+    const v = result.data
+
     const data: Record<string, unknown> = {}
     if (body?.code !== undefined) data.code = String(body.code).trim() || null
-    if (body?.nom != null) data.nom = String(body.nom).trim()
-    if (body?.telephone !== undefined) data.telephone = String(body.telephone).trim() || null
-    if (body?.email !== undefined) data.email = String(body.email).trim() || null
-    if (body?.ncc !== undefined) data.ncc = String(body.ncc).trim() || null
-    if (body?.localisation !== undefined) data.localisation = String(body.localisation).trim() || null
-    if (body?.numeroCamion !== undefined) data.numeroCamion = String(body.numeroCamion).trim() || null
+    if (v.nom != null) data.nom = v.nom
+    if (v.telephone !== undefined) data.telephone = v.telephone
+    if (v.email !== undefined) data.email = v.email
+    if (v.ncc !== undefined) data.ncc = v.ncc
+    if (v.localisation !== undefined) data.localisation = v.localisation
+    if (v.numeroCamion !== undefined) data.numeroCamion = v.numeroCamion
     // SEC-01: Vérification cloture si modification soldes initiaux
-    if (body?.soldeInitial !== undefined || body?.avoirInitial !== undefined) {
-      const nouvelleValeur = (body?.soldeInitial ?? existing.soldeInitial) - (body?.avoirInitial ?? existing.avoirInitial)
+    if (v.soldeInitial !== undefined || v.avoirInitial !== undefined) {
+      const nouvelleValeur = (v.soldeInitial ?? existing.soldeInitial) - (v.avoirInitial ?? existing.avoirInitial)
       const ancienneValeur = existing.soldeInitial - existing.avoirInitial
       if (Math.abs(nouvelleValeur - ancienneValeur) > 0.01) {
         await verifierCloture(new Date(), session!)
       }
     }
 
-    if (body?.soldeInitial !== undefined) data.soldeInitial = Number(body.soldeInitial)
-    if (body?.avoirInitial !== undefined) data.avoirInitial = Number(body.avoirInitial)
+    if (v.soldeInitial !== undefined) data.soldeInitial = v.soldeInitial
+    if (v.avoirInitial !== undefined) data.avoirInitial = v.avoirInitial
     if (body?.actif !== undefined) data.actif = Boolean(body.actif)
 
     const f = await prisma.fournisseur.update({ where: { id }, data: data as object })
     return NextResponse.json(f)
   } catch (e) {
-    console.error('PATCH /api/fournisseurs/[id]:', e)
+    await apiCatch(e, 'api/fournisseurs/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -107,7 +114,7 @@ export async function DELETE(
     await prisma.fournisseur.delete({ where: { id } })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('DELETE /api/fournisseurs/[id]:', e)
+    await apiCatch(e, 'api/fournisseurs/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

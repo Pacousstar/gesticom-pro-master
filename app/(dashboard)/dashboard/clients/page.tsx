@@ -371,7 +371,7 @@ export default function ClientsPage() {
 
       {/* COMPTEURS DE PERFORMANCE CLIENTS */}
       <div className="space-y-2 no-print">
-        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6 italic">Analyse du Portefeuille Clients : Zéro Erreur</p>
+        <p className="text-[10px] font-black text-white uppercase tracking-[0.3em] ml-6 italic">Analyse du Portefeuille Clients : Zéro Erreur</p>
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
           {[
             {

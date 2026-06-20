@@ -1,6 +1,6 @@
 {
   "name": "gesticom",
-  "version": "3.40.5",
+  "version": "3.41.11",
   "private": true,
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev -H 127.0.0.1",
@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint app components lib --ext .ts,.tsx",
+    "check:routes": "powershell scripts/check-route-validation.ps1",
     "audit": "npm audit",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",

@@ -8,6 +8,9 @@ import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces, estModeBanque } from '@/lib/enums-commerce'
 import fs from 'fs'
 import path from 'path'
+import { depenseSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -111,27 +114,26 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+
+    const validation = validateApiRequest(depenseSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
     const now = new Date()
     let date = now
-    if (body?.date) {
-      const [y, m, d] = String(body.date).split('-').map(Number)
+    if (v.date) {
+      const [y, m, d] = v.date.split('-').map(Number)
       date = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
     }
-    const magasinId = body?.magasinId != null ? Number(body.magasinId) : null
-    const categorie = String(body?.categorie || 'AUTRE').trim() || 'AUTRE'
-    const libelle = String(body?.libelle || '').trim()
-    const montant = Math.max(0, Number(body?.montant) || 0)
-    const montantPayeRaw = body?.montantPaye != null ? Math.max(0, Number(body.montantPaye) || 0) : null
-    const modePaiement = ['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE', 'CREDIT'].includes(String(body?.modePaiement || ''))
-      ? String(body.modePaiement)
-      : 'ESPECES'
-    const beneficiaire = body?.beneficiaire != null ? String(body.beneficiaire).trim() || null : null
-    const pieceJustificative = body?.pieceJustificative != null ? String(body.pieceJustificative).trim() || null : null
-    const observation = body?.observation != null ? String(body.observation).trim() || null : null
-
-    if (!libelle) {
-      return NextResponse.json({ error: 'Libellé requis.' }, { status: 400 })
-    }
+    const magasinId = v.magasinId ?? null
+    const categorie = v.categorie
+    const libelle = v.libelle
+    const montant = v.montant
+    const montantPayeRaw = v.montantPaye ?? null
+    const modePaiement = v.modePaiement
+    const beneficiaire = v.beneficiaire ?? null
+    const pieceJustificative = v.pieceJustificative ?? null
+    const observation = v.observation ?? null
     if (montant <= 0) {
       return NextResponse.json({ error: 'Montant doit être supérieur à 0.' }, { status: 400 })
     }
@@ -269,7 +271,7 @@ export async function POST(request: NextRequest) {
 
             return NextResponse.json(depense)
   } catch (e: any) {
-    console.error('POST /api/depenses:', e)
+    await apiCatch(e, 'api/depenses')
     if (e.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ 
         error: 'Cette dépense a déjà été enregistrée (Doublon bloqué).', 

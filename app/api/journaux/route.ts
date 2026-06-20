@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { journalSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
     },
   })
   } catch (e) {
-    console.error('GET /api/journaux:', e)
+    await apiCatch(e, 'api/journaux')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -43,23 +46,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const code = String(body?.code || '').trim().toUpperCase()
-    const libelle = String(body?.libelle || '').trim()
-    const type = ['ACHATS', 'VENTES', 'BANQUE', 'CAISSE', 'OD'].includes(String(body?.type || '').toUpperCase())
-      ? String(body.type).toUpperCase()
-      : 'OD'
-
-    if (!code || !libelle) {
-      return NextResponse.json({ error: 'Code et libellé requis.' }, { status: 400 })
-    }
+    const result = validateApiRequest(journalSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
 
     const journal = await prisma.journal.create({
-      data: { code, libelle, type, actif: true },
+      data: { code: data.code, libelle: data.libelle, type: data.type, actif: true },
     })
 
     return NextResponse.json(journal)
   } catch (e: any) {
-    console.error('POST /api/journaux:', e)
+    await apiCatch(e, 'api/journaux')
     if (e.code === 'P2002') {
       return NextResponse.json({ error: 'Ce code de journal existe déjà.' }, { status: 400 })
     }

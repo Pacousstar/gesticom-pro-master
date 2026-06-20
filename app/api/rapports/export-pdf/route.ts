@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
  
 const { jsPDF } = require('jspdf')
 
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Export PDF rapports:', error)
+    await apiCatch(error, 'api/rapports/export-pdf')
     return NextResponse.json({ error: 'Erreur lors de l\'export PDF' }, { status: 500 })
   }
 }

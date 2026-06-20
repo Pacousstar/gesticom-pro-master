@@ -4,6 +4,11 @@ import { prisma } from '@/lib/db'
 import { createToken, getCookieName } from '@/lib/auth'
 import { cookies } from 'next/headers'
 import { ROLE_PERMISSIONS } from '@/lib/roles-permissions'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const switchEntiteSchema = z.object({ entiteId: z.coerce.number().int().positive() })
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -11,11 +16,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const entiteId = Number(body?.entiteId)
-
-    if (!Number.isInteger(entiteId) || entiteId < 1) {
-      return NextResponse.json({ error: 'Entité invalide.' }, { status: 400 })
-    }
+    const vres = validateApiRequest(switchEntiteSchema, body)
+    if (!vres.success) return vres.response
+    const { entiteId } = vres.data
 
     const entite = await prisma.entite.findUnique({
       where: { id: entiteId, active: true },
@@ -68,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, entite: { id: entite.id, nom: entite.nom, code: entite.code } })
   } catch (e) {
-    console.error('Switch entité error:', e)
+    await apiCatch(e, 'api/auth/switch-entite')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

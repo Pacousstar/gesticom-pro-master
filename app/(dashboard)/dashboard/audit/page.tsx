@@ -147,7 +147,9 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* VUE ÉCRAN (cachée à l'impression) */}
+      <div className="print:hidden space-y-6">
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Journal d'audit</h1>
           <p className="text-white/80 mt-1 text-xs font-bold uppercase tracking-wider">Traçabilité des actions des utilisateurs</p>
@@ -202,7 +204,10 @@ export default function AuditPage() {
           </button>
         </div>
       </div>
-                <div className="hidden print:block absolute inset-0 bg-white">
+      </div>
+
+      {/* VUE IMPRESSION */}
+      <div className="hidden print:block absolute inset-0 bg-white">
                     {paginateForPrint(logs).map((chunk: AuditLog[], index: number, allChunks: AuditLog[][]) => (
                         <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                             <ListPrintWrapper
@@ -333,7 +338,8 @@ export default function AuditPage() {
                   </div>
                 )}
 
-      {/* Recherche et Filtres */}
+      <div className="print:hidden space-y-6">
+        {/* Recherche et Filtres */}
       <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
         <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-4">
           <div className="flex items-center justify-between">
@@ -624,6 +630,7 @@ export default function AuditPage() {
             )}
           </>
         )}
+      </div>
       </div>
     </div>
   )

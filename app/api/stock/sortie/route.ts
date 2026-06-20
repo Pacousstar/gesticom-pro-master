@@ -4,11 +4,10 @@ import { prisma } from '@/lib/db'
 import { logModification, getIpAddress } from '@/lib/audit'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { mouvementStockSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
-/**
- * Sortie de stock (hors vente) : casse, don, transfert, correction, etc.
- * Crée un Mouvement type SORTIE et décrémente le stock.
- */
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -17,11 +16,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const magasinId = Number(body?.magasinId)
-    const produitId = Number(body?.produitId)
-    const quantite = Math.max(0, Number(body?.quantite) || 0) // Libération des décimales
-    const observation = body?.observation != null ? String(body.observation).trim() || null : null
-    const dateStr = body?.date != null ? String(body.date).trim() : null
+
+    const validation = validateApiRequest(mouvementStockSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
+    const magasinId = v.magasinId
+    const produitId = v.produitId
+    const quantite = v.quantite
+    const observation = v.observation ?? null
+    const dateStr = v.date ?? null
     const dateMouvement = dateStr ? (() => {
       const now = new Date();
       const [y, m, d] = dateStr.split('-').map(Number);
@@ -29,10 +33,6 @@ export async function POST(request: NextRequest) {
     })() : new Date()
     if (isNaN(dateMouvement.getTime())) {
       return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
-    }
-
-    if (!Number.isInteger(magasinId) || magasinId < 1 || !Number.isInteger(produitId) || produitId < 1) {
-      return NextResponse.json({ error: 'Magasin et produit requis.' }, { status: 400 })
     }
 
     // Vérifier que l'utilisateur existe
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
 
             return NextResponse.json(result)
   } catch (e: any) {
-    console.error('POST /api/stock/sortie:', e)
+    await apiCatch(e, 'api/stock/sortie')
     if (e.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ 
         error: 'Cette sortie de stock a déjà été enregistrée (Doublon bloqué).', 

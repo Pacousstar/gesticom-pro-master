@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { initialiserComptabilite } from '@/lib/comptabilisation'
+import { apiCatch } from '@/lib/log-error'
 
 /**
  * POST /api/comptabilite/init — Initialise le plan de comptes et les journaux par défaut
@@ -18,7 +19,7 @@ export async function POST() {
       message: 'Plan de comptes et journaux initialisés avec succès.' 
     })
   } catch (e) {
-    console.error('POST /api/comptabilite/init:', e)
+    await apiCatch(e, 'api/comptabilite/init')
     const errorMsg = e instanceof Error ? e.message : 'Erreur inconnue'
     return NextResponse.json(
       { error: 'Erreur lors de l\'initialisation.', details: errorMsg },

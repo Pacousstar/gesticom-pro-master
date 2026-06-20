@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     return response
   } catch (e) {
-    console.error('Export utilisateurs error:', e)
+    await apiCatch(e, 'api/utilisateurs/export')
     return NextResponse.json({ error: 'Erreur lors de l\'export.' }, { status: 500 })
   }
 }

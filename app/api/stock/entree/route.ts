@@ -4,6 +4,10 @@ import { prisma } from '@/lib/db'
 import { logModification, getIpAddress } from '@/lib/audit'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { mouvementStockSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
+import { nouveauPampApresAchatLigne } from '@/lib/calculs-commerciaux'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -13,11 +17,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const magasinId = Number(body?.magasinId)
-    const produitId = Number(body?.produitId)
-    const quantite = Math.max(0, Number(body?.quantite) || 0) // Libération des décimales
-    const observation = body?.observation != null ? String(body.observation).trim() || null : null
-    const dateStr = body?.date != null ? String(body.date).trim() : null
+
+    const validation = validateApiRequest(mouvementStockSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
+    const magasinId = v.magasinId
+    const produitId = v.produitId
+    const quantite = v.quantite
+    const observation = v.observation ?? null
+    const prixAchatSaisi = v.prixAchat ?? null
+    const dateStr = v.date ?? null
     const dateMouvement = dateStr ? (() => {
       const now = new Date();
       const [y, m, d] = dateStr.split('-').map(Number);
@@ -27,19 +37,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
     }
 
-    if (!Number.isInteger(magasinId) || magasinId < 1 || !Number.isInteger(produitId) || produitId < 1) {
-      return NextResponse.json({ error: 'Magasin et produit requis.' }, { status: 400 })
-    }
-
     // Vérifier que l'utilisateur existe
     const user = await prisma.utilisateur.findUnique({
       where: { id: session.userId },
       select: { id: true },
     })
     if (!user) return NextResponse.json({ error: 'Utilisateur introuvable.' }, { status: 401 })
-
-    // Utiliser l'entité de la session
-    const prixAchatSaisi = body?.prixAchat != null ? Math.max(0, Number(body.prixAchat) || 0) : null
 
     const entiteId = await getEntiteId(session)
 
@@ -86,24 +89,24 @@ export async function POST(request: NextRequest) {
       }
       stockAvantRecalcul = { id: st.id, quantite: st.quantite }
 
-      // a. Recalcul PAMP
+      // a. Recalcul PAMP (via fonction centralisée)
       if (prixAchatSaisi !== null) {
         const stockGlobalAvant = produit.stocks.reduce((acc, s) => acc + s.quantite, 0)
         const pampActuel = produit.pamp || produit.prixAchat || 0
+        const valeurAchatNet = quantite * prixAchatSaisi
         
-        let nouveauPamp = pampActuel
-        if (stockGlobalAvant <= 0) {
-          nouveauPamp = prixAchatSaisi
-        } else {
-          const valeurExistante = stockGlobalAvant * pampActuel
-          const valeurNouvelle = quantite * prixAchatSaisi
-          nouveauPamp = (valeurExistante + valeurNouvelle) / (stockGlobalAvant + quantite)
-        }
+        const nouveauPamp = nouveauPampApresAchatLigne({
+          stockGlobalAvant,
+          pampActuel,
+          quantiteLigne: quantite,
+          valeurAchatNet,
+          prixUnitaireFallback: prixAchatSaisi,
+        })
         
-        if (!isNaN(nouveauPamp) && isFinite(nouveauPamp)) {
+        if (nouveauPamp > 0) {
           await tx.produit.update({
             where: { id: produitId },
-            data: { pamp: Math.round(nouveauPamp) }
+            data: { pamp: nouveauPamp }
           })
         }
       }
@@ -166,7 +169,7 @@ export async function POST(request: NextRequest) {
     // Invalider le cache pour affichage immédiat
             return NextResponse.json(updatedStock)
   } catch (e: any) {
-    console.error('POST /api/stock/entree:', e)
+    await apiCatch(e, 'api/stock/entree')
     if (e.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ 
         error: 'Cette entrée de stock a déjà été enregistrée (Doublon bloqué).', 

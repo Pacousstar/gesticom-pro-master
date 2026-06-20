@@ -5,6 +5,9 @@ import { comptabiliserCharge } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { requirePermission } from '@/lib/require-role'
+import { chargeSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -114,27 +117,23 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+
+    const validation = validateApiRequest(chargeSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
     const now = new Date()
     let date = now
-    if (body?.date) {
-      const [y, m, d] = String(body.date).split('-').map(Number)
+    if (v.date) {
+      const [y, m, d] = v.date.split('-').map(Number)
       date = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
     }
-    const magasinId = body?.magasinId != null ? Number(body.magasinId) : null
-    const type = ['FIXE', 'VARIABLE'].includes(String(body?.type || '').toUpperCase())
-      ? String(body.type).toUpperCase()
-      : 'VARIABLE'
-    const rubrique = String(body?.rubrique || '').trim()
-    const beneficiaire = body?.beneficiaire != null ? String(body.beneficiaire).trim() || null : null
-    const montant = Math.max(0, Number(body?.montant) || 0)
-    const observation = body?.observation != null ? String(body.observation).trim() || null : null
-
-    if (!rubrique) {
-      return NextResponse.json({ error: 'Rubrique requise.' }, { status: 400 })
-    }
-    if (montant <= 0) {
-      return NextResponse.json({ error: 'Montant doit être supérieur à 0.' }, { status: 400 })
-    }
+    const magasinId = v.magasinId ?? null
+    const type = v.type
+    const rubrique = v.rubrique
+    const beneficiaire = v.beneficiaire ?? null
+    const montant = v.montant
+    const observation = v.observation ?? null
 
     // Vérifier que l'utilisateur existe
     const user = await prisma.utilisateur.findUnique({
@@ -263,7 +262,7 @@ await enregistrerOperationBancaire({
 
             return NextResponse.json(charge)
   } catch (e: any) {
-    console.error('POST /api/charges:', e)
+    await apiCatch(e, 'api/charges')
     if (e.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ 
         error: 'Cette charge a déjà été enregistrée (Doublon bloqué).', 

@@ -4,6 +4,13 @@ import { requirePermission } from '@/lib/require-role'
 import fs from 'fs'
 import path from 'path'
 import { Readable } from 'stream'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const downloadSchema = z.object({
+  downloadUrl: z.string().url('URL invalide.').max(1000).trim(),
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -13,13 +20,10 @@ export async function POST(request: NextRequest) {
     const insufficient = requirePermission(session, 'parametres:edit')
     if (insufficient) return insufficient
 
-    const { downloadUrl } = await request.json()
-    if (!downloadUrl || typeof downloadUrl !== 'string') {
-      return NextResponse.json(
-        { error: 'URL de téléchargement manquante' },
-        { status: 400 }
-      )
-    }
+    const body = await request.json()
+    const validation = validateApiRequest(downloadSchema, body)
+    if (!validation.success) return validation.response
+    const { downloadUrl } = validation.data
 
     const tempDir = path.join(process.env.TEMP || 'C:\\Temp', 'GestiCom-Update')
     if (!fs.existsSync(tempDir)) {
@@ -52,7 +56,8 @@ export async function POST(request: NextRequest) {
       filename,
       size: fs.statSync(localPath).size,
     })
-  } catch {
+  } catch (e) {
+    await apiCatch(e, 'api/update/download')
     return NextResponse.json(
       { error: 'Erreur lors du téléchargement de la mise à jour' },
       { status: 500 }

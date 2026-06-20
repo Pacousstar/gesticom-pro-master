@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { unauthorized, notFound, badRequest, handleApiError } from '@/lib/api-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { commandeFournisseurSchema } from '@/lib/validations'
 
 export async function GET(
   request: NextRequest,
@@ -44,10 +46,13 @@ export async function PATCH(
 
   try {
     const body = await request.json()
+    const vres = validateApiRequest(commandeFournisseurSchema.partial(), body)
+    if (!vres.success) return vres.response
+    const cfData = vres.data
     const entiteId = await getEntiteId(session)
 
     // Modification complète (Full Update)
-    if (body.lignes) {
+    if (cfData.lignes) {
       await prisma.$transaction([
         // 1. Supprimer les anciennes lignes
         prisma.commandeFournisseurLigne.deleteMany({ where: { commandeId: id } }),
@@ -55,20 +60,20 @@ export async function PATCH(
         prisma.commandeFournisseur.update({
           where: { id },
           data: {
-            date: body.date ? new Date(body.date) : undefined,
-            fournisseurId: body.fournisseurId ? Number(body.fournisseurId) : null,
-            fournisseurLibre: body.fournisseurLibre,
-            magasinId: body.magasinId ? Number(body.magasinId) : undefined,
-            montantTotal: Number(body.montantTotal),
-            observation: body.observation,
+            date: cfData.date ? new Date(cfData.date) : undefined,
+            fournisseurId: cfData.fournisseurId ?? null,
+            fournisseurLibre: cfData.fournisseurLibre,
+            magasinId: cfData.magasinId ?? undefined,
+            montantTotal: cfData.montantTotal ?? 0,
+            observation: cfData.observation,
             statut: body.statut,
             lignes: {
-              create: body.lignes.map((l: any) => ({
-                produitId: Number(l.produitId),
+              create: cfData.lignes.map((l: any) => ({
+                produitId: l.produitId,
                 designation: l.designation,
-                quantite: Number(l.quantite),
-                prixUnitaire: Number(l.prixUnitaire),
-                montant: Number(l.montant)
+                quantite: l.quantite,
+                prixUnitaire: l.prixUnitaire,
+                montant: l.montant
               }))
             }
           }
@@ -80,7 +85,7 @@ export async function PATCH(
         where: { id },
         data: {
           statut: body.statut,
-          observation: body.observation
+          observation: cfData.observation
         }
       })
     }

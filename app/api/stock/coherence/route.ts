@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { stockInventaireSchema } from '@/lib/validations'
 
 type CoherenceDetail = {
   produitId: number
@@ -129,6 +131,7 @@ export async function POST(request: NextRequest) {
   if (!entiteId) return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
 
   const body = await request.json().catch(() => ({} as any))
+  validateApiRequest(stockInventaireSchema, body)
   const mode = String(body?.mode || 'simulate').toLowerCase() === 'apply' ? 'apply' : 'simulate'
   const maxItems = Math.max(1, Number(body?.maxItems) || 5000)
 

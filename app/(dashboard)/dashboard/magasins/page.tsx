@@ -6,7 +6,7 @@ import { Package, Warehouse, ArrowRightLeft, Loader2, Building2, MapPin, CheckCi
 import { useToast } from '@/hooks/useToast'
 
 type Magasin = { id: number; code: string; nom: string; localisation: string; actif: boolean; estDepotPrincipal: boolean; soldeCaisse: number }
-type StockRow = { id: number | null; quantite: number; produit: { id: number; code: string; designation: string; prixVente: number | null; prixAchat: number | null; seuilMin: number } }
+type StockRow = { id: number | null; quantite: number; produit: { id: number; code: string; designation: string; prixVente: number | null; prixAchat: number | null; pamp: number | null; seuilMin: number } }
 
 export default function MagasinsPage() {
   const [magasins, setMagasins] = useState<Magasin[]>([])
@@ -63,7 +63,8 @@ export default function MagasinsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {magasins.map(m => {
           const magStock = stocks[m.id] || []
-          const valeurStock = magStock.reduce((a, s) => a + s.quantite * (s.produit.prixAchat || s.produit.prixVente || 0), 0)
+          const valeurStock = magStock.reduce((a, s) => a + s.quantite * (s.produit.pamp && s.produit.pamp > 0 ? s.produit.pamp : (s.produit.prixAchat || 0)), 0)
+          const valeurEstimee = magStock.reduce((a, s) => a + s.quantite * (s.produit.prixVente || 0), 0)
           const enAlerte = magStock.filter(s => s.quantite <= s.produit.seuilMin).length
 
           return (
@@ -94,7 +95,7 @@ export default function MagasinsPage() {
                 <MapPin className="h-4 w-4" /> {m.localisation}
               </div>
 
-              <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 <div className="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-3 text-center">
                   <p className="text-2xl font-black text-gray-900 dark:text-white">{magStock.length}</p>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Produits</p>
@@ -102,6 +103,10 @@ export default function MagasinsPage() {
                 <div className="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-3 text-center">
                   <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{valeurStock.toLocaleString('fr-FR')}</p>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Valeur stock</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-3 text-center">
+                  <p className="text-2xl font-black text-orange-600 dark:text-orange-400">{valeurEstimee.toLocaleString('fr-FR')}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Valeur estimée</p>
                 </div>
                 <div className="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-3 text-center">
                   <p className={`text-2xl font-black ${enAlerte > 0 ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>{enAlerte}</p>

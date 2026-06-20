@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -45,7 +46,8 @@ export async function GET(request: NextRequest) {
       produitsDeLaCat.forEach(p => {
         const qte = p.stocks.reduce((sum, s) => sum + s.quantite, 0)
         qteTotale += qte
-        totalValeurAchat += qte * (p.prixAchat || 0)
+        const pamp = p.pamp && p.pamp > 0 ? p.pamp : (p.prixAchat || 0)
+        totalValeurAchat += qte * pamp
         totalValeurVente += qte * (p.prixVente || 0)
       })
 
@@ -63,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: resultats })
   } catch (error) {
-    console.error('Erreur Rapport Categories:', error)
+    await apiCatch(error, 'api/rapports/categories')
     return NextResponse.json({ error: 'Erreur lors du calcul du rapport par catégories' }, { status: 500 })
   }
 }

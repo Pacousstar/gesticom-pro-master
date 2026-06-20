@@ -3,6 +3,14 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const genererRelanceSchema = z.object({
+  clientIds: z.array(z.coerce.number().int().positive()).min(1, 'Au moins un client requis.'),
+  canal: z.enum(['SMS', 'EMAIL', 'APPEL']).optional().default('SMS'),
+})
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -12,10 +20,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { clientIds, canal } = body
-    if (!Array.isArray(clientIds) || clientIds.length === 0) {
-      return NextResponse.json({ error: 'Au moins un client requis.' }, { status: 400 })
-    }
+    const validation = validateApiRequest(genererRelanceSchema, body)
+    if (!validation.success) return validation.response
+    const { clientIds, canal } = validation.data
 
     const entiteId = await getEntiteId(session)
 
@@ -81,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ results, count: results.length, succes: results.filter(r => r.statut === 'ENVOYE').length })
   } catch (e) {
-    console.error('POST /api/relances:', e)
+    await apiCatch(e, 'api/relances/generer')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

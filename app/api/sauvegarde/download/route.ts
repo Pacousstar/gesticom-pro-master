@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/require-role'
 import fs from 'fs'
 import path from 'path'
 import { getBackupDir, BACKUP_PREFIX, BACKUP_EXT } from '@/lib/sauvegarde-db'
+import { apiCatch } from '@/lib/log-error'
 
 function isValidBackupName(name: string): boolean {
   if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) return false
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (e) {
-    console.error('GET /api/sauvegarde/download:', e)
+    await apiCatch(e, 'api/sauvegarde/download')
     return NextResponse.json({ error: 'Erreur lors de la lecture du fichier.' }, { status: 500 })
   }
 }

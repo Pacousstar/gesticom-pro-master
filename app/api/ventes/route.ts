@@ -15,6 +15,8 @@ import {
   montantTotalVenteDocument,
   pointsFideliteDepuisEncaissement,
 } from '@/lib/calculs-commerciaux'
+import { venteSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -165,12 +167,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const magasinId = Number(body?.magasinId)
-    const clientId = body?.clientId != null ? Number(body.clientId) : null
-    const clientLibre = body?.clientLibre != null ? String(body.clientLibre).trim() || null : null
-    const remiseGlobale = Math.max(0, Number(body?.remiseGlobale) || 0)
+
+    const validation = validateApiRequest(venteSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
+    const magasinId = v.magasinId ?? 0
+    const clientId = v.clientId ?? null
+    const clientLibre = v.clientLibre ?? null
+    const remiseGlobale = v.remiseGlobale
     const fraisApproche = Math.max(0, Number(body?.fraisApproche) || 0)
-    const observation = body?.observation != null ? String(body.observation).trim() || null : null
+    const observation = v.observation ?? null
     const numeroBon = body?.numeroBon != null ? String(body.numeroBon).trim() || null : null
     const estVenteRapide = body?.estVenteRapide === true
     const retraitDiffere = body?.retraitDiffere === true

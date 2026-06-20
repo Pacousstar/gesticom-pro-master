@@ -3,9 +3,12 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { stockInventaireSchema } from '@/lib/validations'
 
 /**
- * Régularisation du stock après inventaire : pour chaque ligne (stockId, quantiteReelle),
+ * Régularisation du stock après inventaire : pour chaque ligne (produitId, quantitePhysique),
  * crée un Mouvement ENTREE ou SORTIE pour aligner le stock sur la quantité réelle.
  * OPTIMISÉ : Utilise des transactions et des opérations en batch pour améliorer les performances.
  */
@@ -17,8 +20,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const lignes = Array.isArray(body?.lignes) ? body.lignes : []
-    const dateStr = body?.date != null ? String(body.date).trim() : null
+    const result = validateApiRequest(stockInventaireSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
+
+    const dateStr = data.date?.trim() ?? null
     const dateInventaire = dateStr ? new Date(dateStr + 'T12:00:00') : new Date()
     if (isNaN(dateInventaire.getTime())) {
       return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
@@ -34,18 +40,10 @@ export async function POST(request: NextRequest) {
     // Utiliser l'entité de la session
     const entiteId = await getEntiteId(session)
 
-    // Préparer les données : récupérer tous les stocks en une seule requête
-    const stockIds = lignes
-      .map((l: any) => Number(l?.stockId))
-      .filter((id: number) => Number.isInteger(id) && id > 0)
-
-    if (stockIds.length === 0) {
-      return NextResponse.json({ regularise: 0 })
-    }
-
-    // Récupérer tous les stocks en une seule requête
+    // Récupérer tous les stocks par produitId+magasinId
+    const produitIds = data.lignes.map(l => l.produitId)
     const stocks = await prisma.stock.findMany({
-      where: { id: { in: stockIds } },
+      where: { produitId: { in: produitIds }, magasinId: data.magasinId },
       select: {
         id: true,
         produitId: true,
@@ -54,7 +52,11 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const stocksMap = new Map(stocks.map((s) => [s.id, s]))
+    const stocksMap = new Map(stocks.map((s) => [`${s.produitId}:${s.magasinId}`, s]))
+
+    if (stocksMap.size === 0 && data.lignes.length > 0) {
+      return NextResponse.json({ regularise: 0 })
+    }
 
     // Préparer les opérations en batch
     const mouvements: Array<{
@@ -70,18 +72,15 @@ export async function POST(request: NextRequest) {
 
     const updatesStock: Array<{ id: number; quantite: number }> = []
 
-    const observation = `Inventaire ${dateInventaire.toISOString().slice(0, 10)} – régularisation`
+    const observation = data.observation ?? `Inventaire ${dateInventaire.toISOString().slice(0, 10)} – régularisation`
 
     // Traiter toutes les lignes
-    for (const l of lignes) {
-      const stockId = Number(l?.stockId)
-      const quantiteReelle = Math.max(0, Number(l?.quantiteReelle) || 0) // Libération des décimales
-      if (!Number.isInteger(stockId) || stockId < 1) continue
-
-      const st = stocksMap.get(stockId)
+    for (const l of data.lignes) {
+      const key = `${l.produitId}:${data.magasinId}`
+      const st = stocksMap.get(key)
       if (!st) continue
 
-      const ecart = quantiteReelle - st.quantite
+      const ecart = l.quantitePhysique - st.quantite
       if (ecart === 0) continue
 
       if (ecart > 0) {
@@ -95,7 +94,7 @@ export async function POST(request: NextRequest) {
           quantite: ecart,
           observation,
         })
-        updatesStock.push({ id: st.id, quantite: quantiteReelle })
+        updatesStock.push({ id: st.id, quantite: l.quantitePhysique })
       } else {
         mouvements.push({
           date: dateInventaire,
@@ -107,7 +106,7 @@ export async function POST(request: NextRequest) {
           quantite: -ecart,
           observation,
         })
-        updatesStock.push({ id: st.id, quantite: quantiteReelle })
+        updatesStock.push({ id: st.id, quantite: l.quantitePhysique })
       }
     }
 
@@ -166,7 +165,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ regularise })
   } catch (e) {
-    console.error('POST /api/stock/inventaire:', e)
+    await apiCatch(e, 'api/stock/inventaire')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

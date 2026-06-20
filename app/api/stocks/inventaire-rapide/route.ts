@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db'
 import { verifierCloture } from '@/lib/cloture'
 import { comptabiliserMouvementStock } from '@/lib/comptabilisation'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { stockInventaireSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -13,7 +16,9 @@ export async function POST(request: NextRequest) {
   if (forbidden) return forbidden
 
   try {
-    const { produitId, magasinId, nouvelleQuantite, observation } = await request.json()
+    const body = await request.json()
+    validateApiRequest(stockInventaireSchema, body)
+    const { produitId, magasinId, nouvelleQuantite, observation } = body
     
     if (!produitId || !magasinId || nouvelleQuantite === undefined) {
       return NextResponse.json({ error: 'Données manquantes' }, { status: 400 })
@@ -74,7 +79,7 @@ const updated = await tx.stock.upsert({
 
     return NextResponse.json(res)
   } catch (error) {
-    console.error('Erreur Inventaire Rapide:', error)
+    await apiCatch(error, 'api/stocks/inventaire-rapide')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

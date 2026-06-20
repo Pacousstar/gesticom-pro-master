@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { archiveVenteSchema } from '@/lib/validations'
 
 export async function GET(req: NextRequest) {
   try {
@@ -65,7 +68,7 @@ export async function GET(req: NextRequest) {
       }
     })
   } catch (e) {
-    console.error('Error fetching archives:', e)
+    await apiCatch(e, 'api/archives/ventes')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }
@@ -77,7 +80,9 @@ export async function POST(req: NextRequest) {
     const authError = requirePermission(session, 'archives:create')
     if (authError) return authError
 
-    const data = await req.json()
+    const body = await req.json()
+    const vres = validateApiRequest(archiveVenteSchema, body)
+    if (!vres.success) return vres.response
     const { 
       numeroFactureOrigine, 
       date, 
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
       montantTotal, 
       observation, 
       lignes 
-    } = data
+    } = body
 
     // Blindage numérique
     const rawMagasinId = Number(magasinId)
@@ -129,7 +134,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(archive)
   } catch (e) {
-    console.error('Error creating archive:', e)
+    await apiCatch(e, 'api/archives/ventes')
     return NextResponse.json({ error: 'Erreur lors de la création de l\'archive' }, { status: 500 })
   }
 }

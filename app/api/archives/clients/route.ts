@@ -2,6 +2,9 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { archiveVenteSchema } from '@/lib/validations'
 
 export async function GET(req: Request) {
   try {
@@ -21,7 +24,7 @@ export async function GET(req: Request) {
     })
     return NextResponse.json(soldes)
   } catch (error) {
-    console.error('Erreur GET /api/archives/clients:', error)
+    await apiCatch(error, 'api/archives/clients')
     return NextResponse.json({ error: 'Erreur interne' }, { status: 500 })
   }
 }
@@ -34,8 +37,10 @@ export async function POST(req: Request) {
     if (authError) return authError
     const currentUser = { id: session.userId, entiteId: session.entiteId, role: session.role }
 
-    const body = await req.json()
-    const { clientId, clientLibre, montant, dateArchive, observation } = body
+    const rawBody = await req.json()
+    const vres = validateApiRequest(archiveVenteSchema, rawBody)
+    if (!vres.success) return vres.response
+    const { clientId, clientLibre, montant, dateArchive, observation } = rawBody
 
     if (!montant || (!clientId && !clientLibre)) {
       return NextResponse.json({ error: 'Montant et identifiant du client requis' }, { status: 400 })
@@ -54,7 +59,7 @@ export async function POST(req: Request) {
     })
     return NextResponse.json(solde, { status: 201 })
   } catch (error) {
-    console.error('Erreur POST /api/archives/clients:', error)
+    await apiCatch(error, 'api/archives/clients')
     return NextResponse.json({ error: 'Erreur internet création archive solde' }, { status: 500 })
   }
 }
@@ -76,7 +81,7 @@ export async function DELETE(req: Request) {
     })
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Erreur DELETE /api/archives/clients:', error)
+    await apiCatch(error, 'api/archives/clients')
     return NextResponse.json({ error: 'Erreur suppression archive' }, { status: 500 })
   }
 }

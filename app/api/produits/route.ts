@@ -5,6 +5,7 @@ import { logCreation, getIpAddress } from '@/lib/audit'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { produitSchema } from '@/lib/validations'
+import { apiCatch } from '@/lib/log-error'
 
 const MAX_LIMIT = 1000
 const CODE_PADDING = 3
@@ -277,7 +278,7 @@ export async function POST(request: NextRequest) {
 
                         return NextResponse.json(result)
   } catch (e) {
-    console.error('POST /api/produits:', e)
+    await apiCatch(e, 'api/produits')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

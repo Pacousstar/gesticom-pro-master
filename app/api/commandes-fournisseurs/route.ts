@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { commandeFournisseurSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -95,14 +98,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const result = validateApiRequest(commandeFournisseurSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
+
     const entiteId = await getEntiteId(session)
-    
+
     // Génération du numéro BC-YYYY-XXX
     const now = new Date()
     const year = now.getFullYear()
     const startOfYear = new Date(year, 0, 1)
     const endOfYear = new Date(year, 11, 31, 23, 59, 59)
-    
+
     const count = await prisma.commandeFournisseur.count({
       where: {
         date: {
@@ -112,29 +119,29 @@ export async function POST(request: NextRequest) {
         entiteId
       }
     })
-    
+
     const num = `BC-${year}-${String(count + 1).padStart(3, '0')}`
-    
+
     const commande = await prisma.commandeFournisseur.create({
       data: {
         numero: num,
-        date: body.date ? new Date(body.date) : new Date(),
-        fournisseurId: body.fournisseurId ? Number(body.fournisseurId) : null,
-        fournisseurLibre: body.fournisseurLibre,
-        magasinId: Number(body.magasinId),
+        date: data.date ? new Date(data.date) : new Date(),
+        fournisseurId: data.fournisseurId ?? null,
+        fournisseurLibre: data.fournisseurLibre ?? null,
+        magasinId: data.magasinId,
         entiteId,
         utilisateurId: session.userId,
-        montantTotal: Number(body.montantTotal) || 0,
-        observation: body.observation,
+        montantTotal: data.montantTotal,
+        observation: data.observation ?? null,
         statut: 'BROUILLON',
         lignes: {
-          create: (body.lignes || []).map((l: any) => ({
-            produitId: Number(l.produitId),
-            designation: l.designation,
-            quantite: Number(l.quantite),
-            prixUnitaire: Number(l.prixUnitaire),
-            montant: Number(l.montant)
-          }))
+          create: data.lignes.map((l) => ({
+            produitId: l.produitId,
+            designation: l.designation ?? null,
+            quantite: l.quantite,
+            prixUnitaire: l.prixUnitaire,
+            montant: l.montant ?? null,
+          } as any))
         }
       },
       include: {
@@ -145,7 +152,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(commande)
   } catch (e) {
-    console.error('POST /api/commandes-fournisseurs:', e)
+    await apiCatch(e, 'api/commandes-fournisseurs')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

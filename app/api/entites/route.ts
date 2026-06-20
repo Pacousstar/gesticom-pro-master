@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { entiteSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -25,7 +28,7 @@ export async function GET(request: NextRequest) {
     })
     return NextResponse.json(entites)
   } catch (e) {
-    console.error('GET /api/entites:', e)
+    await apiCatch(e, 'api/entites')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -37,24 +40,20 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const code = String(body?.code ?? '').trim().toUpperCase()
-    const nom = String(body?.nom ?? '').trim()
-    const type = String(body?.type ?? 'MAISON_MERE').trim()
-    const localisation = String(body?.localisation ?? '').trim()
+    const result = validateApiRequest(entiteSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
 
-    if (!code) return NextResponse.json({ error: 'Code requis.' }, { status: 400 })
-    if (!nom) return NextResponse.json({ error: 'Nom requis.' }, { status: 400 })
-
-    const existant = await prisma.entite.findUnique({ where: { code } })
-    if (existant) return NextResponse.json({ error: `Le code "${code}" existe déjà.` }, { status: 400 })
+    const existant = await prisma.entite.findUnique({ where: { code: data.code } })
+    if (existant) return NextResponse.json({ error: `Le code "${data.code}" existe déjà.` }, { status: 400 })
 
     const entite = await prisma.entite.create({
       data: {
-        code,
-        nom,
-        type: type || 'MAISON_MERE',
-        localisation: localisation || '-',
-        active: true,
+        code: data.code,
+        nom: data.nom,
+        type: data.type,
+        localisation: data.localisation,
+        active: data.active ?? true,
       },
       select: {
         id: true,
@@ -68,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(entite)
   } catch (e) {
-    console.error('POST /api/entites:', e)
+    await apiCatch(e, 'api/entites')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

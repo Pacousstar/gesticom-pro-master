@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db'
 import { createToken, getCookieName } from '@/lib/auth'
 import { loginSchema } from '@/lib/validations'
 import { logConnexion, getIpAddress, getUserAgent } from '@/lib/audit'
+import { apiCatch } from '@/lib/log-error'
 
 const IS_DEV = process.env.NODE_ENV === 'development'
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     const redirect = parsed.data.redirect ?? '/dashboard'
     return NextResponse.json({ redirect })
   } catch (e: unknown) {
-    console.error('Login error:', e)
+    await apiCatch(e, 'api/auth/login')
     let msg = ''
     if (e instanceof Error) {
       msg = e.message || (e as { code?: string }).code || e.name || '(Error)'

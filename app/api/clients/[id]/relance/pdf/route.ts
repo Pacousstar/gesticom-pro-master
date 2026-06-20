@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { generateRelancePDF } from '@/lib/pdf-gen'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
   request: NextRequest,
@@ -50,7 +51,7 @@ export async function GET(
     })
 
   } catch (error) {
-    console.error('PDF Relance Error:', error)
+    await apiCatch(error, 'api/clients/[id]/relance/pdf')
     return NextResponse.json({ error: 'Erreur génération PDF' }, { status: 500 })
   }
 }

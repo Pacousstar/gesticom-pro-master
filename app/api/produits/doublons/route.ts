@@ -3,6 +3,11 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const doublonsSchema = z.object({ idPrincipal: z.coerce.number().int().positive(), idDoublon: z.coerce.number().int().positive() })
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -53,7 +58,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(duplicates)
   } catch (e) {
-    console.error('Error detecting duplicates:', e)
+    await apiCatch(e, 'api/produits/doublons')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }
@@ -70,11 +75,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { idPrincipal, idDoublon } = await req.json()
-
-    if (!idPrincipal || !idDoublon) {
-      return NextResponse.json({ error: 'IDs manquants' }, { status: 400 })
-    }
+    const body = await req.json()
+    const vres = validateApiRequest(doublonsSchema, body)
+    if (!vres.success) return vres.response
+    const { idPrincipal, idDoublon } = vres.data
 
     const principal = await prisma.produit.findFirst({
       where: { id: idPrincipal, entiteId }
@@ -141,7 +145,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(res)
   } catch (e) {
-    console.error('Error merging duplicates:', e)
+    await apiCatch(e, 'api/produits/doublons')
     return NextResponse.json({ error: 'Erreur lors de la fusion' }, { status: 500 })
   }
 }

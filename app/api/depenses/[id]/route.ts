@@ -10,6 +10,9 @@ import { comptabiliserDepense } from '@/lib/comptabilisation'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { enregistrerOperationBancaire } from '@/lib/banque'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { depenseSchema } from '@/lib/validations'
 
 export async function GET(
   _request: NextRequest,
@@ -75,59 +78,43 @@ export async function PATCH(
     await verifierCloture(oldDepense.date, session)
 
     const body = await request.json()
+    const validation = validateApiRequest(depenseSchema.partial(), body)
+    if (!validation.success) return validation.response
+    const data = validation.data
 
-    const updateData: {
-      date?: Date
-      magasinId?: number | null
-      categorie?: string
-      libelle?: string
-      montant?: number
-      montantPaye?: number
-      statutPaiement?: string
-      modePaiement?: string
-      beneficiaire?: string | null
-      pieceJustificative?: string | null
-      observation?: string | null
-    } = {}
+    const updateData: Record<string, unknown> = {}
 
-    if (body.date) {
-      const newDate = new Date(body.date)
-      if (body.date.length <= 10) {
+    if (data.date) {
+      const newDate = new Date(data.date)
+      if (String(data.date).length <= 10) {
         newDate.setHours(oldDepense.date.getHours(), oldDepense.date.getMinutes(), oldDepense.date.getSeconds())
       }
       updateData.date = newDate
     }
-    if (body.magasinId !== undefined) {
-      updateData.magasinId = body.magasinId != null ? Number(body.magasinId) : null
-    }
-    if (body.categorie) updateData.categorie = String(body.categorie).trim()
-    if (body.libelle) updateData.libelle = String(body.libelle).trim()
-    if (body.montant != null) updateData.montant = Math.max(0, Number(body.montant))
+    if (data.magasinId !== undefined) updateData.magasinId = data.magasinId
+    if (data.categorie) updateData.categorie = data.categorie
+    if (data.libelle) updateData.libelle = data.libelle
+    if (data.montant != null) updateData.montant = data.montant
+    if (data.modePaiement) updateData.modePaiement = data.modePaiement
+    if (data.montantPaye != null) updateData.montantPaye = data.montantPaye
+    if (data.beneficiaire !== undefined) updateData.beneficiaire = data.beneficiaire ?? null
+    if (data.pieceJustificative !== undefined) updateData.pieceJustificative = data.pieceJustificative ?? null
+    if (data.observation !== undefined) updateData.observation = data.observation ?? null
 
-    // RD5: Normaliser le mode paiement
-    if (body.modePaiement) {
-      const modeNormalise = String(body.modePaiement).toUpperCase().trim()
-      if (['ESPECES', 'MOBILE_MONEY', 'VIREMENT', 'CHEQUE', 'CREDIT'].includes(modeNormalise)) {
-        updateData.modePaiement = modeNormalise
-      }
-    }
-
-    if (body.montantPaye != null) updateData.montantPaye = Math.max(0, Number(body.montantPaye))
-    if (body.beneficiaire !== undefined) updateData.beneficiaire = body.beneficiaire ? String(body.beneficiaire).trim() : null
-    if (body.pieceJustificative !== undefined) updateData.pieceJustificative = body.pieceJustificative ? String(body.pieceJustificative).trim() : null
-    if (body.observation !== undefined) updateData.observation = body.observation ? String(body.observation).trim() : null
-
-    if (updateData.magasinId != null && updateData.magasinId > 0) {
-      const magasin = await prisma.magasin.findUnique({ where: { id: updateData.magasinId } })
+    const magasinId = updateData.magasinId as number | undefined
+    if (magasinId != null && magasinId > 0) {
+      const magasin = await prisma.magasin.findUnique({ where: { id: magasinId } })
       if (!magasin) return NextResponse.json({ error: 'Magasin introuvable.' }, { status: 400 })
     }
 
     // Calcul du statut paiement
-    if (updateData.montantPaye != null || updateData.montant != null) {
+    const rawMontantPaye = updateData.montantPaye as number | undefined
+    const rawMontant = updateData.montant as number | undefined
+    if (rawMontantPaye != null || rawMontant != null) {
       const current = await prisma.depense.findUnique({ where: { id }, select: { montant: true, montantPaye: true } })
       if (current) {
-        const total = updateData.montant ?? current.montant
-        const paye = updateData.montantPaye ?? current.montantPaye ?? 0
+        const total = rawMontant ?? current.montant
+        const paye = rawMontantPaye ?? current.montantPaye ?? 0
         const payeClamp = Math.min(total, Math.max(0, paye))
         updateData.montantPaye = payeClamp
         updateData.statutPaiement = payeClamp >= total ? 'PAYE' : payeClamp > 0 ? 'PARTIEL' : 'CREDIT'
@@ -243,7 +230,7 @@ export async function PATCH(
 
             return NextResponse.json(depense)
   } catch (e) {
-    console.error('PATCH /api/depenses/[id]:', e)
+    await apiCatch(e, 'api/depenses/[id]')
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -330,7 +317,7 @@ await prisma.$transaction(async (tx) => {
 
             return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/depenses/[id]:', e)
+    await apiCatch(e, 'api/depenses/[id]')
     const errorMsg = e instanceof Error ? e.message : 'Erreur lors de la suppression.'
     return NextResponse.json({ error: errorMsg }, { status: 500 })
   }

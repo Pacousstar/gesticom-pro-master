@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { validerLicence } from '@/lib/license'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const licenseSchema = z.object({
+  cle: z.string().min(1, 'Clé requise.').max(200).trim(),
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -70,20 +76,16 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { cle } = await request.json()
+    const body = await request.json()
+    const validation = validateApiRequest(licenseSchema, body)
+    if (!validation.success) return validation.response
+    const { cle } = validation.data
 
-    if (!cle || typeof cle !== 'string') {
+    const licenceValide = validerLicence(cle)
+
+    if (!licenceValide.valide) {
       return NextResponse.json(
-        { error: 'Veuillez fournir une clé de licence valide' },
-        { status: 400 }
-      )
-    }
-
-    const validation = validerLicence(cle.trim())
-
-    if (!validation.valide) {
-      return NextResponse.json(
-        { error: validation.erreur, statut: validation.statut },
+        { error: licenceValide.erreur, statut: licenceValide.statut },
         { status: 400 }
       )
     }
@@ -97,22 +99,22 @@ export async function POST(request: NextRequest) {
         where: { id: existing.id },
         data: {
           cle: cle.trim(),
-          clientNom: validation.payload!.client,
-          finValidite: validation.payload!.expire ? new Date(validation.payload!.expire) : null,
+          clientNom: licenceValide.payload!.client,
+          finValidite: licenceValide.payload!.expire ? new Date(licenceValide.payload!.expire) : null,
           statut: 'ACTIVE',
           typeEssai: false,
           debutEssai: null,
-          features: JSON.stringify(validation.payload!.features),
+          features: JSON.stringify(licenceValide.payload!.features),
         }
       })
     } else {
       await prisma.licence.create({
         data: {
           cle: cle.trim(),
-          clientNom: validation.payload!.client,
-          finValidite: validation.payload!.expire ? new Date(validation.payload!.expire) : null,
+          clientNom: licenceValide.payload!.client,
+          finValidite: licenceValide.payload!.expire ? new Date(licenceValide.payload!.expire) : null,
           statut: 'ACTIVE',
-          features: JSON.stringify(validation.payload!.features),
+          features: JSON.stringify(licenceValide.payload!.features),
         }
       })
     }
@@ -120,9 +122,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Licence activée avec succès',
-      client: validation.payload!.client,
-      expire: validation.payload!.expire,
-      features: validation.payload!.features,
+      client: licenceValide.payload!.client,
+      expire: licenceValide.payload!.expire,
+      features: licenceValide.payload!.features,
     })
   } catch (error) {
     return NextResponse.json(

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import fs from 'fs'
 import path from 'path'
+import { apiCatch } from '@/lib/log-error'
 import {
   getDatabaseFilePath,
   ensureBackupDir,
@@ -21,9 +22,7 @@ export async function POST() {
   try {
     const dbPath = getDatabaseFilePath()
     if (!dbPath) {
-      console.error('[backup] Impossible de déterminer le chemin de la base de données')
-      console.error('[backup] DATABASE_URL:', process.env.DATABASE_URL || 'non défini')
-      console.error('[backup] CWD:', process.cwd())
+      await apiCatch(new Error('Impossible de déterminer le chemin ou de créer la sauvegarde'), 'api/sauvegarde/backup')
       return NextResponse.json(
         { 
           error: 'Base de données introuvable (chemin ou fichier manquant).',
@@ -34,7 +33,7 @@ export async function POST() {
     }
     
     if (!fs.existsSync(dbPath)) {
-      console.error('[backup] Fichier de base de données introuvable au chemin:', dbPath)
+      await apiCatch(new Error('Fichier de base de données introuvable: ' + dbPath), 'api/sauvegarde/backup')
       return NextResponse.json(
         { 
           error: 'Base de données introuvable (chemin ou fichier manquant).',
@@ -82,7 +81,7 @@ export async function POST() {
         message: `Sauvegarde créée avec succès: ${name}`,
       })
     } catch (copyError) {
-      console.error('[backup] Erreur lors de la copie:', copyError)
+      await apiCatch(copyError, 'api/sauvegarde/backup')
       return NextResponse.json(
         { 
           error: 'Erreur lors de la copie du fichier de base de données.',
@@ -92,7 +91,7 @@ export async function POST() {
       )
     }
   } catch (e) {
-    console.error('POST /api/sauvegarde/backup:', e)
+    await apiCatch(e, 'api/sauvegarde/backup')
     const errorMsg = e instanceof Error ? e.message : 'Erreur inconnue'
     return NextResponse.json(
       { 

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 /**
  * GET /api/comptabilite/diagnostic — Diagnostic des données comptables
@@ -190,7 +191,7 @@ export async function GET() {
       },
     })
   } catch (e) {
-    console.error('GET /api/comptabilite/diagnostic:', e)
+    await apiCatch(e, 'api/comptabilite/diagnostic')
     const errorMsg = e instanceof Error ? e.message : 'Erreur inconnue'
     return NextResponse.json(
       { error: 'Erreur lors du diagnostic.', details: errorMsg },

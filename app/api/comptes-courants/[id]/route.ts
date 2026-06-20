@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { compteCourantSchema } from '@/lib/validations'
 
 export async function GET(
   _request: NextRequest,
@@ -49,11 +51,14 @@ export async function PATCH(
   if (cc.entiteId !== entiteId) return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
 
   const body = await request.json()
+  const vres = validateApiRequest(compteCourantSchema.partial(), body)
+  if (!vres.success) return vres.response
+  const ccData = vres.data
   const data: any = {}
-  if (body.nom !== undefined) data.nom = String(body.nom).trim()
-  if (body.ncc !== undefined) data.ncc = String(body.ncc).trim() || null
-  if (body.clientId !== undefined) data.clientId = body.clientId ? Number(body.clientId) : null
-  if (body.fournisseurId !== undefined) data.fournisseurId = body.fournisseurId ? Number(body.fournisseurId) : null
+  if (ccData.nom !== undefined) data.nom = ccData.nom
+  if (ccData.ncc !== undefined) data.ncc = ccData.ncc
+  if (ccData.clientId !== undefined) data.clientId = ccData.clientId
+  if (ccData.fournisseurId !== undefined) data.fournisseurId = ccData.fournisseurId
 
   const updated = await prisma.compteCourant.update({ where: { id }, data })
   return NextResponse.json(updated)

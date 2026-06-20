@@ -17,6 +17,7 @@ import {
 } from '@/lib/comptabilisation'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST() {
   const session = await getSession()
@@ -294,7 +295,7 @@ export async function POST() {
       ...created,
     })
   } catch (e) {
-    console.error('Backfill écritures:', e)
+    await apiCatch(e, 'api/comptabilite/backfill-ecritures')
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Erreur serveur' },
       { status: 500 }

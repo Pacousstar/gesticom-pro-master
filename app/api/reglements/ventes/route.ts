@@ -7,6 +7,9 @@ import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
+import { reglementVenteSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -16,12 +19,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const venteId = body.venteId ? Number(body.venteId) : null
-    const clientId = body.clientId ? Number(body.clientId) : (body.venteId ? null : null)
-    const montant = Math.max(0, Number(body.montant))
-    const modePaiement = body.modePaiement || 'ESPECES'
-    const observation = body.observation || (venteId ? `Règlement vente` : `Acompte client`)
-    const dateStr = body.date || null
+
+    const validation = validateApiRequest(reglementVenteSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
+    const venteId = v.venteId ?? null
+    const clientId = v.clientId ?? null
+    const montant = v.montant
+    const modePaiement = v.modePaiement
+    const observation = v.observation || (venteId ? `Règlement vente` : `Acompte client`)
+    const dateStr = v.date ?? null
     let dateReglement = new Date()
     if (dateStr) {
       try {
@@ -33,7 +41,7 @@ export async function POST(request: NextRequest) {
           dateReglement = tempDate
         }
       } catch (e) {
-        console.error("Date invalide reçue:", dateStr)
+        await apiCatch(new Error('Date invalide reçue: ' + dateStr), 'api/reglements/ventes')
       }
     }
 
@@ -197,7 +205,7 @@ export async function POST(request: NextRequest) {
 
             return NextResponse.json(res)
   } catch (error: any) {
-    console.error('Erreur Règlement Vente:', error)
+    await apiCatch(error, 'api/reglements/ventes')
     if (error.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ 
         error: 'Ce règlement a déjà été enregistré (Doublon bloqué).', 

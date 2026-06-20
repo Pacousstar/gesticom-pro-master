@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db'
 import { logAction } from '@/lib/audit'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { banqueSchema } from '@/lib/validations'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -18,8 +21,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
     }
 
-    const data = await request.json()
-    const { numero, nomBanque, libelle, soldeInitial, compteId } = data
+    const body = await request.json()
+    const vres = validateApiRequest(banqueSchema.partial(), body)
+    if (!vres.success) return vres.response
+    const { numero, nomBanque, libelle, soldeInitial, compteId } = vres.data
 
     // Vérifier que la banque existe
     const banqueExistante = await prisma.banque.findUnique({ where: { id: banqueId } })
@@ -41,14 +46,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const updateData: any = {}
-    if (numero !== undefined) updateData.numero = numero.trim()
-    if (nomBanque !== undefined) updateData.nomBanque = nomBanque.trim()
-    if (libelle !== undefined) updateData.libelle = libelle.trim()
+    if (numero !== undefined) updateData.numero = numero
+    if (nomBanque !== undefined) updateData.nomBanque = nomBanque
+    if (libelle !== undefined) updateData.libelle = libelle
     if (soldeInitial !== undefined) {
-      updateData.soldeInitial = Number(soldeInitial) || 0
+      updateData.soldeInitial = soldeInitial
       // Recalculer le solde actuel si le solde initial change
       const operations = await prisma.operationBancaire.findMany({ where: { banqueId } })
-      let solde = Number(soldeInitial) || 0
+      let solde = soldeInitial
       for (const op of operations) {
         if (estTypeOperationBanqueEntree(op.type)) {
           solde += op.montant
@@ -58,7 +63,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       updateData.soldeActuel = solde
     }
-    if (compteId !== undefined) updateData.compteId = compteId ? Number(compteId) : null
+    if (compteId !== undefined) updateData.compteId = compteId ?? null
 
     const banque = await prisma.banque.update({
       where: { id: banqueId },
@@ -72,7 +77,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     return NextResponse.json(banque)
   } catch (error) {
-    console.error('PATCH /api/banques/[id]:', error)
+    await apiCatch(error, 'api/banques/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -115,7 +120,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('DELETE /api/banques/[id]:', error)
+    await apiCatch(error, 'api/banques/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

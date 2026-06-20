@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -119,7 +120,7 @@ export async function GET(request: NextRequest) {
     const filename = `etat_paiements_${type || 'VENTE'}_${dateDebut || 'init'}_${dateFin || 'fin'}.xlsx`
     return makeResponse(buf, filename)
   } catch (error: any) {
-    console.error('Export Excel Etat Paiements:', error)
+    await apiCatch(error, 'api/rapports/finances/etat-paiements/export-excel')
     return NextResponse.json({ error: "Erreur lors de l'export Excel" }, { status: 500 })
   }
 }

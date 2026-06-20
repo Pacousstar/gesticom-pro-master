@@ -313,7 +313,7 @@ export default function CommandesPage() {
           </div>
         )}
 
-        <p className="text-center text-xs text-gray-500">{filtered.length} commande(s) — Page {currentPage}/{totalFilteredPages}</p>
+        <p className="text-center text-xs text-white">{filtered.length} commande(s) — Page {currentPage}/{totalFilteredPages}</p>
       </div>
 
       {modalOpen && selectedVente && (

@@ -6,6 +6,7 @@ import { logModification, getIpAddress } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
 import { getDatabaseFilePath, getBackupDir } from '@/lib/sauvegarde-db'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
       message: 'Base restaurée. Redémarrez l\'application pour utiliser la base restaurée.',
     })
   } catch (e) {
-    console.error('POST /api/sauvegarde/restore:', e)
+    await apiCatch(e, 'api/sauvegarde/restore')
     return NextResponse.json(
       { error: 'Erreur lors de la restauration.' },
       { status: 500 }

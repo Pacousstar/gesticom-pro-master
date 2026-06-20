@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { logSuppression, getIpAddress } from '@/lib/audit'
 import { recalculerSoldeCaisse } from '@/lib/caisse'
 import { verifierCloture } from '@/lib/cloture'
+import { apiCatch } from '@/lib/log-error'
 
 export async function DELETE(
   _request: NextRequest,
@@ -88,7 +89,7 @@ export async function DELETE(
 
             return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/retours/[id]:', e)
+    await apiCatch(e, 'api/retours/[id]')
     return NextResponse.json({ error: (e as Error).message || 'Erreur serveur.' }, { status: 500 })
   }
 }

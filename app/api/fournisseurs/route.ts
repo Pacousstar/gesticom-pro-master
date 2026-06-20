@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { fournisseurSchema } from '@/lib/validations'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -173,7 +174,7 @@ export async function POST(request: NextRequest) {
     // Invalider le cache pour affichage immédiat
             return NextResponse.json(f)
   } catch (e: any) {
-    console.error('POST /api/fournisseurs:', e)
+    await apiCatch(e, 'api/fournisseurs')
     if (e?.code === 'P2002') {
       return NextResponse.json({ error: 'Code fournisseur déjà utilisé. Réessayez.' }, { status: 409 })
     }

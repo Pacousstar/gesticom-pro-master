@@ -319,7 +319,7 @@ export default function RetraitsPage() {
           </div>
         )}
 
-        <p className="text-center text-xs text-gray-500">{filtered.length} retrait(s) — Page {currentPage}/{totalFilteredPages}</p>
+        <p className="text-center text-xs text-white">{filtered.length} retrait(s) — Page {currentPage}/{totalFilteredPages}</p>
       </div>
 
       {/* Modal retrait partiel */}

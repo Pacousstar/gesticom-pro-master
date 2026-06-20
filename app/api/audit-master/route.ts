@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { comptabiliserAchat, comptabiliserVente } from '@/lib/comptabilisation'
 import { getSession } from '@/lib/auth'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST() {
   const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
@@ -84,7 +85,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true, logs });
   } catch (error: any) {
-    console.error(error);
+    await apiCatch(error, 'api/audit-master');
     return NextResponse.json({ success: false, error: error.message, logs }, { status: 500 });
   }
 }

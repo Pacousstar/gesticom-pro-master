@@ -6,6 +6,9 @@ import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { comptabiliserCaisse } from '@/lib/comptabilisation'
 import { estModeEspeces } from '@/lib/enums-commerce'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { reglementCompteCourantSchema } from '@/lib/validations'
 
 export async function POST(
   request: NextRequest,
@@ -26,15 +29,11 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { montant, modePaiement, magasinId, banqueId, date } = body
-
-    if (!montant || montant <= 0) {
-      return NextResponse.json({ error: 'Montant invalide' }, { status: 400 })
-    }
-
-    if (!modePaiement) {
-      return NextResponse.json({ error: 'Mode de paiement requis' }, { status: 400 })
-    }
+    const validation = validateApiRequest(reglementCompteCourantSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+    const { montant, modePaiement, magasinId } = v
+    const { banqueId, date } = body
 
     // CREDIT = dette à terme, ne peut pas être un règlement
     if (String(modePaiement).toUpperCase() === 'CREDIT') {
@@ -191,7 +190,7 @@ export async function POST(
 
     return NextResponse.json({ success: true, reglementId: result.id })
   } catch (error) {
-    console.error('POST /api/fournisseurs/[id]/compte-courant/paiement:', error)
+    await apiCatch(error, 'api/fournisseurs/[id]/compte-courant/paiement')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

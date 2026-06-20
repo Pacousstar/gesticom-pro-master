@@ -53,6 +53,7 @@ import { useToast } from '@/hooks/useToast'
 import SupportModal from '@/components/SupportModal'
 import UpdateChecker from '@/components/UpdateChecker'
 import { useTheme } from '@/components/ThemeProvider'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 // Diagnostic DB banner
 type DbInfo = { nodeEnv?: string; databaseUrl?: string }
@@ -1037,7 +1038,7 @@ export default function DashboardLayoutClient({
               </div>
             </div>
           ) : (
-            children
+            <ErrorBoundary componentName="Dashboard">{children}</ErrorBoundary>
           )}
         </main>
 

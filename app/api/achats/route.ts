@@ -16,6 +16,9 @@ import {
   valeurAchatNetAvecFrais,
   roundMoneyFCFA,
 } from '@/lib/calculs-commerciaux'
+import { achatSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -156,18 +159,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const magasinId = Number(body?.magasinId)
-    const fournisseurId = body?.fournisseurId != null ? Number(body.fournisseurId) : null
-    const fournisseurLibre = body?.fournisseurLibre != null ? String(body.fournisseurLibre).trim() || null : null
-    const numeroCamion = body?.numeroCamion != null ? String(body.numeroCamion).trim() || null : null
-    const observation = body?.observation != null ? String(body.observation).trim() || null : null
-    const fraisApproche = Math.max(0, Number(body?.fraisApproche) || 0)
+
+    const validation = validateApiRequest(achatSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
+    const magasinId = v.magasinId
+    const fournisseurId = v.fournisseurId ?? null
+    const fournisseurLibre = v.fournisseurLibre ?? null
+    const numeroCamion = v.numeroCamion ?? null
+    const observation = v.observation ?? null
+    const fraisApproche = v.fraisApproche
+    const lignes = v.lignes
 
     // --- SUPPORT MULTI-PAIEMENT ---
-    const reglementsPayload = Array.isArray(body?.reglements) ? body.reglements : []
-    const modePaiementPrincipal = ['ESPECES', 'MOBILE_MONEY', 'CHEQUE', 'CREDIT', 'VIREMENT'].includes(String(body?.modePaiement || ''))
-      ? String(body.modePaiement)
-      : 'ESPECES'
+    const reglementsPayload = v.reglements ?? []
+    const modePaiementPrincipal = v.modePaiement || 'ESPECES'
 
     let montantPaye = 0
     let autoReglementComplet = false
@@ -175,17 +182,16 @@ export async function POST(request: NextRequest) {
 
     if (reglementsPayload.length > 0) {
       for (const r of reglementsPayload) {
-        const amt = Math.max(0, Number(r.montant) || 0)
-        const mode = String(r.mode).toUpperCase()
+        const amt = r.montant
+        const mode = r.mode.toUpperCase()
         if (amt > 0 && mode !== 'CREDIT') {
-          // CREDIT = dette à terme, on ne crée PAS de règlement
           listReglements.push({ mode, montant: amt, payeDepuisCaisse: r.payeDepuisCaisse === true, payeDepuisBanque: r.payeDepuisBanque === true })
           montantPaye += amt
         }
       }
     } else {
-      const montantPayeRaw = body?.montantPaye != null ? Math.max(0, Number(body.montantPaye) || 0) : null
-      if (montantPayeRaw !== null && modePaiementPrincipal !== 'CREDIT') {
+      const montantPayeRaw = v.montantPaye
+      if (montantPayeRaw != null && montantPayeRaw > 0 && modePaiementPrincipal !== 'CREDIT') {
         listReglements.push({ mode: modePaiementPrincipal, montant: montantPayeRaw })
         montantPaye = montantPayeRaw
       } else {
@@ -194,37 +200,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const dateStr = body?.date != null ? String(body.date).trim() : null
+    const dateStr = v.date ?? null
     const now = new Date()
     let dateAchat = now
     if (dateStr) {
       const parts = dateStr.split('-')
-      if (parts.length !== 3) {
-        return NextResponse.json({ error: 'Format de date invalide. Utilisez YYYY-MM-DD.' }, { status: 400 })
-      }
       const [yStr, mStr, dStr] = parts
       const y = Number(yStr)
       const m = Number(mStr)
       const d = Number(dStr)
-      if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) {
-        return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
-      }
       const candidate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
-      if (candidate.getFullYear() !== y || candidate.getMonth() !== m - 1 || candidate.getDate() !== d) {
-        return NextResponse.json({ error: 'Date invalide (jour inexistant).' }, { status: 400 })
+      if (!isNaN(candidate.getTime())) {
+        dateAchat = candidate
       }
-      dateAchat = candidate
-    }
-    if (isNaN(dateAchat.getTime())) {
-      return NextResponse.json({ error: 'Date invalide.' }, { status: 400 })
-    }
-    const lignes = Array.isArray(body?.lignes) ? body.lignes : []
-
-    if (!Number.isInteger(magasinId) || magasinId < 1) {
-      return NextResponse.json({ error: 'Magasin requis.' }, { status: 400 })
-    }
-    if (!lignes.length) {
-      return NextResponse.json({ error: 'Au moins une ligne requise.' }, { status: 400 })
     }
 
     // Vérifier que l'utilisateur existe
@@ -526,7 +514,7 @@ let montantFactureHT = 0
     // Invalider le cache pour affichage immédiat
                 return NextResponse.json(achat)
   } catch (e: any) {
-    console.error('POST /api/achats:', e)
+    await apiCatch(e, 'api/achats')
     if (e.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ 
         error: 'Cet achat a déjà été enregistré (Doublon bloqué).', 

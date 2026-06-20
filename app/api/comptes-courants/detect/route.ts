@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { compteCourantSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -33,6 +35,7 @@ export async function POST(request: NextRequest) {
   }[] = []
 
   const body = await request.json().catch(() => ({}))
+  validateApiRequest(compteCourantSchema, body)
   const forceRefresh = body.force === true
 
   for (const c of clients) {

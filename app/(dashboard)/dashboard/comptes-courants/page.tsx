@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Search, Plus, Trash2, ArrowLeftRight, UserCheck, Printer, FileSpreadsheet } from 'lucide-react'
+import { useToast } from '@/hooks/useToast'
 
 interface CompteCourant {
   id: number
@@ -98,65 +99,70 @@ export default function ComptesCourantsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white p-6 space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold text-white">Comptes Courants</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic">Comptes Courants</h1>
+          <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Gestion des comptes clients et fournisseurs</p>
+        </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={fetchDetect}
-            className="inline-flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 rounded-md text-sm text-white transition-colors">
-            <UserCheck className="mr-2 h-4 w-4" />
+            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 transition-all">
+            <UserCheck className="h-4 w-4" />
             Détection auto
           </button>
           <button onClick={handleExportExcel}
-            className="inline-flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 rounded-md text-sm text-white transition-colors">
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 transition-all">
+            <FileSpreadsheet className="h-4 w-4" />
             Export
           </button>
           <button onClick={() => window.print()}
-            className="inline-flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 rounded-md text-sm text-white transition-colors">
-            <Printer className="mr-2 h-4 w-4" />
+            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 transition-all">
+            <Printer className="h-4 w-4" />
             Imprimer
           </button>
           <button onClick={() => router.push('/dashboard/comptes-courants/nouveau')}
-            className="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm transition-colors">
-            <Plus className="mr-2 h-4 w-4" />
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 shadow-md transition-all">
+            <Plus className="h-4 w-4" />
             Nouveau
           </button>
         </div>
       </div>
 
       {/* Search */}
-      <div className="relative w-full max-w-xs">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)}
-          className="pl-9 w-full bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white placeholder-gray-500" />
+      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 no-print">
+        <div className="relative max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input placeholder="Rechercher par nom, code ou NCC..." value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 bg-white pl-9 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
+        </div>
       </div>
 
       {/* Matches */}
       {showDetect && matches.length > 0 && (
-        <div className="bg-white/5 backdrop-blur rounded-xl border border-white/10 p-4">
-          <h3 className="font-bold mb-3">Correspondances détectées</h3>
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
+          <h3 className="font-bold text-gray-900 mb-3">Correspondances détectées</h3>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-gray-400">
-                <th className="text-left py-2">Client</th>
-                <th className="text-left py-2">Fournisseur</th>
-                <th className="text-left py-2">Type</th>
-                <th className="py-2">Action</th>
+              <tr className="border-b border-gray-200 text-gray-500 text-xs uppercase">
+                <th className="text-left py-2 font-semibold">Client</th>
+                <th className="text-left py-2 font-semibold">Fournisseur</th>
+                <th className="text-left py-2 font-semibold">Type</th>
+                <th className="py-2 font-semibold">Action</th>
               </tr>
             </thead>
             <tbody>
               {matches.map(m => (
-                <tr key={`${m.clientId}-${m.fournisseurId}`} className="border-b border-white/5">
-                  <td className="py-2">{m.clientNom}</td>
-                  <td className="py-2">{m.fournisseurNom}</td>
+                <tr key={`${m.clientId}-${m.fournisseurId}`} className="border-b border-gray-100">
+                  <td className="py-2 text-gray-700">{m.clientNom}</td>
+                  <td className="py-2 text-gray-700">{m.fournisseurNom}</td>
                   <td className="py-2">
-                    <span className="text-xs bg-blue-600/30 text-blue-300 px-2 py-0.5 rounded">{m.type}</span>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-medium">{m.type}</span>
                   </td>
                   <td className="py-2 text-center">
                     <button onClick={() => linkMatch(m)}
-                      className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs transition-colors">Lier</button>
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-sm transition-all">Lier</button>
                   </td>
                 </tr>
               ))}
@@ -166,51 +172,51 @@ export default function ComptesCourantsPage() {
       )}
 
       {showDetect && matches.length === 0 && (
-        <div className="bg-white/5 rounded-xl p-4 text-center text-sm text-gray-400 border border-white/10">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 text-center text-sm text-gray-500 shadow-sm">
           Aucune nouvelle correspondance détectée.
         </div>
       )}
 
       {/* Cards */}
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin h-8 w-8" /></div>
+        <div className="flex justify-center py-16"><Loader2 className="animate-spin h-8 w-8 text-orange-500" /></div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white/5 rounded-xl p-12 text-center text-gray-400 border border-white/10">
+        <div className="rounded-xl border border-gray-200 bg-white p-12 text-center text-gray-500 shadow-sm">
           Aucun compte courant trouvé.
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map(cc => (
-            <div key={cc.id} className="bg-white/5 backdrop-blur rounded-xl p-5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
+            <div key={cc.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group"
               onClick={() => router.push(`/dashboard/comptes-courants/${cc.id}`)}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-white truncate">{cc.nom}</p>
-                  <p className="text-xs text-gray-400">{cc.code}</p>
-                  {cc.ncc && <p className="text-xs text-gray-500 truncate" title={`NCC: ${cc.ncc}`}>NCC: {cc.ncc}</p>}
+                  <p className="font-bold text-gray-900 truncate">{cc.nom}</p>
+                  <p className="text-xs text-gray-500">{cc.code}</p>
+                  {cc.ncc && <p className="text-xs text-gray-400 truncate" title={`NCC: ${cc.ncc}`}>NCC: {cc.ncc}</p>}
                 </div>
                 <div className="text-right shrink-0">
-                  <p className={`text-lg font-bold ${cc.solde >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <p className={`text-lg font-black ${cc.solde >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                     {fmt(Math.abs(cc.solde))}
                   </p>
-                  <p className={`text-[11px] ${cc.solde >= 0 ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${cc.solde >= 0 ? 'text-emerald-600/70' : 'text-red-500/70'}`}>
                     {cc.solde >= 0 ? 'Débiteur' : 'Créditeur'}
                   </p>
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {cc.client && <span className="text-[10px] bg-blue-600/20 text-blue-300 px-2 py-0.5 rounded truncate max-w-full" title={`Client: ${cc.client.nom}`}>Client: {cc.client.nom}</span>}
-                {cc.fournisseur && <span className="text-[10px] bg-orange-600/20 text-orange-300 px-2 py-0.5 rounded truncate max-w-full" title={`Fournisseur: ${cc.fournisseur.nom}`}>Fournisseur: {cc.fournisseur.nom}</span>}
+                {cc.client && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-medium" title={`Client: ${cc.client.nom}`}>Client: {cc.client.nom}</span>}
+                {cc.fournisseur && <span className="text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded font-medium" title={`Fournisseur: ${cc.fournisseur.nom}`}>Fournisseur: {cc.fournisseur.nom}</span>}
               </div>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2">
                 <button onClick={e => { e.stopPropagation(); router.push(`/dashboard/comptes-courants/${cc.id}`) }}
-                  className="text-xs inline-flex items-center px-2.5 py-1.5 bg-white/10 hover:bg-white/20 rounded transition-colors">
-                  <ArrowLeftRight className="mr-1 h-3 w-3" /> Détail
+                  className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-sm transition-all">
+                  <ArrowLeftRight className="h-3 w-3" /> Détail
                 </button>
                 <button onClick={e => { e.stopPropagation(); deleteCompte(cc.id) }}
-                  className="text-xs inline-flex items-center px-2.5 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 rounded transition-colors">
-                  <Trash2 className="mr-1 h-3 w-3" /> Supprimer
+                  className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-lg transition-all">
+                  <Trash2 className="h-3 w-3" /> Supprimer
                 </button>
               </div>
             </div>

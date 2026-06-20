@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
   _request: NextRequest,
@@ -115,7 +116,7 @@ export async function GET(
       }
     })
   } catch (error) {
-    console.error('Erreur API Historique Produit:', error)
+    await apiCatch(error, 'api/rapports/produits/[id]/historique')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

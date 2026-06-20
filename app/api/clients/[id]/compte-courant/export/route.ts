@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
     request: NextRequest,
@@ -83,7 +84,7 @@ export async function GET(
         const filename = `Compte_Courant_${client.nom.replace(/\s+/g, '_')}.xlsx`
         return makeResponse(buf, filename)
     } catch (error) {
-        console.error('Export Excel Erreur:', error)
+        await apiCatch(error, 'api/clients/[id]/compte-courant/export')
         return NextResponse.json({ error: 'Erreur lors de l\'export' }, { status: 500 })
     }
 }

@@ -12,6 +12,10 @@ import {
   comptabiliserReglementVente,
   comptabiliserVente,
 } from '@/lib/comptabilisation'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const rebuildEcrituresSchema = z.object({ entiteId: z.coerce.number().int().positive().optional() })
 
 function isEnabled() {
   return process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
@@ -47,6 +51,8 @@ export async function POST(request: NextRequest) {
   const logs: string[] = []
   try {
     const body = await request.json().catch(() => ({}))
+    const vres = validateApiRequest(rebuildEcrituresSchema, body)
+    if (!vres.success) return vres.response
     const startDate = parseDateOrThrow(body?.startDate, 'startDate')
     const endDate = body?.endDate ? parseDateOrThrow(body.endDate, 'endDate') : null
 

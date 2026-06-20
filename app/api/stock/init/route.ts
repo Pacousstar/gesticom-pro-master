@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { stockInventaireSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -15,12 +18,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    let body: { produitId?: number; magasinId?: number } = {}
-    try {
-      body = (await request.json().catch(() => ({}))) as { produitId?: number; magasinId?: number }
-    } catch {
-      // ignore
-    }
+    const body = await request.json().catch(() => ({} as any))
+    validateApiRequest(stockInventaireSchema, body)
     const produitId = body?.produitId != null ? Number(body.produitId) : null
     const magasinId = body?.magasinId != null ? Number(body.magasinId) : null
     const oneOnly = Number.isInteger(produitId) && produitId! > 0 && Number.isInteger(magasinId) && magasinId! > 0
@@ -80,7 +79,7 @@ const [produits, magazines] = await Promise.all([
 
     return NextResponse.json({ created })
   } catch (e) {
-    console.error('POST /api/stock/init:', e)
+    await apiCatch(e, 'api/stock/init')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

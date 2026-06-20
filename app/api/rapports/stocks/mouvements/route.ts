@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error) {
-    console.error('Erreur Rapport Mouvements:', error)
+    await apiCatch(error, 'api/rapports/stocks/mouvements')
     return NextResponse.json({ error: 'Erreur lors de la récupération des mouvements' }, { status: 500 })
   }
 }

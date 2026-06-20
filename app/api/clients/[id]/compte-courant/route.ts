@@ -6,6 +6,9 @@ import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { estModeEspeces } from '@/lib/enums-commerce'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { reglementCompteCourantSchema } from '@/lib/validations'
 
 export async function GET(
   request: NextRequest,
@@ -173,7 +176,7 @@ export async function GET(
       avoirInitial: client.avoirInitial || 0
     })
   } catch (error) {
-    console.error('GET /api/clients/[id]/compte-courant:', error)
+    await apiCatch(error, 'api/clients/[id]/compte-courant')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }
@@ -197,15 +200,11 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { montant, modePaiement, magasinId, banqueId, date, observation } = body
-
-    if (!montant || montant <= 0) {
-      return NextResponse.json({ error: 'Montant invalide' }, { status: 400 })
-    }
-
-    if (!modePaiement) {
-      return NextResponse.json({ error: 'Mode de paiement requis' }, { status: 400 })
-    }
+    const validation = validateApiRequest(reglementCompteCourantSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+    const { montant, modePaiement, magasinId } = v
+    const { banqueId, date, observation } = body
 
     const entiteId = await getEntiteId(session)
     if (!entiteId) {
@@ -357,7 +356,7 @@ export async function POST(
 
     return NextResponse.json({ success: true, reglementId: result.id })
   } catch (error) {
-    console.error('POST /api/clients/[id]/compte-courant:', error)
+    await apiCatch(error, 'api/clients/[id]/compte-courant')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

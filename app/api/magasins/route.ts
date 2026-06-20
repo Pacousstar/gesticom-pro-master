@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { logModification, getIpAddress } from '@/lib/audit'
+import { magasinSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -42,15 +45,17 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
 
   try {
+    const body = await request.json()
+
+    const validation = validateApiRequest(magasinSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
     const entiteId = await getEntiteId(session)
 
-    const body = await request.json()
-    const code = String(body?.code ?? '').trim().toUpperCase()
-    const nom = String(body?.nom ?? '').trim()
-    const localisation = String(body?.localisation ?? '').trim()
-
-    if (!code) return NextResponse.json({ error: 'Code requis.' }, { status: 400 })
-    if (!nom) return NextResponse.json({ error: 'Nom requis.' }, { status: 400 })
+    const code = v.code
+    const nom = v.nom
+    const localisation = v.localisation ?? ''
 
     const existant = await prisma.magasin.findFirst({ where: { code, entiteId } })
     if (existant) return NextResponse.json({ error: `Le code "${code}" existe déjà dans votre entité.` }, { status: 400 })
@@ -64,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(magasin)
   } catch (e) {
-    console.error('POST /api/magasins:', e)
+    await apiCatch(e, 'api/magasins')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

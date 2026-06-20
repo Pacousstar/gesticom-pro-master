@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { printTemplateSchema } from '@/lib/validations'
 
 async function checkPermission(session: any, permission: string) {
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
@@ -37,7 +40,7 @@ export async function GET(
 
     return NextResponse.json(template)
   } catch (e) {
-    console.error('GET /api/print-templates/[id]:', e)
+    await apiCatch(e, 'api/print-templates/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -64,15 +67,18 @@ export async function PATCH(
       return NextResponse.json({ error: 'Template introuvable ou accès refusé.' }, { status: 404 })
     }
 
-    const data = await request.json()
+    const body = await request.json()
+    const result = validateApiRequest(printTemplateSchema.partial(), body)
+    if (!result.success) return result.response
+    const validated = result.data
     const updateData: Record<string, any> = {}
-    if (data.type !== undefined) updateData.type = data.type
-    if (data.nom !== undefined) updateData.nom = data.nom
-    if (data.logo !== undefined) updateData.logo = data.logo || null
-    if (data.enTete !== undefined) updateData.enTete = data.enTete || null
-    if (data.piedDePage !== undefined) updateData.piedDePage = data.piedDePage || null
-    if (data.variables !== undefined) updateData.variables = data.variables ? JSON.stringify(data.variables) : null
-    if (data.actif !== undefined) updateData.actif = data.actif
+    if (validated.type !== undefined) updateData.type = validated.type
+    if (validated.nom !== undefined) updateData.nom = validated.nom
+    if (body.logo !== undefined) updateData.logo = body.logo || null
+    if (body.enTete !== undefined) updateData.enTete = body.enTete || null
+    if (body.piedDePage !== undefined) updateData.piedDePage = body.piedDePage || null
+    if (body.variables !== undefined) updateData.variables = body.variables ? JSON.stringify(body.variables) : null
+    if (body.actif !== undefined) updateData.actif = body.actif
 
     const template = await prisma.printTemplate.update({
       where: { id },
@@ -83,7 +89,7 @@ export async function PATCH(
 
     return NextResponse.json(template)
   } catch (e) {
-    console.error('PATCH /api/print-templates/[id]:', e)
+    await apiCatch(e, 'api/print-templates/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -115,7 +121,7 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('DELETE /api/print-templates/[id]:', e)
+    await apiCatch(e, 'api/print-templates/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

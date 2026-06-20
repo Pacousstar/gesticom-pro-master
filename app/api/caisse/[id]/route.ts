@@ -6,6 +6,7 @@ import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { requirePermission } from '@/lib/require-role'
 import { verifierCloture } from '@/lib/cloture'
 import { recalculerSoldeCaisse } from '@/lib/caisse'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
   _request: NextRequest,
@@ -107,7 +108,7 @@ export async function DELETE(
     // P3-C : Invalider le cache pour affichage immédiat
                 return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/caisse/[id]:', e)
+    await apiCatch(e, 'api/caisse/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

@@ -2,16 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const emailFactureSchema = z.object({
+  emailDestinataire: z.string().email('Email invalide.').max(200).trim(),
+  htmlContent: z.string().min(1, 'Contenu requis.').max(50000),
+  subject: z.string().max(200).optional(),
+})
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
-    const { emailDestinataire, htmlContent, subject } = await req.json()
-    if (!emailDestinataire || !htmlContent) {
-      return NextResponse.json({ error: 'Email et contenu requis' }, { status: 400 })
-    }
+    const body = await req.json()
+    const validation = validateApiRequest(emailFactureSchema, body)
+    if (!validation.success) return validation.response
+    const { emailDestinataire, htmlContent, subject } = validation.data
 
     // Récupérer la conf SMTP courante
     const parametre = await prisma.parametre.findFirst()
@@ -63,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Erreur SMTP:', error)
+    await apiCatch(error, 'api/email/send-facture')
     return NextResponse.json({ error: error.message || "Erreur lors de l'envoi de l'email." }, { status: 500 })
   }
 }

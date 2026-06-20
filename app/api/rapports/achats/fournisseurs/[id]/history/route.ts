@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
     request: NextRequest,
@@ -121,7 +122,7 @@ export async function GET(
             },
         })
     } catch (error) {
-        console.error('Erreur API historique fournisseur:', error)
+        await apiCatch(error, 'api/rapports/achats/fournisseurs/[id]/history')
         const message = error instanceof Error ? error.message : 'Erreur serveur'
         return NextResponse.json({ error: message }, { status: 500 })
     }

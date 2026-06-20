@@ -6,6 +6,7 @@ import { processImportRows, type ImportRow } from '@/lib/importProduits'
 import { resolveDataFilePath } from '@/lib/resolveDataFile'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 const JSON_FILE = 'GestiCom_Produits_Master.json'
 
@@ -80,7 +81,7 @@ export async function POST() {
       stockInit: { created: stockCreated },
     })
   } catch (e) {
-    console.error('POST /api/produits/bootstrap:', e)
+    await apiCatch(e, 'api/produits/bootstrap')
     const err = e as NodeJS.ErrnoException
     if (err?.code === 'ENOENT') {
       return NextResponse.json(

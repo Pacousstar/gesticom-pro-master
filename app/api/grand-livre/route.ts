@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
     },
   })
   } catch (e) {
-    console.error('GET /api/grand-livre:', e)
+    await apiCatch(e, 'api/grand-livre')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

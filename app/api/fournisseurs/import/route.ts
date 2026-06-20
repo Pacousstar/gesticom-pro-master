@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { parseExcel } from '@/lib/excel'
 import { requireRole } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(req: NextRequest) {
     try {
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ success: true, created, updated, total: data.length })
     } catch (error: any) {
-        console.error('[IMPORT_FOURNISSEURS_ERROR]', error)
+        await apiCatch(error, 'api/fournisseurs/import')
         return NextResponse.json({ error: error.message || "Erreur lors de l'importation" }, { status: 500 })
     }
 }

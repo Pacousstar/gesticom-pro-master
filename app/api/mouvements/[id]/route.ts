@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
+import { apiCatch } from '@/lib/log-error'
 
 export async function DELETE(
   request: NextRequest,
@@ -33,7 +34,7 @@ export async function DELETE(
     await prisma.mouvement.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/mouvements/[id]:', e)
+    await apiCatch(e, 'api/mouvements/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

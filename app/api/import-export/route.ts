@@ -6,6 +6,7 @@ import { validateImportData, prepareExportData } from '@/lib/import-export'
 import { getEntiteId } from '@/lib/get-entite-id'
 
 import { rowsToBuffer, makeResponse, parseExcel } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 /**
  * POST : Importer des données depuis Excel/CSV
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
       message: `${imported} élément(s) importé(s) avec succès.`,
     })
   } catch (e) {
-    console.error('POST /api/import-export:', e)
+    await apiCatch(e, 'api/import-export')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
     const filename = `export-${entity.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.xlsx`
     return makeResponse(buf, filename)
   } catch (e) {
-    console.error('GET /api/import-export:', e)
+    await apiCatch(e, 'api/import-export')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

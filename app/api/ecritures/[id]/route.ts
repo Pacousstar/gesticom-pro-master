@@ -13,6 +13,9 @@ import {
   comptabiliserReglementAchat,
 } from '@/lib/comptabilisation'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { ecritureSchema } from '@/lib/validations'
 
 export async function GET(
   _request: NextRequest,
@@ -47,7 +50,7 @@ export async function GET(
     if (!ecriture) return NextResponse.json({ error: 'Écriture introuvable.' }, { status: 404 })
     return NextResponse.json(ecriture)
   } catch (e) {
-    console.error('GET /api/ecritures/[id]:', e)
+    await apiCatch(e, 'api/ecritures/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -68,54 +71,44 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const updateData: {
-      date?: Date
-      journalId?: number
-      piece?: string | null
-      libelle?: string
-      compteId?: number
-      debit?: number
-      credit?: number
-      reference?: string | null
-      referenceType?: string | null
-      referenceId?: number | null
-    } = {}
+    const validation = validateApiRequest(ecritureSchema.partial(), body)
+    if (!validation.success) return validation.response
+    const data = validation.data
 
-    if (body.date) updateData.date = new Date(body.date)
-    if (body.journalId != null) {
-      const jId = Number(body.journalId)
-      if (Number.isInteger(jId) && jId > 0) {
-        const journal = await prisma.journal.findUnique({ where: { id: jId } })
-        if (!journal) return NextResponse.json({ error: 'Journal introuvable.' }, { status: 400 })
-        updateData.journalId = jId
-      }
-    }
-    if (body.piece !== undefined) updateData.piece = body.piece ? String(body.piece).trim() || null : null
-    if (body.libelle != null) updateData.libelle = String(body.libelle).trim()
-    if (body.compteId != null) {
-      const cId = Number(body.compteId)
-      if (Number.isInteger(cId) && cId > 0) {
-        const compte = await prisma.planCompte.findUnique({ where: { id: cId } })
-        if (!compte) return NextResponse.json({ error: 'Compte introuvable.' }, { status: 400 })
-        updateData.compteId = cId
-      }
-    }
-    if (body.debit != null) updateData.debit = Math.max(0, Number(body.debit))
-    if (body.credit != null) updateData.credit = Math.max(0, Number(body.credit))
+    const updateData: Record<string, unknown> = {}
 
-    // Validation : débit ou crédit doit être > 0, pas les deux
-    if (updateData.debit !== undefined && updateData.credit !== undefined) {
-      if (updateData.debit === 0 && updateData.credit === 0) {
+    if (data.date) updateData.date = new Date(data.date)
+    if (data.journalId != null) {
+      const jId = data.journalId
+      const journal = await prisma.journal.findUnique({ where: { id: jId } })
+      if (!journal) return NextResponse.json({ error: 'Journal introuvable.' }, { status: 400 })
+      updateData.journalId = jId
+    }
+    if (data.piece !== undefined) updateData.piece = data.piece ?? null
+    if (data.libelle != null) updateData.libelle = data.libelle
+    if (data.compteId != null) {
+      const cId = data.compteId
+      const compte = await prisma.planCompte.findUnique({ where: { id: cId } })
+      if (!compte) return NextResponse.json({ error: 'Compte introuvable.' }, { status: 400 })
+      updateData.compteId = cId
+    }
+    if (data.debit != null) updateData.debit = data.debit
+    if (data.credit != null) updateData.credit = data.credit
+
+    const debit = updateData.debit as number | undefined
+    const credit = updateData.credit as number | undefined
+    if (debit !== undefined && credit !== undefined) {
+      if (debit === 0 && credit === 0) {
         return NextResponse.json({ error: 'Débit ou crédit doit être supérieur à 0.' }, { status: 400 })
       }
-      if (updateData.debit > 0 && updateData.credit > 0) {
+      if (debit > 0 && credit > 0) {
         return NextResponse.json({ error: 'Une écriture ne peut avoir à la fois un débit et un crédit.' }, { status: 400 })
       }
     }
 
-    if (body.reference !== undefined) updateData.reference = body.reference ? String(body.reference).trim() || null : null
-    if (body.referenceType !== undefined) updateData.referenceType = body.referenceType ? String(body.referenceType).trim() || null : null
-    if (body.referenceId !== undefined) updateData.referenceId = body.referenceId != null ? Number(body.referenceId) : null
+    if (data.reference !== undefined) updateData.reference = data.reference ?? null
+    if (data.referenceType !== undefined) updateData.referenceType = data.referenceType ?? null
+    if (data.referenceId !== undefined) updateData.referenceId = data.referenceId
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'Aucune donnée à mettre à jour.' }, { status: 400 })
@@ -281,7 +274,7 @@ export async function PATCH(
 
     return NextResponse.json(ecriture)
   } catch (e) {
-    console.error('PATCH /api/ecritures/[id]:', e)
+    await apiCatch(e, 'api/ecritures/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -383,7 +376,7 @@ export async function DELETE(
     await prisma.ecritureComptable.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/ecritures/[id]:', e)
+    await apiCatch(e, 'api/ecritures/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

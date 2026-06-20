@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { parseExcel } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 const CODE_PADDING = 3
 
@@ -172,7 +173,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, created, updated, total: data.length })
   } catch (error: any) {
-    console.error('[IMPORT_PRODUITS_ERROR]', error)
+    await apiCatch(error, 'api/produits/import')
     return NextResponse.json({ error: error.message || "Erreur lors de l'importation" }, { status: 500 })
   }
 }

@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { logAction } from '@/lib/audit'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { banqueSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: banquesAvecSolde })
   } catch (error) {
-    console.error('GET /api/banques:', error)
+    await apiCatch(error, 'api/banques')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -68,15 +71,13 @@ export async function POST(request: NextRequest) {
   if (authError) return authError
 
   try {
-    const data = await request.json()
-    const { numero, nomBanque, libelle, soldeInitial, compteId } = data
-
-    if (!numero || !nomBanque || !libelle) {
-      return NextResponse.json({ error: 'Numéro, nom de banque et libellé requis.' }, { status: 400 })
-    }
+    const body = await request.json()
+    const result = validateApiRequest(banqueSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
 
     // Vérifier si le numéro existe déjà
-    const existe = await prisma.banque.findUnique({ where: { numero } })
+    const existe = await prisma.banque.findUnique({ where: { numero: data.numero } })
     if (existe) {
       return NextResponse.json({ error: 'Ce numéro de compte existe déjà.' }, { status: 400 })
     }
@@ -93,14 +94,14 @@ export async function POST(request: NextRequest) {
 
     // compteId : accepter id ou numéro (512, 513, 514) ; résoudre par numéro si besoin
     let compteIdFinal: number | null = null
-    if (compteId != null && compteId !== '') {
-      const num = Number(compteId)
+    if (data.compteId != null) {
+      const num = Number(data.compteId)
       const byId = await prisma.planCompte.findUnique({ where: { id: num }, select: { id: true } })
       if (byId) {
         compteIdFinal = byId.id
       } else {
         const byNumero = await prisma.planCompte.findFirst({
-          where: { numero: String(compteId).trim() },
+          where: { numero: String(data.compteId).trim() },
           select: { id: true },
         })
         if (byNumero) compteIdFinal = byNumero.id
@@ -109,11 +110,11 @@ export async function POST(request: NextRequest) {
 
     const banque = await prisma.banque.create({
       data: {
-        numero: numero.trim(),
-        nomBanque: nomBanque.trim(),
-        libelle: libelle.trim(),
-        soldeInitial: Number(soldeInitial) || 0,
-        soldeActuel: Number(soldeInitial) || 0,
+        numero: data.numero,
+        nomBanque: data.nomBanque,
+        libelle: data.libelle,
+        soldeInitial: data.soldeInitial,
+        soldeActuel: data.soldeInitial,
         entiteId,
         compteId: compteIdFinal,
       },
@@ -122,11 +123,11 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    await logAction(session, 'CREATION', 'BANQUE', `Création compte bancaire: ${nomBanque} - ${libelle}`, session.entiteId)
+    await logAction(session, 'CREATION', 'BANQUE', `Création compte bancaire: ${data.nomBanque} - ${data.libelle}`, session.entiteId)
 
     return NextResponse.json(banque)
   } catch (error) {
-    console.error('POST /api/banques:', error)
+    await apiCatch(error, 'api/banques')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

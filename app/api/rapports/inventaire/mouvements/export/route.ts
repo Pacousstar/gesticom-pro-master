@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
     const filename = `mouvements-stock-${new Date().toISOString().split('T')[0]}.xlsx`
     return makeResponse(buf, filename)
   } catch (error) {
-    console.error('Export Excel Mouvements error:', error)
+    await apiCatch(error, 'api/rapports/inventaire/mouvements/export')
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })
   }
 }

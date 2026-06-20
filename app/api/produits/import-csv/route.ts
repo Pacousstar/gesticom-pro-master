@@ -6,6 +6,7 @@ import { processImportRows, type ImportRow } from '@/lib/importProduits'
 import { resolveDataFilePath } from '@/lib/resolveDataFile'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 const CSV_FILE = 'GestiCom_Produits_Master.csv'
 
@@ -110,7 +111,7 @@ export async function POST() {
 
     return NextResponse.json({ created, updated, total: data.length })
   } catch (e) {
-    console.error('POST /api/produits/import-csv:', e)
+    await apiCatch(e, 'api/produits/import-csv')
     const err = e as NodeJS.ErrnoException
     if (err?.code === 'ENOENT') {
       return NextResponse.json(

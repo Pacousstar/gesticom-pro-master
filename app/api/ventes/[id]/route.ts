@@ -13,6 +13,9 @@ import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
 import { verifierCloture } from '@/lib/cloture'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { venteSchema } from '@/lib/validations'
 
 export async function GET(
   _request: NextRequest,
@@ -209,7 +212,7 @@ export async function DELETE(
     // Invalider le cache pour affichage immédiat
             return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/ventes/[id]:', e)
+    await apiCatch(e, 'api/ventes/[id]')
     return NextResponse.json({ error: (e as Error).message || 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -226,6 +229,8 @@ export async function PATCH(
   const id = Number((await params).id)
   try {
     const body = await request.json()
+    const vres = validateApiRequest(venteSchema.partial(), body)
+    if (!vres.success) return vres.response
     const action = body?.action || (body?.lignes ? 'FULL_UPDATE' : 'PAGEMENT')
 
     if (action === 'LIVRER') {
@@ -932,7 +937,7 @@ export async function PATCH(
 
     return NextResponse.json({ error: 'Action non reconnue.' }, { status: 400 })
   } catch (e: any) {
-    console.error('PATCH /api/ventes/[id]:', e)
+    await apiCatch(e, 'api/ventes/[id]')
     return NextResponse.json({ error: e.message || 'Erreur serveur.' }, { status: 500 })
   }
 }

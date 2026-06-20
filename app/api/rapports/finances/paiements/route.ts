@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -110,7 +111,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ summary: formattedSummary, transactions: formattedTransactions })
     }
   } catch (error) {
-    console.error('Erreur Rapport Paiements:', error)
+    await apiCatch(error, 'api/rapports/finances/paiements')
     return NextResponse.json({ error: 'Erreur lors de la récupération des paiements' }, { status: 500 })
   }
 }

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (e) {
-    console.error(e)
+    await apiCatch(e, 'api/rapports/rentabilite')
     return NextResponse.json({ error: 'Erreur lors du calcul de rentabilité' }, { status: 500 })
   }
 }

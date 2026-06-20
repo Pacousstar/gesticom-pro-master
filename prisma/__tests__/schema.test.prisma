@@ -8,6 +8,56 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Utilisateur {
+  id        Int      @id @default(autoincrement())
+  login     String   @unique
+  nom       String
+  role      String   @default("ADMIN")
+  entiteId  Int      @default(1)
+  actif     Boolean  @default(true)
+}
+
+model Magasin {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  nom         String
+  localisation String  @default("")
+  entiteId    Int      @default(1)
+  actif       Boolean  @default(true)
+  soldeCaisse Float    @default(0)
+  stocks      Stock[]
+  ventes      Vente[]
+  achats      Achat[]
+  operationsCaisse Caisse[]
+  mouvements  Mouvement[]
+}
+
+model Client {
+  id            Int      @id @default(autoincrement())
+  code          String?  @unique
+  nom           String
+  telephone     String?
+  type          String   @default("CASH")
+  plafondCredit Float?
+  soldeInitial  Float    @default(0)
+  avoirInitial  Float    @default(0)
+  entiteId      Int      @default(1)
+  actif         Boolean  @default(true)
+  ventes        Vente[]
+  reglements    ReglementVente[]
+}
+
+model Fournisseur {
+  id       Int      @id @default(autoincrement())
+  code     String?  @unique
+  nom      String
+  telephone String?
+  entiteId Int      @default(1)
+  actif    Boolean  @default(true)
+  achats     Achat[]
+  reglements ReglementAchat[]
+}
+
 model Produit {
   id          Int      @id @default(autoincrement())
   code        String   @unique
@@ -16,10 +66,13 @@ model Produit {
   prixVente   Float?
   prixAchat   Float?
   pamp        Float?   @default(0)
+  seuilMin    Int      @default(5)
   actif       Boolean  @default(true)
   entiteId    Int      @default(1)
   stocks      Stock[]
   ventesLignes VenteLigne[]
+  achatsLignes AchatLigne[]
+  mouvements  Mouvement[]
 }
 
 model Stock {
@@ -27,23 +80,50 @@ model Stock {
   produitId Int
   magasinId Int     @default(1)
   quantite  Float   @default(0)
+  quantiteInitiale Float @default(0)
+  entiteId  Int     @default(1)
   produit   Produit @relation(fields: [produitId], references: [id])
+  magasin   Magasin @relation(fields: [magasinId], references: [id])
+
+  @@unique([produitId, magasinId, entiteId])
+}
+
+model Mouvement {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @default(now())
+  type          String
+  produitId     Int
+  magasinId     Int
+  entiteId      Int      @default(1)
+  utilisateurId Int      @default(1)
+  quantite      Float
+  observation   String?
+  produit       Produit  @relation(fields: [produitId], references: [id])
+  magasin       Magasin  @relation(fields: [magasinId], references: [id])
 }
 
 model Vente {
-  id             Int          @id @default(autoincrement())
-  numero         String       @unique
-  date           DateTime     @default(now())
-  magasinId      Int          @default(1)
-  entiteId       Int          @default(1)
-  utilisateurId  Int          @default(1)
+  id             Int            @id @default(autoincrement())
+  numero         String         @unique
+  date           DateTime       @default(now())
+  magasinId      Int
+  entiteId       Int            @default(1)
+  utilisateurId  Int            @default(1)
+  clientId       Int?
+  clientLibre    String?
   montantTotal   Float
-  montantPaye    Float        @default(0)
-  statutPaiement String       @default("PAYE")
-  modePaiement   String       @default("ESPECES")
-  pointsGagnes   Int          @default(0)
-  estVenteRapide Boolean      @default(false)
+  remiseGlobale  Float          @default(0)
+  montantPaye    Float          @default(0)
+  statutPaiement String         @default("CREDIT")
+  modePaiement   String         @default("ESPECES")
+  statut         String         @default("VALIDEE")
+  pointsGagnes   Int            @default(0)
+  estVenteRapide Boolean        @default(false)
+  observation    String?
+  magasin        Magasin        @relation(fields: [magasinId], references: [id])
+  client         Client?        @relation(fields: [clientId], references: [id])
   lignes         VenteLigne[]
+  ReglementVenteLigne ReglementVenteLigne[]
 }
 
 model VenteLigne {
@@ -57,4 +137,167 @@ model VenteLigne {
   montant      Float
   vente        Vente    @relation(fields: [venteId], references: [id], onDelete: Cascade)
   produit      Produit  @relation(fields: [produitId], references: [id])
+}
+
+model ReglementVente {
+  id            Int                    @id @default(autoincrement())
+  date          DateTime               @default(now())
+  montant       Float
+  modePaiement  String
+  statut        String                 @default("VALIDE")
+  venteId       Int?
+  clientId      Int?
+  utilisateurId Int                    @default(1)
+  observation   String?
+  entiteId      Int?                   @default(1)
+  client        Client?                @relation(fields: [clientId], references: [id])
+  ReglementVenteLigne ReglementVenteLigne[]
+}
+
+model ReglementVenteLigne {
+  id          Int            @id @default(autoincrement())
+  reglementId Int
+  venteId     Int
+  montant     Float
+  reglement   ReglementVente @relation(fields: [reglementId], references: [id], onDelete: Cascade)
+  vente       Vente          @relation(fields: [venteId], references: [id], onDelete: Cascade)
+}
+
+model Achat {
+  id              Int         @id @default(autoincrement())
+  numero          String      @unique
+  date            DateTime    @default(now())
+  magasinId       Int
+  entiteId        Int         @default(1)
+  utilisateurId   Int         @default(1)
+  fournisseurId   Int?
+  fournisseurLibre String?
+  montantTotal    Float
+  fraisApproche   Float       @default(0)
+  montantPaye     Float?      @default(0)
+  statut          String      @default("VALIDEE")
+  statutPaiement  String      @default("CREDIT")
+  modePaiement    String      @default("ESPECES")
+  observation     String?
+  fournisseur        Fournisseur?         @relation(fields: [fournisseurId], references: [id])
+  magasin            Magasin              @relation(fields: [magasinId], references: [id])
+  lignes             AchatLigne[]
+  ReglementAchatLigne ReglementAchatLigne[]
+}
+
+model AchatLigne {
+  id           Int      @id @default(autoincrement())
+  achatId      Int
+  produitId    Int
+  designation  String
+  quantite     Float
+  prixUnitaire Float
+  tva          Float    @default(0)
+  remise       Float    @default(0)
+  montant      Float
+  achat        Achat    @relation(fields: [achatId], references: [id], onDelete: Cascade)
+  produit      Produit  @relation(fields: [produitId], references: [id])
+}
+
+model ReglementAchat {
+  id            Int                    @id @default(autoincrement())
+  date          DateTime               @default(now())
+  montant       Float
+  modePaiement  String
+  statut        String                 @default("VALIDE")
+  achatId       Int?
+  fournisseurId Int?
+  utilisateurId Int                    @default(1)
+  entiteId      Int?                   @default(1)
+  fournisseur   Fournisseur?           @relation(fields: [fournisseurId], references: [id])
+  ReglementAchatLigne ReglementAchatLigne[]
+}
+
+model ReglementAchatLigne {
+  id          Int            @id @default(autoincrement())
+  reglementId Int
+  achatId     Int
+  montant     Float
+  reglement   ReglementAchat @relation(fields: [reglementId], references: [id], onDelete: Cascade)
+  achat       Achat          @relation(fields: [achatId], references: [id], onDelete: Cascade)
+}
+
+model Caisse {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @default(now())
+  magasinId     Int
+  type          String
+  motif         String
+  montant       Float
+  utilisateurId Int      @default(1)
+  observation   String?
+  sousType      String   @default("MANUEL")
+  entiteId      Int      @default(1)
+  magasin       Magasin  @relation(fields: [magasinId], references: [id])
+}
+
+model Banque {
+  id          Int      @id @default(autoincrement())
+  numero      String   @unique
+  nomBanque   String
+  libelle     String
+  soldeInitial Float   @default(0)
+  soldeActuel Float    @default(0)
+  entiteId    Int      @default(1)
+  actif       Boolean  @default(true)
+  operations  OperationBancaire[]
+}
+
+model OperationBancaire {
+  id            Int      @id @default(autoincrement())
+  banqueId      Int
+  date          DateTime @default(now())
+  type          String
+  libelle       String
+  montant       Float
+  soldeAvant    Float    @default(0)
+  soldeApres    Float    @default(0)
+  reference     String?
+  beneficiaire  String?
+  utilisateurId Int      @default(1)
+  entiteId      Int      @default(1)
+  banque        Banque   @relation(fields: [banqueId], references: [id], onDelete: Cascade)
+}
+
+model PlanCompte {
+  id        Int      @id @default(autoincrement())
+  numero    String   @unique
+  libelle   String
+  classe    String
+  type      String
+  actif     Boolean  @default(true)
+  ecritures EcritureComptable[]
+}
+
+model Journal {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  libelle   String
+  type      String
+  actif     Boolean  @default(true)
+  ecritures EcritureComptable[]
+}
+
+model EcritureComptable {
+  id            Int         @id @default(autoincrement())
+  numero        String      @unique
+  date          DateTime    @default(now())
+  journalId     Int
+  piece         String?
+  libelle       String
+  compteId      Int
+  debit         Float       @default(0)
+  credit        Float       @default(0)
+  reference     String?
+  referenceType String?
+  referenceId   Int?
+  utilisateurId Int         @default(1)
+  entiteId      Int?        @default(1)
+  journal       Journal     @relation(fields: [journalId], references: [id])
+  compte        PlanCompte  @relation(fields: [compteId], references: [id])
 }

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET() {
   const session = await getSession()
@@ -29,7 +30,7 @@ export async function GET() {
     if (!list.includes('DIVERS')) list.unshift('DIVERS')
     return NextResponse.json(list)
   } catch (e) {
-    console.error('GET /api/produits/categories:', e)
+    await apiCatch(e, 'api/produits/categories')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

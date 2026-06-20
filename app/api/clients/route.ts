@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { clientSchema } from '@/lib/validations'
+import { apiCatch } from '@/lib/log-error'
 
 // Utilisation directe du client Prisma pour éviter les erreurs de type complexes
 
@@ -204,7 +205,7 @@ export async function POST(request: NextRequest) {
     // Invalider le cache pour affichage immédiat
             return NextResponse.json(c)
   } catch (e: any) {
-    console.error('POST /api/clients:', e)
+    await apiCatch(e, 'api/clients')
     if (e?.code === 'P2002') {
       return NextResponse.json({ error: 'Code client déjà utilisé. Réessayez.' }, { status: 409 })
     }

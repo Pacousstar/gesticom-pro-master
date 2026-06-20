@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(request: NextRequest) {
   const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
       results,
     })
   } catch (error: any) {
-    console.error('Sync Paiements Error:', error)
+    await apiCatch(error, 'api/maintenance/sync-paiements')
     return NextResponse.json({ error: 'Erreur lors de la synchronisation.', details: error.message }, { status: 500 })
   }
 }

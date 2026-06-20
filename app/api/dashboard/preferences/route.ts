@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const preferencesSchema = z.object({
+  widgets: z.any().optional(),
+  periode: z.string().max(10).optional().default('30'),
+})
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -23,7 +31,7 @@ export async function GET(request: NextRequest) {
       try {
         widgets = JSON.parse(preference.widgets)
       } catch (e) {
-        console.error('Erreur parse widgets:', e)
+        await apiCatch(e, 'api/dashboard/preferences')
         widgets = null
       }
     }
@@ -33,7 +41,7 @@ export async function GET(request: NextRequest) {
       periode: preference.periode || '30',
     })
   } catch (e) {
-    console.error('GET /api/dashboard/preferences:', e)
+    await apiCatch(e, 'api/dashboard/preferences')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -46,7 +54,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { widgets: widgetsInput, periode } = body
+    const validation = validateApiRequest(preferencesSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+    const widgetsInput = data.widgets
+    const periode = data.periode
 
     const preference = await prisma.dashboardPreference.upsert({
       where: { utilisateurId: session.userId },
@@ -66,7 +78,7 @@ export async function POST(request: NextRequest) {
       try {
         widgets = JSON.parse(preference.widgets)
       } catch (e) {
-        console.error('Erreur parse widgets:', e)
+        await apiCatch(e, 'api/dashboard/preferences')
         widgets = null
       }
     }
@@ -76,7 +88,7 @@ export async function POST(request: NextRequest) {
       periode: preference.periode || '30',
     })
   } catch (e) {
-    console.error('POST /api/dashboard/preferences:', e)
+    await apiCatch(e, 'api/dashboard/preferences')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

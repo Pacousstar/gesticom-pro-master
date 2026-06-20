@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 import {
   comptabiliserVente,
   comptabiliserReglementVente,
@@ -192,7 +193,7 @@ export async function POST() {
 
     return NextResponse.json({ ok: true, results })
   } catch (error) {
-    console.error('Fiabilisation Error:', error)
+    await apiCatch(error, 'api/maintenance/fiabilisation')
     return NextResponse.json({ error: 'Erreur lors de la maintenance.' }, { status: 500 })
   }
 }
@@ -223,7 +224,7 @@ export async function PUT() {
       banksRepaired,
     })
   } catch (error) {
-    console.error('Repair Error:', error)
+    await apiCatch(error, 'api/maintenance/fiabilisation')
     return NextResponse.json({ error: 'Erreur lors de la réparation.' }, { status: 500 })
   }
 }

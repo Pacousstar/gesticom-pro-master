@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 const DASHBOARD_TIMEOUT_MS = 20000
 
@@ -33,12 +34,12 @@ export async function GET(request: NextRequest) {
     const debHier = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
     const finHier = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59)
 
-    const catchZero = (label: string) => (err: unknown) => {
-      console.error('[dashboard]', label, err instanceof Error ? err.message : err)
+    const catchZero = (label: string) => async (err: unknown) => {
+      await apiCatch(err, 'api/dashboard:' + label)
       return 0
     }
-    const catchEmpty = (label: string) => (err: unknown) => {
-      console.error('[dashboard]', label, err instanceof Error ? err.message : err)
+    const catchEmpty = (label: string) => async (err: unknown) => {
+      await apiCatch(err, 'api/dashboard:' + label)
       return [] as never[]
     }
 
@@ -90,8 +91,8 @@ export async function GET(request: NextRequest) {
           ca_total: toNum(total._sum.montantTotal),
           nb_total: total._count.id
         }]
-      })().catch(err => {
-        console.error('[dashboard] sales.aggregate', err)
+      })().catch(async (err) => {
+        await apiCatch(err, 'api/dashboard')
         return [{ nb_auj: 0, ca_auj: 0, nb_hier: 0, ca_hier: 0, ca_mois: 0, ca_total: 0, nb_total: 0 }]
       }),
       // 1 - Mouvements du jour
@@ -145,8 +146,8 @@ export async function GET(request: NextRequest) {
         INNER JOIN "Magasin" m ON s."magasinId" = m.id
         WHERE p.actif = 1
         ${entiteId != null ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
-      `.catch(err => {
-        console.error('[dashboard] stock.raw', err)
+      `.catch(async (err) => {
+        await apiCatch(err, 'api/dashboard')
         return [{ total_achat: 0, total_vente: 0, nb_ruptures: 0, nb_en_stock: 0 }]
       }),
       // 9 - Dépenses Totales
@@ -450,7 +451,7 @@ const result = await Promise.race([
       },
     })
   } catch (e: any) {
-    console.error('Dashboard API error:', e)
+    await apiCatch(e, 'api/dashboard')
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({
       transactionsJour: 0,

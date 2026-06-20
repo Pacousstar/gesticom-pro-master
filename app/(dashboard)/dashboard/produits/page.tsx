@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
-import { Search, Plus, Upload, Download, Loader2, Pencil, Trash2, AlertTriangle, X, Printer } from 'lucide-react'
+import { Search, Plus, Upload, Download, Loader2, Pencil, Trash2, AlertTriangle, X, Printer, Archive } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { produitSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
@@ -56,6 +56,7 @@ export default function ProduitsPage() {
   const [savingForm, setSavingForm] = useState(false)
   const [deleting, setDeleting] = useState<Produit | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isPermanentDelete, setIsPermanentDelete] = useState(false)
   const [restoring, setRestoring] = useState<number | null>(null)
   const [params, setParams] = useState<any>(null)
   const [allProductsForPrint, setAllProductsForPrint] = useState<Produit[]>([])
@@ -214,18 +215,35 @@ export default function ProduitsPage() {
     if (!deleting) return
     setIsDeleting(true)
     try {
-      const res = await fetch(`/api/produits/${deleting.id}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (res.ok) {
-        setDeleting(null)
-        mutate()
-        fetchStats()
-        showSuccess(data.softDeleted ? 'Produit archivé (historique conservé).' : 'Produit supprimé.')
+      if (isPermanentDelete) {
+        const res = await fetch(`/api/produits/${deleting.id}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (res.ok) {
+          setDeleting(null)
+          mutate()
+          fetchStats()
+          showSuccess('Produit supprimé définitivement.')
+        } else {
+          showError(data.error || 'Erreur lors de la suppression.')
+        }
       } else {
-        showError(data.error || 'Erreur lors de la suppression.')
+        const res = await fetch(`/api/produits/${deleting.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'archive' }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          setDeleting(null)
+          mutate()
+          fetchStats()
+          showSuccess('Produit archivé (historique conservé).')
+        } else {
+          showError(data.error || "Erreur lors de l'archivage.")
+        }
       }
     } catch (e) {
-      showError('Erreur réseau lors de la suppression.')
+      showError('Erreur réseau.')
     } finally {
       setIsDeleting(false)
     }
@@ -800,12 +818,22 @@ export default function ProduitsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDeleting(p)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
-                          title="Archiver ce produit"
+                          onClick={() => { setDeleting(p); setIsPermanentDelete(false); }}
+                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-orange-600"
+                          title="Archiver ce produit (le masquer)"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Archive className="h-4 w-4" />
                         </button>
+                        {(p.stockConsolide ?? 0) === 0 && (
+                          <button
+                            type="button"
+                            onClick={() => { setDeleting(p); setIsPermanentDelete(true); }}
+                            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
+                            title="Supprimer définitivement ce produit"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -925,31 +953,63 @@ export default function ProduitsPage() {
       {deleting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDeleting(null)}>
           <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center gap-3 text-red-600">
-              <div className="rounded-full bg-red-100 p-2">
-                <AlertTriangle className="h-6 w-6" />
-              </div>
-              <h3 className="text-lg font-bold">Confirmer l&apos;archivage</h3>
-            </div>
-            <p className="mb-6 text-sm text-gray-600">
-              Voulez-vous archiver le produit <strong>{deleting.designation}</strong> ({deleting.code}) ?
-              Le produit sera masqué mais l&apos;historique sera conservé.
-            </p>
-            <div className="flex gap-3">
-              <button
-                disabled={isDeleting}
-                onClick={handleDelete}
-                className="flex-1 rounded-lg bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {isDeleting ? 'Archivage...' : 'Oui, archiver'}
-              </button>
-              <button
-                onClick={() => setDeleting(null)}
-                className="flex-1 rounded-lg border-2 border-gray-300 bg-white px-4 py-2 font-bold text-gray-700 hover:bg-gray-50"
-              >
-                Annuler
-              </button>
-            </div>
+            {isPermanentDelete ? (
+              <>
+                <div className="mb-4 flex items-center gap-3 text-red-600">
+                  <div className="rounded-full bg-red-100 p-2">
+                    <Trash2 className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-lg font-bold">Confirmer la suppression</h3>
+                </div>
+                <p className="mb-6 text-sm text-gray-600">
+                  Voulez-vous supprimer <strong>définitivement</strong> le produit <strong>{deleting.designation}</strong> ({deleting.code}) ?
+                  Cette action est irréversible.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    disabled={isDeleting}
+                    onClick={handleDelete}
+                    className="flex-1 rounded-lg bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {isDeleting ? 'Suppression...' : 'Oui, supprimer'}
+                  </button>
+                  <button
+                    onClick={() => setDeleting(null)}
+                    className="flex-1 rounded-lg border-2 border-gray-300 bg-white px-4 py-2 font-bold text-gray-700 hover:bg-gray-50"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-4 flex items-center gap-3 text-orange-600">
+                  <div className="rounded-full bg-orange-100 p-2">
+                    <Archive className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-lg font-bold">Confirmer l&apos;archivage</h3>
+                </div>
+                <p className="mb-6 text-sm text-gray-600">
+                  Voulez-vous archiver le produit <strong>{deleting.designation}</strong> ({deleting.code}) ?
+                  Le produit sera masqué mais l&apos;historique sera conservé.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    disabled={isDeleting}
+                    onClick={handleDelete}
+                    className="flex-1 rounded-lg bg-orange-600 px-4 py-2 font-bold text-white hover:bg-orange-700 disabled:opacity-50"
+                  >
+                    {isDeleting ? 'Archivage...' : 'Oui, archiver'}
+                  </button>
+                  <button
+                    onClick={() => setDeleting(null)}
+                    className="flex-1 rounded-lg border-2 border-gray-300 bg-white px-4 py-2 font-bold text-gray-700 hover:bg-gray-50"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

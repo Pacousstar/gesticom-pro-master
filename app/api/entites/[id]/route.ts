@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requireRole, ROLES_ADMIN } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { entiteSchema } from '@/lib/validations'
 
 export async function GET(
   request: NextRequest,
@@ -35,7 +38,7 @@ export async function GET(
 
     return NextResponse.json(entite)
   } catch (e) {
-    console.error('GET /api/entites/[id]:', e)
+    await apiCatch(e, 'api/entites/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -55,11 +58,9 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const code = body?.code?.trim().toUpperCase()
-    const nom = body?.nom?.trim()
-    const type = body?.type?.trim()
-    const localisation = body?.localisation?.trim()
-    const active = body?.active
+    const vres = validateApiRequest(entiteSchema.partial(), body)
+    if (!vres.success) return vres.response
+    const { code, nom, type, localisation, active } = vres.data
 
     if (!code || !nom || !type) {
       return NextResponse.json({ error: 'Code, nom et type requis.' }, { status: 400 })
@@ -94,7 +95,7 @@ export async function PATCH(
 
     return NextResponse.json(entite)
   } catch (e) {
-    console.error('PATCH /api/entites/[id]:', e)
+    await apiCatch(e, 'api/entites/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -129,7 +130,7 @@ export async function DELETE(
     await prisma.entite.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/entites/[id]:', e)
+    await apiCatch(e, 'api/entites/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

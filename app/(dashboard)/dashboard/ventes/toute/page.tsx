@@ -167,7 +167,8 @@ export default function ToutesLesVentesPage() {
 
   return (
     <div className="pb-12">
-      <div className="print:hidden space-y-6">
+      {/* VUE ÉCRAN */}
+      <div className="print:hidden space-y-8">
         <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-orange-500 to-orange-700 p-8 shadow-2xl">
           <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-white/10 blur-3xl opacity-50" />
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -198,6 +199,194 @@ export default function ToutesLesVentesPage() {
           </div>
         </div>
 
+        {/* KPI Cards */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-black text-white uppercase tracking-[0.3em] ml-6">Analyse de Compteur : 1 / 4</p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: "C.A PÉRIODE", val: formatFcfa(caMonth), sub: `${nbSalesMonth} ventes sur la période`, icon: ShoppingCart, color: "bg-orange-600" },
+              { label: "TOTAL ENCAISSÉ", val: formatFcfa(encaisseMonth), sub: "Règlements reçus", icon: CheckCircle2, color: "bg-blue-600" },
+              { label: "RESTE À RECOUVRER", val: formatFcfa(caMonth - encaisseMonth), sub: "Impayés", icon: Clock, color: "bg-rose-600" },
+              { label: "NOMBRE DE VENTES", val: String(nbSalesMonth), sub: "Volume de la période", icon: Tag, color: "bg-indigo-600" },
+            ].map((c, i) => (
+              <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group`}>
+                 <div className="relative z-10 text-white flex flex-col justify-between h-full">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
+                    <div>
+                      <h3 className="text-2xl font-black tracking-tighter">{c.val}</h3>
+                      <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
+                    </div>
+                 </div>
+                 <c.icon className="absolute right-4 bottom-4 h-12 w-12 text-white opacity-10 group-hover:scale-110 transition-transform" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex flex-col md:flex-row gap-6 items-end">
+          <form onSubmit={handleFilter} className="flex flex-wrap items-end gap-4 flex-1">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Du</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="block w-40 rounded-xl border-gray-200 bg-gray-50 text-gray-900 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Au</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="block w-40 rounded-xl border-gray-200 bg-gray-50 text-gray-900 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+              />
+            </div>
+            <button type="submit" className="rounded-xl bg-gray-900 px-8 py-2.5 text-sm font-black text-white hover:bg-black transition-all shadow-lg uppercase tracking-widest flex items-center gap-2">
+              <Filter className="h-4 w-4" /> Filtrer
+            </button>
+          </form>
+
+          <div className="relative w-full md:max-w-xs">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Référence, client, produit, date..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-2xl border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
+            />
+          </div>
+          <div>
+            <select
+              value={statutPaiement}
+              onChange={(e) => setStatutPaiement(e.target.value)}
+              className="rounded-2xl border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
+            >
+              <option value="">Tous les statuts</option>
+              <option value="PAYE">Payé</option>
+              <option value="PARTIEL">Partiel</option>
+              <option value="CREDIT">Crédit</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-hidden rounded-[2.5rem] bg-white shadow-2xl border border-gray-100">
+          <div className="bg-gray-50/50 px-8 py-6 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter italic flex items-center gap-3">
+                <Clock className="h-5 w-5 text-orange-500" />
+                Journal détaillé des transactions
+              </h2>
+              <div className="flex gap-2">
+                 <span className="bg-orange-100 text-orange-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
+                    {filteredData.length} Opérations
+                 </span>
+              </div>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-40">
+              <Loader2 className="h-10 w-10 animate-spin text-orange-500" />
+              <p className="text-xs font-black uppercase tracking-widest italic text-gray-500">Chargement des données...</p>
+            </div>
+          ) : filteredData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-20">
+               <ShoppingCart className="h-16 w-16" />
+               <p className="text-sm font-black uppercase tracking-widest italic">Aucun mouvement trouvé</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-left">
+                    <th className="px-8 py-5">Référence / Date</th>
+                    <th className="px-8 py-5">Client / Magasin</th>
+                    <th className="px-8 py-5 text-center">Règlement</th>
+                    <th className="px-8 py-5 text-right">C.A Total</th>
+                    <th className="px-8 py-5 text-right">Encaissé</th>
+                    <th className="px-8 py-5 text-right">Dette</th>
+                    <th className="px-8 py-5 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedData.map((v) => (
+                    <tr key={v.id} className="group hover:bg-orange-50/30 transition-colors">
+                      <td className="px-8 py-6">
+                         <p className="font-mono text-xs font-black text-orange-600">{v.numero}</p>
+                         <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-tighter">
+                            {new Date(v.date).toLocaleDateString('fr-FR', {day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'})}
+                         </p>
+                      </td>
+                      <td className="px-8 py-6">
+                         <p className="text-sm font-black text-gray-800 uppercase tracking-tighter">{v.client}</p>
+                         <p className="text-[9px] font-bold text-gray-400 flex items-center gap-1 mt-0.5 uppercase">
+                            <Warehouse className="h-3 w-3" /> {v.magasin}
+                         </p>
+                      </td>
+                      <td className="px-8 py-6">
+                         <div className="flex flex-col items-center gap-2">
+                            <span className="bg-gray-100 px-3 py-1 rounded-lg text-[9px] font-black text-gray-600 uppercase tracking-widest">
+                               {v.modePaiement}
+                            </span>
+                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${v.statutPaiement === 'PAYE' ? 'bg-emerald-100 text-emerald-600' : v.statutPaiement === 'PARTIEL' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-600'}`}>
+                               {v.statutPaiement}
+                            </span>
+                         </div>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                         <p className="text-sm font-black text-gray-900 tracking-tighter">{formatFcfa(v.montantTotal)}</p>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                         <p className="text-sm font-black text-emerald-600 tracking-tighter">{formatFcfa(v.montantPaye)}</p>
+                      </td>
+                        <td className="px-8 py-6 text-right">
+                          <p className={`text-sm font-black tracking-tighter ${v.montantTotal - v.montantPaye > 0 ? 'text-rose-500' : 'text-gray-300'}`}>
+                             {formatFcfa(v.montantTotal - v.montantPaye)}
+                          </p>
+                        </td>
+                        <td className="px-8 py-6">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setEditingVenteId(v.id)}
+                              className="rounded-xl border border-gray-200 bg-white p-2.5 text-orange-600 hover:bg-orange-600 hover:text-white transition-all shadow-sm"
+                              title="Modifier"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                             <button
+                               onClick={() => handleSupprimer(v.id, v.numero)}
+                               disabled={supprimant === v.id}
+                               className="rounded-xl border border-gray-200 bg-white p-2.5 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
+                               title="Supprimer"
+                             >
+                               {supprimant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                             </button>
+                           )}
+                          </div>
+                        </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="bg-gray-50/50 px-8 py-6 border-t border-gray-100">
+              <Pagination 
+                currentPage={page} 
+                totalPages={totalPages} 
+                itemsPerPage={itemsPerPage} 
+                totalItems={filteredData.length} 
+                onPageChange={setPage} 
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {isPreviewOpen && (
@@ -375,195 +564,10 @@ export default function ToutesLesVentesPage() {
                       </table>
                     </ListPrintWrapper>
             </div>
-          ))
-        })()}
+            ))
+          })()}
       </div>
 
-      <div className="space-y-2 print:hidden">
-        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6">Analyse de Compteur : 1 / 4</p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: "C.A PÉRIODE", val: formatFcfa(caMonth), sub: `${nbSalesMonth} ventes sur la période`, icon: ShoppingCart, color: "bg-orange-600" },
-            { label: "TOTAL ENCAISSÉ", val: formatFcfa(encaisseMonth), sub: "Règlements reçus", icon: CheckCircle2, color: "bg-blue-600" },
-            { label: "RESTE À RECOUVRER", val: formatFcfa(caMonth - encaisseMonth), sub: "Impayés", icon: Clock, color: "bg-rose-600" },
-            { label: "NOMBRE DE VENTES", val: String(nbSalesMonth), sub: "Volume de la période", icon: Tag, color: "bg-indigo-600" },
-          ].map((c, i) => (
-            <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group`}>
-               <div className="relative z-10 text-white flex flex-col justify-between h-full">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{c.label}</p>
-                  <div>
-                    <h3 className="text-2xl font-black tracking-tighter">{c.val}</h3>
-                    <p className="text-[9px] font-bold opacity-60 uppercase">{c.sub}</p>
-                  </div>
-               </div>
-               <c.icon className="absolute right-4 bottom-4 h-12 w-12 text-white opacity-10 group-hover:scale-110 transition-transform" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex flex-col md:flex-row gap-6 items-end print:hidden">
-        <form onSubmit={handleFilter} className="flex flex-wrap items-end gap-4 flex-1">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Du</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="block w-40 rounded-xl border-gray-200 bg-gray-50 text-gray-900 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Au</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="block w-40 rounded-xl border-gray-200 bg-gray-50 text-gray-900 px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-            />
-          </div>
-          <button type="submit" className="rounded-xl bg-gray-900 px-8 py-2.5 text-sm font-black text-white hover:bg-black transition-all shadow-lg uppercase tracking-widest flex items-center gap-2">
-            <Filter className="h-4 w-4" /> Filtrer
-          </button>
-        </form>
-
-        <div className="relative w-full md:max-w-xs">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Référence, client, produit, date..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-2xl border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
-          />
-        </div>
-        <div>
-          <select
-            value={statutPaiement}
-            onChange={(e) => setStatutPaiement(e.target.value)}
-            className="rounded-2xl border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
-          >
-            <option value="">Tous les statuts</option>
-            <option value="PAYE">Payé</option>
-            <option value="PARTIEL">Partiel</option>
-            <option value="CREDIT">Crédit</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-[2.5rem] bg-white shadow-2xl border border-gray-100 print:hidden">
-        <div className="bg-gray-50/50 px-8 py-6 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter italic flex items-center gap-3">
-              <Clock className="h-5 w-5 text-orange-500" />
-              Journal détaillé des transactions
-            </h2>
-            <div className="flex gap-2">
-               <span className="bg-orange-100 text-orange-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
-                  {filteredData.length} Opérations
-               </span>
-            </div>
-        </div>
-
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-40">
-            <Loader2 className="h-10 w-10 animate-spin text-orange-500" />
-            <p className="text-xs font-black uppercase tracking-widest italic text-gray-500">Chargement des données...</p>
-          </div>
-        ) : filteredData.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-20">
-             <ShoppingCart className="h-16 w-16" />
-             <p className="text-sm font-black uppercase tracking-widest italic">Aucun mouvement trouvé</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-left">
-                  <th className="px-8 py-5">Référence / Date</th>
-                  <th className="px-8 py-5">Client / Magasin</th>
-                  <th className="px-8 py-5 text-center">Règlement</th>
-                  <th className="px-8 py-5 text-right">C.A Total</th>
-                  <th className="px-8 py-5 text-right">Encaissé</th>
-                  <th className="px-8 py-5 text-right">Dette</th>
-                  <th className="px-8 py-5 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {paginatedData.map((v) => (
-                  <tr key={v.id} className="group hover:bg-orange-50/30 transition-colors">
-                    <td className="px-8 py-6">
-                       <p className="font-mono text-xs font-black text-orange-600">{v.numero}</p>
-                       <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-tighter">
-                          {new Date(v.date).toLocaleDateString('fr-FR', {day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'})}
-                       </p>
-                    </td>
-                    <td className="px-8 py-6">
-                       <p className="text-sm font-black text-gray-800 uppercase tracking-tighter">{v.client}</p>
-                       <p className="text-[9px] font-bold text-gray-400 flex items-center gap-1 mt-0.5 uppercase">
-                          <Warehouse className="h-3 w-3" /> {v.magasin}
-                       </p>
-                    </td>
-                    <td className="px-8 py-6">
-                       <div className="flex flex-col items-center gap-2">
-                          <span className="bg-gray-100 px-3 py-1 rounded-lg text-[9px] font-black text-gray-600 uppercase tracking-widest">
-                             {v.modePaiement}
-                          </span>
-                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${v.statutPaiement === 'PAYE' ? 'bg-emerald-100 text-emerald-600' : v.statutPaiement === 'PARTIEL' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-600'}`}>
-                             {v.statutPaiement}
-                          </span>
-                       </div>
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                       <p className="text-sm font-black text-gray-900 tracking-tighter">{formatFcfa(v.montantTotal)}</p>
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                       <p className="text-sm font-black text-emerald-600 tracking-tighter">{formatFcfa(v.montantPaye)}</p>
-                    </td>
-                      <td className="px-8 py-6 text-right">
-                        <p className={`text-sm font-black tracking-tighter ${v.montantTotal - v.montantPaye > 0 ? 'text-rose-500' : 'text-gray-300'}`}>
-                           {formatFcfa(v.montantTotal - v.montantPaye)}
-                        </p>
-                      </td>
-                      <td className="px-8 py-6">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => setEditingVenteId(v.id)}
-                            className="rounded-xl border border-gray-200 bg-white p-2.5 text-orange-600 hover:bg-orange-600 hover:text-white transition-all shadow-sm"
-                            title="Modifier"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-{(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
-                           <button
-                             onClick={() => handleSupprimer(v.id, v.numero)}
-                             disabled={supprimant === v.id}
-                             className="rounded-xl border border-gray-200 bg-white p-2.5 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
-                             title="Supprimer"
-                           >
-                             {supprimant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                           </button>
-                         )}
-                        </div>
-                      </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {totalPages > 1 && (
-          <div className="bg-gray-50/50 px-8 py-6 border-t border-gray-100 print:hidden">
-            <Pagination 
-              currentPage={page} 
-              totalPages={totalPages} 
-              itemsPerPage={itemsPerPage} 
-              totalItems={filteredData.length} 
-              onPageChange={setPage} 
-            />
-          </div>
-        )}
-      </div>
       <ModificationVenteModal
         isOpen={editingVenteId !== null}
         onClose={() => setEditingVenteId(null)}

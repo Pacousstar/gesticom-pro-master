@@ -899,8 +899,41 @@ export default function ManuelUtilisateurPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50/30 to-white relative">
+      <style>{`
+        @media print {
+          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .no-print { display: none !important; }
+          .min-h-screen { background: white !important; }
+          aside { display: none !important; }
+          footer { display: none !important; }
+          [class*="fixed"] { display: none !important; }
+          article { page-break-inside: avoid; break-inside: avoid; box-shadow: none !important; border: 1px solid #e5e7eb !important; border-radius: 8px !important; margin-bottom: 20px !important; }
+          article > button { background: #1e293b !important; padding: 16px 24px !important; border-radius: 8px 8px 0 0 !important; cursor: default !important; }
+          article > button h2 { font-size: 20px !important; color: white !important; }
+          article > button div[class*="flex items-center gap-2"]:last-child { display: none !important; }
+          article > button p { color: rgba(255,255,255,0.8) !important; }
+          article > div { display: block !important; }
+          article > div > div > div:first-child { margin-top: 0 !important; }
+          img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; }
+          table { font-size: 11px !important; page-break-inside: avoid; }
+          th, td { padding: 6px 10px !important; }
+          h3 { font-size: 16px !important; margin-top: 20px !important; }
+          p, li { font-size: 12px !important; line-height: 1.6 !important; color: #1a1a1a !important; }
+          code { font-size: 11px !important; }
+          [class*="rounded-2xl"] { border-radius: 8px !important; }
+          [class*="shadow-"] { box-shadow: none !important; }
+          .group\\/kpi, [class*="kpi"] { box-shadow: none !important; }
+          div[class*="bg-gradient-to-r"] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .px-6 { padding-left: 24px !important; padding-right: 24px !important; }
+          .py-6 { padding-top: 16px !important; padding-bottom: 16px !important; }
+          .px-8 { padding-left: 24px !important; padding-right: 24px !important; }
+          .py-8 { padding-top: 16px !important; padding-bottom: 16px !important; }
+          .hidden { display: none !important; }
+          .print\\:block { display: block !important; }
+        }
+      `}</style>
       {/* Background decorations */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden no-print">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-orange-200/40 rounded-full blur-3xl" />
         <div className="absolute top-1/3 -left-40 w-80 h-80 bg-amber-200/30 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-1/4 w-64 h-64 bg-rose-200/20 rounded-full blur-3xl" />
@@ -1106,33 +1139,43 @@ export default function ManuelUtilisateurPage() {
                         <p className="text-sm opacity-80 mt-0.5">{section.subtitle}</p>
                       </div>
                     </div>
-                    <div className="relative flex items-center gap-3">
+                    <div className="relative flex items-center gap-3 no-print">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
                           const el = document.getElementById(`print-chapter-${section.id}`)
                           if (el) {
-                            const w = open('', '_blank')
-                            if (w) {
-                              w.document.write(`<!DOCTYPE html><html><head><title>${section.title}</title>
-                                <style>body{font-family:Arial,sans-serif;padding:40px;font-size:14px;line-height:1.7;color:#1a1a1a}
-                                table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13px}
-                                th,td{border:1px solid #ddd;padding:8px 12px;text-align:left}
-                                th{background:#f5f5f5;font-weight:bold}
-                                img{max-width:100%;height:auto}
-                                h2{font-size:24px;color:#1a1a1a;margin-top:30px}
-                                h3{font-size:18px;color:#333;margin-top:24px}
-                                li{margin:6px 0}
-                                blockquote{border-left:3px solid #f97316;padding:8px 16px;margin:16px 0;background:#fff7ed;border-radius:0 8px 8px 0}
-                                code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:13px}
-                                .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
-                                .kpi-item{border:1px solid #e5e7eb;padding:16px;border-radius:8px;text-align:center}
-                                .kpi-label{font-size:10px;text-transform:uppercase;color:#6b7280;font-weight:bold}
-                                .kpi-value{font-size:20px;font-weight:bold;color:#111827}
-                                .footer{text-align:center;margin-top:40px;padding-top:20px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af}
-                                </style></head><body><h1 style="font-size:28px;margin-bottom:4px">${section.title}</h1>
-                                <p style="color:#666;margin-top:0;margin-bottom:30px;font-size:14px">${section.subtitle}</p>
-                                ${el.innerHTML}</body></html>`)
+                          const w = open('', '_blank')
+                          if (w) {
+                            w.document.write(`<!DOCTYPE html><html><head><title>${section.title}</title>
+                              <style>
+                                * { box-sizing: border-box; margin: 0; padding: 0; }
+                                body { font-family: 'Segoe UI', Arial, sans-serif; padding: 0; font-size: 13px; line-height: 1.7; color: #1a1a1a; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                                .chapter-header { background: linear-gradient(135deg, #1e293b, #334155); color: white; padding: 24px 40px; }
+                                .chapter-header h1 { font-size: 24px; font-weight: 900; margin: 0; }
+                                .chapter-header p { opacity: 0.85; font-size: 13px; margin-top: 4px; }
+                                .content { padding: 32px 40px; max-width: 900px; margin: 0 auto; }
+                                h3 { font-size: 17px; font-weight: 900; color: #111827; margin-top: 28px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #f97316; display: flex; align-items: center; gap: 8px; }
+                                h4 { font-size: 14px; font-weight: 700; color: #1f2937; margin-top: 18px; margin-bottom: 6px; }
+                                p { font-size: 13px; color: #1a1a1a; line-height: 1.7; margin-bottom: 8px; white-space: pre-wrap; }
+                                li { font-size: 13px; color: #374151; margin: 3px 0 3px 22px; line-height: 1.6; }
+                                li::marker { color: #f97316; font-weight: 700; }
+                                table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 12px; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); page-break-inside: avoid; }
+                                th { background: #f3f4f6; padding: 10px 14px; text-align: left; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; border-bottom: 2px solid #e5e7eb; }
+                                td { padding: 8px 14px; border-bottom: 1px solid #e5e7eb; color: #4b5563; }
+                                tr:last-child td { border-bottom: none; }
+                                img { max-width: 100%; height: auto; margin: 16px 0 0; border-radius: 12px 12px 0 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); page-break-inside: avoid; display: block; }
+                                img + div { background: linear-gradient(135deg, #fff7ed, #fffbeb); padding: 8px 16px; text-align: center; font-size: 11px; font-weight: 700; color: #c2410c; text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid #fed7aa; margin-bottom: 16px; border-radius: 0 0 12px 12px; }
+                                blockquote { border-left: 4px solid #f97316; padding: 12px 20px; margin: 16px 0; background: #fff7ed; border-radius: 0 8px 8px 0; font-style: italic; color: #525252; font-size: 13px; }
+                                code { background: #f3f4f6; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: 'Consolas', 'Courier New', monospace; color: #dc2626; }
+                                pre { background: #1e293b; color: #e2e8f0; padding: 16px 20px; border-radius: 8px; font-size: 12px; font-family: 'Consolas', monospace; line-height: 1.5; margin: 16px 0; overflow-x: auto; white-space: pre-wrap; }
+                                hr { border: none; border-top: 2px solid #e5e7eb; margin: 24px 0; }
+                                .footer { text-align: center; margin-top: 40px; padding: 20px 40px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; }
+                              </style></head><body>
+                              <div class="chapter-header"><h1>${section.title}</h1><p>${section.subtitle}</p></div>
+                              <div class="content">${el.innerHTML}</div>
+                              <div class="footer">GestiCom Pro — ${section.title} — ${new Date().toLocaleDateString('fr-FR')}</div>
+                            </body></html>`)
                               w.document.close()
                             }
                           }
@@ -1149,8 +1192,7 @@ export default function ManuelUtilisateurPage() {
                     </div>
                   </button>
 
-                  {(activeSection === section.id || searchQuery) && (
-                    <div className="px-6 sm:px-8 py-6">
+                  <div className={`px-6 sm:px-8 py-6 ${(activeSection === section.id || searchQuery) ? '' : 'hidden print:block'}`}>
                       <div id={`print-chapter-${section.id}`}>
                         {section.content.map((block, i) => (
                           <div key={i}>{renderContent(block)}</div>
@@ -1170,7 +1212,6 @@ export default function ManuelUtilisateurPage() {
                         </button>
                       </div>
                     </div>
-                  )}
                 </article>
               ))}
             </div>

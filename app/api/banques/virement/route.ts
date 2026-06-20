@@ -5,6 +5,9 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { virementBancaireSchema } from '@/lib/validations'
 
 /**
  * Gère les virements internes : 
@@ -20,14 +23,20 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { sourceId, sourceIdType, destId, destIdType, montant, frais, date, motif } = body
-    
-    if (!montant || montant <= 0) return NextResponse.json({ error: 'Montant invalide.' }, { status: 400 })
+    const validationResult = validateApiRequest(virementBancaireSchema, body)
+    if (!validationResult.success) return validationResult.response
+    const data = validationResult.data
+    const sourceId = body?.sourceId
+    const sourceIdType = String(body?.sourceIdType || '').toUpperCase()
+    const destId = body?.destId
+    const destIdType = String(body?.destIdType || '').toUpperCase()
+    const motif = body?.motif ? String(body.motif).trim() : ''
+
     if (!sourceId || !destId) return NextResponse.json({ error: 'Source et destination requises.' }, { status: 400 })
 
     const entiteId = await getEntiteId(session)
-    const dateVirement = date ? new Date(date) : new Date()
-    const fraisMontant = Math.max(0, Number(frais) || 0)
+    const dateVirement = data.date ? new Date(data.date) : new Date()
+    const fraisMontant = Math.max(0, Number(body?.frais) || 0)
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. DÉBIT DE LA SOURCE
@@ -38,7 +47,7 @@ await enregistrerOperationBancaire({
           date: dateVirement,
           type: 'VIREMENT_SORTANT',
           libelle: `Virement Interne => ${destIdType === 'CAISSE' ? 'Caisse' : 'Banque ' + destId}`,
-          montant: montant + fraisMontant,
+          montant: data.montant + fraisMontant,
           utilisateurId: session.userId,
           reference: `VIR-${Date.now()}`,
           observation: motif
@@ -48,7 +57,7 @@ await enregistrerOperationBancaire({
           magasinId: Number(sourceId),
           type: 'SORTIE',
           motif: `Virement Interne => ${destIdType === 'BANQUE' ? 'Banque ' + destId : 'Caisse ' + destId}`,
-          montant: montant + fraisMontant,
+          montant: data.montant + fraisMontant,
           utilisateurId: session.userId,
           entiteId,
           date: dateVirement,
@@ -82,7 +91,7 @@ await enregistrerOperationBancaire({
           date: dateVirement,
           type: 'VIREMENT_ENTRANT',
           libelle: `Virement Interne depuis ${sourceIdType === 'CAISSE' ? 'Caisse' : 'Banque ' + sourceId}`,
-          montant: montant,
+          montant: data.montant,
           utilisateurId: session.userId,
           reference: `VIR-${Date.now()}`,
           observation: motif
@@ -92,7 +101,7 @@ await enregistrerOperationBancaire({
           magasinId: Number(destId),
           type: 'ENTREE',
           motif: `Virement Interne depuis ${sourceIdType === 'BANQUE' ? 'Banque ' + sourceId : 'Caisse ' + sourceId}`,
-          montant: montant,
+          montant: data.montant,
           utilisateurId: session.userId,
           entiteId,
           date: dateVirement,
@@ -105,7 +114,7 @@ await enregistrerOperationBancaire({
 
             return NextResponse.json(result)
   } catch (e: any) {
-    console.error('[API VIREMENT ERROR]', e)
+    await apiCatch(e, 'api/banques/virement')
     return NextResponse.json({ error: e.message || 'Erreur lors du virement.' }, { status: 500 })
   }
 }

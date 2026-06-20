@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { magasinSchema } from '@/lib/validations'
 
 export async function PATCH(
   request: NextRequest,
@@ -26,21 +29,25 @@ export async function PATCH(
     }
 
     const body = await request.json()
+    const result = validateApiRequest(magasinSchema.partial(), body)
+    if (!result.success) return result.response
+    const v = result.data
+
     const data: { code?: string; nom?: string; localisation?: string; actif?: boolean } = {}
 
-    if (body?.code != null) {
-      const code = String(body.code).trim().toUpperCase()
+    if (v.code != null) {
+      const code = v.code
       if (!code) return NextResponse.json({ error: 'Code non vide requis.' }, { status: 400 })
       const existant = await prisma.magasin.findFirst({ where: { code, NOT: { id }, entiteId: session!.entiteId } })
       if (existant) return NextResponse.json({ error: `Le code "${code}" est déjà utilisé.` }, { status: 400 })
       data.code = code
     }
-    if (body?.nom != null) {
-      const nom = String(body.nom).trim()
+    if (v.nom != null) {
+      const nom = v.nom
       if (!nom) return NextResponse.json({ error: 'Nom non vide requis.' }, { status: 400 })
       data.nom = nom
     }
-    if (body?.localisation != null) data.localisation = String(body.localisation).trim()
+    if (v.localisation != null) data.localisation = v.localisation
     if (typeof body?.actif === 'boolean') data.actif = body.actif
 
     if (Object.keys(data).length === 0) {
@@ -58,7 +65,7 @@ export async function PATCH(
     return NextResponse.json(magasin)
   } catch (e) {
     if ((e as { code?: string })?.code === 'P2025') return NextResponse.json({ error: 'Magasin introuvable.' }, { status: 404 })
-    console.error('PATCH /api/magasins/[id]:', e)
+    await apiCatch(e, 'api/magasins/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -94,7 +101,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true })
   } catch (e) {
     if ((e as { code?: string })?.code === 'P2025') return NextResponse.json({ error: 'Magasin introuvable.' }, { status: 404 })
-    console.error('DELETE /api/magasins/[id]:', e)
+    await apiCatch(e, 'api/magasins/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

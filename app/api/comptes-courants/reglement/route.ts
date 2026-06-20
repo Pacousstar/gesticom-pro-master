@@ -5,6 +5,9 @@ import { comptabiliserReglementVente, comptabiliserReglementAchat } from '@/lib/
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { reglementCompteCourantSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -12,13 +15,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { compteCourantId, montant, modePaiement, clientId, fournisseurId } = body
-    const payeDepuisCaisse = body.payeDepuisCaisse === true
-    const payeDepuisBanque = body.payeDepuisBanque === true
 
-    if (!compteCourantId || !montant || montant <= 0 || !modePaiement) {
-      return NextResponse.json({ error: 'Paramètres manquants.' }, { status: 400 })
-    }
+    const validation = validateApiRequest(reglementCompteCourantSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
+    const { compteCourantId, montant, modePaiement, clientId, fournisseurId } = v
+    const payeDepuisCaisse = v.payeDepuisCaisse === true
+    const payeDepuisBanque = v.payeDepuisBanque === true
 
     if (payeDepuisCaisse && !body.magasinId) {
       return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire.' }, { status: 400 })
@@ -181,7 +185,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(res)
   } catch (error: any) {
-    console.error('Erreur Règlement CC:', error)
+    await apiCatch(error, 'api/comptes-courants/reglement')
     if (error.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ error: 'Doublon bloqué.', code: 'IDEMPOTENCY_CONFLICT' }, { status: 409 })
     }

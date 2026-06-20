@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { reaproSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -12,12 +15,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { magasinId, lignes } = body
-
-    if (!magasinId) return NextResponse.json({ error: 'Magasin requis.' }, { status: 400 })
-    if (!lignes || !Array.isArray(lignes) || lignes.length === 0) {
-      return NextResponse.json({ error: 'Au moins une ligne requise.' }, { status: 400 })
-    }
+    const vres = validateApiRequest(reaproSchema, body)
+    if (!vres.success) return vres.response
+    const { magasinId, lignes } = vres.data
 
     const entiteId = await getEntiteId(session)
 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ commandes: created, count: created.length })
   } catch (e) {
-    console.error('POST /api/reapro/generer-bons:', e)
+    await apiCatch(e, 'api/reapro/generer-bons')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

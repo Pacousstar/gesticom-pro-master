@@ -769,7 +769,7 @@ export default function AchatsPage() {
 
       {/* COMPTEURS DE PERFORMANCE (Analyse de Compteur) */}
       <div className="space-y-2">
-        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6 italic">Analyse des flux achats : Période en cours</p>
+        <p className="text-[10px] font-black text-white uppercase tracking-[0.3em] ml-6 italic">Analyse des flux achats : Période en cours</p>
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 no-print">
           {[
             { label: "Total Facturé", val: (totals?.montantTotal || 0).toLocaleString('fr-FR') + ' F', sub: "Volume achat brut", icon: ShoppingBag, color: "from-blue-600 to-indigo-700" },

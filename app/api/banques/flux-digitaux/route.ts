@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -164,7 +165,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(flux)
   } catch (error) {
-    console.error('Erreur flux digitaux:', error)
+    await apiCatch(error, 'api/banques/flux-digitaux')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

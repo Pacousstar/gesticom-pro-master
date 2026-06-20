@@ -5,6 +5,9 @@ import { comptabiliserCaisse } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { caisseSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -110,10 +113,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const validationResult = validateApiRequest(caisseSchema, body)
+    if (!validationResult.success) return validationResult.response
+    const data = validationResult.data
     const now = new Date()
     let date = now
-    if (body?.date) {
-      const raw = String(body.date).trim()
+    if (data.date) {
+      const raw = data.date
       if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
         const [y, m, d] = raw.split('-').map(Number)
         const tmp = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
@@ -123,34 +129,12 @@ export async function POST(request: NextRequest) {
         if (!Number.isNaN(tmp.getTime())) date = tmp
       }
     }
-    const magasinId = Number(body?.magasinId)
-    const type = ['ENTREE', 'SORTIE'].includes(String(body?.type || '').toUpperCase())
-      ? String(body.type).toUpperCase()
-      : 'ENTREE'
-    const motif = String(body?.motif || '').trim()
-    const montant = Math.max(0, Number(body?.montant) || 0)
-    const observation = body?.observation ? String(body.observation).trim() : null
-    const sousType = body?.sousType ? String(body.sousType).trim() : 'MANUEL'
-    const sousTypesValides = ['MANUEL', 'PRODUIT', 'APPROVISIONNEMENT', 'CHARGE', 'RETRAIT']
-    const sousTypeFinal = sousTypesValides.includes(sousType) ? sousType : 'MANUEL'
 
-    if (!Number.isInteger(magasinId) || magasinId <= 0) {
-      return NextResponse.json({ error: 'Magasin requis.' }, { status: 400 })
-    }
-    if (!motif) {
-      return NextResponse.json({ error: 'Motif requis.' }, { status: 400 })
-    }
-    if (montant <= 0) {
-      return NextResponse.json({ error: 'Montant doit être supérieur à 0.' }, { status: 400 })
-    }
-
-    const magasin = await prisma.magasin.findUnique({ where: { id: magasinId } })
+    const magasin = await prisma.magasin.findUnique({ where: { id: data.magasinId } })
     if (!magasin) {
       return NextResponse.json({ error: 'Magasin introuvable.' }, { status: 400 })
     }
 
-    // Utiliser l'entité de la session
-    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     const entiteId = await getEntiteId(session)
 
     // Vérifier que le magasin appartient à l'entité sélectionnée (sauf SUPER_ADMIN)
@@ -162,15 +146,15 @@ export async function POST(request: NextRequest) {
       // RC4 : Utiliser enregistrerMouvementCaisse au lieu de tx.caisse.create
       // pour garantir le uppercase du motif et la cohérence
       const operation = await enregistrerMouvementCaisse({
-        magasinId,
-        type: type as 'ENTREE' | 'SORTIE',
-        motif,
-        montant,
+        magasinId: data.magasinId,
+        type: data.type,
+        motif: data.motif,
+        montant: data.montant,
         utilisateurId: session.userId,
         entiteId: magasin.entiteId,
         date,
-        observation: observation ?? undefined,
-        sousType: sousTypeFinal,
+        observation: data.observation ?? undefined,
+        sousType: data.sousType,
       }, tx)
 
       if (!operation) {
@@ -181,16 +165,16 @@ export async function POST(request: NextRequest) {
       await comptabiliserCaisse({
         caisseId: operation.id,
         date,
-        type: type as 'ENTREE' | 'SORTIE',
-        montant,
+        type: data.type,
+        montant: data.montant,
         motif: operation.motif,
         utilisateurId: session.userId,
         entiteId: magasin.entiteId,
-        sousType: sousTypeFinal,
+        sousType: data.sousType,
       }, tx)
 
       // RC1 : Recalculer le solde caisse après chaque mouvement
-      await recalculerSoldeCaisse(magasinId, tx)
+      await recalculerSoldeCaisse(data.magasinId, tx)
 
       // Refetch avec includes pour la réponse
       return await tx.caisse.findUnique({
@@ -204,7 +188,7 @@ export async function POST(request: NextRequest) {
 
             return NextResponse.json(result)
   } catch (e) {
-    console.error('POST /api/caisse:', e)
+    await apiCatch(e, 'api/caisse')
     return NextResponse.json(
       { error: 'Erreur serveur.' },
       { status: 500 }

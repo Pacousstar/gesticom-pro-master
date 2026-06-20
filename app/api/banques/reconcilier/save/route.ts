@@ -6,6 +6,9 @@ import { enregistrerOperationBancaire } from '@/lib/banque'
 import { comptabiliserOperationBancaire } from '@/lib/comptabilisation'
 import { verifierCloture } from '@/lib/cloture'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { reconciliationBancaireSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -15,15 +18,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const entiteId = await getEntiteId(session)
-    const { rapprochement } = await request.json()
-    const { banqueId, reglementId, type, libelle, montant, date } = rapprochement
+    const body = await request.json()
+    const validationResult = validateApiRequest(reconciliationBancaireSchema, body)
+    if (!validationResult.success) return validationResult.response
+    const data = validationResult.data
+    const { rapprochement } = body
+    const { reglementId, type, libelle, montant, date } = rapprochement || {}
 
-    if (!banqueId || !reglementId || !type) {
+    if (!reglementId || !type) {
       return NextResponse.json({ error: 'Données manquantes' }, { status: 400 })
     }
 
     // RB3: Vérifier que la banque appartient à l'entité de l'utilisateur
-    const banque = await prisma.banque.findUnique({ where: { id: Number(banqueId) } })
+    const banque = await prisma.banque.findUnique({ where: { id: data.banqueId } })
     if (!banque) {
       return NextResponse.json({ error: 'Compte bancaire introuvable.' }, { status: 404 })
     }
@@ -56,7 +63,7 @@ export async function POST(request: NextRequest) {
       const typeOpBancaire = type === 'VENTE' ? 'VIREMENT_ENTRANT' : 'VIREMENT_SORTANT'
       const existsRap = await tx.operationBancaire.findFirst({
         where: {
-          banqueId: Number(banqueId),
+          banqueId: data.banqueId,
           reference: `RAP-${reglementId}`
         }
       })
@@ -98,7 +105,7 @@ export async function POST(request: NextRequest) {
 
       // RB2: Utiliser enregistrerOperationBancaire (montant toujours positif, direction via type)
 const operation = await enregistrerOperationBancaire({
-        banqueId: Number(banqueId),
+        banqueId: data.banqueId,
         entiteId: banque.entiteId,
         date: new Date(date),
         type: typeOpBancaire,
@@ -116,7 +123,7 @@ const operation = await enregistrerOperationBancaire({
       // RB8: Comptabiliser l'opération de rapprochement
       await comptabiliserOperationBancaire({
         operationId: operation.id,
-        banqueId: Number(banqueId),
+        banqueId: data.banqueId,
         date: new Date(date),
         type: typeOpBancaire,
         montant: Math.abs(Number(montant)),
@@ -131,7 +138,7 @@ const operation = await enregistrerOperationBancaire({
 
     return NextResponse.json(result)
   } catch (error) {
-    console.error('Save Rapprochement Error:', error)
+    await apiCatch(error, 'api/banques/reconcilier/save')
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Erreur serveur' }, { status: 500 })
   }
 }

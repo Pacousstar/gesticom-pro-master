@@ -6,6 +6,9 @@ import { comptabiliserReglementAchat } from '@/lib/comptabilisation'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { reglementAchatSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -15,15 +18,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const achatId = body.achatId ? Number(body.achatId) : null
-    const fournisseurId = body.fournisseurId ? Number(body.fournisseurId) : null
-    const montant = Math.max(0, Number(body.montant))
-    const modePaiement = body.modePaiement || 'ESPECES'
-    const observation = body.observation || (achatId ? `Règlement achat` : `Acompte fournisseur`)
-    const payeDepuisCaisse = body.payeDepuisCaisse === true
-    const payeDepuisBanque = body.payeDepuisBanque === true
+    const result = validateApiRequest(reglementAchatSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
 
-    const dateStr = body.date || null
+    const achatId = data.achatId ?? null
+    const fournisseurId = data.fournisseurId ?? null
+    const montant = data.montant
+    const modePaiement = data.modePaiement
+    const observation = data.observation ?? (achatId ? `Règlement achat` : `Acompte fournisseur`)
+    const payeDepuisCaisse = data.payeDepuisCaisse === true
+    const payeDepuisBanque = data.payeDepuisBanque === true
+
+    const dateStr = data.date || null
     let dateReglement = new Date()
     if (dateStr) {
       try {
@@ -36,11 +43,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!montant || (!achatId && !fournisseurId)) {
+    if (!fournisseurId && !achatId) {
       return NextResponse.json({ error: 'Montant et (Achat ou Fournisseur) requis.' }, { status: 400 })
     }
 
-    if (modePaiement === 'ESPECES' && !body.magasinId) {
+    if (modePaiement === 'ESPECES' && !data.magasinId) {
       return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire pour un règlement en espèces.' }, { status: 400 })
     }
 
@@ -135,7 +142,7 @@ export async function POST(request: NextRequest) {
       // ✅ SYNCHRO PHYSIQUE (caisse/banque) — optionnelle
       if (payeDepuisCaisse && estModeEspeces(modePaiement)) {
         await enregistrerMouvementCaisse({
-          magasinId: Number(body.magasinId),
+          magasinId: data.magasinId!,
           type: 'SORTIE',
           motif: `Règlement Achat ${a?.numero || 'R'+reglement.id} : ${observation}`,
           montant,
@@ -143,12 +150,12 @@ export async function POST(request: NextRequest) {
           entiteId,
           date: dateReglement,
         }, tx)
-        await recalculerSoldeCaisse(Number(body.magasinId), tx)
+        await recalculerSoldeCaisse(data.magasinId!, tx)
       }
       if (payeDepuisBanque) {
         const { enregistrerOperationBancaire } = await import('@/lib/banque')
         await enregistrerOperationBancaire({
-          banqueId: body.banqueId ? Number(body.banqueId) : null,
+          banqueId: data.banqueId ?? null,
           entiteId,
           date: dateReglement,
           type: 'REGLEMENT_FOURNISSEUR',
@@ -171,7 +178,7 @@ export async function POST(request: NextRequest) {
         modePaiement,
         entiteId,
         utilisateurId: session.userId,
-        magasinId: body.magasinId ? Number(body.magasinId) : undefined,
+        magasinId: data.magasinId ?? undefined,
         paiementDirect: !payeDepuisCaisse && !payeDepuisBanque,
       }, tx)
 
@@ -180,7 +187,7 @@ export async function POST(request: NextRequest) {
 
             return NextResponse.json(res)
   } catch (error: any) {
-    console.error('Erreur Règlement Achat:', error)
+    await apiCatch(error, 'api/reglements/achats')
     if (error.message?.includes('DOUBLE_TRANSACTION')) {
       return NextResponse.json({ 
         error: 'Ce règlement achat a déjà été enregistré (Doublon bloqué).', 

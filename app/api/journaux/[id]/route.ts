@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { journalSchema } from '@/lib/validations'
 
 export async function GET(
   _request: NextRequest,
@@ -22,7 +25,7 @@ export async function GET(
     if (!journal) return NextResponse.json({ error: 'Journal introuvable.' }, { status: 404 })
     return NextResponse.json(journal)
   } catch (e) {
-    console.error('GET /api/journaux/[id]:', e)
+    await apiCatch(e, 'api/journaux/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -43,19 +46,20 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const data: Record<string, unknown> = {}
-    
-    if (body?.code != null) data.code = String(body.code).trim().toUpperCase()
-    if (body?.libelle != null) data.libelle = String(body.libelle).trim()
-    if (body?.type != null && ['ACHATS', 'VENTES', 'BANQUE', 'CAISSE', 'OD'].includes(String(body.type).toUpperCase())) {
-      data.type = String(body.type).toUpperCase()
-    }
-    if (body?.actif !== undefined) data.actif = Boolean(body.actif)
+    const validation = validateApiRequest(journalSchema.partial(), body)
+    if (!validation.success) return validation.response
+    const d = validation.data
 
-    const journal = await prisma.journal.update({ where: { id }, data: data as object })
+    const updateData: Record<string, unknown> = {}
+    if (d.code != null) updateData.code = d.code
+    if (d.libelle != null) updateData.libelle = d.libelle
+    if (d.type != null) updateData.type = d.type
+    if (body?.actif !== undefined) updateData.actif = Boolean(body.actif)
+
+    const journal = await prisma.journal.update({ where: { id }, data: updateData })
     return NextResponse.json(journal)
   } catch (e: any) {
-    console.error('PATCH /api/journaux/[id]:', e)
+    await apiCatch(e, 'api/journaux/[id]')
     if (e.code === 'P2002') {
       return NextResponse.json({ error: 'Ce code de journal existe déjà.' }, { status: 400 })
     }
@@ -81,7 +85,7 @@ export async function DELETE(
     await prisma.journal.update({ where: { id }, data: { actif: false } })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('DELETE /api/journaux/[id]:', e)
+    await apiCatch(e, 'api/journaux/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 
 export async function PATCH(
   _request: NextRequest,
@@ -66,7 +67,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    console.error('Erreur annulation lettrage:', e)
+    await apiCatch(e, 'api/reglements/ventes/[id]/annuler-lettrage')
     return NextResponse.json({ error: e.message || 'Erreur serveur' }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
     request: NextRequest,
@@ -129,7 +130,7 @@ export async function GET(
         const filename = `releve_compte_${fournisseur.nom.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
         return makeResponse(buf, filename)
     } catch (e) {
-        console.error('GET /api/fournisseurs/[id]/compte-courant/export:', e)
+        await apiCatch(e, 'api/fournisseurs/[id]/compte-courant/export')
         return NextResponse.json({ error: 'Erreur génération export.' }, { status: 500 })
     }
 }

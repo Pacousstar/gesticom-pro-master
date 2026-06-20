@@ -6,6 +6,9 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { reglementAchatSchema } from '@/lib/validations'
 
 export async function DELETE(
   _request: NextRequest,
@@ -100,7 +103,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    console.error('DELETE /api/reglements/achats/[id]:', e)
+    await apiCatch(e, 'api/reglements/achats/[id]')
     return NextResponse.json({ error: e.message || 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -120,9 +123,9 @@ export async function PATCH(
   try {
     const entiteId = await getEntiteId(session)
     const body = await request.json()
-    const { montant, modePaiement, date, observation } = body
-    const payeDepuisCaisse = body.payeDepuisCaisse === true
-    const payeDepuisBanque = body.payeDepuisBanque === true
+    const vres = validateApiRequest(reglementAchatSchema.partial(), body)
+    if (!vres.success) return vres.response
+    const { montant, modePaiement, date, observation, payeDepuisCaisse, payeDepuisBanque, banqueId } = vres.data
 
     const old = await prisma.reglementAchat.findUnique({
       where: { id },
@@ -168,10 +171,10 @@ export async function PATCH(
       const updated = await tx.reglementAchat.update({
         where: { id },
         data: {
-          montant: montant != null ? Number(montant) : undefined,
-          modePaiement: modePaiement || undefined,
+          montant: montant ?? undefined,
+          modePaiement: modePaiement ?? undefined,
           date: date ? new Date(date) : undefined,
-          observation: observation || undefined,
+          observation: observation ?? undefined,
         },
         include: { achat: { include: { fournisseur: { select: { nom: true } } } } }
       })
@@ -202,7 +205,7 @@ export async function PATCH(
             }
           })
 
-          const diffMontant = (montant != null ? Number(montant) : old.montant) - old.montant
+          const diffMontant = (montant ?? old.montant) - old.montant
           if (diffMontant !== 0 && old.achatId) {
             const existingLigne = await tx.reglementAchatLigne.findFirst({
               where: { reglementId: id, achatId: old.achatId }
@@ -210,7 +213,7 @@ export async function PATCH(
             if (existingLigne) {
               await tx.reglementAchatLigne.update({
                 where: { id: existingLigne.id },
-                data: { montant: montant != null ? Number(montant) : old.montant }
+                data: { montant: montant ?? old.montant }
               })
             }
           }
@@ -231,10 +234,10 @@ export async function PATCH(
         await recalculerSoldeCaisse(updated.achat?.magasinId || 1, tx)
       }
       if (payeDepuisBanque) {
-        const banqueId = body?.banqueId ? Number(body.banqueId) : null
+        const banqueIdVal = banqueId ?? null
         const { enregistrerOperationBancaire } = await import('@/lib/banque')
         await enregistrerOperationBancaire({
-          banqueId,
+          banqueId: banqueIdVal,
           entiteId: updated.entiteId ?? entiteId ?? 1,
           date: updated.date,
           type: 'REGLEMENT_FOURNISSEUR',
@@ -264,7 +267,7 @@ export async function PATCH(
 
     return NextResponse.json(result)
   } catch (e: any) {
-    console.error('PATCH /api/reglements/achats/[id]:', e)
+    await apiCatch(e, 'api/reglements/achats/[id]')
     return NextResponse.json({ error: e.message || 'Erreur serveur.' }, { status: 500 })
   }
 }

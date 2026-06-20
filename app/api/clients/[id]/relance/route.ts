@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
   request: NextRequest,
@@ -91,7 +92,7 @@ export async function GET(
     })
 
   } catch (error) {
-    console.error('Erreur Relance Client:', error)
+    await apiCatch(error, 'api/clients/[id]/relance')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }
@@ -154,7 +155,7 @@ export async function POST(
     return NextResponse.json({ success: true, message: 'Email envoyé avec succès' })
 
   } catch (error: any) {
-    console.error('POST Relance SMTP Error:', error)
+    await apiCatch(error, 'api/clients/[id]/relance')
     return NextResponse.json({ error: error.message || 'Erreur lors de l\'envoi de l\'email' }, { status: 500 })
   }
 }

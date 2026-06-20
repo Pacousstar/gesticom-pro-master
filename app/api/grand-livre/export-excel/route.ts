@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -171,7 +172,7 @@ export async function GET(request: NextRequest) {
     const filename = `grand-livre_${dateDebut || 'all'}_${dateFin || 'all'}.xlsx`
     return makeResponse(buf, filename)
   } catch (error) {
-    console.error('Export Excel grand livre:', error)
+    await apiCatch(error, 'api/grand-livre/export-excel')
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })
   }
 }

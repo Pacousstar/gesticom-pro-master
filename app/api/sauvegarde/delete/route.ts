@@ -5,6 +5,7 @@ import { logSuppression, getIpAddress } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
 import { getBackupDir, BACKUP_PREFIX, BACKUP_EXT } from '@/lib/sauvegarde-db'
+import { apiCatch } from '@/lib/log-error'
 
 function isValidBackupName(name: string): boolean {
   if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) return false
@@ -39,7 +40,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: `Sauvegarde ${name} supprimée avec succès.` })
   } catch (e) {
-    console.error('DELETE /api/sauvegarde/delete:', e)
+    await apiCatch(e, 'api/sauvegarde/delete')
     const errorMsg = e instanceof Error ? e.message : 'Erreur inconnue'
     return NextResponse.json(
       { error: 'Erreur lors de la suppression de la sauvegarde.', details: errorMsg },

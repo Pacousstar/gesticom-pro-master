@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { ecritureSchema } from '@/lib/validations'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -73,7 +76,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(ecritures)
   } catch (e) {
-    console.error('GET /api/ecritures:', e)
+    await apiCatch(e, 'api/ecritures')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -86,20 +89,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const date = body?.date ? new Date(body.date) : new Date()
-    const journalId = Number(body?.journalId)
-    const piece = body?.piece != null ? String(body.piece).trim() || null : null
-    const libelle = String(body?.libelle || '').trim()
-    const compteId = Number(body?.compteId)
-    const debit = Math.max(0, Number(body?.debit) || 0)
-    const credit = Math.max(0, Number(body?.credit) || 0)
-    const reference = body?.reference != null ? String(body.reference).trim() || null : null
-    const referenceType = body?.referenceType != null ? String(body.referenceType).trim() || null : null
-    const referenceId = body?.referenceId != null ? Number(body.referenceId) : null
 
-    if (!journalId || !Number.isInteger(journalId) || journalId < 1) {
-      return NextResponse.json({ error: 'Journal requis.' }, { status: 400 })
-    }
+    const validation = validateApiRequest(ecritureSchema, body)
+    if (!validation.success) return validation.response
+    const v = validation.data
+
+    const date = v.date ? new Date(v.date) : new Date()
+    const journalId = v.journalId
+    const piece = v.piece ?? null
+    const libelle = v.libelle
+    const compteId = v.compteId
+    const debit = v.debit
+    const credit = v.credit
+    const reference = v.reference ?? null
+    const referenceType = v.referenceType ?? null
+    const referenceId = v.referenceId ?? null
+
     if (!libelle) {
       return NextResponse.json({ error: 'Libellé requis.' }, { status: 400 })
     }
@@ -154,7 +159,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(ecriture)
   } catch (e: any) {
-    console.error('POST /api/ecritures:', e)
+    await apiCatch(e, 'api/ecritures')
     if (e.code === 'P2002') {
       return NextResponse.json({ error: 'Numéro d\'écriture déjà utilisé.' }, { status: 400 })
     }

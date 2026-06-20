@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { parseExcel } from '@/lib/excel'
 import { requireRole } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -179,7 +180,7 @@ export async function POST(request: NextRequest) {
       total: result.created + result.updated,
     })
   } catch (e) {
-    console.error('POST /api/import/excel:', e)
+    await apiCatch(e, 'api/import/excel')
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Erreur lors de l\'import Excel.' },
       { status: 500 }

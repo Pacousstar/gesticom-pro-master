@@ -219,7 +219,7 @@ export default function SoldesClientsPage() {
 
       {/* Cartes de Totaux (Analyse de Compteur) */}
       <div className="space-y-2 no-print">
-        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] ml-6 italic">Analyse des flux financiers tiers</p>
+        <p className="text-[10px] font-black text-white uppercase tracking-[0.3em] ml-6 italic">Analyse des flux financiers tiers</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: "Total Facturé", val: totals.factures.toLocaleString('fr-FR') + ' F', icon: FileText, color: "from-blue-600 to-indigo-700", sub: "Volume général" },

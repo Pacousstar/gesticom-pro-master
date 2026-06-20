@@ -61,15 +61,17 @@ export function partFraisApprocheLigne(
   sommeHtNetFacture: number,
   fraisApprocheTotal: number
 ): number {
-  const ht = Number(htNetLigne) || 0
-  const somme = Number(sommeHtNetFacture) || 0
+  const ht = Math.max(0, Number(htNetLigne) || 0)
+  const somme = Math.max(0, Number(sommeHtNetFacture) || 0)
   const frais = Math.max(0, Number(fraisApprocheTotal) || 0)
   if (somme <= 0) return 0
   return (ht / somme) * frais
 }
 
 export function valeurAchatNetAvecFrais(htNet: number, partFrais: number): number {
-  return (Number(htNet) || 0) + (Number(partFrais) || 0)
+  const ht = Math.max(0, Number(htNet) || 0)
+  const frais = Math.max(0, Number(partFrais) || 0)
+  return Math.max(0, ht + frais)
 }
 
 /**

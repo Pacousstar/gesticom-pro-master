@@ -65,7 +65,8 @@ export default function MobileDashboardPage() {
   const trend = calcTrend(data?.transactionsJour || 0, data?.transactionsHier || 0)
 
   return (
-    <> {/* Header */}
+    <div className="flex flex-col h-[calc(100vh-5rem)]">
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-2">
           <Smartphone className="h-5 w-5 text-orange-400" />
@@ -278,6 +279,7 @@ export default function MobileDashboardPage() {
         {page > 0 && <button onClick={() => setPage(p => p - 1)} className="pointer-events-auto bg-gray-800/80 p-3 rounded-full text-white shadow-lg"><ChevronLeft className="h-6 w-6" /></button>}
         {page < PAGES.length - 1 && <button onClick={() => setPage(p => p + 1)} className="pointer-events-auto bg-gray-800/80 p-3 rounded-full text-white shadow-lg"><ChevronRight className="h-6 w-6" /></button>}
       </div>
-    </>
+    </div>
   )
 }
+

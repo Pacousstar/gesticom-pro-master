@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -80,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(formatted)
   } catch (error) {
-    console.error('GET /api/rapports/ventes/liste:', error)
+    await apiCatch(error, 'api/rapports/ventes/liste')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { genererExportSage } from '@/lib/formats/sage'
 import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (e) {
-    console.error('Export Pro Error:', e)
+    await apiCatch(e, 'api/comptabilite/export-pro')
     return NextResponse.json({ error: 'Erreur lors de la génération de l\'export' }, { status: 500 })
   }
 }

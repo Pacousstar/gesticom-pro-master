@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 const EXPORT_MAX_ROWS = 10000
 
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
     const filename = `audit_${new Date().toISOString().slice(0, 10)}.xlsx`
     return makeResponse(buf, filename)
   } catch (error) {
-    console.error('Export Excel audit:', error)
+    await apiCatch(error, 'api/audit/export-excel')
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel' }, { status: 500 })
   }
 }

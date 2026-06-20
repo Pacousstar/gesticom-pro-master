@@ -5,6 +5,7 @@ import { parametresPatchSchema } from '@/lib/validations'
 import { prisma } from '@/lib/db'
 import { logModification, getIpAddress } from '@/lib/audit'
 import { encrypt, decrypt } from '@/lib/security'
+import { apiCatch } from '@/lib/log-error'
 
 async function canAccessParametres(session: any) {
   if (!session) return false
@@ -166,7 +167,7 @@ export async function PATCH(request: NextRequest) {
     }
     return NextResponse.json(p)
   } catch (e) {
-    console.error('PATCH /api/parametres:', e)
+    await apiCatch(e, 'api/parametres')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

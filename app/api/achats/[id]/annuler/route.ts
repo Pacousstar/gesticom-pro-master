@@ -9,6 +9,9 @@ import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
 import { deleteEcrituresByReference, deleteEcrituresByReferenceForIds } from '@/lib/delete-ecritures'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
 
 export async function POST(
   _request: NextRequest,
@@ -41,6 +44,9 @@ export async function POST(
     }
 
     const body = await _request.json().catch(() => ({}))
+    const annulSchema = z.object({ motif: z.string().optional(), observation: z.string().optional(), date: z.string().optional() })
+    const vres = validateApiRequest(annulSchema, body)
+    if (!vres.success) return vres.response
     const now = new Date()
     let dateOperation = now
     if (body?.date) {
@@ -168,7 +174,7 @@ export async function POST(
                   return NextResponse.json({ ok: true })
     })
   } catch (e) {
-    console.error('POST /api/achats/[id]/annuler:', e)
+    await apiCatch(e, 'api/achats/[id]/annuler')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

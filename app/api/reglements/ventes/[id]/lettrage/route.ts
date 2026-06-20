@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { lettrageSchema } from '@/lib/validations'
 
 export async function PATCH(
     request: NextRequest,
@@ -19,6 +22,8 @@ export async function PATCH(
     try {
         const id = Number((await params).id)
         const body = await request.json()
+        const vres = validateApiRequest(lettrageSchema, body)
+        if (!vres.success) return vres.response
         const venteId = Number(body.venteId)
 
         if (!id || !venteId) {
@@ -90,7 +95,7 @@ export async function PATCH(
 
         return NextResponse.json(result)
     } catch (error: any) {
-        console.error('Erreur Lettrage Vente:', error)
+        await apiCatch(error, 'api/reglements/ventes/[id]/lettrage')
         return NextResponse.json({ error: error.message || 'Erreur serveur' }, { status: 500 })
     }
 }

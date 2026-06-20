@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
         try {
           details = JSON.parse(log.details)
         } catch (e) {
-          console.error('Erreur parse details audit log:', e)
+          void apiCatch(e, 'api/audit')
           details = null
         }
       }
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (e) {
-    console.error('GET /api/audit:', e)
+    await apiCatch(e, 'api/audit')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

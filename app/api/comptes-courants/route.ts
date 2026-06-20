@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { compteCourantSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -36,22 +38,17 @@ export async function POST(request: NextRequest) {
   if (forbidden) return forbidden
 
   const body = await request.json()
-  const clientId = body.clientId ? Number(body.clientId) : null
-  const fournisseurId = body.fournisseurId ? Number(body.fournisseurId) : null
-  const nom = body.nom?.trim()
-  if (!nom) return NextResponse.json({ error: 'Nom requis.' }, { status: 400 })
-  if (!clientId && !fournisseurId) {
-    return NextResponse.json({ error: 'Client ou Fournisseur requis.' }, { status: 400 })
-  }
+  const result = validateApiRequest(compteCourantSchema, body)
+  if (!result.success) return result.response
+  const data = result.data
 
   const entiteId = await getEntiteId(session)
-  const ncc = body.ncc?.trim() || null
 
   const count = await prisma.compteCourant.count()
   const code = `CC-${String(count + 1).padStart(3, '0')}`
 
   const compte = await prisma.compteCourant.create({
-    data: { code, nom, ncc, entiteId, clientId, fournisseurId },
+    data: { code, nom: data.nom, ncc: data.ncc ?? null, entiteId, clientId: data.clientId ?? null, fournisseurId: data.fournisseurId ?? null },
     include: {
       client: { select: { id: true, nom: true, telephone: true } },
       fournisseur: { select: { id: true, nom: true, telephone: true } },

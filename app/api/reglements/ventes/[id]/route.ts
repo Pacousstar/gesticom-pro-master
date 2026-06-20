@@ -6,6 +6,9 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { estModeBanque } from '@/lib/banque'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { reglementVenteSchema } from '@/lib/validations'
 
 export async function DELETE(
   _request: NextRequest,
@@ -107,7 +110,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    console.error('DELETE /api/reglements/ventes/[id]:', e)
+    await apiCatch(e, 'api/reglements/ventes/[id]')
     return NextResponse.json({ error: e.message || 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -123,7 +126,9 @@ export async function PATCH(
   try {
     const entiteId = await getEntiteId(session)
     const body = await request.json()
-    const { montant, modePaiement, date, observation } = body
+    const vres = validateApiRequest(reglementVenteSchema.partial(), body)
+    if (!vres.success) return vres.response
+    const { montant, modePaiement, date, observation, banqueId } = vres.data
 
     const old = await prisma.reglementVente.findUnique({
       where: { id },
@@ -169,7 +174,7 @@ export async function PATCH(
         })
       }
 
-      const montantFinal = montant != null ? Math.max(0, Number(montant)) : old.montant
+      const montantFinal = montant != null ? Math.max(0, montant) : old.montant
       const modeFinal = modePaiement || old.modePaiement
       let dateFinal = old.date
       if (date) {
@@ -245,10 +250,10 @@ include: { vente: { include: { client: { select: { nom: true } } } } }
         }, tx)
         await recalculerSoldeCaisse(updated.vente?.magasinId || 1, tx)
       } else if (estModeBanque(modeFinal)) {
-        const banqueId = body?.banqueId ? Number(body.banqueId) : null
+        const banqueIdVal = banqueId ?? null
         const { enregistrerOperationBancaire } = await import('@/lib/banque')
         await enregistrerOperationBancaire({
-          banqueId,
+          banqueId: banqueIdVal,
           entiteId: entiteId || 1,
           date: dateFinal,
           type: 'REGLEMENT_CLIENT',
@@ -278,7 +283,7 @@ include: { vente: { include: { client: { select: { nom: true } } } } }
 
     return NextResponse.json(result)
   } catch (e: any) {
-    console.error('PATCH /api/reglements/ventes/[id]:', e)
+    await apiCatch(e, 'api/reglements/ventes/[id]')
     return NextResponse.json({ error: e.message || 'Erreur serveur.' }, { status: 500 })
   }
 }

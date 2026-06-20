@@ -7,6 +7,7 @@ import {
   pointsFideliteDepuisEncaissement,
   montantTotalAchatSommeLignes,
   partFraisApprocheLigne,
+  valeurAchatNetAvecFrais,
   nouveauPampApresAchatLigne,
   montantTvaImpliciteLigne,
   htNetDepuisTtcEtTauxGlobal,
@@ -148,6 +149,29 @@ describe('partFraisApprocheLigne', () => {
     expect(partFraisApprocheLigne(5000, 0, 2000)).toBe(0)
     expect(partFraisApprocheLigne(0, 0, 2000)).toBe(0)
   })
+
+  it('gère les valeurs négatives en les clampant à 0', () => {
+    expect(partFraisApprocheLigne(5000, 20000, -500)).toBe(0)
+    expect(partFraisApprocheLigne(-100, 1000, 500)).toBe(0)
+  })
+})
+
+describe('valeurAchatNetAvecFrais', () => {
+  it('additionne le HT net et la part de frais', () => {
+    const result = valeurAchatNetAvecFrais(5000, 500)
+    expect(result).toBe(5500)
+  })
+
+  it('gère des valeurs à zéro', () => {
+    expect(valeurAchatNetAvecFrais(0, 0)).toBe(0)
+    expect(valeurAchatNetAvecFrais(5000, 0)).toBe(5000)
+  })
+
+  it('clamp chaque composant négatif à 0 indépendamment', () => {
+    expect(valeurAchatNetAvecFrais(-500, 100)).toBe(100)
+    expect(valeurAchatNetAvecFrais(5000, -100)).toBe(5000)
+    expect(valeurAchatNetAvecFrais(-500, -100)).toBe(0)
+  })
 })
 
 describe('nouveauPampApresAchatLigne', () => {
@@ -167,6 +191,61 @@ describe('nouveauPampApresAchatLigne', () => {
       stockGlobalAvant: 0,
       pampActuel: 0,
       quantiteLigne: 0,
+      valeurAchatNet: 0,
+      prixUnitaireFallback: 1500,
+    })
+    expect(result).toBe(1500)
+  })
+
+  it('calcule correctement quand stock=0 avec qte>0', () => {
+    const result = nouveauPampApresAchatLigne({
+      stockGlobalAvant: 0,
+      pampActuel: 0,
+      quantiteLigne: 10,
+      valeurAchatNet: 25000,
+      prixUnitaireFallback: 3000,
+    })
+    expect(result).toBe(2500)
+  })
+
+  it('utilise fallback si NaN (valeurAchatNet=0 mais qte>0)', () => {
+    const result = nouveauPampApresAchatLigne({
+      stockGlobalAvant: 0,
+      pampActuel: 0,
+      quantiteLigne: 5,
+      valeurAchatNet: 0,
+      prixUnitaireFallback: 2000,
+    })
+    expect(result).toBe(2000)
+  })
+
+  it('conserve PAMP existant si stock=0 et qte=0', () => {
+    const result = nouveauPampApresAchatLigne({
+      stockGlobalAvant: 0,
+      pampActuel: 1500,
+      quantiteLigne: 0,
+      valeurAchatNet: 0,
+      prixUnitaireFallback: 2000,
+    })
+    expect(result).toBe(1500)
+  })
+
+  it('gère des valeurs décimales précises', () => {
+    const result = nouveauPampApresAchatLigne({
+      stockGlobalAvant: 3,
+      pampActuel: 1250,
+      quantiteLigne: 7,
+      valeurAchatNet: 8750,
+      prixUnitaireFallback: 1250,
+    })
+    expect(result).toBe(1250)
+  })
+
+  it('ne retourne jamais zéro si fallback > 0 et calcul donne 0', () => {
+    const result = nouveauPampApresAchatLigne({
+      stockGlobalAvant: 10,
+      pampActuel: 0,
+      quantiteLigne: 5,
       valeurAchatNet: 0,
       prixUnitaireFallback: 1500,
     })

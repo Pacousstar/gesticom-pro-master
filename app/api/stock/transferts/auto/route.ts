@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(recommendations)
   } catch (e) {
-    console.error('GET /api/stock/transferts/auto:', e)
+    await apiCatch(e, 'api/stock/transferts/auto')
     return NextResponse.json({ error: 'Erreur lors du calcul des recommandations' }, { status: 500 })
   }
 }

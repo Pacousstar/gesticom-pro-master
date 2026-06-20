@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const stockPatchSchema = z.object({
+  quantite: z.coerce.number().int().min(0).optional(),
+  quantiteInitiale: z.coerce.number().int().min(0).optional(),
+})
 
 export async function PATCH(
   request: NextRequest,
@@ -28,20 +36,21 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const quantite = body?.quantite
-    const quantiteInitiale = body?.quantiteInitiale
+    const validation = validateApiRequest(stockPatchSchema, body)
+    if (!validation.success) return validation.response
+    const patchData = validation.data
 
     const data: Record<string, number> = {}
-    if (typeof quantite === 'number' && quantite >= 0) data.quantite = Math.floor(quantite)
-    if (typeof quantiteInitiale === 'number' && quantiteInitiale >= 0) data.quantiteInitiale = Math.floor(quantiteInitiale)
+    if (patchData.quantite != null) data.quantite = Math.floor(patchData.quantite)
+    if (patchData.quantiteInitiale != null) data.quantiteInitiale = Math.floor(patchData.quantiteInitiale)
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: 'quantite ou quantiteInitiale requis.' }, { status: 400 })
     }
 
     // Créer un mouvement de stock si la quantité change
-    if (typeof quantite === 'number' && quantite >= 0 && quantite !== oldStock.quantite) {
-      const diff = quantite - oldStock.quantite
+    if (patchData.quantite != null && patchData.quantite !== oldStock.quantite) {
+      const diff = patchData.quantite - oldStock.quantite
       await prisma.mouvement.create({
         data: {
           date: new Date(),
@@ -51,7 +60,7 @@ export async function PATCH(
           quantite: Math.abs(diff),
           utilisateurId: session.userId,
           entiteId: session.entiteId,
-          observation: `Ajustement manuel (${oldStock.quantite} → ${quantite})`,
+          observation: `Ajustement manuel (${oldStock.quantite} → ${patchData.quantite})`,
         }
       })
     }
@@ -61,7 +70,7 @@ export async function PATCH(
     // Invalider le cache pour affichage immédiat
             return NextResponse.json(s)
   } catch (e) {
-    console.error('PATCH /api/stock/[id]:', e)
+    await apiCatch(e, 'api/stock/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -97,7 +106,7 @@ export async function DELETE(
   } catch (e: unknown) {
     const err = e as { code?: string }
     if (err?.code === 'P2025') return NextResponse.json({ error: 'Ligne de stock introuvable.' }, { status: 404 })
-    console.error('DELETE /api/stock/[id]:', e)
+    await apiCatch(e, 'api/stock/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

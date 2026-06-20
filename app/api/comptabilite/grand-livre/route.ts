@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: Request) {
     try {
@@ -49,7 +50,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json(ecritures)
     } catch (e) {
-        console.error('Grand Livre API Error:', e)
+        await apiCatch(e, 'api/comptabilite/grand-livre')
         return NextResponse.json({ error: 'Erreur lors du chargement des écritures' }, { status: 500 })
     }
 }

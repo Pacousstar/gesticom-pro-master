@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
+import { logError } from '@/lib/log-error'
 
 export type ApiErrorCode =
   | 'UNAUTHORIZED'
@@ -24,7 +25,7 @@ export class ApiError extends Error {
   }
 }
 
-export function handleApiError(error: unknown): NextResponse {
+export async function handleApiError(error: unknown): Promise<NextResponse> {
   if (error instanceof ApiError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
   }
@@ -70,7 +71,11 @@ export function handleApiError(error: unknown): NextResponse {
     }
   }
 
-  console.error('[ApiError] Unhandled:', error)
+  await logError(error instanceof Error ? error.message : 'Erreur inconnue', {
+    source: 'api-error',
+    stack: error instanceof Error ? error.stack : undefined,
+    level: 'error',
+  })
   return NextResponse.json({
     error: 'Erreur serveur. Veuillez réessayer plus tard.',
     code: 'SERVER_ERROR'

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(detailedStats)
   } catch (error) {
-    console.error('Erreur Rapport CA Clients:', error)
+    await apiCatch(error, 'api/rapports/ventes/clients')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

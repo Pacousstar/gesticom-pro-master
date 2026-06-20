@@ -6,6 +6,9 @@ import { requirePermission } from '@/lib/require-role'
 import { logAction, getIpAddress } from '@/lib/audit'
 import { comptabiliserVente } from '@/lib/comptabilisation'
 import { montantLigneTTC } from '@/lib/calculs-commerciaux'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { archiveVenteSchema } from '@/lib/validations'
 
 /**
  * API : Ventes Historiques (Anciennes Ventes)
@@ -90,6 +93,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const vres = validateApiRequest(archiveVenteSchema, body)
+    if (!vres.success) return vres.response
     const magasinId = Number(body?.magasinId)
     const clientId = body?.clientId != null ? Number(body.clientId) : null
     const clientLibre = body?.clientLibre != null ? String(body.clientLibre).trim() || null : null
@@ -258,13 +263,13 @@ export async function POST(request: NextRequest) {
         utilisateurId: session.userId,
         magasinId,
       })
-    } catch (e) { console.error('Erreur compta historique:', e) }
+    } catch (e) { await apiCatch(e, 'api/ventes-historiques') }
 
     await logAction(session, 'CREATION', 'VENTE', `Enregistrement vente historique ${num}`, vente.id, body)
 
                 return NextResponse.json(vente)
   } catch (e) {
-    console.error('POST /api/ventes-historiques:', e)
+    await apiCatch(e, 'api/ventes-historiques')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

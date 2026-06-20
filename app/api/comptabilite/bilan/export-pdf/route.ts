@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { getBilanForYear } from '../route'
+import { apiCatch } from '@/lib/log-error'
  
 const { jsPDF } = require('jspdf')
 
@@ -320,7 +321,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Export PDF bilan:', error)
+    await apiCatch(error, 'api/comptabilite/bilan/export-pdf')
     return NextResponse.json({ error: "Erreur lors de l'export PDF du bilan" }, { status: 500 })
   }
 }

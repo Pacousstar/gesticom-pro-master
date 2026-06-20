@@ -755,7 +755,7 @@ export default function StockPage() {
           />
         </div>
         <label className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">Magasin</span>
+          <span className="text-sm font-medium text-white">Magasin</span>
           <select
             value={magasinId}
             onChange={(e) => setMagasinId(e.target.value)}
@@ -768,7 +768,7 @@ export default function StockPage() {
           </select>
         </label>
         <label className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">Catégorie</span>
+          <span className="text-sm font-medium text-white">Catégorie</span>
           <select
             value={selectedCategory}
             onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); fetchList(1, searchTerm, e.target.value); }}
@@ -1298,7 +1298,7 @@ export default function StockPage() {
                           <button
                             onClick={() => setDeletingStock(s)}
                             className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
-                            title={s.id ? "Supprimer cette ligne de stock" : "Archiver ce produit"}
+                            title={s.id ? "Supprimer cette ligne de stock" : "Supprimer définitivement ce produit"}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1656,12 +1656,12 @@ export default function StockPage() {
               <div className="rounded-full bg-red-100 p-2">
                 <AlertTriangle className="h-6 w-6" />
               </div>
-              <h3 className="text-lg font-bold">{deletingStock.id ? 'Supprimer le stock ?' : 'Archiver le produit ?'}</h3>
+              <h3 className="text-lg font-bold">{deletingStock.id ? 'Supprimer le stock ?' : 'Supprimer le produit ?'}</h3>
             </div>
             <p className="mb-6 text-sm text-gray-600">
               {deletingStock.id
                 ? `Voulez-vous supprimer la ligne de stock pour **${deletingStock.produit.designation}** dans **${deletingStock.magasin.nom}** ? Cette action est définitive.`
-                : `Ce produit n'a pas de stock enregistré. Voulez-vous archiver **${deletingStock.produit.designation}** ? Il disparaîtra de la liste.`}
+                : `Ce produit n'a pas de stock enregistré. Voulez-vous le supprimer définitivement ? Cette action est irréversible.`}
             </p>
             <div className="flex gap-3">
               <button

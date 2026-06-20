@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { comptabiliserAchat } from '@/lib/comptabilisation'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(
   request: NextRequest,
@@ -154,7 +155,7 @@ export async function POST(
 
             return NextResponse.json(results)
   } catch (e) {
-    console.error('POST /api/commandes-fournisseurs/transformer:', e)
+    await apiCatch(e, 'api/commandes-fournisseurs/[id]/transformer-en-achat')
     return NextResponse.json({ error: 'Erreur lors de la transformation.' }, { status: 500 })
   }
 }

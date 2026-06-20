@@ -57,6 +57,30 @@ export const ErrorMessages = {
 }
 
 /**
+ * Valide le body d'une requête API avec un schéma Zod.
+ * Retourne les données parsées ou une NextResponse 400.
+ */
+export function validateApiRequest<T>(
+  schema: z.ZodSchema<T>,
+  body: unknown
+): { success: true; data: T } | { success: false; response: Response } {
+  const result = schema.safeParse(body)
+  if (result.success) {
+    return { success: true, data: result.data }
+  }
+  const errors = result.error.issues.map(e =>
+    `${e.path.join('.')}: ${e.message}`
+  ).join('; ')
+  return {
+    success: false,
+    response: new Response(JSON.stringify({ error: `Validation échouée: ${errors}` }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+}
+
+/**
  * Formate les erreurs API en messages utilisateur
  */
 export function formatApiError(error: unknown): string {

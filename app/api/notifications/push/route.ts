@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const pushSchema = z.object({
+  userId: z.coerce.number().int().positive().optional(),
+  title: z.string().min(1, 'Titre requis.').max(200).trim(),
+  body: z.string().min(1, 'Corps requis.').max(2000).trim(),
+  data: z.record(z.string(), z.any()).optional(),
+})
 
 /**
  * POST : Envoyer une notification push à un utilisateur
@@ -12,12 +22,10 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   try {
-    const requestBody = await request.json()
-    const { userId, title, body: messageBody, data } = requestBody
-
-    if (!title || !messageBody) {
-      return NextResponse.json({ error: 'Titre et corps requis.' }, { status: 400 })
-    }
+    const body = await request.json()
+    const validation = validateApiRequest(pushSchema, body)
+    if (!validation.success) return validation.response
+    const { userId, title, body: messageBody, data } = validation.data
 
     // Notification enregistrée en base
     // L'envoi se fait côté client via le service worker
@@ -27,7 +35,7 @@ export async function POST(request: NextRequest) {
       message: 'Notification enregistrée. L\'envoi se fera via le service worker.',
     })
   } catch (e) {
-    console.error('POST /api/notifications/push:', e)
+    await apiCatch(e, 'api/notifications/push')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

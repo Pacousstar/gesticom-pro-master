@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 
 const { jsPDF } = require('jspdf')
 
@@ -217,7 +218,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Export PDF achat:', error)
+    await apiCatch(error, 'api/achats/[id]/export-pdf')
     return NextResponse.json({ error: "Erreur lors de l'export PDF" }, { status: 500 })
   }
 }

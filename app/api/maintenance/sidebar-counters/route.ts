@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
       bilan: `${(actif/1000000).toFixed(1)}M / ${(passif/1000000).toFixed(1)}M`
     })
   } catch (e) {
-    console.error('Erreur compteurs sidebar:', e)
+    await apiCatch(e, 'api/maintenance/sidebar-counters')
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

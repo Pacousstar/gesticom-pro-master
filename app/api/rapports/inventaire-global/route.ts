@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
     const session = await getSession()
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
             }
         })
     } catch (error) {
-        console.error('Erreur API inventaire journalier:', error)
+        await apiCatch(error, 'api/rapports/inventaire-global')
         return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
     }
 }

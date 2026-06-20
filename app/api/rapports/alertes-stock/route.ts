@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { getProduitsEnAlerte } from '@/lib/intelligence'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
     const alertes = await getProduitsEnAlerte()
     return NextResponse.json(alertes)
   } catch (e) {
-    console.error('API Alertes Stock:', e)
+    await apiCatch(e, 'api/rapports/alertes-stock')
     return NextResponse.json({ error: 'Erreur lors de la récupération des alertes' }, { status: 500 })
   }
 }

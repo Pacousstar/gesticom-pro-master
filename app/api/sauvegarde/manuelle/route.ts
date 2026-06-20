@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { logAction, getIpAddress } from '@/lib/audit'
 import path from 'path'
+import { apiCatch } from '@/lib/log-error'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
       message: `La sauvegarde a été enregistrée avec succès dans le dossier GestiCom Pro (${backupName})`
     })
   } catch (e: any) {
-    console.error('POST /api/sauvegarde/manuelle:', e)
+    await apiCatch(e, 'api/sauvegarde/manuelle')
     return NextResponse.json({ error: e.message || 'Erreur lors de la création de la sauvegarde.' }, { status: 500 })
   }
 }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(req: NextRequest) {
     const session = await getSession()
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
           headers: { 'Cache-Control': 'no-store, max-age=0' },
         })
     } catch (error: any) {
-        console.error('❌ Erreur API predictions rupture:', error.message, error.stack)
+        await apiCatch(error, 'api/predictions/rupture')
         return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
     }
 }

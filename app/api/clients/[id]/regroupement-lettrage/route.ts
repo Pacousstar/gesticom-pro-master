@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { lettrageSchema } from '@/lib/validations'
 
 export async function POST(
   request: NextRequest,
@@ -20,6 +23,8 @@ export async function POST(
 
   try {
     const body = await request.json()
+    const validation = validateApiRequest(lettrageSchema, body)
+    if (!validation.success) return validation.response
     const reglementIds: number[] = body.reglementIds || []
 
     if (!reglementIds.length) {
@@ -124,7 +129,7 @@ export async function POST(
 
     return NextResponse.json(result)
   } catch (e: any) {
-    console.error('Erreur regroupement lettrage:', e)
+    await apiCatch(e, 'api/clients/[id]/regroupement-lettrage')
     return NextResponse.json({ error: e.message || 'Erreur serveur' }, { status: 500 })
   }
 }

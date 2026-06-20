@@ -4,6 +4,9 @@ import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { printTemplateSchema } from '@/lib/validations'
 
 async function checkPermission(session: any, permission: string) {
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(templates)
   } catch (e) {
-    console.error('GET /api/print-templates:', e)
+    await apiCatch(e, 'api/print-templates')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -49,16 +52,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    const result = validateApiRequest(printTemplateSchema.omit({ contenu: true }), body)
+    if (!result.success) return result.response
+    const data = result.data
     const { type, nom, logo, enTete, piedDePage, variables, actif } = body
-
-    if (!type || !nom) {
-      return NextResponse.json({ error: 'Type et nom requis.' }, { status: 400 })
-    }
 
     const template = await prisma.printTemplate.create({
       data: {
-        type,
-        nom,
+        type: data.type,
+        nom: data.nom,
         logo: logo || null,
         enTete: enTete || null,
         piedDePage: piedDePage || null,
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(template)
   } catch (e) {
-    console.error('POST /api/print-templates:', e)
+    await apiCatch(e, 'api/print-templates')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -83,7 +85,11 @@ export async function PATCH(request: NextRequest) {
   if (checked instanceof NextResponse) return checked
 
   try {
-    const { id, ...data } = await request.json()
+    const body = await request.json()
+    const { id, ...data } = body
+    const result = validateApiRequest(printTemplateSchema.partial(), data)
+    if (!result.success) return result.response
+
     if (!id || !Number.isInteger(id)) {
       return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
     }
@@ -114,7 +120,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json(template)
   } catch (e) {
-    console.error('PATCH /api/print-templates:', e)
+    await apiCatch(e, 'api/print-templates')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -144,7 +150,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('DELETE /api/print-templates:', e)
+    await apiCatch(e, 'api/print-templates')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

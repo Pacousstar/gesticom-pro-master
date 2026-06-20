@@ -6,6 +6,7 @@ import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { verifierCloture } from '@/lib/cloture'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
   _request: NextRequest,
@@ -83,7 +84,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE /api/banques/operations/[id]:', e)
+    await apiCatch(e, 'api/banques/operations/[id]')
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Erreur serveur.' }, { status: 500 })
   }
 }

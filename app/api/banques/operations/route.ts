@@ -6,6 +6,9 @@ import { comptabiliserOperationBancaire } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { banqueOperationSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -78,7 +81,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('GET /api/banques/operations:', error)
+    await apiCatch(error, 'api/banques/operations')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -90,23 +93,17 @@ export async function POST(request: NextRequest) {
   if (authError) return authError
 
   try {
-    const data = await request.json()
-    const { date, banqueId, type, libelle, montant, reference, beneficiaire, observation } = data
-
-    if (!banqueId || !type || !libelle || !montant) {
-      return NextResponse.json({ error: 'Banque, type, libellé et montant requis.' }, { status: 400 })
-    }
-
-    const montantNum = Number(montant)
-    if (montantNum <= 0) {
-      return NextResponse.json({ error: 'Le montant doit être supérieur à 0.' }, { status: 400 })
-    }
+    const body = await request.json()
+    const result = validateApiRequest(banqueOperationSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
+    const reference = body?.reference ? String(body.reference).trim() : null
 
     // RB10: Normaliser le type (uppercase)
-    const typeNormalise = String(type).toUpperCase().trim()
+    const typeNormalise = data.type
 
     // Vérifier que la banque existe
-    const banque = await prisma.banque.findUnique({ where: { id: Number(banqueId) } })
+    const banque = await prisma.banque.findUnique({ where: { id: data.banqueId } })
     if (!banque) {
       return NextResponse.json({ error: 'Compte bancaire introuvable.' }, { status: 404 })
     }
@@ -122,16 +119,16 @@ export async function POST(request: NextRequest) {
       // Enregistrer l'opération bancaire via le service canonique
       // Ce service gère: calcul du solde, mise à jour de banque.soldeActuel, création de l'OperationBancaire avec entiteId
       const op = await enregistrerOperationBancaire({
-        banqueId: Number(banqueId),
+        banqueId: data.banqueId,
         entiteId: banque.entiteId,
-        date: new Date(date + 'T00:00:00'),
+        date: new Date(data.date + 'T00:00:00'),
         type: typeNormalise,
-        libelle: libelle.trim(),
-        montant: montantNum,
+        libelle: data.description ?? '',
+        montant: data.montant,
         utilisateurId: session.userId,
-        reference: reference?.trim() || null,
-        beneficiaire: beneficiaire?.trim() || null,
-        observation: observation?.trim() || null,
+        reference: reference,
+        beneficiaire: data.beneficiaire ?? null,
+        observation: data.observation ?? null,
       }, tx)
 
       if (!op) {
@@ -141,11 +138,11 @@ export async function POST(request: NextRequest) {
       // Comptabiliser dans la même transaction
       await comptabiliserOperationBancaire({
         operationId: op.id,
-        banqueId: Number(banqueId),
-        date: new Date(date + 'T00:00:00'),
+        banqueId: data.banqueId,
+        date: new Date(data.date + 'T00:00:00'),
         type: typeNormalise,
-        montant: montantNum,
-        libelle: libelle.trim(),
+        montant: data.montant,
+        libelle: data.description ?? '',
         compteId: banque.compteId,
         utilisateurId: session.userId,
         entiteId: banque.entiteId,
@@ -165,13 +162,13 @@ await logAction(
       session,
       'CREATION',
       'OPERATION_BANQUE',
-      `Opération bancaire: ${typeNormalise} - ${libelle} - ${montantNum} FCA`,
+      `Opération bancaire: ${typeNormalise} - ${data.description} - ${data.montant} FCA`,
       banque.entiteId
     )
 
     return NextResponse.json(operation)
   } catch (error) {
-    console.error('POST /api/banques/operations:', error)
+    await apiCatch(error, 'api/banques/operations')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
     request: NextRequest,
@@ -31,7 +32,7 @@ export async function GET(
 
         return NextResponse.json(ventes)
     } catch (error) {
-        console.error('Erreur API factures détaillées:', error)
+        await apiCatch(error, 'api/clients/[id]/factures-detaillees')
         return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
     }
 }

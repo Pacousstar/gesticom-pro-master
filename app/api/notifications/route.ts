@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
       }
     } catch (e) {
       // Dégrade gracieusement: on conserve les autres notifications même si une source échoue.
-      console.error('GET /api/notifications (stocks):', e)
+      await apiCatch(e, 'api/notifications')
     }
 
     // 2. Ventes récentes (dernières 24h)
@@ -105,7 +106,7 @@ export async function GET(request: NextRequest) {
       }
     } catch (e) {
       // Dégrade gracieusement: on conserve les autres notifications même si une source échoue.
-      console.error('GET /api/notifications (ventes):', e)
+      await apiCatch(e, 'api/notifications')
     }
 
     // Trier par date (plus récentes en premier)
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
       nonLues,
     })
   } catch (e) {
-    console.error('GET /api/notifications:', e)
+    await apiCatch(e, 'api/notifications')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

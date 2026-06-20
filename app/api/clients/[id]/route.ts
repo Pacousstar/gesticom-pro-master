@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { verifierCloture } from '@/lib/cloture'
 import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { clientSchema } from '@/lib/validations'
 
 // Utilisation directe du client Prisma
 
@@ -51,24 +54,28 @@ export async function PATCH(
     }
 
     const body = await request.json()
+    const result = validateApiRequest(clientSchema.partial(), body)
+    if (!result.success) return result.response
+    const v = result.data
+
     const code = body?.code !== undefined ? (String(body.code).trim() || null) : undefined
-    const nom = body?.nom != null ? String(body.nom).trim() : undefined
-    const telephone = body?.telephone !== undefined ? (String(body.telephone).trim() || null) : undefined
-    const type = body?.type != null
-      ? (String(body.type).toUpperCase() === 'CREDIT' ? 'CREDIT' : 'CASH')
+    const nom = v.nom
+    const telephone = v.telephone !== undefined ? v.telephone : undefined
+    const type = v.type !== undefined
+      ? (String(v.type).toUpperCase() === 'CREDIT' ? 'CREDIT' : 'CASH')
       : undefined
-    const plafondCredit = body?.plafondCredit !== undefined
-      ? (type === 'CREDIT' ? Math.max(0, Number(body.plafondCredit) || 0) : null)
+    const plafondCredit = v.plafondCredit !== undefined
+      ? (type === 'CREDIT' ? Math.max(0, Number(v.plafondCredit) || 0) : null)
       : undefined
-    const ncc = body?.ncc !== undefined ? (String(body.ncc).trim() || null) : undefined
-    const localisation = body?.localisation !== undefined ? (String(body.localisation).trim() || null) : undefined
-    const soldeInitial = body?.soldeInitial !== undefined ? Number(body.soldeInitial) || 0 : undefined
-    const avoirInitial = body?.avoirInitial !== undefined ? Number(body.avoirInitial) || 0 : undefined
-    const email = body?.email !== undefined ? (String(body.email).trim() || null) : undefined
+    const ncc = v.ncc !== undefined ? v.ncc : undefined
+    const localisation = v.localisation !== undefined ? v.localisation : undefined
+    const soldeInitial = v.soldeInitial !== undefined ? v.soldeInitial : undefined
+    const avoirInitial = v.avoirInitial !== undefined ? v.avoirInitial : undefined
+    const email = v.email !== undefined ? v.email : undefined
     const actif = body?.actif !== undefined ? Boolean(body.actif) : undefined
 
     // SEC-01: Vérification cloture si modification des soldes initiaux
-    const modifieSoldeInitial = body?.soldeInitial !== undefined && Number(body.soldeInitial) !== existing.soldeInitial
+    const modifieSoldeInitial = v.soldeInitial !== undefined && v.soldeInitial !== existing.soldeInitial
     const modifieAvoirInitial = avoirInitial !== undefined && avoirInitial !== existing.avoirInitial
     
     if (modifieSoldeInitial || modifieAvoirInitial) {
@@ -101,7 +108,7 @@ export async function PATCH(
     
     return NextResponse.json(c)
   } catch (e) {
-    console.error('PATCH /api/clients/[id]:', e)
+    await apiCatch(e, 'api/clients/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -144,7 +151,7 @@ export async function DELETE(
     
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('DELETE /api/clients/[id]:', e)
+    await apiCatch(e, 'api/clients/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }

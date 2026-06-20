@@ -25,7 +25,7 @@ import {
 const BarcodeScanner = dynamic(() => import('@/components/scanner/BarcodeScanner'), { ssr: false })
 
 type Magasin = { id: number; code: string; nom: string }
-type Client = { id: number; nom: string; type: string }
+type Client = { id: number; nom: string; type: string; pointsFidelite?: number }
 type Produit = { 
   id: number; 
   code: string; 
@@ -553,7 +553,6 @@ export default function ArchivesVentesNouvellePage() {
 
   // Calculer points restants pour remise (Fidélité Pro)
   const clientSel = clients.find(c => c.id === Number(formData.clientId))
-  // @ts-ignore
   const pointsClient = clientSel?.pointsFidelite || 0
 
   const addLigneInPopup = () => {

@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requireRole } from '@/lib/require-role'
 import { repairCaisseIntegrity, repairStockIntegrity, repairBankIntegrity } from '@/lib/repair'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const repairSchema = z.object({
+  caisse: z.boolean().optional().default(true),
+  stock: z.boolean().optional().default(true),
+  bank: z.boolean().optional().default(true),
+})
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -11,9 +20,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}))
-    const repairCaisse = body?.caisse !== false
-    const repairStock = body?.stock !== false
-    const repairBank = body?.bank !== false
+    const validation = validateApiRequest(repairSchema, body)
+    if (!validation.success) return validation.response
+    const { caisse: repairCaisse, stock: repairStock, bank: repairBank } = validation.data
 
     const results: Record<string, any> = {}
 
@@ -29,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, ...results })
   } catch (error) {
-    console.error('Reparateur Error:', error)
+    await apiCatch(error, 'api/maintenance/reparateur')
     return NextResponse.json({ error: 'Erreur lors de la réparation.' }, { status: 500 })
   }
 }

@@ -3,6 +3,11 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logAction, getIpAddress } from '@/lib/audit'
 import { comptabiliserVente } from '@/lib/comptabilisation'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { z } from 'zod'
+
+const logIdSchema = z.object({ logId: z.coerce.number().int().positive() })
 
 /**
  * API DE RESTAURATION GRANULAIRE (SNAPSHOT 2.0)
@@ -15,7 +20,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { logId } = await request.json()
+    const body = await request.json()
+    const vres = validateApiRequest(logIdSchema, body)
+    if (!vres.success) return vres.response
+    const { logId } = body
     if (!logId) return NextResponse.json({ error: 'ID de log requis.' }, { status: 400 })
 
     const log = await prisma.auditLog.findUnique({
@@ -161,7 +169,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('[RESTORE ERROR]', error)
+    await apiCatch(error, 'api/audit/restore')
     return NextResponse.json({ 
       error: 'Erreur lors de la restauration.',
       details: error.message 

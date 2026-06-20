@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 import { getBilanForYear } from '../route'
 
 import { multiSheetToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   try {
@@ -146,7 +147,7 @@ export async function GET(request: NextRequest) {
     const filename = `bilan_${annee}.xlsx`
     return makeResponse(buf, filename)
   } catch (error) {
-    console.error('Export Excel bilan:', error)
+    await apiCatch(error, 'api/comptabilite/bilan/export-excel')
     return NextResponse.json({ error: 'Erreur lors de l\'export Excel du bilan' }, { status: 500 })
   }
 }

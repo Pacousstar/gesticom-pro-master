@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { planCompteSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(comptes)
   } catch (e) {
-    console.error('GET /api/plan-comptes:', e)
+    await apiCatch(e, 'api/plan-comptes')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
   }
 }
@@ -51,24 +54,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const numero = String(body?.numero || '').trim()
-    const libelle = String(body?.libelle || '').trim()
-    const classe = String(body?.classe || '').trim()
-    const type = ['ACTIF', 'PASSIF', 'CHARGES', 'PRODUITS'].includes(String(body?.type || '').toUpperCase())
-      ? String(body.type).toUpperCase()
-      : 'CHARGES'
-
-    if (!numero || !libelle || !classe) {
-      return NextResponse.json({ error: 'Numéro, libellé et classe requis.' }, { status: 400 })
-    }
+    const result = validateApiRequest(planCompteSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
 
     const compte = await prisma.planCompte.create({
-      data: { numero, libelle, classe, type, actif: true },
+      data: { numero: data.numero, libelle: data.libelle, classe: data.classe, type: data.type, actif: true },
     })
 
     return NextResponse.json(compte)
   } catch (e: any) {
-    console.error('POST /api/plan-comptes:', e)
+    await apiCatch(e, 'api/plan-comptes')
     if (e.code === 'P2002') {
       return NextResponse.json({ error: 'Ce numéro de compte existe déjà.' }, { status: 400 })
     }

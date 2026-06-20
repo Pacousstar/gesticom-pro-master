@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/require-role'
 import { montantLigneTTC, montantTotalVenteDocument } from '@/lib/calculs-commerciaux'
+import { apiCatch } from '@/lib/log-error'
+import { validateApiRequest } from '@/lib/validation-helpers'
+import { archiveVenteSchema } from '@/lib/validations'
 
 export async function POST(req: Request) {
   try {
@@ -13,7 +16,9 @@ export async function POST(req: Request) {
     if (forbidden) return forbidden
     const currentUser = { id: session.userId, entiteId: session.entiteId, role: session.role }
 
-    const data = await req.json()
+    const body = await req.json()
+    const vres = validateApiRequest(archiveVenteSchema, body)
+    if (!vres.success) return vres.response
     const {
       magasinId,
       clientId,
@@ -23,7 +28,7 @@ export async function POST(req: Request) {
       lignes,
       observation,
       numeroFactureOrigine
-    } = data
+    } = body
 
     if (!magasinId || !lignes || lignes.length === 0) {
       return NextResponse.json({ error: 'Données incomplètes (magasin, lignes manquants)' }, { status: 400 })
@@ -41,7 +46,7 @@ export async function POST(req: Request) {
       return { designation: l.designation || ("Produit ID: " + l.produitId), quantite: qte, prixUnitaire: pu, montant }
     })
 
-    const montantTotal = montantTotalVenteDocument(sommeLignesTTC, Number(data.remiseGlobale || 0), Number(data.fraisApproche || 0))
+    const montantTotal = montantTotalVenteDocument(sommeLignesTTC, Number(body.remiseGlobale || 0), Number(body.fraisApproche || 0))
 
     const nouvelleArchive = await prisma.archiveVente.create({
       data: {
@@ -61,7 +66,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(nouvelleArchive, { status: 201 })
   } catch (error: any) {
-    console.error('Erreur API Archives Ventes:', error)
+    await apiCatch(error, 'api/archives/ventes/nouvelle')
     return NextResponse.json({ error: error.message || 'Erreur serveur' }, { status: 500 })
   }
 }
