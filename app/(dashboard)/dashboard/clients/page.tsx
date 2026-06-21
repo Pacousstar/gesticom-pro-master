@@ -84,7 +84,7 @@ export default function ClientsPage() {
   const { data: listData, isLoading: listLoading, mutate } = useSWR(
     buildListUrl(currentPage),
     fetcher,
-    { keepPreviousData: true, revalidateOnFocus: false }
+    { keepPreviousData: true, revalidateOnFocus: false, dedupingInterval: 2000 }
   )
 
   const list: Client[] = listData?.data || (Array.isArray(listData) ? listData : [])

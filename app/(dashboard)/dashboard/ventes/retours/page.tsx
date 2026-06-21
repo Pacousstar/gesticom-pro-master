@@ -188,7 +188,7 @@ export default function RetoursPage() {
                     <td className="px-4 py-3 font-semibold text-gray-900">{r.numero}</td>
                     <td className="px-4 py-3 text-gray-700">{r.vente.numero}</td>
                     <td className="px-4 py-3 text-gray-700">{r.client?.nom || 'N/A'}</td>
-                    <td className="px-4 py-3 text-gray-500">{new Date(r.date).toLocaleDateString('fr-FR')}</td>
+                    <td className="px-4 py-3 text-gray-500">{new Date(r.date).toLocaleString('fr-FR')}</td>
                     <td className="px-4 py-3 text-gray-500 max-w-[150px] truncate">{r.motif || '-'}</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">{r.montantTotal.toLocaleString('fr-FR')} F</td>
                     <td className="px-4 py-3 text-center">

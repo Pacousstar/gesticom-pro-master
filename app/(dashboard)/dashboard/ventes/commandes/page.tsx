@@ -269,7 +269,7 @@ export default function CommandesPage() {
                       <tr key={v.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 font-semibold text-gray-900">{v.numero}</td>
                         <td className="px-4 py-3 text-gray-700">{v.client?.nom || v.clientLibre || 'N/A'}</td>
-                        <td className="px-4 py-3 text-gray-500">{new Date(v.date).toLocaleDateString('fr-FR')}</td>
+                        <td className="px-4 py-3 text-gray-500">{new Date(v.date).toLocaleString('fr-FR')}</td>
                         <td className="px-4 py-3 text-right font-semibold text-gray-900">{v.montantTotal.toLocaleString('fr-FR')} F</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3 justify-center">

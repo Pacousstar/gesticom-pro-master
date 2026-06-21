@@ -31,8 +31,8 @@ export default function NouveauCompteCourantPage() {
   const [fournisseurId, setFournisseurId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const { data: clientsRaw } = useSWR('/api/clients', fetcher)
-  const { data: fournisseursRaw } = useSWR('/api/fournisseurs', fetcher)
+  const { data: clientsRaw } = useSWR('/api/clients', fetcher, { dedupingInterval: 2000 })
+  const { data: fournisseursRaw } = useSWR('/api/fournisseurs', fetcher, { dedupingInterval: 2000 })
   const clients: ClientOption[] = clientsRaw?.data ?? []
   const fournisseurs: FournisseurOption[] = fournisseursRaw?.data ?? []
 

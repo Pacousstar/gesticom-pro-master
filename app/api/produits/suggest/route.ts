@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       { code: string; designation: string | null; categorie: string | null }[]
     >`
       SELECT code, designation, categorie FROM Produit
-      WHERE actif = 1 AND entiteId = ${entiteId}
+      WHERE actif = ${true} AND entiteId = ${entiteId}
         AND LOWER(designation) LIKE ${safeTerm}
       LIMIT 100
     `

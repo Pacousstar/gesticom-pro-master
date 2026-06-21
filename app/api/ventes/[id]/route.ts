@@ -229,9 +229,13 @@ export async function PATCH(
   const id = Number((await params).id)
   try {
     const body = await request.json()
-    const vres = validateApiRequest(venteSchema.partial(), body)
-    if (!vres.success) return vres.response
     const action = body?.action || (body?.lignes ? 'FULL_UPDATE' : 'PAGEMENT')
+
+    // RETRAIT_PARTIEL et LIVRER ont leur propre validation inline, pas besoin de venteSchema
+    if (action !== 'RETRAIT_PARTIEL' && action !== 'LIVRER') {
+      const vres = validateApiRequest(venteSchema.partial(), body)
+      if (!vres.success) return vres.response
+    }
 
     if (action === 'LIVRER') {
       const vente = await prisma.vente.findUnique({

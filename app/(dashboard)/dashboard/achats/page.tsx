@@ -433,7 +433,7 @@ export default function AchatsPage() {
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalHTNet: 0, totalAchatTTC: 0 }
   )
   const total = montantTotalAchatSommeLignes([totalAchatTTC])
-  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()) && (r as any).payeDepuisBanque === true)
+  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
 
   // Récupérer le templateId par défaut pour ACHAT
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
@@ -1179,7 +1179,10 @@ export default function AchatsPage() {
                             value={reg.mode}
                             onChange={(e) => {
                               const newRegs = [...formData.reglements]
-                              newRegs[idx].mode = e.target.value
+                              const newMode = e.target.value
+                              newRegs[idx].mode = newMode
+                              newRegs[idx].payeDepuisCaisse = newMode === 'ESPECES'
+                              newRegs[idx].payeDepuisBanque = ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(newMode)
                               setFormData(f => ({ ...f, reglements: newRegs }))
                             }}
                             className="flex-1 min-w-[140px] rounded-lg border border-orange-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none bg-white font-bold"

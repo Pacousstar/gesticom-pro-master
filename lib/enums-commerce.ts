@@ -15,6 +15,7 @@ export const MODES_PAIEMENT = [
   'VIREMENT',
   'CHEQUE',
   'CREDIT',
+  'MULTI',
 ] as const
 export type ModePaiement = (typeof MODES_PAIEMENT)[number]
 

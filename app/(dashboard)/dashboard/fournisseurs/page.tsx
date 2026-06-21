@@ -57,7 +57,7 @@ export default function FournisseursPage() {
   const { data: listData, isLoading: listLoading, mutate } = useSWR(
     `/api/fournisseurs?page=${currentPage}&limit=20${q ? `&q=${encodeURIComponent(q)}` : ''}`,
     fetcher,
-    { keepPreviousData: true, revalidateOnFocus: false }
+    { keepPreviousData: true, revalidateOnFocus: false, dedupingInterval: 2000 }
   )
 
   const list: Fournisseur[] = listData?.data || (Array.isArray(listData) ? listData : [])

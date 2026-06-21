@@ -43,7 +43,10 @@ export async function GET(request: NextRequest) {
       const d1 = new Date(dateDebut + 'T00:00:00')
       const d2 = new Date(dateFin + 'T23:59:59')
       if (!isNaN(d1.getTime()) && !isNaN(d2.getTime())) {
-        where.date = { gte: d1, lte: d2 }
+        where.OR = [
+          { date: { gte: d1, lte: d2 } },
+          { dateOperation: { gte: d1, lte: d2 } }
+        ]
       }
     } catch {
       // Ignore les dates invalides
@@ -81,7 +84,7 @@ export async function GET(request: NextRequest) {
           utilisateur: { select: { nom: true } },
           transfert: { select: { id: true, numero: true } }
         },
-        orderBy: { dateOperation: 'desc' },
+        orderBy: [{ dateOperation: 'desc' }, { id: 'desc' }],
       })
 
       let totalEntrees = 0
@@ -140,7 +143,7 @@ export async function GET(request: NextRequest) {
           utilisateur: { select: { nom: true } },
           transfert: { select: { id: true, numero: true } }
         },
-        orderBy: { dateOperation: 'desc' },
+        orderBy: [{ dateOperation: 'desc' }, { id: 'desc' }],
         skip,
         take: limit,
       }),

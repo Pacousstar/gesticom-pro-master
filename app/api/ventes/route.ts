@@ -477,7 +477,7 @@ export async function POST(request: NextRequest) {
               entiteId,
               utilisateurId: session.userId,
               quantite: l.quantite,
-              dateOperation: dateVente,
+              dateOperation: new Date(),
               observation: `Vente ${num}`,
             },
           })

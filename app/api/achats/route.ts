@@ -308,7 +308,7 @@ let montantFactureHT = 0
         error: `Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse l'achat (${montantTotal.toLocaleString()} F).`
       }, { status: 400 })
     }
-    const needsBanque = listReglements.some((r) => estModeBanque(r.mode) && r.payeDepuisBanque === true)
+    const needsBanque = listReglements.some((r) => estModeBanque(r.mode))
     if (needsBanque && !Number(body?.banqueId)) {
       return NextResponse.json({ error: 'Banque requise pour les règlements cochés "Payé depuis la banque".' }, { status: 400 })
     }
@@ -421,7 +421,7 @@ let montantFactureHT = 0
             entiteId: entiteId,
             utilisateurId: session.userId,
             quantite: l.quantite,
-            dateOperation: dateAchat,
+            dateOperation: new Date(),
             observation: `Achat ${num}`,
           },
         })

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { Prisma } from '@prisma/client'
 import { getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
@@ -101,23 +100,29 @@ export async function GET(request: NextRequest) {
       prisma.client.count({ where: { actif: true, ...entiteCondition } }).catch(catchZero('Client')),
       // 3 - Total produits catalogue
       prisma.produit.count({ where: { actif: true, ...entiteCondition } }).catch(catchZero('produit.count')),
-      // 4 - Stocks faibles
-      prisma.$queryRaw<Array<{
-        id: number
-        quantite: number
-        produit_designation: string
-        produit_seuilMin: number
-        produit_categorie: string
-        magasin_code: string
-      }>>`
-        SELECT s.id, s.quantite, p.designation as produit_designation, p."seuilMin" as produit_seuilMin, p.categorie as produit_categorie, m.code as magasin_code
-        FROM "Stock" s
-        INNER JOIN "Produit" p ON s."produitId" = p.id
-        INNER JOIN "Magasin" m ON s."magasinId" = m.id
-        WHERE p.actif = 1 AND s.quantite < p."seuilMin"
-        ${entiteId != null ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
-        ORDER BY s.quantite ASC LIMIT 5
-      `.catch(catchEmpty('stock.low')),
+      // 4 - Stocks faibles (Prisma pur — compatible SQLite + PostgreSQL)
+      prisma.stock.findMany({
+        where: {
+          produit: { actif: true },
+          ...(entiteId != null ? { entiteId } : {}),
+        },
+        include: {
+          produit: { select: { designation: true, seuilMin: true, categorie: true } },
+          magasin: { select: { code: true } },
+        },
+      }).then(stocks => stocks
+        .filter(s => s.quantite < s.produit.seuilMin)
+        .sort((a, b) => a.quantite - b.quantite)
+        .slice(0, 5)
+        .map(s => ({
+          id: s.id,
+          quantite: s.quantite,
+          produit_designation: s.produit.designation,
+          produit_seuilMin: s.produit.seuilMin,
+          produit_categorie: s.produit.categorie,
+          magasin_code: s.magasin.code,
+        }))
+      ).catch(catchEmpty('stock.low')),
       // 5 - Ventes récentes
       prisma.vente.findMany({
         where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition }, take: 5, orderBy: { date: 'desc' },
@@ -133,20 +138,25 @@ export async function GET(request: NextRequest) {
         orderBy: { _sum: { montant: 'desc' } },
         take: 5
       }).catch(catchEmpty('venteLigne.groupBy')),
-      // 8 - Valeur du Stock (Agrégation SQL Native)
-      // Formule: Si pamp > 0, utiliser pamp. Sinon utiliser prixAchat (ou 0)
-      prisma.$queryRaw<any[]>`
-        SELECT 
-          SUM(s.quantite * CASE WHEN p.pamp > 0 THEN p.pamp ELSE COALESCE(p."prixAchat", 0) END) as total_achat,
-          SUM(s.quantite * COALESCE(p."prixVente", 0)) as total_vente,
-          SUM(CASE WHEN s.quantite <= 0 THEN 1 ELSE 0 END) as nb_ruptures,
-          SUM(CASE WHEN s.quantite > 0 THEN 1 ELSE 0 END) as nb_en_stock
-        FROM "Stock" s
-        INNER JOIN "Produit" p ON s."produitId" = p.id
-        INNER JOIN "Magasin" m ON s."magasinId" = m.id
-        WHERE p.actif = 1
-        ${entiteId != null ? Prisma.sql`AND m."entiteId" = ${entiteId}` : Prisma.empty}
-      `.catch(async (err) => {
+      // 8 - Valeur du Stock (Prisma pur — compatible SQLite + PostgreSQL)
+      prisma.stock.findMany({
+        where: {
+          produit: { actif: true },
+          ...(entiteId != null ? { entiteId } : {}),
+        },
+        include: {
+          produit: { select: { pamp: true, prixAchat: true, prixVente: true } },
+        },
+      }).then(stocks => {
+        const total_achat = stocks.reduce((sum, s) => {
+          const prix = (s.produit.pamp ?? 0) > 0 ? (s.produit.pamp ?? 0) : (s.produit.prixAchat ?? 0)
+          return sum + (s.quantite * prix)
+        }, 0)
+        const total_vente = stocks.reduce((sum, s) => sum + (s.quantite * (s.produit.prixVente ?? 0)), 0)
+        const nb_ruptures = stocks.filter(s => s.quantite <= 0).length
+        const nb_en_stock = stocks.filter(s => s.quantite > 0).length
+        return [{ total_achat, total_vente, nb_ruptures, nb_en_stock }]
+      }).catch(async (err) => {
         await apiCatch(err, 'api/dashboard')
         return [{ total_achat: 0, total_vente: 0, nb_ruptures: 0, nb_en_stock: 0 }]
       }),
@@ -178,41 +188,67 @@ export async function GET(request: NextRequest) {
         take: 10
       }).catch(catchEmpty('systemAlerte.findMany')),
 
-      // 14 - TENDANCES MENSUELLES (date stockée en ms → conversion pour strftime)
-      prisma.$queryRaw<any[]>`
-        SELECT 
-          strftime('%Y-%m', date / 1000, 'unixepoch') as mois,
-          SUM(montantTotal) as montant
-        FROM Vente
-        WHERE statut IN ('VALIDE', 'VALIDEE')
-        AND date >= ${new Date(now.getFullYear() - 2, now.getMonth(), 1).getTime()}
-        ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.empty}
-        GROUP BY mois
-        ORDER BY mois ASC
-      `.catch(catchEmpty('tendances.raw')),
-      // 15 - CA PAR CATÉGORIE DE PRODUIT (pour donut)
-      prisma.$queryRaw<any[]>`
-        SELECT p.categorie, SUM(vl.montant) as montant
-        FROM "VenteLigne" vl
-        INNER JOIN "Produit" p ON vl."produitId" = p.id
-        INNER JOIN "Vente" v ON vl."venteId" = v.id
-        WHERE v.statut IN ('VALIDE', 'VALIDEE')
-        AND v.date >= ${new Date(now.getFullYear(), 0, 1).getTime()}
-        ${entiteId ? Prisma.sql`AND v."entiteId" = ${entiteId}` : Prisma.empty}
-        GROUP BY p.categorie
-        ORDER BY montant DESC
-      `.catch(catchEmpty('caCategorie.raw')),
-      // 16 - CA PAR JOUR POUR LE MOIS EN COURS (heatmap)
-      prisma.$queryRaw<any[]>`
-        SELECT strftime('%d', date / 1000, 'unixepoch') as jour, SUM(montantTotal) as montant
-        FROM Vente
-        WHERE statut IN ('VALIDE', 'VALIDEE')
-        AND date >= ${new Date(now.getFullYear(), now.getMonth(), 1).getTime()}
-        AND date < ${new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime()}
-        ${entiteId ? Prisma.sql`AND "entiteId" = ${entiteId}` : Prisma.empty}
-        GROUP BY jour
-        ORDER BY jour ASC
-      `.catch(catchEmpty('caJournalier.raw')),
+      // 14 - TENDANCES MENSUELLES (Prisma pur — compatible SQLite + PostgreSQL)
+      prisma.vente.findMany({
+        where: {
+          statut: { in: ['VALIDE', 'VALIDEE'] },
+          date: { gte: new Date(now.getFullYear() - 2, now.getMonth(), 1) },
+          ...(entiteId != null ? { entiteId } : {}),
+        },
+        select: { date: true, montantTotal: true },
+      }).then(ventes => {
+        const groups: Record<string, number> = {}
+        for (const v of ventes) {
+          const d = new Date(v.date)
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+          groups[key] = (groups[key] || 0) + v.montantTotal
+        }
+        return Object.entries(groups)
+          .map(([mois, montant]) => ({ mois, montant }))
+          .sort((a, b) => a.mois.localeCompare(b.mois))
+      }).catch(catchEmpty('tendances')),
+      // 15 - CA PAR CATÉGORIE DE PRODUIT (Prisma pur)
+      prisma.venteLigne.findMany({
+        where: {
+          vente: {
+            statut: { in: ['VALIDE', 'VALIDEE'] },
+            date: { gte: new Date(now.getFullYear(), 0, 1) },
+            ...(entiteId != null ? { entiteId } : {}),
+          },
+        },
+        select: { montant: true, produit: { select: { categorie: true } } },
+      }).then(lignes => {
+        const groups: Record<string, number> = {}
+        for (const l of lignes) {
+          const cat = l.produit?.categorie || 'DIVERS'
+          groups[cat] = (groups[cat] || 0) + l.montant
+        }
+        return Object.entries(groups)
+          .map(([categorie, montant]) => ({ categorie, montant }))
+          .sort((a, b) => b.montant - a.montant)
+      }).catch(catchEmpty('caCategorie')),
+      // 16 - CA PAR JOUR POUR LE MOIS EN COURS (Prisma pur)
+      prisma.vente.findMany({
+        where: {
+          statut: { in: ['VALIDE', 'VALIDEE'] },
+          date: {
+            gte: new Date(now.getFullYear(), now.getMonth(), 1),
+            lt: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+          },
+          ...(entiteId != null ? { entiteId } : {}),
+        },
+        select: { date: true, montantTotal: true },
+      }).then(ventes => {
+        const groups: Record<string, number> = {}
+        for (const v of ventes) {
+          const d = new Date(v.date)
+          const jour = String(d.getDate())
+          groups[jour] = (groups[jour] || 0) + v.montantTotal
+        }
+        return Object.entries(groups)
+          .map(([jour, montant]) => ({ jour: Number(jour), montant }))
+          .sort((a, b) => a.jour - b.jour)
+      }).catch(catchEmpty('caJournalier')),
       // 17 - (réservé)
     ])
 

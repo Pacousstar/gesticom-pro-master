@@ -299,6 +299,10 @@ model Fournisseur {
   produits              Produit[]
   reglements            ReglementAchat[]
   compteCourant         CompteCourant?        @relation("FournisseurCompteCourant")
+
+  @@index([entiteId])
+  @@index([actif])
+  @@index([nom])
 }
 
 model ReglementVente {

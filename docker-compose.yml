@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gesticom
+      POSTGRES_USER: gesticom
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gesticom -d gesticom"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      DATABASE_URL: postgresql://gesticom:${DB_PASSWORD:-changeme}@db:5432/gesticom
+      SESSION_SECRET: ${SESSION_SECRET:-changer-en-production-cle-32-caracteres-minimum}
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app-data:/data
+
+volumes:
+  pgdata:
+  app-data:

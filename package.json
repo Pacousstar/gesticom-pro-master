@@ -1,13 +1,14 @@
 {
   "name": "gesticom",
-  "version": "3.41.15",
+  "version": "3.42.3",
   "private": true,
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev -H 127.0.0.1",
     "dev:legacy": "next dev",
     "build": "node scripts/prebuild-check.js && node scripts/bump-version.js && node node_modules/prisma/build/index.js generate && node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && node scripts/build-wrapper.js",
     "bump:version": "node scripts/bump-version.js",
-    "build:installer": "npm run bump:version && npm run build",
+    "download:pg": "node scripts/download-postgres.js",
+    "build:installer": "node scripts/download-postgres.js && npm run bump:version && npm run build",
     "clean": "node scripts/clean.js",
     "start": "node scripts/standalone-launcher.js",
     "start:next": "next start",

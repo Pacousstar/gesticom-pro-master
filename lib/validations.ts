@@ -166,7 +166,7 @@ export const venteSchema = z.object({
   magasinId: z.coerce.number().int().positive('Le magasin est requis.').nullable().optional(),
   clientId: z.coerce.number().int().positive('Le client est requis.').nullable().optional(),
   clientLibre: z.string().max(MAX_STRING).nullable().optional(),
-  montantTotal: z.coerce.number().min(0),
+  montantTotal: z.coerce.number().min(0).optional(),
   remiseGlobale: z.coerce.number().min(0).optional().default(0),
   montantPaye: z.coerce.number().min(0).optional().default(0),
   modePaiement: z.enum(MODES_PAIEMENT as unknown as [string, ...string[]], { message: 'Mode de paiement invalide.' }),

@@ -110,7 +110,7 @@ export default function ProduitsPage() {
   const { data: listData, isLoading: listLoading, mutate } = useSWR(
     `/api/produits?page=${currentPage}&limit=20${q ? `&q=${encodeURIComponent(q)}` : ''}`,
     fetcher,
-    { keepPreviousData: true, revalidateOnFocus: false }
+    { keepPreviousData: true, revalidateOnFocus: false, dedupingInterval: 2000 }
   )
 
   const list: Produit[] = listData?.data || (Array.isArray(listData) ? listData : [])

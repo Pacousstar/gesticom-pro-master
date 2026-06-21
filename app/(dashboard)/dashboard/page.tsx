@@ -140,6 +140,7 @@ export default function DashboardPage() {
     keepPreviousData: true,
     errorRetryCount: 2,
     refreshInterval: 60000,
+    dedupingInterval: 2000,
   })
 
   // Permet de mettre le message d'erreur SWR dans un format exploitable

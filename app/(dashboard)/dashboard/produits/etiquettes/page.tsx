@@ -110,9 +110,7 @@ export default function EtiquettesPage() {
         for (let i = 0; i < nb; i++) {
           const barcodeData = p.codeBarres || p.code
 
-          const svgContainer = document.createElement('div')
-          svgContainer.style.display = 'none'
-          document.body.appendChild(svgContainer)
+          const svgContainer = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
 
           try {
             JsBarcode(svgContainer, barcodeData, {
@@ -122,12 +120,11 @@ export default function EtiquettesPage() {
               displayValue: false,
               margin: 0,
             })
-          } catch {
-            // fallback: text only
+          } catch (e) {
+            console.warn('JsBarcode error for', barcodeData, e)
           }
 
-          const svgHtml = svgContainer.innerHTML
-          document.body.removeChild(svgContainer)
+          const svgHtml = svgContainer.outerHTML
 
           html += `<div class="label">
             <div class="barcode">${svgHtml}</div>

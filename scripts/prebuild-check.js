@@ -23,6 +23,8 @@ const jsFiles = [
   'scripts/seed.js',
   'scripts/sauvegarde-bd.js',
   'scripts/bump-version.js',
+  'scripts/download-postgres.js',
+  'scripts/migrate-sqlite-to-postgres.js',
   'next.config.js',
 ]
 for (const f of jsFiles) {
@@ -55,7 +57,16 @@ for (const f of installerFiles) {
   }
 }
 
-// 2b. Vérification optionnelle standalone (peut ne pas exister avant build)
+// 2b. PostgreSQL zip (requis pour installateur)
+const pgZip = path.join(root, 'pgsql', 'postgresql-16.14-2-windows-x64-binaries.zip')
+if (fs.existsSync(pgZip)) {
+  const size = (fs.statSync(pgZip).size / 1024 / 1024).toFixed(1)
+  console.log(`  ✓ pgsql/postgresql-16.14-2-windows-x64-binaries.zip (${size} Mo)`)
+} else {
+  console.log('  ~ pgsql/postgresql-16.14-2-windows-x64-binaries.zip absent (lancera download-postgres.js)')
+}
+
+// 2c. Vérification optionnelle standalone (peut ne pas exister avant build)
 const standaloneServer = path.join(root, '.next', 'standalone', 'server.js')
 if (fs.existsSync(standaloneServer)) {
   console.log('  ✓ .next/standalone/server.js présent')

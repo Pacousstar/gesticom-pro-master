@@ -1,15 +1,18 @@
 /**
- * Script CLI : créer une sauvegarde de la base ou lister les sauvegardes.
+ * Script CLI : creer une sauvegarde de la base ou lister les sauvegardes.
+ * Supporte SQLite (copie fichier) et PostgreSQL (pg_dump).
  * Usage :
- *   node scripts/sauvegarde-bd.js          -> crée une sauvegarde
+ *   node scripts/sauvegarde-bd.js          -> cree une sauvegarde
  *   node scripts/sauvegarde-bd.js list     -> liste les sauvegardes
  *
- * Nécessite : DATABASE_URL dans .env (ou .database_url) et être exécuté depuis la racine du projet.
- * Les sauvegardes sont créées dans <répertoire de la base>/backups/
+ * Necessite : DATABASE_URL dans .env et etre execute depuis la racine du projet.
+ * Les sauvegardes sont creees dans <repertoire de la base>/backups/
+ * Pour PostgreSQL, necessite pg_dump dans le PATH ou dans pgsql/bin/
  */
 
 const path = require('path')
 const fs = require('fs')
+const { execSync } = require('child_process')
 
 const projectRoot = path.resolve(__dirname, '..')
 const envPath = path.join(projectRoot, '.env')
@@ -23,13 +26,11 @@ if (fs.existsSync(urlPath)) {
 if (!process.env.DATABASE_URL && fs.existsSync(envPath)) {
   try {
     const content = fs.readFileSync(envPath, 'utf8')
-    // Regex améliorée pour supporter les guillemets et espaces
     const m = content.match(/DATABASE_URL\s*=\s*["']?([^"'\r\n]+)["']?/)
     if (m) process.env.DATABASE_URL = m[1].replace(/["']$/g, '').trim()
   } catch (_) {}
 }
 
-// Si toujours rien, on utilise le chemin portable par défaut
 if (!process.env.DATABASE_URL) {
     const localDbPath = path.join(projectRoot, 'database', 'gesticom.db');
     if (fs.existsSync(localDbPath)) {
@@ -43,9 +44,11 @@ if (!process.env.DATABASE_URL) {
 }
 
 if (!process.env.DATABASE_URL) {
-  console.error('sauvegarde-bd: DATABASE_URL manquant. Définissez-le dans .env ou .database_url.')
+  console.error('sauvegarde-bd: DATABASE_URL manquant.')
   process.exit(1)
 }
+
+const isPostgres = () => (process.env.DATABASE_URL || '').startsWith('postgresql')
 
 function getDatabaseFilePath() {
   let filePath = process.env.DATABASE_URL.trim()
@@ -60,10 +63,16 @@ function getDatabaseFilePath() {
 }
 
 const BACKUP_PREFIX = 'gesticom-backup-'
-const BACKUP_EXT = '.db'
+const BACKUP_EXT_SQLITE = '.db'
+const BACKUP_EXT_PG = '.sql'
 const BACKUP_DIR_NAME = 'backups'
 
 function getBackupDir() {
+  if (isPostgres()) {
+    const dir = path.join(projectRoot, 'database', BACKUP_DIR_NAME)
+    fs.mkdirSync(dir, { recursive: true })
+    return dir
+  }
   const dbPath = getDatabaseFilePath()
   return path.join(path.dirname(dbPath), BACKUP_DIR_NAME)
 }
@@ -76,7 +85,8 @@ function backupFileName() {
   const h = String(now.getHours()).padStart(2, '0')
   const min = String(now.getMinutes()).padStart(2, '0')
   const s = String(now.getSeconds()).padStart(2, '0')
-  return `${BACKUP_PREFIX}${y}-${m}-${d}-${h}${min}${s}${BACKUP_EXT}`
+  const ext = isPostgres() ? BACKUP_EXT_PG : BACKUP_EXT_SQLITE
+  return `${BACKUP_PREFIX}${y}-${m}-${d}-${h}${min}${s}${ext}`
 }
 
 function listBackups() {
@@ -85,7 +95,6 @@ function listBackups() {
   const files = fs.readdirSync(dir)
   const result = []
   for (const name of files) {
-    if (!name.startsWith(BACKUP_PREFIX) || !name.endsWith(BACKUP_EXT)) continue
     const fullPath = path.join(dir, name)
     try {
       const stat = fs.statSync(fullPath)
@@ -96,6 +105,69 @@ function listBackups() {
   return result
 }
 
+function backupPostgres() {
+  const url = process.env.DATABASE_URL
+  console.log('Sauvegarde PostgreSQL...')
+
+  const pgsqlDirs = [
+    path.join(projectRoot, 'pgsql', 'bin'),
+    path.join(projectRoot, '..', 'pgsql', 'bin'),
+    'C:\\Program Files\\PostgreSQL\\16\\bin',
+    'C:\\Program Files\\PostgreSQL\\15\\bin',
+  ]
+
+  let pgDumpPath = 'pg_dump'
+  for (const dir of pgsqlDirs) {
+    const candidate = path.join(dir, 'pg_dump.exe')
+    if (fs.existsSync(candidate)) {
+      pgDumpPath = candidate
+      break
+    }
+  }
+
+  const backupDir = getBackupDir()
+  const name = backupFileName()
+  const destPath = path.join(backupDir, name)
+
+  const { spawn } = require('child_process')
+  const dump = spawn(pgDumpPath, [
+    '--no-owner', '--no-acl', '--clean', '--if-exists', '--format=c',
+    '-f', destPath, url,
+  ], { shell: true, stdio: 'pipe', windowsHide: true })
+
+  return new Promise((resolve, reject) => {
+    let stderr = ''
+    dump.stderr.on('data', (d) => { stderr += d.toString() })
+    dump.on('close', (code) => {
+      if (code === 0) {
+        const sizeKo = (fs.statSync(destPath).size / 1024).toFixed(1)
+        console.log('Sauvegarde PostgreSQL creee:', destPath, '(' + sizeKo + ' Ko)')
+        resolve()
+      } else {
+        reject(new Error(stderr || `pg_dump code ${code}`))
+      }
+    })
+    dump.on('error', reject)
+  })
+}
+
+function backupSQLite() {
+  const dbPath = getDatabaseFilePath()
+  if (!fs.existsSync(dbPath)) {
+    console.error('Base introuvable:', dbPath)
+    process.exit(1)
+  }
+
+  const backupDir = getBackupDir()
+  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true })
+
+  const name = backupFileName()
+  const destPath = path.join(backupDir, name)
+  fs.copyFileSync(dbPath, destPath)
+  const sizeKo = (fs.statSync(destPath).size / 1024).toFixed(1)
+  console.log('Sauvegarde creee:', destPath, '(' + sizeKo + ' Ko)')
+}
+
 const command = process.argv[2] === 'list' ? 'list' : 'backup'
 
 if (command === 'list') {
@@ -103,7 +175,7 @@ if (command === 'list') {
   if (backups.length === 0) {
     console.log('Aucune sauvegarde.')
   } else {
-    console.log('Sauvegardes (répertoire:', getBackupDir(), '):')
+    console.log('Sauvegardes (repertoire:', getBackupDir(), '):')
     backups.forEach((b) => {
       const sizeKo = (b.size / 1024).toFixed(1)
       console.log('  ', b.name, '  ', sizeKo, 'Ko  ', b.date.toLocaleString('fr-FR'))
@@ -112,17 +184,12 @@ if (command === 'list') {
   process.exit(0)
 }
 
-const dbPath = getDatabaseFilePath()
-if (!fs.existsSync(dbPath)) {
-  console.error('Base introuvable:', dbPath)
-  process.exit(1)
+if (isPostgres()) {
+  backupPostgres()
+    .catch((e) => {
+      console.error('ERREUR sauvegarde PostgreSQL:', e.message)
+      process.exit(1)
+    })
+} else {
+  backupSQLite()
 }
-
-const backupDir = getBackupDir()
-if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true })
-
-const name = backupFileName()
-const destPath = path.join(backupDir, name)
-fs.copyFileSync(dbPath, destPath)
-const sizeKo = (fs.statSync(destPath).size / 1024).toFixed(1)
-console.log('Sauvegarde créée:', destPath, '(' + sizeKo + ' Ko)')

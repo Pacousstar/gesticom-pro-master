@@ -30,6 +30,7 @@ export const viewport: Viewport = {
 
 import PwaRegister from '@/components/PwaRegister'
 import ErrorInitializer from '@/components/ErrorInitializer'
+import UpdateChecker from '@/components/UpdateChecker'
 import { ThemeProvider } from '@/components/ThemeProvider'
 
 export default function RootLayout({
@@ -44,6 +45,7 @@ export default function RootLayout({
           {children}
         </ThemeProvider>
         <PwaRegister />
+        <UpdateChecker />
         <ErrorInitializer />
       </body>
     </html>
