@@ -320,6 +320,7 @@ export const reglementCompteCourantSchema = z.object({
   payeDepuisCaisse: z.boolean().optional(),
   payeDepuisBanque: z.boolean().optional(),
   magasinId: z.coerce.number().int().positive().nullable().optional(),
+  banqueId: z.coerce.number().int().positive().nullable().optional(),
 })
 
 /** Banque */

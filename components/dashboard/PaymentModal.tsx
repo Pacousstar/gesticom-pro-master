@@ -212,7 +212,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
           )}
 
-          {modePaiement === 'ESPECES' && (
+          {type === 'ACHAT' && modePaiement === 'ESPECES' && (
             <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -223,15 +223,17 @@ const handleSubmit = async (e: React.FormEvent) => {
               Payé depuis la caisse
             </label>
           )}
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={payeDepuisBanque}
-              onChange={(e) => setPayeDepuisBanque(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            Payé depuis la banque
-          </label>
+          {type === 'ACHAT' && (
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={payeDepuisBanque}
+                onChange={(e) => setPayeDepuisBanque(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Payé depuis la banque
+            </label>
+          )}
 
           <div className="pt-4 flex gap-3">
             <button

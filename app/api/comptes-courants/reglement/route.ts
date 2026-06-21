@@ -20,11 +20,11 @@ export async function POST(request: NextRequest) {
     if (!validation.success) return validation.response
     const v = validation.data
 
-    const { compteCourantId, montant, modePaiement, clientId, fournisseurId } = v
+    const { compteCourantId, montant, modePaiement, clientId, fournisseurId, magasinId, banqueId } = v
     const payeDepuisCaisse = v.payeDepuisCaisse === true
     const payeDepuisBanque = v.payeDepuisBanque === true
 
-    if (payeDepuisCaisse && !body.magasinId) {
+    if (payeDepuisCaisse && !magasinId) {
       return NextResponse.json({ error: 'Le choix du point de vente (Caisse) est obligatoire.' }, { status: 400 })
     }
 
@@ -71,19 +71,19 @@ export async function POST(request: NextRequest) {
         if (payeDepuisCaisse && estModeEspeces(modePaiement)) {
           const client = await tx.client.findUnique({ where: { id: clientId }, select: { nom: true } })
           await enregistrerMouvementCaisse({
-            magasinId: Number(body.magasinId),
+            magasinId: magasinId!,
             type: 'ENTREE',
             motif: `Règlement CC Client ${client?.nom || ''} #${compteCourantId}`,
             montant: montantFinal,
             utilisateurId: session.userId,
             entiteId,
           }, tx)
-          await recalculerSoldeCaisse(Number(body.magasinId), tx)
+          await recalculerSoldeCaisse(magasinId!, tx)
         }
         if (payeDepuisBanque) {
           const { enregistrerOperationBancaire } = await import('@/lib/banque')
           await enregistrerOperationBancaire({
-            banqueId: body.banqueId ? Number(body.banqueId) : null,
+            banqueId,
             entiteId,
             date: new Date(),
             type: 'REGLEMENT_CLIENT',
@@ -140,19 +140,19 @@ export async function POST(request: NextRequest) {
         if (payeDepuisCaisse && estModeEspeces(modePaiement)) {
           const fournisseur = await tx.fournisseur.findUnique({ where: { id: fournisseurId }, select: { nom: true } })
           await enregistrerMouvementCaisse({
-            magasinId: Number(body.magasinId),
+            magasinId: magasinId!,
             type: 'SORTIE',
             motif: `Règlement CC Fournisseur ${fournisseur?.nom || ''} #${compteCourantId}`,
             montant: montantFinal,
             utilisateurId: session.userId,
             entiteId,
           }, tx)
-          await recalculerSoldeCaisse(Number(body.magasinId), tx)
+          await recalculerSoldeCaisse(magasinId!, tx)
         }
         if (payeDepuisBanque) {
           const { enregistrerOperationBancaire } = await import('@/lib/banque')
           await enregistrerOperationBancaire({
-            banqueId: body.banqueId ? Number(body.banqueId) : null,
+            banqueId,
             entiteId,
             date: new Date(),
             type: 'REGLEMENT_FOURNISSEUR',

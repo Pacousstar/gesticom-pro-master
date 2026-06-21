@@ -32,8 +32,8 @@ export async function POST(
     const validation = validateApiRequest(reglementCompteCourantSchema, body)
     if (!validation.success) return validation.response
     const v = validation.data
-    const { montant, modePaiement, magasinId } = v
-    const { banqueId, date } = body
+    const { montant, modePaiement, magasinId, banqueId } = v
+    const { date } = body
 
     // CREDIT = dette à terme, ne peut pas être un règlement
     if (String(modePaiement).toUpperCase() === 'CREDIT') {
