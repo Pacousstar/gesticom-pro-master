@@ -39,9 +39,7 @@ export async function getBilanForYear(
     entiteId: number,
     annee: number,
     dateDebut?: string | null,
-    dateFin?: string | null,
-    dateDebutPrec?: string | null,
-    dateFinPrec?: string | null
+    dateFin?: string | null
 ): Promise<{
     bilan: BilanComplet
     totalEcritures: number
@@ -71,8 +69,8 @@ export async function getBilanForYear(
     const totalEcritures = comptes.reduce((sum, c) => sum + (c.ecritures?.length || 0), 0)
 
     const balances = comptes.map(compte => {
-        const totalDebit = compte.ecritures.reduce((sum, e) => sum + Number(e.debit), 0)
-        const totalCredit = compte.ecritures.reduce((sum, e) => sum + Number(e.credit), 0)
+        const totalDebit = Math.round(compte.ecritures.reduce((sum, e) => sum + Number(e.debit), 0) * 100) / 100
+        const totalCredit = Math.round(compte.ecritures.reduce((sum, e) => sum + Number(e.credit), 0) * 100) / 100
         return {
             numero: compte.numero.trim(),
             libelle: compte.libelle,
@@ -197,8 +195,8 @@ export async function GET(request: Request) {
         }
 
         const [resultN, resultN1] = await Promise.all([
-            getBilanForYear(entiteId, annee, dateDebut, dateFin, dateDebutPrec, dateFinPrec),
-            getBilanForYear(entiteId, anneePrecedente, dateDebutPrec, dateFinPrec, dateDebutPrec, dateFinPrec),
+            getBilanForYear(entiteId, annee, dateDebut, dateFin),
+            getBilanForYear(entiteId, anneePrecedente, dateDebutPrec, dateFinPrec),
         ])
 
         const { bilan } = resultN

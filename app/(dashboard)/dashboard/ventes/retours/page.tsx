@@ -49,6 +49,8 @@ export default function RetoursPage() {
       const data = await res.json()
       setRetours(data.data || [])
       setTotalPages(data.pagination?.totalPages || 1)
+    } catch {
+      console.error('Erreur chargement retours')
     } finally {
       setLoading(false)
     }

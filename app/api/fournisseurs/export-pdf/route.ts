@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     let y = 35
     doc.setFontSize(9)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Nom', 15, y)
     doc.text('Téléphone', 70, y)
     doc.text('Email', 110, y)
@@ -64,12 +64,12 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.line(15, y, 195, y)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     for (const f of filtered) {
       if (y > 270) {
         doc.addPage()
         y = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Nom', 15, y)
         doc.text('Téléphone', 70, y)
         doc.text('Email', 110, y)
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
         y += 5
         doc.line(15, y, 195, y)
         y += 5
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const nom = f.nom.length > 25 ? f.nom.substring(0, 22) + '...' : f.nom

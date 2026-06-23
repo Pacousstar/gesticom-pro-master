@@ -2,7 +2,6 @@ import { randomUUID } from 'crypto'
 import { prisma } from './db'
 import type { PrismaClient } from '@prisma/client'
 import { estModeEspeces } from './enums-commerce'
-import { estModeBanque } from './banque'
 import {
   htNetDepuisTtcEtTauxGlobal,
   montantHtNetTotalLignesCompta,
@@ -44,6 +43,7 @@ export const COMPTES_DEFAUT = {
   
   // CLASSE 7 - PRODUITS
   VENTES_MARCHANDISES: '701', // Ventes de marchandises
+  RRR_ACCORDES: '7097', // Rabais, remises et ristournes accordés
   VENTES_PRODUITS_FINIS: '703', // Ventes de produits finis
   PRODUITS_DIVERS: '758', // Produits divers
 }
@@ -106,8 +106,8 @@ async function createEcriture(data: {
         referenceType: data.referenceType,
         referenceId: data.referenceId,
         compteId: data.compteId,
-        debit: Math.round(data.debit || 0),
-        credit: Math.round(data.credit || 0),
+        debit: Math.round((data.debit || 0) * 100) / 100,
+        credit: Math.round((data.credit || 0) * 100) / 100,
         entiteId: data.entiteId || 1
       }
     })
@@ -123,8 +123,8 @@ async function createEcriture(data: {
     data: {
       numero,
       ...data,
-      debit: Math.round(data.debit || 0),
-      credit: Math.round(data.credit || 0),
+      debit: Math.round((data.debit || 0) * 100) / 100,
+      credit: Math.round((data.credit || 0) * 100) / 100,
       entiteId: data.entiteId || 1
     },
   })
@@ -156,14 +156,15 @@ export async function comptabiliserVente(data: {
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
   // Supprime toutes les écritures liées à cette vente pour éviter les doublons lors des mises à jour
-  // Note: VENTE_REGLEMENT n'est pas nettoyé ici car les entries utilisent reglementId (pas venteId)
-  // Elles sont nettoyées individuellement par comptabiliserReglementVente
+  // VENTE_REGLEMENT avec referenceId=venteId (créés sans reglementId) sont nettoyés ici
+  // Les VENTE_REGLEMENT avec referenceId=reglementId sont nettoyés par comptabiliserReglementVente
   await p.ecritureComptable.deleteMany({
     where: {
       OR: [
         { referenceType: 'VENTE', referenceId: data.venteId },
         { referenceType: 'VENTE_STOCK', referenceId: data.venteId },
         { referenceType: 'VENTE_FRAIS', referenceId: data.venteId },
+        { referenceType: 'VENTE_REGLEMENT', referenceId: data.venteId },
       ]
     }
   })
@@ -252,8 +253,13 @@ export async function comptabiliserVente(data: {
   const fraisVente = data.fraisApproche || 0
   if (fraisVente > 0) {
     const compteTransport = await getOrCreateCompte('624', 'Transport sur vente', '6', 'CHARGES', tx)
-    const modePrincipal = data.modePaiement || (data.reglements?.[0]?.mode) || ''
-    const isCashFrais = estModeEspeces(modePrincipal)
+    let isCashFrais = false
+    if (data.modePaiement === 'MULTI' && data.reglements?.length) {
+      isCashFrais = data.reglements.some(r => estModeEspeces(r.mode))
+    } else {
+      const modePrincipal = data.modePaiement || (data.reglements?.[0]?.mode) || ''
+      isCashFrais = estModeEspeces(modePrincipal)
+    }
     const compteTresorerieFrais = isCashFrais
       ? await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
       : await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
@@ -341,7 +347,7 @@ export async function comptabiliserVente(data: {
     }
   }
 
-  // 5. Règlements (Écritures de Trésorerie)
+  // 6. Règlements (Écritures de Trésorerie)
   if (data.reglements && data.reglements.length > 0) {
     for (const reg of data.reglements) {
       if (reg.montant <= 0) continue
@@ -394,8 +400,7 @@ export async function comptabiliserReglementVente(data: {
   
   // Déterminer le compte de trésorerie dynamiquement
   let compteTresorerie: { id: number }
-  const m = (data.modePaiement || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  const isCash = m === 'ESPECES' || m === 'CASH' || m === 'ESPECE'
+  const isCash = estModeEspeces(data.modePaiement)
   
   if (isCash) {
     compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
@@ -806,8 +811,7 @@ export async function comptabiliserReglementAchat(data: {
       tx
     )
   } else {
-    const m = (data.modePaiement || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    const isCash = m === 'ESPECES' || m === 'CASH' || m === 'ESPECE'
+    const isCash = estModeEspeces(data.modePaiement)
   
     if (isCash) {
       compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
@@ -1039,10 +1043,9 @@ export async function comptabiliserDepense(data: {
   }
   
   // Déterminer le compte de règlement dynamiquement
-  const m = data.modePaiement?.toUpperCase() || ''
   let compteReglement: { id: number }
   
-  if (m === 'ESPECES' || m === 'CASH' || m === 'ESPECE') {
+  if (estModeEspeces(data.modePaiement)) {
     compteReglement = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
   } else {
     // Tentative de récupération du compte spécifique à la banque
@@ -1188,8 +1191,7 @@ export async function comptabiliserCharge(data: {
   }
   
   // Déterminer le compte de règlement dynamiquement (Défaut Caisse si non précisé)
-  const m = data.modePaiement?.toUpperCase() || ''
-  const isCash = m === 'ESPECES' || m === 'CASH' || m === ''
+  const isCash = !data.modePaiement || estModeEspeces(data.modePaiement)
   let compteReglement: { id: number }
   
   if (isCash) {
@@ -1321,10 +1323,13 @@ export async function comptabiliserCaisse(data: {
     }, tx)
   } else {
     const isRetrait = sousType === 'RETRAIT'
+    const isRetour = sousType === 'RETOUR'
     const compteContrepartie = isRetrait
       ? await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque', '5', 'ACTIF', tx)
-      : await getOrCreateCompte(COMPTES_DEFAUT.AUTRES_CHARGES, 'Autres charges', '6', 'CHARGES', tx)
-    const libelleContrepartie = isRetrait ? 'Retrait caisse' : 'Sortie caisse'
+      : isRetour
+        ? await getOrCreateCompte(COMPTES_DEFAUT.RRR_ACCORDES, 'RRR accordés', '7', 'PRODUITS', tx)
+        : await getOrCreateCompte(COMPTES_DEFAUT.AUTRES_CHARGES, 'Autres charges', '6', 'CHARGES', tx)
+    const libelleContrepartie = isRetrait ? 'Retrait caisse' : isRetour ? 'Remboursement retour' : 'Sortie caisse'
     
     await createEcriture({
       date: data.date,
@@ -1497,6 +1502,14 @@ export async function comptabiliserOperationBancaire(data: {
         'Autres charges',
         '6',
         'CHARGES',
+        tx
+      )
+    } else if (data.type === 'RETOUR_CLIENT') {
+      compteDebit = await getOrCreateCompte(
+        COMPTES_DEFAUT.RRR_ACCORDES,
+        'RRR accordés',
+        '7',
+        'PRODUITS',
         tx
       )
     } else {

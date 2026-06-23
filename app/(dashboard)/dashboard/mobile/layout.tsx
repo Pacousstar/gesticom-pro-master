@@ -19,7 +19,7 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-4">
-      <div className="relative h-[90vh] max-h-[820px] w-full max-w-sm bg-gray-950 text-white flex flex-col overflow-hidden rounded-[3rem] border-4 border-gray-800 shadow-2xl shadow-orange-500/10">
+      <div className="relative w-full max-w-sm h-[90vh] max-h-[min(820px,calc(100vh-3rem))] translate-y-8 bg-gray-950 text-white flex flex-col overflow-y-auto rounded-[3rem] border-4 border-gray-800 shadow-2xl shadow-orange-500/10">
         {children}
         <div className="flex items-center justify-around bg-gray-900 border-t border-gray-800 py-1 shrink-0">
           {tabs.map((tab) => {

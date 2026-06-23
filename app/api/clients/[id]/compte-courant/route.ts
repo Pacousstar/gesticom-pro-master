@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { estModeEspeces } from '@/lib/enums-commerce'
+import { enregistrerOperationBancaire, estModeBanque } from '@/lib/banque'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { reglementCompteCourantSchema } from '@/lib/validations'
@@ -318,9 +319,7 @@ export async function POST(
           date: dateReglement,
         }, tx)
         await recalculerSoldeCaisse(Number(magasinId), tx)
-      } else {
-        const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
-        if (estModeBanque(modePaiement)) {
+      } else if (estModeBanque(modePaiement)) {
           await enregistrerOperationBancaire({
             banqueId: banqueId ? Number(banqueId) : null,
             entiteId,
@@ -336,7 +335,6 @@ export async function POST(
         } else {
           console.warn(`[paiement client] Mode de paiement non géré pour trésorerie: ${modePaiement}`)
         }
-      }
 
       // ✅ COMPTABILISATION
       await comptabiliserReglementVente({

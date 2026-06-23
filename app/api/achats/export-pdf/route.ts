@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     let currentY = y
 
     // En-têtes du tableau (Landscape)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     const colPositions = {
       n: margin,
       date: margin + 25,
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     currentY += lineHeight
     doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     let totalMontant = 0
     let totalReste = 0
 
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('N°', colPositions.n, currentY)
         doc.text('Date', colPositions.date, currentY)
         doc.text('Magasin', colPositions.magasin, currentY)
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
         doc.text('Reste', colPositions.reste, currentY, { align: 'right' })
         currentY += lineHeight
         doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const dateStr = new Date(a.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -129,14 +129,16 @@ export async function GET(request: NextRequest) {
       doc.text(a.numeroCamion || '—', colPositions.camion, currentY)
       doc.text(a.montantTotal.toLocaleString('fr-FR'), colPositions.montant, currentY, { align: 'right' })
       doc.text(a.modePaiement, colPositions.paiement, currentY)
-      doc.text(a.statutPaiement === 'PAYE' ? 'Payé' : a.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit', colPositions.statutPaiement, currentY)
+      doc.text(['PAYE', 'PARTIEL', 'CREDIT', 'REMBOURSE'].includes(a.statutPaiement)
+  ? ({ PAYE: 'Payé', PARTIEL: 'Partiel', CREDIT: 'Crédit', REMBOURSE: 'Remboursé' } as Record<string, string>)[a.statutPaiement]
+  : 'Crédit', colPositions.statutPaiement, currentY)
       doc.text(reste.toLocaleString('fr-FR'), colPositions.reste, currentY, { align: 'right' })
 
       currentY += lineHeight
     }
 
     // Totaux
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
     doc.text('TOTAUX', colPositions.n, currentY)
     doc.text(totalMontant.toLocaleString('fr-FR') + ' F', colPositions.montant, currentY, { align: 'right' })

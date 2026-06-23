@@ -8,6 +8,7 @@ import {
 import SuppressionConfirmModal from '@/components/SuppressionConfirmModal'
 import ModificationAchatModal from '@/components/dashboard/achats/ModificationAchatModal'
 import { useToast } from '@/hooks/useToast'
+import { extractList } from '@/lib/api-client'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import { fournisseurSchema } from '@/lib/validations'
@@ -17,7 +18,6 @@ import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/prin
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import PrintPreview from '@/components/print/PrintPreview'
 import { paginateForPrint } from '@/lib/print-helpers'
-import { addToSyncQueue, isOnline } from '@/lib/offline-sync'
 import {
   montantLigneTTC,
   montantTvaImpliciteLigne,
@@ -35,6 +35,34 @@ type Produit = {
   stocks?: Array<{ magasinId: number; quantite: number }>;
 }
 type Ligne = { produitId: number; designation: string; quantite: number; prixUnitaire: number; tvaPerc: number; remise: number }
+type AchatRequest = {
+  date?: string
+  magasinId: number
+  fournisseurId: number | null
+  fournisseurLibre: string | null
+  modePaiement: string
+  reglements: Array<{ mode: string; montant: number; payeDepuisCaisse: boolean; payeDepuisBanque: boolean; banqueId?: number }>
+  banqueId?: number
+  fraisApproche: number
+  numeroCamion: string | null
+  observation: string | null
+  lignes: Array<{ produitId: number; quantite: number; prixUnitaire: number; tva: number; remise: number }>
+}
+type AchatItem = {
+  id: number
+  numero: string
+  date: string
+  montantTotal: number
+  montantPaye?: number
+  statutPaiement?: string
+  modePaiement: string
+  magasin: { code: string; nom: string }
+  fournisseur: { id: number; code: string; nom: string; telephone?: string | null; email?: string | null; localisation?: string | null; ncc?: string | null } | null
+  fournisseurLibre: string | null
+  numeroCamion?: string | null
+  lignes: Array<{ quantite: number; prixUnitaire: number; designation: string }>
+  reglements?: Array<{ id: number; modePaiement: string }>
+}
 
 export default function AchatsPage() {
   const [magasins, setMagasins] = useState<Magasin[]>([])
@@ -144,7 +172,7 @@ export default function AchatsPage() {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => { })
     fetch('/api/banques')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setBanques(Array.isArray(d?.data) ? d.data : []))
+      .then((d) => setBanques(extractList(d)))
       .catch(() => setBanques([]))
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => { })
   }, [])
@@ -206,16 +234,16 @@ export default function AchatsPage() {
     fetch('/api/produits?complet=1')
       .then((r) => (r.ok ? r.json() : []))
       .then((res) => {
-        const arr = Array.isArray(res) ? res : []
-        setProduits(arr.map((p: any) => p.produit || p))
+        const arr = extractList(res) as Array<{ produit: Produit } | Produit>
+        setProduits(arr.map((p: { produit: Produit } | Produit) => ('produit' in p ? p.produit : p)))
       })
   }
 
   useEffect(() => {
     Promise.all([
       fetch('/api/magasins').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/fournisseurs?limit=1000').then((r) => (r.ok ? r.json() : { data: [] })).then((res) => setFournisseurs(Array.isArray(res) ? res : res.data || [])),
-      fetch('/api/produits?complet=1').then((r) => (r.ok ? r.json() : [])).then((res) => setProduits(Array.isArray(res) ? res : [])),
+      fetch('/api/fournisseurs?limit=1000').then((r) => (r.ok ? r.json() : { data: [] })).then((res) => setFournisseurs(extractList(res))),
+      fetch('/api/produits?complet=1').then((r) => (r.ok ? r.json() : [])).then((res) => setProduits(extractList(res))),
     ]).then(([m]) => {
       setMagasins(m)
     })
@@ -257,11 +285,14 @@ export default function AchatsPage() {
           setPagination(response.pagination)
           setTotals(response.totals)
         } else {
-          // Compatibilité avec l'ancien format
-          setAchats(Array.isArray(response) ? response : [])
+          setAchats(extractList(response))
           setPagination(null)
           setTotals(null)
         }
+      })
+      .catch((e) => {
+        console.error('Erreur chargement achats', e)
+        showError('Erreur lors du chargement des achats.')
       })
       .finally(() => setLoading(false))
   }
@@ -458,13 +489,14 @@ export default function AchatsPage() {
       const res = await fetch('/api/achats?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        setAllAchatsForPrint(response.data || [])
+        setAllAchatsForPrint(extractList(response))
+        setIsPreviewOpen(true)
       }
     } catch (e) {
       console.error(e)
+    } finally {
+      setIsPrintingData(false)
     }
-    setIsPreviewOpen(true)
-    setIsPrintingData(false)
   }
 
   useEffect(() => {
@@ -485,7 +517,7 @@ export default function AchatsPage() {
     const dateDoc = new Date(d.date)
 
     // Calculs conformes (TTC = HT Net + TVA sur Net)
-    const totalCalc = d.lignes.reduce((acc, l: any) => {
+    const totalCalc = d.lignes.reduce((acc, l: { quantite: number; prixUnitaire: number; remise?: number; tvaPerc?: number; tva?: number }) => {
       const q = l.quantite
       const pu = l.prixUnitaire
       const r = Number(l.remise) || 0
@@ -581,7 +613,7 @@ export default function AchatsPage() {
     }
   }
 
-  const doEnregistrerAchat = async (requestData: any) => {
+  const doEnregistrerAchat = async (requestData: AchatRequest) => {
     try {
       const res = await fetch('/api/achats', {
         method: 'POST',
@@ -603,7 +635,7 @@ export default function AchatsPage() {
     }
   }
 
-  const doModifierAchat = async (requestData: any) => {
+  const doModifierAchat = async (requestData: AchatRequest) => {
     try {
       const res = await fetch(`/api/achats/${editingAchatId}`, {
         method: 'PATCH',
@@ -626,7 +658,7 @@ export default function AchatsPage() {
     }
   }
 
-  const finaliserSucces = (data: any, message: string) => {
+  const finaliserSucces = (data: AchatItem, message: string) => {
     setForm(false)
     setEditingAchatId(null)
     setFormData({
@@ -659,6 +691,8 @@ export default function AchatsPage() {
     try {
       const res = await fetch(`/api/achats/${id}`)
       if (res.ok) setDetailAchat(await res.json())
+    } catch (e) {
+      showError(formatApiError(e))
     } finally {
       setLoadingDetail(null)
     }
@@ -675,6 +709,7 @@ export default function AchatsPage() {
         setAchats((list) => list.filter((x) => x.id !== target.id))
         if (detailAchat?.id === target.id) setDetailAchat(null)
         showSuccess(MESSAGES.ACHAT_SUPPRIME)
+        fetchAchats()
       } else {
         const d = await res.json()
         showError(res.status === 403 ? (d.error || MESSAGES.RESERVE_SUPER_ADMIN) : formatApiError(d.error || 'Erreur suppression.'))
@@ -721,7 +756,7 @@ export default function AchatsPage() {
         showSuccess('Règlement enregistré avec succès.')
         setShowReglement(null)
         setReglementData({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0], payeDepuisCaisse: false, payeDepuisBanque: false })
-        fetchAchats()
+        setCurrentPage(1)
         if (detailAchat?.id === showReglement.id) {
           handleVoirDetail(showReglement.id)
         }
@@ -1059,7 +1094,7 @@ export default function AchatsPage() {
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
                     >
                       <option value="">— Sélectionner un compte —</option>
-                      {banques.map((b: any) => (
+                      {banques.map((b: { id: number; numero: string; nomBanque?: string; nom?: string; libelle: string }) => (
                         <option key={b.id} value={b.id}>
                           {b.numero} — {b.nomBanque || b.nom || 'Banque'} ({b.libelle})
                         </option>
@@ -1702,12 +1737,12 @@ export default function AchatsPage() {
                         fournisseurLibre: detailAchat.fournisseurLibre || '',
                         modePaiement: detailAchat.modePaiement,
                         montantPaye: detailAchat.montantPaye ? String(detailAchat.montantPaye) : '',
-                        reglements: (detailAchat as any).reglements?.map((r: any) => ({ mode: r.modePaiement || r.mode || 'ESPECES', montant: String(r.montant) })) || [{ mode: 'ESPECES', montant: '' }],
+                        reglements: ((detailAchat as any).reglements as Array<{ modePaiement?: string; mode?: string; montant: number }>)?.map((r) => ({ mode: r.modePaiement || r.mode || 'ESPECES', montant: String(r.montant), payeDepuisCaisse: false, payeDepuisBanque: false })) || [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }],
                         banqueId: '',
                         numeroCamion: detailAchat.numeroCamion || '',
                         fraisApproche: String((detailAchat as any).fraisApproche || '0'),
                         observation: detailAchat.observation || '',
-                        lignes: detailAchat.lignes.map((l: any) => ({
+                        lignes: detailAchat.lignes.map((l: { produitId: number; designation: string; quantite: number; prixUnitaire: number; tva?: number; tvaPerc?: number; remise?: number; montant: number }) => ({
                           produitId: l.produitId,
                           designation: l.designation,
                           quantite: l.quantite,
@@ -1959,7 +1994,7 @@ export default function AchatsPage() {
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-orange-500 focus:outline-none"
                     >
                       <option value="">— Sélectionner un compte —</option>
-                      {banques.map((b: any) => (
+                      {banques.map((b: { id: number; numero: string; nomBanque?: string; nom?: string; libelle: string }) => (
                         <option key={b.id} value={b.id}>
                           {b.numero} — {b.nomBanque || b.nom || 'Banque'} ({b.libelle})
                         </option>
@@ -2075,7 +2110,7 @@ export default function AchatsPage() {
                 Fermer
               </button>
               <button
-                onClick={() => { setIsPreviewOpen(false); setTimeout(() => window.print(), 100); }}
+                onClick={() => { setIsPreviewOpen(false); setTimeout(() => window.print(), 0); }}
                 className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
               >
                 <Printer className="h-4 w-4" />

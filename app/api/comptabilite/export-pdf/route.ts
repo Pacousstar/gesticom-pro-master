@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 // Fonction pour formater les montants correctement pour jsPDF
 function formatMontant(n: number): string {
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
       y += 10
 
       doc.setFontSize(9)
-      doc.setFont(undefined, 'bold')
+      doc.setFont('helvetica', 'bold')
       doc.text('Compte', margin, y)
       doc.text('Libellé', margin + 35, y)
       doc.text('Débit', margin + 110, y, { align: 'right' })
@@ -128,12 +128,12 @@ export async function GET(request: NextRequest) {
       y += lineHeight
       doc.line(margin, y - 2, 190, y - 2)
 
-      doc.setFont(undefined, 'normal')
+      doc.setFont('helvetica', 'normal')
       for (const entry of result) {
         if (y > pageHeight - 30) {
           doc.addPage()
           y = 20
-          doc.setFont(undefined, 'bold')
+          doc.setFont('helvetica', 'bold')
           doc.text('Compte', margin, y)
           doc.text('Libellé', margin + 35, y)
           doc.text('Débit', margin + 110, y, { align: 'right' })
@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
           doc.text('Solde', margin + 170, y, { align: 'right' })
           y += lineHeight
           doc.line(margin, y - 2, 190, y - 2)
-          doc.setFont(undefined, 'normal')
+          doc.setFont('helvetica', 'normal')
         }
         doc.text(entry.compte.numero, margin, y)
         doc.text(entry.compte.libelle.length > 30 ? entry.compte.libelle.substring(0, 30) + '...' : entry.compte.libelle, margin + 35, y)
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
       }
       y += 5
       doc.line(margin, y - 2, 190, y - 2)
-      doc.setFont(undefined, 'bold')
+      doc.setFont('helvetica', 'bold')
       doc.text('TOTAUX', margin, y)
       doc.text(formatMontant(totalDebit), margin + 110, y, { align: 'right' })
       doc.text(formatMontant(totalCredit), margin + 140, y, { align: 'right' })
@@ -263,12 +263,12 @@ export async function GET(request: NextRequest) {
         }
 
         doc.setFontSize(12)
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text(`${compte.compte.numero} - ${compte.compte.libelle}`, margin, y)
         y += 8
 
         doc.setFontSize(8)
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Date', margin, y)
         doc.text('Journal', margin + 30, y)
         doc.text('Pièce', margin + 50, y)
@@ -278,12 +278,12 @@ export async function GET(request: NextRequest) {
         y += lineHeight
         doc.line(margin, y - 2, 190, y - 2)
 
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
         for (const ecriture of compte.ecritures) {
           if (y > pageHeight - 30) {
             doc.addPage()
             y = 20
-            doc.setFont(undefined, 'bold')
+            doc.setFont('helvetica', 'bold')
             doc.text('Date', margin, y)
             doc.text('Journal', margin + 30, y)
             doc.text('Pièce', margin + 50, y)
@@ -292,7 +292,7 @@ export async function GET(request: NextRequest) {
             doc.text('Crédit', margin + 150, y, { align: 'right' })
             y += lineHeight
             doc.line(margin, y - 2, 190, y - 2)
-            doc.setFont(undefined, 'normal')
+            doc.setFont('helvetica', 'normal')
           }
           const dateStr = new Date(ecriture.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
           doc.text(dateStr, margin, y)
@@ -307,7 +307,7 @@ export async function GET(request: NextRequest) {
         // Solde du compte
         y += 3
         doc.line(margin, y - 2, 190, y - 2)
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Solde', margin + 100, y)
         doc.text(formatMontant(compte.solde), margin + 150, y, { align: 'right' })
         y += 10
@@ -315,7 +315,7 @@ export async function GET(request: NextRequest) {
 
       y += 5
       doc.line(margin, y - 2, 190, y - 2)
-      doc.setFont(undefined, 'bold')
+      doc.setFont('helvetica', 'bold')
       doc.text('TOTAL GÉNÉRAL', margin + 70, y)
       doc.text(formatMontant(grandTotalDebit), margin + 130, y, { align: 'right' })
       doc.text(formatMontant(grandTotalCredit), margin + 150, y, { align: 'right' })

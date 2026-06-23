@@ -4,6 +4,7 @@ import { useState, useEffect, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/swr-fetcher'
+import { extractList } from '@/lib/api-client'
 import { Truck, Search, Plus, Loader2, Pencil, Trash2, FileSpreadsheet, Download, Clock, X, FileText, Calendar, ChevronRight, DollarSign, Printer } from 'lucide-react'
 import PaymentModal from '@/components/dashboard/PaymentModal'
 import { useToast } from '@/hooks/useToast'
@@ -60,7 +61,7 @@ export default function FournisseursPage() {
     { keepPreviousData: true, revalidateOnFocus: false, dedupingInterval: 2000 }
   )
 
-  const list: Fournisseur[] = listData?.data || (Array.isArray(listData) ? listData : [])
+  const list: Fournisseur[] = extractList(listData)
   const pagination = listData?.pagination || null
   const loading = listLoading && !listData
 
@@ -83,11 +84,11 @@ export default function FournisseursPage() {
       const res = await fetch('/api/fournisseurs?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        setAllFournisseursForPrint(response.data || [])
+        setAllFournisseursForPrint(extractList(response))
         setTimeout(() => {
           window.print()
           setIsPrinting(false)
-        }, 500)
+        }, 0)
       }
     } catch (e) {
       console.error(e)

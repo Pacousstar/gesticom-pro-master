@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
+import { extractList } from '@/lib/api-client'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 
@@ -94,8 +95,8 @@ export default function CaissePage() {
     fetch('/api/caisse?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [], total: 0, totalGlobal: 0, stats: { totalEntrees: 0, totalSorties: 0, solde: 0 } }))
       .then((res) => {
-        setOperations(res.data || [])
-        setTotalEntries(res.totalGlobal ?? res.total ?? 0)
+        setOperations(extractList(res))
+        setTotalEntries(res.total ?? res.totalGlobal ?? 0)
         setTotalPages(Math.ceil((res.total || 0) / itemsPerPage))
         // Utiliser les stats de la page pour la cohérence visuelle, mais garder les stats globales si pas de filtre
         setStatsPeriod(res.stats || { totalEntrees: 0, totalSorties: 0, solde: 0 })
@@ -246,7 +247,7 @@ export default function CaissePage() {
                   const data = await res.json()
                   setAllOperationsForPrint(data.data || [])
                   setIsPreviewOpen(true)
-                  setTimeout(() => window.print(), 50)
+                  setTimeout(() => window.print(), 0)
                 }
               } catch (e) {
                 console.error(e)

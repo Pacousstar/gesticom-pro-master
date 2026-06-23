@@ -6,6 +6,7 @@ import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
+import { extractList } from '@/lib/api-client'
 import Pagination from '@/components/ui/Pagination'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
 
@@ -120,7 +121,7 @@ export default function BanquePage() {
   const fetchBanques = () => {
     fetch('/api/banques')
       .then((r) => (r.ok ? r.json() : { data: [] }))
-      .then((res) => setBanques(res.data || (Array.isArray(res) ? res : [])))
+      .then((res) => setBanques(extractList(res)))
   }
 
   const fetchComptes = () => {
@@ -162,7 +163,7 @@ export default function BanquePage() {
     if (filtreType) params.set('type', filtreType)
     fetch('/api/banques/operations?' + params.toString())
       .then((r) => (r.ok ? r.json() : { data: [] }))
-      .then((res) => setOperations(res.data || (Array.isArray(res) ? res : [])))
+      .then((res) => setOperations(extractList(res)))
       .finally(() => setLoading(false))
 
     // Récupérer aussi les soldes globaux par mode (MoMo, Virement, Cheque)
@@ -587,9 +588,9 @@ export default function BanquePage() {
                   const res = await fetch(`/api/banques/operations?${params.toString()}`)
                   if (res.ok) {
                     const data = await res.json()
-                    setAllOperationsForPrint(data.operations || [])
+                    setAllOperationsForPrint(data.data || [])
                     setIsPreviewOpen(true)
-                    setTimeout(() => window.print(), 50)
+                    setTimeout(() => window.print(), 0)
                   }
                } catch (e) {
                   console.error(e)
@@ -914,7 +915,7 @@ export default function BanquePage() {
                             return (
                           <tr key={op.id} className="hover:bg-gray-50">
                             <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">
-                              {new Date(op.date).toLocaleDateString('fr-FR')}
+                              {new Date(op.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </td>
                             {!selectedBanque && (
                               <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
@@ -1293,7 +1294,7 @@ export default function BanquePage() {
                           <tbody>
                             {chunk.map((op, idx) => (
                               <tr key={idx} className="border-b border-black">
-                                <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">{new Date(op.date).toLocaleDateString('fr-FR')}</td>
+                                <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">{new Date(op.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                                 <td className="border-r-2 border-black px-3 py-2 font-bold text-[11px] uppercase">{op.type.replace(/_/g, ' ')}</td>
                                 <td className="border-r-2 border-black px-3 py-2">
                                    <div className="font-bold">{op.libelle}</div>
@@ -1359,7 +1360,7 @@ export default function BanquePage() {
                           <tbody>
                             {chunk.map((op, idx) => (
                               <tr key={idx} className="border-b border-black">
-                                <td className="border-r-2 border-black px-3 py-2">{new Date(op.date).toLocaleDateString('fr-FR')}</td>
+                                <td className="border-r-2 border-black px-3 py-2">{new Date(op.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                                 <td className="border-r-2 border-black px-3 py-2 font-bold text-[11px] uppercase">{op.type}</td>
                                 <td className="border-r-2 border-black px-3 py-2">{op.libelle}</td>
                                 <td className="border-r-2 border-black px-3 py-2">{op.reference || '-'}</td>

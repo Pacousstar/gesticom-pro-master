@@ -29,8 +29,21 @@ const nextBuild = spawn(
 )
 
 nextBuild.on('exit', (code) => {
-  // Nettoyer les .tmp* de Prisma (crash dumps) qui gonflent le standalone
-  const prismaDir = path.join(projectRoot, '.next', 'standalone', 'node_modules', '.prisma')
+  const standalone = path.join(projectRoot, '.next', 'standalone')
+  if (!fs.existsSync(standalone)) { process.exit(code || 0); return }
+
+  // 1. Fichiers temporaires Prisma (node_modules/*.tmp*)
+  const nmDir = path.join(standalone, 'node_modules')
+  if (fs.existsSync(nmDir)) {
+    for (const f of fs.readdirSync(nmDir)) {
+      if (f.includes('.tmp')) {
+        try { fs.unlinkSync(path.join(nmDir, f)); console.log(`[clean] Supprimé: ${f}`) } catch {}
+      }
+    }
+  }
+
+  // 2. Ancien chemin .prisma/tmp*
+  const prismaDir = path.join(nmDir, '.prisma')
   if (fs.existsSync(prismaDir)) {
     for (const f of fs.readdirSync(prismaDir)) {
       if (f.startsWith('tmp') || /\.tmp\d+$/.test(f)) {
@@ -38,5 +51,12 @@ nextBuild.on('exit', (code) => {
       }
     }
   }
+
+  // 3. Coverage artifact (coverage-final.json)
+  const coverageDir = path.join(standalone, 'coverage')
+  if (fs.existsSync(coverageDir)) {
+    try { fs.rmSync(coverageDir, { recursive: true, force: true }); console.log('[clean] Supprimé: coverage/') } catch {}
+  }
+
   process.exit(code || 0)
 })

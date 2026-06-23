@@ -143,7 +143,7 @@ export async function PATCH(
       const oldOpsBancaires = await tx.operationBancaire.findMany({
         where: {
           entiteId: c.entiteId,
-          reference: { contains: `CHG-${id}` },
+          reference: { endsWith: `CHG-${id}` },
           banque: { entiteId: c.entiteId }
         }
       })

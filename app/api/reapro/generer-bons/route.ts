@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const entiteId = await getEntiteId(session)
 
     const produits = await prisma.produit.findMany({
-      where: { id: { in: lignes.map((l: any) => Number(l.produitId)) }, entiteId },
+      where: { id: { in: lignes.map(l => l.produitId) }, entiteId },
       include: { fournisseur: { select: { id: true, nom: true } } },
     })
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     const grouped = new Map<number | null, typeof lignes>()
     for (const l of lignes) {
-      const p = produitsMap.get(Number(l.produitId))
+      const p = produitsMap.get(l.produitId)
       const fId = p?.fournisseurId ?? null
       if (!grouped.has(fId)) grouped.set(fId, [])
       grouped.get(fId)!.push(l)
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         ? produitsMap.get(lignesGroupe[0].produitId)?.fournisseur
         : null
 
-      const montantTotal = lignesGroupe.reduce((s, l: any) => s + (Number(l.montant) || 0), 0)
+      const montantTotal = lignesGroupe.reduce((s, l) => s + l.montant, 0)
 
       const commande = await prisma.commandeFournisseur.create({
         data: {
@@ -67,14 +67,14 @@ export async function POST(request: NextRequest) {
           statut: 'BROUILLON',
           observation: `Généré automatiquement depuis le réapro (${new Date().toLocaleDateString('fr-FR')})`,
           lignes: {
-            create: lignesGroupe.map((l: any) => ({
-              produitId: Number(l.produitId),
-              designation: l.designation || '',
-              quantite: Number(l.quantite),
-              prixUnitaire: Number(l.prixUnitaire) || 0,
-              tva: Number(l.tva) || 0,
-              remise: Number(l.remise) || 0,
-              montant: Number(l.montant) || 0,
+            create: lignesGroupe.map(l => ({
+              produitId: l.produitId,
+              designation: l.designation,
+              quantite: l.quantite,
+              prixUnitaire: l.prixUnitaire,
+              tva: l.tva,
+              remise: l.remise,
+              montant: l.montant,
             })),
           },
         },

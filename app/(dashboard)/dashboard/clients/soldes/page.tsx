@@ -84,7 +84,7 @@ export default function SoldesClientsPage() {
     setTimeout(() => {
       window.print()
       setIsPrinting(false)
-    }, 1000)
+    }, 0)
   }
 
   const filteredData = Array.isArray(data) ? data.filter(c => 

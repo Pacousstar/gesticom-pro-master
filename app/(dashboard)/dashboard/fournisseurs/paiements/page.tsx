@@ -74,7 +74,7 @@ export default function PaiementsFournisseursPage() {
     setIsPrintingData(true)
     try {
       setIsPreviewOpen(true)
-      setTimeout(() => window.print(), 50)
+      setTimeout(() => window.print(), 0)
     } catch (e) {
       console.error(e)
     } finally {

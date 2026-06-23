@@ -13,12 +13,14 @@ import {
 } from 'lucide-react'
 import { generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import PrintPreview from '@/components/print/PrintPreview'
+import { extractList } from '@/lib/api-client'
 import Pagination from '@/components/ui/Pagination'
 import { formatDate } from '@/lib/format-date'
 import { montantLigneTTC, montantTvaImpliciteLigne } from '@/lib/calculs-commerciaux'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import { useToast } from '@/hooks/useToast'
+import { getStatutPaiementLabel, getStatutPaiementColors } from '@/lib/enums-commerce'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 
@@ -33,6 +35,7 @@ type Produit = {
   prixMinimum?: number | null;
   stocks: Array<{ magasinId: number; quantite: number }>; prixAchat?: number | null 
 }
+type VenteLigne = { quantite: number; prixUnitaire: number; designation: string; tvaPerc?: number; remise?: number | string; montant?: number; tva?: number }
 export default function VentesPage() {
   const router = useRouter()
   const pathname = usePathname()
@@ -143,7 +146,7 @@ export default function VentesPage() {
     }).catch(() => { })
     fetch('/api/banques')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setBanques(Array.isArray(d?.data) ? d.data : []))
+      .then((d) => setBanques(extractList(d)))
       .catch(() => setBanques([]))
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => { })
   }, [])
@@ -168,7 +171,7 @@ export default function VentesPage() {
       // Toutes les lignes (articles) de la vente sont affichées sur une même facture
       const lignes = Array.isArray(d.lignes) ? d.lignes : []
       // Calculs conformes (TTC = HT Net + TVA sur Net)
-      const totalCalc = lignes.reduce((acc, l: any) => {
+      const totalCalc = lignes.reduce((acc, l: VenteLigne) => {
         const q = l.quantite
         const pu = l.prixUnitaire
         const r = Number(l.remise) || 0
@@ -185,7 +188,7 @@ export default function VentesPage() {
         return acc
       }, { ht: 0, remise: 0, tva: 0 })
       
-      const lignesHtml = generateLignesHTML(lignes.map((l: any) => ({
+      const lignesHtml = generateLignesHTML(lignes.map((l: { designation: string; quantite: number; prixUnitaire: number; remise?: number | string; montant: number }) => ({
         designation: l.designation,
         quantite: l.quantite,
         prixUnitaire: l.prixUnitaire,
@@ -300,7 +303,7 @@ export default function VentesPage() {
           setPagination(response.pagination || { page: 1, limit: 20, total: response.data.length, totalPages: 1 })
           setTotals(response.totals)
         } else {
-          const arr = Array.isArray(response) ? response : []
+          const arr = extractList(response) as typeof ventes
           setVentes(arr)
           setPagination({ page: 1, limit: 20, total: arr.length, totalPages: 1 })
           setTotals(null)
@@ -323,8 +326,8 @@ export default function VentesPage() {
       const res = await fetch('/api/ventes?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        setAllVentesForPrint(response.data || [])
-        setTimeout(() => { window.print(); setIsPrinting(false) }, 500)
+        setAllVentesForPrint(extractList(response))
+        setTimeout(() => { window.print(); setIsPrinting(false) }, 0)
       } else {
         setIsPrinting(false)
       }
@@ -338,12 +341,13 @@ export default function VentesPage() {
     fetchVentes()
   }, [currentPage])
 
-  const handleEditVente = useCallback((v: any) => {
+  const handleEditVente = useCallback((v: { id: number }) => {
     setEditingVente(v)
+    setEditingVenteId(v.id)
     setForm(true)
   }, [])
 
-  const handleEditVenteModal = useCallback((v: any) => {
+  const handleEditVenteModal = useCallback((v: { id: number }) => {
     setEditingVenteModalId(v.id)
   }, [])
 
@@ -420,7 +424,7 @@ export default function VentesPage() {
     }
   }
 
-  const handleSupprimer = (v: { id: number; numero: string; lignes?: any[]; reglements?: any[] }) => {
+  const handleSupprimer = (v: { id: number; numero: string; lignes?: unknown[]; reglements?: unknown[] }) => {
     setDeleteConfirmTarget({
       id: v.id,
       numero: v.numero,
@@ -452,10 +456,10 @@ export default function VentesPage() {
     }
   }
 
-  const handleLivrer = (v: any) => {
+  const handleLivrer = (v: { id: number; numero: string; lignes: Array<{ produitId: number; designation: string; quantite: number; quantiteLivree: number; prixUnitaire: number; montant: number }> }) => {
     if (!v.lignes) return
     const initial: Record<number, number> = {}
-    v.lignes.forEach((l: any) => {
+    v.lignes.forEach((l: { produitId: number; quantite: number; quantiteLivree: number }) => {
       const reste = l.quantite - (l.quantiteLivree || 0)
       if (reste > 0) initial[l.produitId] = reste
     })
@@ -549,11 +553,11 @@ export default function VentesPage() {
     }
   }
 
-  const openRetourModal = (v: any) => {
+  const openRetourModal = (v: { id: number; numero: string; lignes?: Array<{ produitId: number; designation: string; quantite: number; prixUnitaire: number; montant: number }>; magasinId?: number; magasin?: { id: number }; date: string; client?: { nom?: string }; clientLibre?: string | null }) => {
     setRetourModalVente(v)
-    setRetourLignes((v.lignes || []).map((l: any) => {
+    setRetourLignes((v.lignes || []).map((l: { produitId: number; designation: string; quantite: number; prixUnitaire: number; montant: number }) => {
       const p = produits.find(x => x.id === l.produitId)
-      const st = p?.stocks?.find((s: any) => s.magasinId === (v.magasinId || v.magasin?.id))
+      const st = p?.stocks?.find((s: { magasinId: number; quantite: number }) => s.magasinId === (v.magasinId || v.magasin?.id))
       const q = Number(l.quantite) || 1
       return {
         produitId: l.produitId,
@@ -574,7 +578,7 @@ export default function VentesPage() {
 
   const handleRetour = async () => {
     if (!retourModalVente) return
-    const lignes = retourLignes.filter((l: any) => l.quantite > 0)
+    const lignes = retourLignes.filter((l: { quantite: number }) => l.quantite > 0)
     if (!lignes.length) { showError('Sélectionnez au moins un produit.'); return }
     setSavingRetour(true)
     try {
@@ -582,7 +586,7 @@ export default function VentesPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lignes: lignes.map((l: any) => ({ produitId: l.produitId, quantite: l.quantite })),
+          lignes: lignes.map((l: { produitId: number; quantite: number }) => ({ produitId: l.produitId, quantite: l.quantite })),
           remboursement: retourRemboursement,
           modeRemboursement: retourMode,
           banqueId: retourMode !== 'ESPECES' ? retourBanqueId : null,
@@ -593,7 +597,7 @@ export default function VentesPage() {
       showSuccess('Retour effectué avec succès.')
       setRetourModalVente(null)
       fetchVentes()
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError(formatApiError(e) || 'Erreur lors du retour.')
     } finally {
       setSavingRetour(false)
@@ -1194,11 +1198,8 @@ export default function VentesPage() {
                 <div><span className="font-medium text-gray-700">Client :</span> <span className="text-gray-900">{detailVente.client?.nom || detailVente.clientLibre || '—'}</span></div>
                 <div><span className="font-medium text-gray-700">Paiement :</span> <span className="text-gray-900">{detailVente.modePaiement}</span></div>
                 <div><span className="font-medium text-gray-700">Statut paiement :</span>
-                  <span className={`ml-1 rounded px-2 py-0.5 text-xs font-medium ${detailVente.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' :
-                    detailVente.statutPaiement === 'PARTIEL' ? 'bg-amber-100 text-amber-800' :
-                      detailVente.statutPaiement === 'CREDIT' ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-700'
-                    }`}>
-                    {detailVente.statutPaiement === 'PAYE' ? 'Payé' : detailVente.statutPaiement === 'PARTIEL' ? 'Partiel' : detailVente.statutPaiement === 'CREDIT' ? 'Crédit' : '—'}
+                  <span className={`ml-1 rounded px-2 py-0.5 text-xs font-medium ${(() => { const c = getStatutPaiementColors(detailVente.statutPaiement || ''); return `${c.bg} ${c.text} ${c.border}` })()}`}>
+                    {getStatutPaiementLabel(detailVente.statutPaiement || '')}
                   </span>
                 </div>
                 <div><span className="font-medium text-gray-700">Montant payé (avance) :</span> <span className="text-gray-900">{(Number(detailVente.montantPaye) || 0).toLocaleString('fr-FR')} FCFA</span></div>
@@ -1254,7 +1255,7 @@ export default function VentesPage() {
                       <table className="min-w-full text-xs">
                         <thead><tr className="border-b border-amber-200 text-left text-gray-600"><th className="pb-1 pr-3">Produit</th><th className="pb-1 pr-3 text-right">Qté</th><th className="pb-1 pr-3 text-right">P.U.</th><th className="pb-1 pr-3 text-right text-red-500">Remise</th><th className="pb-1 pr-3 text-right text-blue-500">TVA</th><th className="pb-1 text-right">Total</th></tr></thead>
                         <tbody>
-                          {retour.lignes.map((l: any, i: number) => (
+                          {retour.lignes.map((l: { designation: string; quantite: number; prixUnitaire: number; remise: number; tva: number; montant: number }, i: number) => (
                             <tr key={i} className="border-b border-amber-100">
                               <td className="py-1 pr-3 text-gray-900">{l.designation}</td>
                               <td className="py-1 pr-3 text-right text-gray-900">{l.quantite}</td>
@@ -1567,7 +1568,7 @@ export default function VentesPage() {
                   {retourMode !== 'ESPECES' && (
                     <select value={retourBanqueId} onChange={(e) => setRetourBanqueId(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
                       <option value="">Sélectionnez un compte bancaire</option>
-                      {banques.map((b: any) => (
+                      {banques.map((b: { id: number; nom: string; numeroCompte: string }) => (
                         <option key={b.id} value={b.id}>{b.nom} — {b.numeroCompte}</option>
                       ))}
                     </select>
@@ -1614,8 +1615,8 @@ export default function VentesPage() {
             </p>
             <div className="mb-4 max-h-[50vh] overflow-y-auto space-y-3">
               {deliverVente.lignes
-                .filter((l: any) => l.quantite - (l.quantiteLivree || 0) > 0)
-                .map((l: any) => {
+                .filter((l: { quantite: number; quantiteLivree?: number }) => l.quantite - (l.quantiteLivree || 0) > 0)
+                .map((l: { produitId: number; designation: string; quantite: number; quantiteLivree?: number }) => {
                   const reste = l.quantite - (l.quantiteLivree || 0)
                   return (
                     <div key={l.produitId} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
@@ -1649,7 +1650,7 @@ export default function VentesPage() {
             </div>
             <div className="mb-4 flex items-center justify-between rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-800">
               <span>Total à livrer</span>
-              <span>{Object.values(deliverQtys).reduce((s: number, q: any) => s + Number(q || 0), 0)} article(s)</span>
+              <span>{Object.values(deliverQtys).reduce((s: number, q: number) => s + q, 0)} article(s)</span>
             </div>
             <div className="flex items-center justify-end gap-2">
               <button
@@ -1659,7 +1660,7 @@ export default function VentesPage() {
               >Annuler</button>
               <button
                 onClick={confirmDeliver}
-                disabled={savingDeliver || Object.values(deliverQtys).every((q: any) => Number(q || 0) <= 0)}
+                disabled={savingDeliver || Object.values(deliverQtys).every((q: number) => q <= 0)}
                 className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 {savingDeliver ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
@@ -1725,7 +1726,7 @@ export default function VentesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pageData.map((v: any) => {
+                    {pageData.map((v: { id: number; numero: string; numeroBon?: string; date: string; montantTotal: number; montantPaye?: number; modePaiement: string; statutPaiement?: string; statut: string; magasin: { code: string }; client?: { code?: string; nom?: string }; clientLibre?: string }) => {
                       const rp = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
                       return (
                         <tr key={v.id}>
@@ -1737,8 +1738,8 @@ export default function VentesPage() {
                           <td className="border p-1">{v.magasin.code}</td>
                           <td className="border p-1 text-right">{Number(v.montantTotal).toLocaleString('fr-FR')} F</td>
                           <td className="border p-1">{v.modePaiement.replace('_', ' ')}</td>
-                          <td className="border p-1">{v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit'}</td>
-                          <td className="border p-1 text-right">{rp > 0 ? rp.toLocaleString('fr-FR') + ' F' : '-'}</td>
+                           <td className="border p-1">{getStatutPaiementLabel(v.statutPaiement || '')}</td>
+                           <td className="border p-1 text-right">{rp > 0 ? rp.toLocaleString('fr-FR') + ' F' : '-'}</td>
                           <td className="border p-1">{v.statut === 'ANNULEE' ? 'Annulée' : 'Validée'}</td>
                         </tr>
                       )

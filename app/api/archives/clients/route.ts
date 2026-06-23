@@ -3,8 +3,7 @@ import { getSession } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
-import { validateApiRequest } from '@/lib/validation-helpers'
-import { archiveVenteSchema } from '@/lib/validations'
+
 
 export async function GET(req: Request) {
   try {
@@ -37,10 +36,7 @@ export async function POST(req: Request) {
     if (authError) return authError
     const currentUser = { id: session.userId, entiteId: session.entiteId, role: session.role }
 
-    const rawBody = await req.json()
-    const vres = validateApiRequest(archiveVenteSchema, rawBody)
-    if (!vres.success) return vres.response
-    const { clientId, clientLibre, montant, dateArchive, observation } = rawBody
+    const { clientId, clientLibre, montant, dateArchive, observation } = await req.json()
 
     if (!montant || (!clientId && !clientLibre)) {
       return NextResponse.json({ error: 'Montant et identifiant du client requis' }, { status: 400 })

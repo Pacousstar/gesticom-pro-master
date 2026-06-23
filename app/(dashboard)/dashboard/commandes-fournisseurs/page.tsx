@@ -24,6 +24,20 @@ type Produit = {
   stocks: Array<{ magasinId: number; quantite: number }>;
 }
 type Ligne = { produitId: number; designation: string; quantite: number; prixUnitaire: number; montant: number }
+type Commande = {
+  id: number
+  numero: string
+  date: string
+  montantTotal: number
+  statut: string
+  observation?: string
+  magasinId?: number
+  fournisseurId?: number
+  magasin: { code: string; nom: string }
+  fournisseur: { nom: string; telephone?: string; localisation?: string; ncc?: string; code?: string } | null
+  fournisseurLibre: string | null
+  lignes: Ligne[]
+}
 
 export default function CommandesFournisseursPage() {
   const [magasins, setMagasins] = useState<Magasin[]>([])
@@ -45,7 +59,6 @@ export default function CommandesFournisseursPage() {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [err, setErr] = useState('')
   const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
@@ -53,7 +66,6 @@ export default function CommandesFournisseursPage() {
   const [selectedStatut, setSelectedStatut] = useState('TOUT')
   
   const [detailCommande, setDetailCommande] = useState<any | null>(null)
-  const [loadingDetail, setLoadingDetail] = useState<number | null>(null)
   const [transforming, setTransforming] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState<{ id: number; type: string } | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -72,24 +84,15 @@ export default function CommandesFournisseursPage() {
   })
   const [savingFournisseur, setSavingFournisseur] = useState(false)
 
-  useEffect(() => {
-    fetch('/api/print-templates?type=BON_COMMANDE&actif=true')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((templates: any[]) => {
-        const active = templates.find(t => t.actif)
-        if (active) setDefaultTemplateId(active.id)
-      })
-  }, [])
-
-  const handleEdit = (c: any) => {
+  const handleEdit = (c: Commande) => {
     setEditingId(c.id)
     setFormData({
       date: new Date(c.date).toLocaleDateString('en-CA'),
-      magasinId: String(c.magasinId),
+      magasinId: String(c.magasinId ?? ''),
       fournisseurId: String(c.fournisseurId || ''),
       fournisseurLibre: c.fournisseurLibre || '',
       observation: c.observation || '',
-      lignes: c.lignes.map((l: any) => ({
+      lignes: c.lignes.map((l: Ligne) => ({
         produitId: l.produitId,
         designation: l.designation,
         quantite: l.quantite,
@@ -102,16 +105,19 @@ export default function CommandesFournisseursPage() {
     setDetailCommande(null)
   }
 
-  const imprimerCommande = (c: any) => {
+  const imprimerCommande = (c: Commande) => {
     const templateData: TemplateData = {
       NUMERO: c.numero,
       DATE: new Date(c.date).toLocaleDateString('fr-FR'),
       HEURE: new Date(c.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
       MAGASIN_CODE: c.magasin.code,
       MAGASIN_NOM: c.magasin.nom,
-      FOURNISSEUR_NOM: c.fournisseur?.nom || c.fournisseurLibre || 'Client Libre',
+      FOURNISSEUR_NOM: c.fournisseur?.nom || c.fournisseurLibre || 'Fournisseur libre',
       FOURNISSEUR_TELEPHONE: c.fournisseur?.telephone || undefined,
-      CLIENT_NOM: c.fournisseur?.nom || c.fournisseurLibre || 'Client Libre',
+      FOURNISSEUR_LOCALISATION: c.fournisseur?.localisation || undefined,
+      FOURNISSEUR_CODE: c.fournisseur?.code || undefined,
+      FOURNISSEUR_NCC: c.fournisseur?.ncc || undefined,
+      CLIENT_NOM: c.fournisseur?.nom || c.fournisseurLibre || 'Fournisseur libre',
       CLIENT_CONTACT: c.fournisseur?.telephone || undefined,
       CLIENT_LOCALISATION: c.fournisseur?.localisation || undefined,
       CLIENT_NCC: c.fournisseur?.ncc || undefined,
@@ -156,7 +162,6 @@ export default function CommandesFournisseursPage() {
   const handleCreateFournisseur = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingFournisseur(true)
-    setErr('')
 
     const validationData = {
       nom: fournisseurForm.nom.trim(),
@@ -167,7 +172,6 @@ export default function CommandesFournisseursPage() {
 
     const validation = validateForm(fournisseurSchema, validationData)
     if (!validation.success) {
-      setErr(validation.error)
       showError(validation.error)
       setSavingFournisseur(false)
       return
@@ -198,14 +202,10 @@ export default function CommandesFournisseursPage() {
         })
         showSuccess('Fournisseur créé avec succès.')
       } else {
-        const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
-        setErr(errorMsg)
-        showError(errorMsg)
+        showError(formatApiError(data.error || 'Erreur lors de la création.'))
       }
     } catch (e) {
-      const errorMsg = formatApiError(e)
-      setErr(errorMsg)
-      showError(errorMsg)
+      showError(formatApiError(e))
     } finally {
       setSavingFournisseur(false)
     }
@@ -223,6 +223,7 @@ export default function CommandesFournisseursPage() {
         setCommandes(res.data)
         setPagination(res.pagination)
       })
+      .catch(() => showError('Erreur réseau lors du chargement.'))
       .finally(() => setLoading(false))
   }
 
@@ -635,6 +636,7 @@ export default function CommandesFournisseursPage() {
           >
             <option value="TOUT" className="text-gray-900">Tous</option>
             <option value="BROUILLON" className="text-gray-900">Brouillon</option>
+            <option value="ENVOYEE" className="text-gray-900">Envoyée</option>
             <option value="RECUE" className="text-gray-900">Réceptionnée</option>
             <option value="ANNULEE" className="text-gray-900">Annulée</option>
           </select>
@@ -657,7 +659,7 @@ export default function CommandesFournisseursPage() {
                 const d = await res.json()
                 const csv = [
                   ['Numéro', 'Date', 'Fournisseur', 'Montant', 'Statut'].join(';'),
-                  ...d.data.map((c: any) => [
+                   ...d.data.map((c: Commande) => [
                     c.numero,
                     new Date(c.date).toLocaleDateString('fr-FR'),
                     c.fournisseur?.nom || c.fournisseurLibre || '',
@@ -673,6 +675,8 @@ export default function CommandesFournisseursPage() {
                 a.download = `bons_commande_${new Date().toISOString().split('T')[0]}.csv`
                 a.click()
                 window.URL.revokeObjectURL(blobUrl)
+              } else {
+                showError('Erreur lors de l\'export.')
               }
             } catch (err) {
               showError('Erreur export')
@@ -833,7 +837,7 @@ export default function CommandesFournisseursPage() {
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {detailCommande.lignes.map((l: any, i: number) => (
+                      {detailCommande.lignes.map((l: Ligne, i: number) => (
                         <tr key={i}>
                           <td className="px-4 py-3 font-medium text-gray-900">{l.designation}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{l.quantite}</td>
@@ -938,7 +942,14 @@ export default function CommandesFournisseursPage() {
   )
 }
 
-function ModalFournisseur({ isOpen, onClose, form, setForm, onSubmit, loading }: any) {
+function ModalFournisseur({ isOpen, onClose, form, setForm, onSubmit, loading }: {
+  isOpen: boolean
+  onClose: () => void
+  form: { nom: string; telephone: string; email: string; soldeInitial: string; avoirInitial: string }
+  setForm: React.Dispatch<React.SetStateAction<{ nom: string; telephone: string; email: string; soldeInitial: string; avoirInitial: string }>>
+  onSubmit: (e: React.FormEvent) => Promise<void>
+  loading: boolean
+}) {
   if (!isOpen) return null
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">

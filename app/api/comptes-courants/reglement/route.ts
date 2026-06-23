@@ -8,6 +8,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { reglementCompteCourantSchema } from '@/lib/validations'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { apiCatch } from '@/lib/log-error'
+import { enregistrerOperationBancaire } from '@/lib/banque'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -81,7 +82,6 @@ export async function POST(request: NextRequest) {
           await recalculerSoldeCaisse(magasinId!, tx)
         }
         if (payeDepuisBanque) {
-          const { enregistrerOperationBancaire } = await import('@/lib/banque')
           await enregistrerOperationBancaire({
             banqueId,
             entiteId,
@@ -150,7 +150,6 @@ export async function POST(request: NextRequest) {
           await recalculerSoldeCaisse(magasinId!, tx)
         }
         if (payeDepuisBanque) {
-          const { enregistrerOperationBancaire } = await import('@/lib/banque')
           await enregistrerOperationBancaire({
             banqueId,
             entiteId,

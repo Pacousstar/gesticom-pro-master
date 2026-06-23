@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
       })
     } else {
       // Cas 2: Pas de magasin spécifié - Afficher tous les produits avec leur stock dans leur magasin d'origine
-      const whereProduit: any = { entiteId: where.entiteId }
+      const whereProduit: any = { entiteId: where.entiteId, ...searchConditions, ...categorieCondition }
       // Récupérer tous les produits
       const [tousProduits, tousStocks, total] = await Promise.all([
         prisma.produit.findMany({

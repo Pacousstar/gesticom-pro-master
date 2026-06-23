@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/require-role'
 import { comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
+import { enregistrerOperationBancaire, estModeBanque } from '@/lib/banque'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
 import { reglementVenteSchema } from '@/lib/validations'
@@ -168,11 +169,8 @@ export async function POST(request: NextRequest) {
           date: dateReglement,
         }, tx)
         await recalculerSoldeCaisse(Number(body.magasinId), tx)
-      } else {
-        // ✅ SYNCHRO BANQUE : Mobile Money, Virement, Chèque
-        const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
-        if (estModeBanque(modePaiement)) {
-          await enregistrerOperationBancaire({
+      } else if (estModeBanque(modePaiement)) {
+        await enregistrerOperationBancaire({
             banqueId: body.banqueId ? Number(body.banqueId) : null,
             entiteId,
             date: dateReglement,
@@ -182,9 +180,8 @@ export async function POST(request: NextRequest) {
             utilisateurId: session.userId,
             reference: v?.numero || `REG-${reglement.id}`,
             beneficiaire: client?.nom || v?.clientLibre || null,
-            observation: `Paiement via ${modePaiement}`
-          }, tx)
-        }
+          observation: `Paiement via ${modePaiement}`
+        }, tx)
       }
 
       // ✅ COMPTABILISATION

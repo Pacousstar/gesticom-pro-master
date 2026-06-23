@@ -7,6 +7,7 @@ import { chargeSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
+import { extractList, extractPagination, extractTotals } from '@/lib/api-client'
 
 type Charge = {
   id: number
@@ -123,9 +124,9 @@ export default function ChargesPage() {
       const res = await fetch('/api/charges?' + params.toString())
       if (res.ok) {
         const data = await res.json()
-        setCharges(data.charges || [])
-        setPagination(data.pagination || null)
-        setTotalAmount(data.totalAmount || 0)
+        setCharges(extractList(data))
+        setPagination(extractPagination(data))
+        setTotalAmount(extractTotals(data)?.totalAmount ?? data.totalAmount ?? 0)
       }
     } catch (e) {
       console.error(e)

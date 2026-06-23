@@ -180,21 +180,25 @@ export default function ListPrintWrapper({
             width: 100% !important;
             border-collapse: collapse !important;
             margin-bottom: 0 !important;
-            table-layout: auto !important;
+            table-layout: fixed !important;
           }
           .print-content th {
             background-color: #f3f4f6 !important;
             border: 2px solid #000 !important;
-            padding: 10px 4px !important;
-            font-size: 15px !important;
+            padding: 4px 2px !important;
+            font-size: 13px !important;
             font-weight: 900 !important;
             text-transform: uppercase;
+            white-space: nowrap !important;
+            overflow: hidden !important;
           }
           .print-content td {
             border: 1px solid #000 !important;
-            padding: 8px 4px !important;
-            font-size: 14px !important;
+            padding: 3px 2px !important;
+            font-size: 13px !important;
             font-weight: 500 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
           }
           .print-content tr {
             page-break-inside: avoid !important;

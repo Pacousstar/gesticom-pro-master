@@ -10,108 +10,111 @@ import { validateApiRequest } from '@/lib/validation-helpers'
 import { caisseSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
-  const session = await getSession()
-  const forbidden = requirePermission(session, 'caisse:view')
-  if (forbidden) return forbidden
+  try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const forbidden = requirePermission(session, 'caisse:view')
+    if (forbidden) return forbidden
 
-  const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
-  const limit = Math.min(200, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 100))
-  const skip = (page - 1) * limit
-  const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
-  const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
-  const magasinIdParam = request.nextUrl.searchParams.get('magasinId')?.trim()
-  const typeParam = request.nextUrl.searchParams.get('type')?.trim()
-  
-  const searchTerm = request.nextUrl.searchParams.get('search')?.trim()
-  
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const entiteIdFilter = await getEntiteIdOrAll(session)
-  const where: any = {}
+    const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
+    const limit = Math.min(200, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 100))
+    const skip = (page - 1) * limit
+    const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
+    const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
+    const magasinIdParam = request.nextUrl.searchParams.get('magasinId')?.trim()
+    const typeParam = request.nextUrl.searchParams.get('type')?.trim()
+    
+    const searchTerm = request.nextUrl.searchParams.get('search')?.trim()
+    
+    const entiteIdFilter = await getEntiteIdOrAll(session)
+    const where: any = {}
 
-  // Filtrage par entité (support SUPER_ADMIN)
-  if (entiteIdFilter != null) {
-    where.magasin = { entiteId: entiteIdFilter }
-  } else {
-    const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
-    if (entiteIdFromParams) {
-      where.magasin = { entiteId: Number(entiteIdFromParams) }
+    if (entiteIdFilter != null) {
+      where.magasin = { entiteId: entiteIdFilter }
+    } else {
+      const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
+      if (entiteIdFromParams) {
+        where.magasin = { entiteId: Number(entiteIdFromParams) }
+      }
     }
-  }
 
-  if (dateDebut && dateFin) {
-    where.date = {
-      gte: new Date(dateDebut + 'T00:00:00'),
-      lte: new Date(dateFin + 'T23:59:59'),
+    if (dateDebut && dateFin) {
+      where.date = {
+        gte: new Date(dateDebut + 'T00:00:00'),
+        lte: new Date(dateFin + 'T23:59:59'),
+      }
     }
-  }
 
-  if (magasinIdParam) {
-    const magId = Number(magasinIdParam)
-    if (Number.isInteger(magId) && magId > 0) where.magasinId = magId
-  }
+    if (magasinIdParam) {
+      const magId = Number(magasinIdParam)
+      if (Number.isInteger(magId) && magId > 0) where.magasinId = magId
+    }
 
-  if (typeParam && ['ENTREE', 'SORTIE'].includes(typeParam)) {
-    where.type = typeParam
-  }
+    if (typeParam && ['ENTREE', 'SORTIE'].includes(typeParam)) {
+      where.type = typeParam
+    }
 
-  if (searchTerm) {
-    where.OR = [
-      { motif: { contains: searchTerm } },
-      { magasin: { nom: { contains: searchTerm } } },
-      { magasin: { code: { contains: searchTerm } } },
-      { utilisateur: { nom: { contains: searchTerm } } },
-    ]
-  }
+    if (searchTerm) {
+      where.OR = [
+        { motif: { contains: searchTerm } },
+        { magasin: { nom: { contains: searchTerm } } },
+        { magasin: { code: { contains: searchTerm } } },
+        { utilisateur: { nom: { contains: searchTerm } } },
+      ]
+    }
 
-  const [operations, total, totalGlobal, aggregates] = await Promise.all([
-    prisma.caisse.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        magasin: { select: { id: true, code: true, nom: true } },
-        utilisateur: { select: { nom: true, login: true } },
+    const [operations, total, totalGlobal, aggregates] = await Promise.all([
+      prisma.caisse.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          magasin: { select: { id: true, code: true, nom: true } },
+          utilisateur: { select: { nom: true, login: true } },
+        },
+      }),
+      prisma.caisse.count({ where }),
+      prisma.caisse.count({
+        where: { magasin: where.magasin, magasinId: where.magasinId },
+      }),
+      prisma.caisse.groupBy({
+        by: ['type'],
+        where,
+        _sum: { montant: true }
+      })
+    ])
+
+    const totalEntrees = aggregates.find(a => a.type === 'ENTREE')?._sum.montant || 0
+    const totalSorties = aggregates.find(a => a.type === 'SORTIE')?._sum.montant || 0
+
+    return NextResponse.json({ 
+      data: operations, 
+      total,
+      totalGlobal,
+      stats: {
+        totalEntrees,
+        totalSorties,
+        solde: totalEntrees - totalSorties
+      }
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
       },
-    }),
-    prisma.caisse.count({ where }),
-    // Compteur global (sans filtre de date) pour l'affichage dans le badge
-    prisma.caisse.count({
-      where: { magasin: where.magasin, magasinId: where.magasinId },
-    }),
-    prisma.caisse.groupBy({
-      by: ['type'],
-      where,
-      _sum: { montant: true }
     })
-  ])
-
-  const totalEntrees = aggregates.find(a => a.type === 'ENTREE')?._sum.montant || 0
-  const totalSorties = aggregates.find(a => a.type === 'SORTIE')?._sum.montant || 0
-
-  return NextResponse.json({ 
-    data: operations, 
-    total,
-    totalGlobal,
-    stats: {
-      totalEntrees,
-      totalSorties,
-      solde: totalEntrees - totalSorties
-    }
-  }, {
-    headers: {
-      'Cache-Control': 'no-store, max-age=0',
-    },
-  })
+  } catch (e) {
+    await apiCatch(e, 'api/caisse')
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'caisse:create')
-  if (forbidden) return forbidden
-
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const forbidden = requirePermission(session, 'caisse:create')
+    if (forbidden) return forbidden
+
     const body = await request.json()
     const validationResult = validateApiRequest(caisseSchema, body)
     if (!validationResult.success) return validationResult.response
@@ -137,14 +140,11 @@ export async function POST(request: NextRequest) {
 
     const entiteId = await getEntiteId(session)
 
-    // Vérifier que le magasin appartient à l'entité sélectionnée (sauf SUPER_ADMIN)
     if (session.role !== 'SUPER_ADMIN' && magasin.entiteId !== entiteId) {
       return NextResponse.json({ error: 'Ce magasin n\'appartient pas à votre entité.' }, { status: 403 })
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // RC4 : Utiliser enregistrerMouvementCaisse au lieu de tx.caisse.create
-      // pour garantir le uppercase du motif et la cohérence
       const operation = await enregistrerMouvementCaisse({
         magasinId: data.magasinId,
         type: data.type,
@@ -161,7 +161,6 @@ export async function POST(request: NextRequest) {
         throw new Error('Erreur lors de la création de l\'opération caisse.')
       }
 
-      // Comptabilisation automatique
       await comptabiliserCaisse({
         caisseId: operation.id,
         date,
@@ -173,10 +172,8 @@ export async function POST(request: NextRequest) {
         sousType: data.sousType,
       }, tx)
 
-      // RC1 : Recalculer le solde caisse après chaque mouvement
       await recalculerSoldeCaisse(data.magasinId, tx)
 
-      // Refetch avec includes pour la réponse
       return await tx.caisse.findUnique({
         where: { id: operation.id },
         include: {
@@ -186,7 +183,7 @@ export async function POST(request: NextRequest) {
       })
     }, { timeout: 20000 })
 
-            return NextResponse.json(result)
+    return NextResponse.json(result)
   } catch (e) {
     await apiCatch(e, 'api/caisse')
     return NextResponse.json(

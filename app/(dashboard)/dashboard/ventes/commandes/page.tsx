@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Search, ArrowLeft, Package, Clock, CheckCircle, AlertTriangle, Truck, X } from 'lucide-react'
+import { useToast } from '@/hooks/useToast'
+import { formatApiError } from '@/lib/validation-helpers'
 
 type Ligne = {
   id: number
@@ -34,6 +36,7 @@ export default function CommandesPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const venteIdParam = searchParams.get('venteId')
+  const { error: showError } = useToast()
 
   const [ventes, setVentes] = useState<Vente[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,12 +61,14 @@ export default function CommandesPage() {
       setVentes(list)
       if (venteIdParam) {
         const found = list.find((v: Vente) => v.id === Number(venteIdParam))
-        if (found) openModal(found)
+        if (found) { openModal(found); window.history.replaceState(null, '', pathname) }
       }
+    } catch {
+      showError('Erreur lors du chargement des commandes')
     } finally {
       setLoading(false)
     }
-  }, [venteIdParam])
+  }, [venteIdParam, pathname])
 
   useEffect(() => { fetchVentes() }, [fetchVentes])
 
@@ -119,15 +124,15 @@ export default function CommandesPage() {
       })
       if (!res.ok) {
         const d = await res.json()
-        alert(d.error || 'Erreur lors de la livraison')
+        showError(d.error || 'Erreur lors de la livraison')
         return
       }
       setSuccessMsg(`Livraison effectuée sur ${selectedVente.numero}`)
       setModalOpen(false)
       fetchVentes()
       setTimeout(() => setSuccessMsg(''), 4000)
-    } catch (e: any) {
-      alert(e.message || 'Erreur')
+    } catch (e: unknown) {
+      showError(formatApiError(e))
     } finally {
       setSubmitting(false)
     }

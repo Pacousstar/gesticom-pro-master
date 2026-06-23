@@ -431,8 +431,8 @@ export default function VenteRapidePage() {
         {/* Catalog / Cart Middle */}
         <div className="flex flex-1 flex-col gap-4 overflow-hidden">
            {/* Grid of products (Visual selection) */}
-           <div className="grid grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto max-h-48 pr-2">
-              {filteredProduits.slice(0, 12).map(p => (
+           <div className="grid grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto flex-1 min-h-0 pr-2">
+              {filteredProduits.map(p => (
                 <button 
                   key={p.id}
                   onClick={() => addToCart(p)}
@@ -443,24 +443,23 @@ export default function VenteRapidePage() {
                    <span className="mt-2 text-sm font-black text-orange-500">{(p.prixVente || 0).toLocaleString()} F</span>
                 </button>
               ))}
-           </div>
-
-           <div className="flex flex-1 flex-col rounded-3xl bg-slate-800 p-6 shadow-2xl border border-slate-700 overflow-hidden">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-6 w-6" />
-                  <input
-                      ref={searchInputRef}
-                      type="text"
-                      value={search}
-                      onChange={e => handleSearch(e.target.value)}
-                      onKeyDown={handleKeyDownInput}
-                      placeholder="Scanner ou saisir code... (ENTRÉE)"
-                      className="w-full rounded-2xl bg-slate-900 border-2 border-slate-700 py-4 pl-12 pr-4 text-xl font-bold placeholder:text-slate-600 focus:border-orange-500 outline-none transition-all shadow-inner"
-                  />
-              </div>
             </div>
 
+           {/* Search bar (between grid and cart) */}
+           <div className="relative flex-shrink-0">
+               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-6 w-6" />
+               <input
+                   ref={searchInputRef}
+                   type="text"
+                   value={search}
+                   onChange={e => handleSearch(e.target.value)}
+                   onKeyDown={handleKeyDownInput}
+                   placeholder="Scanner ou saisir code... (ENTRÉE)"
+                   className="w-full rounded-2xl bg-slate-900 border-2 border-slate-700 py-4 pl-12 pr-4 text-xl font-bold placeholder:text-slate-600 focus:border-orange-500 outline-none transition-all shadow-inner"
+               />
+           </div>
+
+           <div className="flex flex-1 flex-col rounded-3xl bg-slate-800 p-6 shadow-2xl border border-slate-700 overflow-hidden min-h-0">
             <div className="flex-1 overflow-y-auto pr-2 space-y-2">
               {cart.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center opacity-20">

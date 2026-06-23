@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     let currentY = startY
 
     // En-têtes du tableau
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Code', margin, currentY)
     doc.text('Libellé', margin + 30, currentY)
     doc.text('Type', margin + 100, currentY)
@@ -70,19 +70,19 @@ export async function GET(request: NextRequest) {
     currentY += lineHeight
     doc.line(margin, currentY - 2, 190, currentY - 2)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     for (const j of journaux) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Code', margin, currentY)
         doc.text('Libellé', margin + 30, currentY)
         doc.text('Type', margin + 100, currentY)
         doc.text('Statut', margin + 130, currentY)
         currentY += lineHeight
         doc.line(margin, currentY - 2, 190, currentY - 2)
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const libelle = j.libelle.length > 30 ? j.libelle.substring(0, 30) + '...' : j.libelle

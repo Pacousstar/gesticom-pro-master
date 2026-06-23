@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 function formatMontant(n: number): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
 
     let y = 35
     doc.setFontSize(9)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Nom', 15, y)
     doc.text('Téléphone', 70, y)
     doc.text('Type', 110, y)
@@ -95,13 +95,13 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.line(15, y, 195, y)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     let totalDettes = 0
     for (const c of filtered) {
       if (y > 270) {
         doc.addPage()
         y = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Nom', 15, y)
         doc.text('Téléphone', 70, y)
         doc.text('Type', 110, y)
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
         y += 5
         doc.line(15, y, 195, y)
         y += 5
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const dette = detteByClient[c.id] || 0
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.line(15, y, 195, y)
     y += 5
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text(`Total clients: ${filtered.length}`, 15, y)
     doc.text(`Total dettes: ${formatMontant(totalDettes)} F`, 140, y)
 

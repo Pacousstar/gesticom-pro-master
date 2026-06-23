@@ -8,6 +8,7 @@ import { mouvementStockSchema } from '@/lib/validations'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { apiCatch } from '@/lib/log-error'
 import { nouveauPampApresAchatLigne } from '@/lib/calculs-commerciaux'
+import { comptabiliserMouvementStock } from '@/lib/comptabilisation'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -132,7 +133,6 @@ export async function POST(request: NextRequest) {
       })
 
       // d. Comptabilisation
-      const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
       await comptabiliserMouvementStock({
         produitId,
         magasinId,

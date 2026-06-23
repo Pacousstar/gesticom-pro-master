@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, Loader2, Store, Trash2, Shield, Printer, Edit2, Building2, Zap, Database, ImagePlus } from 'lucide-react'
+import { Save, Loader2, Store, Trash2, Shield, Printer, Edit2, Building2, Database, ImagePlus, Zap } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Link from 'next/link'
 
@@ -57,6 +57,7 @@ export default function ParametresPage() {
     fideliteSeuilPoints: '100',
     fideliteTauxRemise: '5',
     mentionSpeciale: '',
+    modeInstallation: 'MODE_1',
   })
 
   const [magasins, setMagasins] = useState<Magasin[]>([])
@@ -131,6 +132,7 @@ export default function ParametresPage() {
           fideliteSeuilPoints: String(p.fideliteSeuilPoints ?? 100),
           fideliteTauxRemise: String(p.fideliteTauxRemise ?? 5),
           mentionSpeciale: p.mentionSpeciale ?? '',
+          modeInstallation: p.modeInstallation ?? 'MODE_1',
         })
       }
     } catch (e) {
@@ -593,6 +595,30 @@ export default function ParametresPage() {
                   </div>
                </div>
             )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-gray-900/40 p-8 shadow-2xl backdrop-blur-xl">
+          <h2 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3 mb-6">
+            <div className="p-2 bg-cyan-500/20 rounded-lg"><Zap className="h-5 w-5 text-cyan-400" /></div>
+            Mode d'Installation
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-1.5 ml-1">Type d'installation</label>
+              <select
+                value={form.modeInstallation}
+                onChange={(e) => setForm({ ...form, modeInstallation: e.target.value })}
+                className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all"
+              >
+                <option value="MODE_1">Mode 1 — Poste unique (Local)</option>
+                <option value="MODE_2">Mode 2 — Réseau (Serveur interne)</option>
+                <option value="MODE_3">Mode 3 — Migration (MODE_1 → MODE_2)</option>
+              </select>
+              <p className="mt-2 text-[10px] text-white/40 italic">
+                Mode 1 : installation sur un seul poste. Mode 2 : installation réseau avec base partagée. Mode 3 : migration d'un Mode 1 vers le Mode 2.
+              </p>
+            </div>
           </div>
         </div>
 

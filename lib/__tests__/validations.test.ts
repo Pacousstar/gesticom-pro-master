@@ -537,7 +537,7 @@ describe('notificationSchema', () => {
 
 describe('lettrageSchema', () => {
   it('valide un lettrage', () => {
-    const r = lettrageSchema.safeParse({ compteCourantId: 1, montant: 50000 })
+    const r = lettrageSchema.safeParse({ compteCourantId: 1, transactionId: 'REG-VENTE-123' })
     expect(r.success).toBe(true)
   })
 })

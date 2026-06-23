@@ -75,7 +75,7 @@ export default function CompteCourantDetailPage() {
   useEffect(() => {
     fetchDetail()
     fetch('/api/magasins?actif=true').then(r => r.ok && r.json()).then(d => setMagasins(d || [])).catch(() => {})
-    fetch('/api/banques?actif=true').then(r => r.ok && r.json()).then(d => setBanques(d || [])).catch(() => {})
+    fetch('/api/banques?actif=true').then(r => r.ok && r.json()).then(d => setBanques(d?.data || d || [])).catch(() => {})
     fetch('/api/clients?limit=10000').then(r => r.ok && r.json()).then(d => setClientsList(d?.data || d || [])).catch(() => {})
     fetch('/api/fournisseurs?limit=10000').then(r => r.ok && r.json()).then(d => setFournisseursList(d?.data || d || [])).catch(() => {})
   }, [params.id])

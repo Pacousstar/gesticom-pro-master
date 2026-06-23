@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -10,14 +11,15 @@ export async function GET(request: NextRequest) {
   const forbidden = requirePermission(session, 'stocks:view')
   if (forbidden) return NextResponse.json({ error: 'Droits insuffisants.' }, { status: 403 })
 
-  const searchParams = request.nextUrl.searchParams
-  const entiteId = await getEntiteId(session)
-  const magasinId = searchParams.get('magasinId') ? Number(searchParams.get('magasinId')) : undefined
-  const categorie = searchParams.get('categorie') || undefined
-  const fournisseurId = searchParams.get('fournisseurId') ? Number(searchParams.get('fournisseurId')) : undefined
-  const search = searchParams.get('search')?.trim() || ''
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const entiteId = await getEntiteId(session)
+    const magasinId = searchParams.get('magasinId') ? Number(searchParams.get('magasinId')) : undefined
+    const categorie = searchParams.get('categorie') || undefined
+    const fournisseurId = searchParams.get('fournisseurId') ? Number(searchParams.get('fournisseurId')) : undefined
+    const search = searchParams.get('search')?.trim() || ''
 
-  const produits = await prisma.produit.findMany({
+    const produits = await prisma.produit.findMany({
     where: {
       entiteId,
       actif: true,
@@ -91,12 +93,16 @@ export async function GET(request: NextRequest) {
 
   const categories = [...new Set(produits.map(p => p.categorie).filter(Boolean))]
 
-  return NextResponse.json({
-    suggestions,
-    magasins,
-    categories,
-    totalSousSeuil: suggestions.length,
-    coutTotalEstime: suggestions.reduce((s, sg) => s + sg.coutEstime, 0),
-    quantiteTotalSuggeree: suggestions.reduce((s, sg) => s + sg.quantiteSuggeree, 0),
-  })
+    return NextResponse.json({
+      suggestions,
+      magasins,
+      categories,
+      totalSousSeuil: suggestions.length,
+      coutTotalEstime: suggestions.reduce((s, sg) => s + sg.coutEstime, 0),
+      quantiteTotalSuggeree: suggestions.reduce((s, sg) => s + sg.quantiteSuggeree, 0),
+    })
+  } catch (e) {
+    await apiCatch(e, 'api/reapro/suggestions')
+    return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })
+  }
 }

@@ -99,8 +99,12 @@ export async function POST(request: NextRequest) {
     const data = result.data
     const reference = body?.reference ? String(body.reference).trim() : null
 
-    // RB10: Normaliser le type (uppercase)
-    const typeNormalise = data.type
+    // RB10: Inclure l'heure actuelle pour les opérations manuelles
+    const dateTime = (() => {
+      const d = new Date()
+      const time = d.toTimeString().split(' ')[0] // HH:MM:SS
+      return new Date(data.date + 'T' + time)
+    })()
 
     // Vérifier que la banque existe
     const banque = await prisma.banque.findUnique({ where: { id: data.banqueId } })
@@ -121,9 +125,9 @@ export async function POST(request: NextRequest) {
       const op = await enregistrerOperationBancaire({
         banqueId: data.banqueId,
         entiteId: banque.entiteId,
-        date: new Date(data.date + 'T00:00:00'),
-        type: typeNormalise,
-        libelle: data.description ?? '',
+        date: dateTime,
+        type: data.type,
+        libelle: data.libelle ?? '',
         montant: data.montant,
         utilisateurId: session.userId,
         reference: reference,
@@ -139,10 +143,10 @@ export async function POST(request: NextRequest) {
       await comptabiliserOperationBancaire({
         operationId: op.id,
         banqueId: data.banqueId,
-        date: new Date(data.date + 'T00:00:00'),
-        type: typeNormalise,
+        date: dateTime,
+        type: data.type,
         montant: data.montant,
-        libelle: data.description ?? '',
+        libelle: data.libelle ?? '',
         compteId: banque.compteId,
         utilisateurId: session.userId,
         entiteId: banque.entiteId,
@@ -162,7 +166,7 @@ await logAction(
       session,
       'CREATION',
       'OPERATION_BANQUE',
-      `Opération bancaire: ${typeNormalise} - ${data.description} - ${data.montant} FCA`,
+      `Opération bancaire: ${data.type} - ${data.libelle} - ${data.montant} FCA`,
       banque.entiteId
     )
 

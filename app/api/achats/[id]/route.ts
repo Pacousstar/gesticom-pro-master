@@ -8,11 +8,12 @@ import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
 import { montantLigneTTC, htNetLigne, partFraisApprocheLigne, valeurAchatNetAvecFrais, nouveauPampApresAchatLigne } from '@/lib/calculs-commerciaux'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
-import { estModeBanque } from '@/lib/banque'
+import { estModeBanque, enregistrerOperationBancaire } from '@/lib/banque'
 import { verifierCloture } from '@/lib/cloture'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { achatSchema } from '@/lib/validations'
+import { comptabiliserReglementAchat, comptabiliserAchat } from '@/lib/comptabilisation'
 
 export async function GET(
   _request: NextRequest,
@@ -184,9 +185,9 @@ export async function PATCH(
     const body = await request.json()
     const vres = validateApiRequest(achatSchema.partial(), body)
     if (!vres.success) return vres.response
-    const action = body?.action || (body?.lignes ? 'FULL_UPDATE' : 'PAGEMENT')
+    const action = body?.action || (body?.lignes ? 'FULL_UPDATE' : 'PAIEMENT')
 
-    if (action === 'PAGEMENT') {
+    if (action === 'PAIEMENT') {
       const montantReglement = Math.max(0, Number(body?.montant) || 0)
       const modePaiement = (body?.modePaiement || 'ESPECES').toUpperCase()
       const payeDepuisCaisse = body?.payeDepuisCaisse === true
@@ -229,10 +230,6 @@ export async function PATCH(
 
       const nouveauMontantPaye = Math.min(achat.montantTotal, realMontantPaye + montantReglement)
       const nouveauStatut = nouveauMontantPaye >= achat.montantTotal ? 'PAYE' : 'PARTIEL'
-
-      const { estModeBanque, enregistrerOperationBancaire } = await import('@/lib/banque')
-      const { estModeEspeces } = await import('@/lib/enums-commerce')
-      const { comptabiliserReglementAchat } = await import('@/lib/comptabilisation')
 
       const updatedAchat = await prisma.$transaction(async (tx) => {
         const up = await tx.achat.update({
@@ -589,7 +586,6 @@ const reglAchat = await tx.reglementAchat.create({
               await recalculerSoldeCaisse(updated.magasinId, tx)
             }
             if (r.payeDepuisBanque) {
-              const { enregistrerOperationBancaire } = await import('@/lib/banque')
               await enregistrerOperationBancaire({
                 banqueId: r.banqueId ? Number(r.banqueId) : null,
                 entiteId: updated.entiteId,
@@ -606,7 +602,6 @@ const reglAchat = await tx.reglementAchat.create({
         }
 
         // 7. Comptabilisation (dans la transaction)
-        const { comptabiliserAchat } = await import('@/lib/comptabilisation')
         await comptabiliserAchat({
           achatId: updated.id,
           numeroAchat: updated.numero,

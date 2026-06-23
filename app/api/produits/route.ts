@@ -6,6 +6,7 @@ import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { produitSchema } from '@/lib/validations'
 import { apiCatch } from '@/lib/log-error'
+import { comptabiliserMouvementStock } from '@/lib/comptabilisation'
 
 const MAX_LIMIT = 1000
 const CODE_PADDING = 3
@@ -242,7 +243,6 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
         await comptabiliserMouvementStock({
           produitId: p.id,
           magasinId: magasinIdRaw,

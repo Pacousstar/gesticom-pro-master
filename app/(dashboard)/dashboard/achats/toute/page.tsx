@@ -20,6 +20,7 @@ import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ModificationAchatModal from '@/components/dashboard/achats/ModificationAchatModal'
 import { paginateForPrint } from '@/lib/print-helpers'
+import { getStatutPaiementLabel, getStatutPaiementColors } from '@/lib/enums-commerce'
 
 interface AchatListe {
   id: number
@@ -46,24 +47,29 @@ export default function TousLesAchatsPage() {
   const [printType, setPrintType] = useState<'GLOBAL' | 'DETAIL' | null>(null)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
-  const [entreprise, setEntreprise] = useState<any>(null)
   const [userRole, setUserRole] = useState('')
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isPrintingData, setIsPrintingData] = useState(false)
+  const [allAchatsForPrint, setAllAchatsForPrint] = useState<AchatListe[]>([])
   const [statutPaiement, setStatutPaiement] = useState('')
 
   const ITEMS_PER_PAGE_REPORT = 22
 
-  const handleOpenPreview = (type: 'GLOBAL' | 'DETAIL') => {
+  const handleOpenPreview = async (type: 'GLOBAL' | 'DETAIL') => {
     setIsPrintingData(true)
     setPrintType(type)
-    setIsPreviewOpen(true)
-    setIsPrintingData(false)
+    try {
+      setAllAchatsForPrint(filteredData)
+      setIsPreviewOpen(true)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsPrintingData(false)
+    }
   }
 
   useEffect(() => {
     const now = new Date()
-    // Par défaut, afficher les 30 derniers jours (évite le vide le 1er du mois)
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(now.getDate() - 30)
     
@@ -73,8 +79,7 @@ export default function TousLesAchatsPage() {
     setStartDate(start)
     setEndDate(end)
     fetchData(start, end)
-    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => { })
-    fetch('/api/auth/check').then(r => r.ok ? r.json() : ({} as any)).then((d: any) => { if (d?.role) setUserRole(d.role) }).catch(() => { })
+    fetch('/api/auth/check').then(r => r.ok ? r.json() : ({} as any)).then((d: any) => { if (d?.role) setUserRole(d.role) }).catch(() => {})
   }, [])
 
   const fetchData = async (start: string, end: string) => {
@@ -118,14 +123,6 @@ export default function TousLesAchatsPage() {
     fetchData(startDate, endDate)
   }
 
-  const handlePrint = (type: 'GLOBAL' | 'DETAIL') => {
-    setPrintType(type)
-    setTimeout(() => {
-      window.print()
-      setPrintType(null)
-    }, 500)
-  }
-
   const filteredData = data.filter(a => {
     const matchSearch = !search ||
       a.numero.toLowerCase().includes(search.toLowerCase()) ||
@@ -139,7 +136,6 @@ export default function TousLesAchatsPage() {
     setPage(1)
   }, [search, statutPaiement])
 
-  // Statistiques
   const caMonth = data.reduce((acc, a) => acc + a.montantTotal, 0)
   const nbAchatsMonth = data.length
   const decaisseMonth = data.reduce((acc, a) => acc + a.montantPaye, 0)
@@ -150,6 +146,77 @@ export default function TousLesAchatsPage() {
   const paginatedData = filteredData.slice((page - 1) * itemsPerPage, page * itemsPerPage)
 
   const formatFcfa = (val: number) => val.toLocaleString('fr-FR') + ' F'
+
+  const renderPrintChunks = (baseClass: string, lastClass = '') => {
+    const chunks = paginateForPrint(allAchatsForPrint, { firstPageSize: 18, otherPagesSize: ITEMS_PER_PAGE_REPORT })
+    return chunks.map((chunk, index, allChunks) => (
+      <div key={index} className={index < allChunks.length - 1 ? baseClass : lastClass}>
+        <ListPrintWrapper
+          title={printType === 'GLOBAL' ? 'Journal Global des Achats' : 'Journal Détaillé des Achats'}
+          subtitle={`Rapport extrait du ${new Date(startDate).toLocaleDateString()} au ${new Date(endDate).toLocaleDateString()}`}
+          pageNumber={index + 1}
+          totalPages={allChunks.length}
+          hideHeader={index > 0}
+          hideVisa={index < allChunks.length - 1}
+          kpis={[
+            { label: 'VOLUME ACHATS', value: allAchatsForPrint.reduce((acc, a) => acc + a.montantTotal, 0).toLocaleString() + ' F', color: 'text-blue-600' },
+            { label: 'TOTAL PAYÉ', value: allAchatsForPrint.reduce((acc, a) => acc + a.montantPaye, 0).toLocaleString() + ' F', color: 'text-emerald-600' },
+            { label: 'RESTE À PAYER', value: (allAchatsForPrint.reduce((acc, a) => acc + a.montantTotal, 0) - allAchatsForPrint.reduce((acc, a) => acc + a.montantPaye, 0)).toLocaleString() + ' F', color: 'text-rose-600' },
+            { label: 'NB OPÉRATIONS', value: String(allAchatsForPrint.length), color: 'text-indigo-600' }
+          ]}
+        >
+          <table className="w-full text-[14px] border-collapse border-2 border-black">
+            <thead>
+              <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
+                <th className="border-r-2 border-black px-3 py-3 text-left">Réf / Date</th>
+                <th className="border-r-2 border-black px-3 py-3 text-left">Fournisseur / Magasin</th>
+                <th className="border-r-2 border-black px-3 py-3 text-center">Règlement</th>
+                <th className="border-r-2 border-black px-3 py-3 text-right">Montant Total</th>
+                <th className="px-3 py-3 text-right">Décaissé</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chunk.map((a) => (
+                <tr key={a.id} className="border-b border-black">
+                  <td className="border-r-2 border-black px-3 py-2">
+                    <span className="font-black text-slate-800">{a.numero}</span><br/>
+                    <span className="text-xs italic font-bold text-gray-500">{new Date(a.date).toLocaleDateString('fr-FR')}</span>
+                  </td>
+                  <td className="border-r-2 border-black px-3 py-2 font-black uppercase italic">
+                    {a.fournisseur}<br/>
+                    <div className="font-bold text-[10px] text-gray-400 truncate max-w-[150px]">{a.magasin}</div>
+                  </td>
+                  <td className="border-r-2 border-black px-3 py-2 text-center">
+                    <div className="text-[10px] font-black text-blue-800 uppercase">{a.modePaiement}</div>
+                    <span className={`text-[11px] font-black underline decoration-double ${getStatutPaiementColors(a.statutPaiement).text}`}>{getStatutPaiementLabel(a.statutPaiement)}</span>
+                  </td>
+                  <td className="border-r-2 border-black px-3 py-2 text-right font-black shadow-inner bg-gray-50/50">
+                    {a.montantTotal.toLocaleString()} F
+                  </td>
+                  <td className="px-3 py-2 text-right font-black text-emerald-800 tabular-nums">
+                    {a.montantPaye.toLocaleString()} F
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            {index === allChunks.length - 1 && (
+              <tfoot>
+                <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-2xl">
+                  <td colSpan={3} className="px-3 py-5 text-right tracking-[0.2em] underline decoration-double">AUDIT VOLUME NET PÉRIODE</td>
+                  <td className="px-3 py-5 text-right bg-white ring-2 ring-black font-mono">
+                    {allAchatsForPrint.reduce((acc, a) => acc + a.montantTotal, 0).toLocaleString()} F
+                  </td>
+                  <td className="px-3 py-5 text-right text-emerald-800 bg-white shadow-inner font-mono">
+                    {allAchatsForPrint.reduce((acc, a) => acc + a.montantPaye, 0).toLocaleString()} F
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </ListPrintWrapper>
+      </div>
+    ))
+  }
 
   return (
     <div className="pb-12">
@@ -373,6 +440,50 @@ export default function TousLesAchatsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+               <div>
+                 <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu du Rapport des Achats</h2>
+                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                   Mode : {printType === 'GLOBAL' ? 'Journal Simplifié' : 'Journal Détaillé'}
+                 </p>
+               </div>
+               <div className="h-10 w-px bg-gray-200" />
+               <span className="rounded-full bg-indigo-100 px-4 py-2 text-xs font-black text-indigo-600 uppercase">
+                 {allAchatsForPrint.length} OPÉRATIONS
+               </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => { setIsPreviewOpen(false); setTimeout(() => window.print(), 0); }}
+                className="flex items-center gap-2 rounded-xl bg-indigo-600 px-10 py-2 text-sm font-black text-white hover:bg-indigo-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
+               {renderPrintChunks('page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8', '')}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="hidden print:block absolute inset-0 bg-white p-4">
+        {renderPrintChunks('page-break mb-8', 'mb-8')}
       </div>
 
       <ModificationAchatModal

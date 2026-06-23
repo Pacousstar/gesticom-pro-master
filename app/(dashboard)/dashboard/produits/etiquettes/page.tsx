@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useMemo } from 'react'
 import {
-  Loader2, Search, Plus, Minus, Printer, Package, Tag, Barcode, Settings
+  Loader2, Search, Plus, Minus, Printer, Package, Barcode, Settings
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
@@ -18,12 +17,12 @@ type Produit = {
 }
 
 export default function EtiquettesPage() {
-  const router = useRouter()
-  const { success: showSuccess, error: showError } = useToast()
+  const { error: showError } = useToast()
 
   const [produits, setProduits] = useState<Produit[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [categorie, setCategorie] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [copies, setCopies] = useState<Record<number, number>>({})
   const [copiesGlobales, setCopiesGlobales] = useState(2)
@@ -43,19 +42,22 @@ export default function EtiquettesPage() {
       .finally(() => setLoading(false))
   }, [showError])
 
-  const filtered = produits.filter(p => {
+  const filtered = useMemo(() => produits.filter(p => {
+    if (categorie && p.categorie !== categorie) return false
     if (!search) return true
     const q = search.toLowerCase()
     return p.code.toLowerCase().includes(q) || p.designation.toLowerCase().includes(q) || (p.codeBarres || '').toLowerCase().includes(q)
-  })
+  }), [produits, search, categorie])
+
+  const categories = useMemo(() => {
+    const set = new Set<string>()
+    produits.forEach(p => { if (p.categorie) set.add(p.categorie) })
+    return Array.from(set).sort()
+  }, [produits])
 
   const itemsPerPage = 10
   const totalPages = Math.ceil(filtered.length / itemsPerPage)
   const paginatedData = filtered.slice((etPage - 1) * itemsPerPage, etPage * itemsPerPage)
-
-  useEffect(() => {
-    setEtPage(1)
-  }, [search])
 
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
@@ -85,6 +87,8 @@ export default function EtiquettesPage() {
   }
 
   const selected = produits.filter(p => selectedIds.has(p.id))
+
+  const escapeHtml = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 
   const genererEtiquettes = async () => {
     if (selected.length === 0) { showError('Sélectionnez au moins un produit.'); return }
@@ -128,8 +132,8 @@ export default function EtiquettesPage() {
 
           html += `<div class="label">
             <div class="barcode">${svgHtml}</div>
-            <div class="code">${p.code}</div>
-            <div class="name">${p.designation}</div>
+            <div class="code">${escapeHtml(p.code)}</div>
+            <div class="name">${escapeHtml(p.designation)}</div>
             <div class="price">${(p.prixVente || 0).toLocaleString('fr-FR')} F</div>
           </div>`
         }
@@ -167,7 +171,7 @@ export default function EtiquettesPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { label: "Produits total", val: String(produits.length), sub: "Dans le catalogue", icon: Package, color: "bg-violet-600" },
-              { label: "Sélectionnés", val: String(selected.length), sub: "Pour étiquetage", icon: Tag, color: "bg-emerald-600" },
+              { label: "Sélectionnés", val: String(selected.length), sub: "Pour étiquetage", icon: Package, color: "bg-emerald-600" },
               { label: "Étiquettes à générer", val: String([...selectedIds].reduce((s, id) => s + (copies[id] || copiesGlobales), 0)), sub: "Copies totales", icon: Barcode, color: "bg-amber-600" },
               { label: "Copies par défaut", val: String(copiesGlobales), sub: "Par produit", icon: Settings, color: "bg-blue-600" },
             ].map((c, i) => (
@@ -190,10 +194,18 @@ export default function EtiquettesPage() {
           <div className="flex flex-wrap items-end gap-4 flex-1">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              <input type="text" value={search} onChange={e => { setSearch(e.target.value); setEtPage(1); setSelectedIds(new Set()) }}
                 placeholder="Rechercher un produit..."
                 className="w-full rounded-2xl border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-bold focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none transition-all"
               />
+            </div>
+            <div className="min-w-[180px]">
+              <select value={categorie} onChange={e => { setCategorie(e.target.value); setEtPage(1); setSelectedIds(new Set()) }}
+                className="w-full rounded-2xl border-gray-200 bg-gray-50 py-3 px-4 text-sm font-bold focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none transition-all"
+              >
+                <option value="">Toutes catégories</option>
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
             <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-2.5 border border-gray-200">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Copies/pdt</label>
@@ -288,7 +300,7 @@ export default function EtiquettesPage() {
                         </td>
                         <td className="px-8 py-5 text-center" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-1.5">
-                            <button onClick={() => setCopies(c => ({ ...c, [p.id]: Math.max(1, (c[p.id] || copiesGlobales) - 1) }))}
+                            <button onClick={() => { if (!selectedIds.has(p.id)) toggleSelect(p.id); setCopies(c => ({ ...c, [p.id]: Math.max(1, (c[p.id] || copiesGlobales) - 1) })) }}
                               className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 transition-all"
                             >
                               <Minus className="h-3 w-3" />
@@ -296,7 +308,7 @@ export default function EtiquettesPage() {
                             <span className="text-sm font-black text-gray-900 w-8 text-center tabular-nums">
                               {copies[p.id] || copiesGlobales}
                             </span>
-                            <button onClick={() => setCopies(c => ({ ...c, [p.id]: Math.min(99, (c[p.id] || copiesGlobales) + 1) }))}
+                            <button onClick={() => { if (!selectedIds.has(p.id)) toggleSelect(p.id); setCopies(c => ({ ...c, [p.id]: Math.min(99, (c[p.id] || copiesGlobales) + 1) })) }}
                               className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 transition-all"
                             >
                               <Plus className="h-3 w-3" />
@@ -341,6 +353,16 @@ export default function EtiquettesPage() {
           </div>
         </div>
       </div>
+
+      {/* Loading overlay */}
+      {generating && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-gray-900/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 rounded-2xl bg-white px-12 py-10 shadow-2xl">
+            <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+            <p className="text-sm font-black text-gray-800 uppercase tracking-widest">Génération des étiquettes...</p>
+          </div>
+        </div>
+      )}
 
       {/* Print Preview Modal */}
       {printPreviewOpen && (

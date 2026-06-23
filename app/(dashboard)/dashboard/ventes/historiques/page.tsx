@@ -5,10 +5,12 @@ import { Archive, Plus, Loader2, Trash2, Search, Filter, X, Printer, ShoppingBag
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/useToast'
+import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 import { formatDate } from '@/lib/format-date'
 import { montantLigneTTC } from '@/lib/calculs-commerciaux'
+import { getStatutPaiementLabel, getStatutPaiementColors } from '@/lib/enums-commerce'
 
 type Client = { id: number; nom: string }
 type Magasin = { id: number; code: string; nom: string }
@@ -72,6 +74,7 @@ export default function AnciennesVentesPage() {
         setPagination(response.pagination || null)
         setTotals(response.totals || null)
       })
+      .catch(() => showError('Erreur lors du chargement'))
       .finally(() => setLoading(false))
   }
 
@@ -86,7 +89,7 @@ export default function AnciennesVentesPage() {
       if (res.ok) {
         const d = await res.json()
         setAllVentesForPrint(d.data || [])
-        setTimeout(() => { window.print(); setIsPrinting(false) }, 500)
+        setTimeout(() => { window.print(); setIsPrinting(false) }, 0)
       } else {
         setIsPrinting(false)
       }
@@ -117,7 +120,7 @@ export default function AnciennesVentesPage() {
       setMagasins(Array.isArray(m) ? m : [])
       setClients(Array.isArray(c) ? c : [])
       setProduits(Array.isArray(p) ? p : [])
-    })
+    }).catch(() => showError('Erreur lors du chargement des données'))
   }, [])
 
   const addLigne = () => {
@@ -593,7 +596,7 @@ export default function AnciennesVentesPage() {
                           <td className="border p-1">{(v.magasin as any)?.code || v.magasinId || '—'}</td>
                           <td className="border p-1 text-right">{Number(v.montantTotal).toLocaleString('fr-FR')} F</td>
                           <td className="border p-1">{v.modePaiement}</td>
-                          <td className="border p-1">{v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit'}</td>
+                          <td className="border p-1">{getStatutPaiementLabel(v.statutPaiement || '')}</td>
                           <td className="border p-1 text-right">{(v.montantPaye || 0).toLocaleString('fr-FR')} F</td>
                           <td className="border p-1 text-right">{rp > 0 ? rp.toLocaleString('fr-FR') + ' F' : '-'}</td>
                         </tr>

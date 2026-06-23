@@ -45,18 +45,17 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-
-  const forbidden = requirePermission(session, 'caisse:delete')
-  if (forbidden) return forbidden
-
-  const id = Number((await params).id)
-  if (!Number.isInteger(id) || id < 1) {
-    return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
-  }
-
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+    const forbidden = requirePermission(session, 'caisse:delete')
+    if (forbidden) return forbidden
+
+    const id = Number((await params).id)
+    if (!Number.isInteger(id) || id < 1) {
+      return NextResponse.json({ error: 'Id invalide.' }, { status: 400 })
+    }
     const op = await prisma.caisse.findUnique({ where: { id } })
     if (!op) return NextResponse.json({ error: 'Opération caisse introuvable.' }, { status: 404 })
 

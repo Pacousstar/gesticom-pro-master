@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { generateRelancePDF } from '@/lib/pdf-gen'
+import { sendRelanceEmail } from '@/lib/mail'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(
@@ -136,12 +138,10 @@ export async function POST(
     const solde = facturesDetail.reduce((acc, f) => acc + f.resteAPayer, 0) + (client.soldeInitial || 0) - (client.avoirInitial || 0)
 
     // 2. Générer le PDF
-    const { generateRelancePDF } = await import('@/lib/pdf-gen')
     const doc = generateRelancePDF({ client, factures: facturesDetail, solde, enterprise })
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'))
 
     // 3. Envoyer l'email
-    const { sendRelanceEmail } = await import('@/lib/mail')
     const message = `Bonjour ${client.nom},\n\nVeuillez trouver ci-joint votre relevé de situation concernant vos factures impayées chez ${enterprise?.nomEntreprise || 'notre établissement'}.\nLe solde total dû à ce jour est de ${solde.toLocaleString()} FCFA.\n\nNous comptons sur votre diligence pour la régularisation.\n\nCordialement,\n\nL'équipe de gestion GestiCom Pro.`
     
     await sendRelanceEmail({

@@ -45,6 +45,8 @@ export default function ValeurStockPage() {
   const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [allDataForPrint, setAllDataForPrint] = useState<any[]>([])
+  const [categories, setCategories] = useState<string[]>([])
 
   // P2: impression standardisée (1ère page plus courte, puis 23 lignes/page)
 
@@ -53,6 +55,7 @@ export default function ValeurStockPage() {
     setDateFin(today)
     loadMagasins()
     fetchData(today, 'TOUT', 1, '', selectedCategorie)
+    loadCategories(today)
     
     fetch('/api/parametres')
       .then(r => r.ok && r.json())
@@ -67,12 +70,31 @@ export default function ValeurStockPage() {
       fetchData(dateFin, selectedMagasin, 1, search, selectedCategorie)
     }, 300)
     return () => clearTimeout(timer)
-  }, [search])
+  }, [search, selectedCategorie])
 
   const loadMagasins = async () => {
     try {
       const res = await fetch('/api/magasins')
-      if (res.ok) setMagasins(await res.json())
+      if (res.ok) {
+        const magData = await res.json()
+        setMagasins(Array.isArray(magData) ? magData : (magData.data || []))
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const loadCategories = async (date?: string) => {
+    try {
+      const d = date || dateFin
+      if (!d) return
+      const res = await fetch(`/api/rapports/inventaire/valeur?limit=10000&dateFin=${d}`)
+      if (res.ok) {
+        const json = await res.json()
+        const allData = json.data || []
+        const cats = Array.from(new Set(allData.map((p: any) => p.categorie))).sort() as string[]
+        setCategories(cats)
+      }
     } catch (e) {
       console.error(e)
     }
@@ -114,11 +136,8 @@ export default function ValeurStockPage() {
     fetchData(dateFin, selectedMagasin, newPage, search, selectedCategorie)
   }
 
-  // Extraire les catégories uniques pour le filtre (depuis toutes les données serveur)
-  const categories = Array.from(new Set(data.map(p => p.categorie))).sort()
-
-  const totalValeur = totals?.valeurTotal ?? data.reduce((acc, p) => acc + p.valeurTotal, 0)
-  const totalQuantite = totals?.totalQuantite ?? data.reduce((acc, p) => acc + p.quantite, 0)
+  const totalValeur = totals?.valeurTotal ?? 0
+  const totalQuantite = totals?.totalQuantite ?? 0
 
   return (
     <div className="space-y-6">
@@ -129,7 +148,24 @@ export default function ValeurStockPage() {
         </div>
         <div className="flex gap-2 no-print">
           <button 
-            onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 1000); }}
+            onClick={async () => {
+              setIsPrinting(true)
+              try {
+                let url = `/api/rapports/inventaire/valeur?dateFin=${dateFin}&limit=10000&includeTotals=true`
+                if (selectedMagasin !== 'TOUT') url += `&magasinId=${selectedMagasin}`
+                if (search) url += `&search=${encodeURIComponent(search)}`
+                if (selectedCategorie !== 'TOUTE') url += `&categorie=${encodeURIComponent(selectedCategorie)}`
+                const res = await fetch(url)
+                if (res.ok) {
+                  const d = await res.json()
+                  setAllDataForPrint(Array.isArray(d.data) ? d.data : [])
+                }
+                setTimeout(() => { window.print(); setIsPrinting(false) }, 0)
+              } catch (e) {
+                console.error(e)
+                setIsPrinting(false)
+              }
+            }}
             disabled={isPrinting}
             className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50"
           >
@@ -207,7 +243,8 @@ export default function ValeurStockPage() {
       {/* ZONE D'IMPRESSION (Masquée à l'écran) */}
       <div className="hidden print:block absolute inset-0 bg-white">
         {(() => {
-          const chunks = paginateForPrint(data)
+          const printData = allDataForPrint.length > 0 ? allDataForPrint : data
+          const chunks = paginateForPrint(printData)
           const offsetBefore = (pageIndex: number) => chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
           return chunks.map((chunk: ProduitValo[], index: number, allChunks: ProduitValo[][]) => (
             <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>

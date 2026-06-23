@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { stockInventaireSchema } from '@/lib/validations'
+import { comptabiliserMouvementStock } from '@/lib/comptabilisation'
 
 /**
  * Régularisation du stock après inventaire : pour chaque ligne (produitId, quantitePhysique),
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
           observation: { contains: 'Inventaire' },
           utilisateurId: session.userId,
           entiteId: entiteId,
+          type: 'ENTREE',
           createdAt: { gte: fifteenSecondsAgo }
         },
         select: { id: true }
@@ -135,7 +137,6 @@ export async function POST(request: NextRequest) {
 
       await prisma.$transaction(async (tx) => {
         // Créer tous les mouvements en batch et les comptabiliser
-        const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
         for (const mvtData of mouvements) {
           const mvt = await tx.mouvement.create({ data: mvtData })
           await comptabiliserMouvementStock({

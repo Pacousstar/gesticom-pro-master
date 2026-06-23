@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/require-role'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 function formatMontant(n: number): string {
   const num = Math.round(n || 0)
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
     // Tableau simple (sans autoTable)
     let y = 42
     doc.setFontSize(9)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Date', 15, y)
     doc.text('N°', 35, y)
     doc.text('Tiers', 60, y)
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
     y += 4
     doc.line(15, y, 195, y)
     y += 5
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
 
     let totalTotal = 0
     let totalPaye = 0
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
       if (y > 270) {
         doc.addPage()
         y = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Date', 15, y)
         doc.text('N°', 35, y)
         doc.text('Tiers', 60, y)
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
         y += 4
         doc.line(15, y, 195, y)
         y += 5
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       totalTotal += r.total
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
     y += 2
     doc.line(15, y, 195, y)
     y += 6
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('TOTAL', 60, y)
     doc.text(`${formatMontant(totalTotal)} F`, 125, y, { align: 'right' })
     doc.text(`${formatMontant(totalPaye)} F`, 150, y, { align: 'right' })

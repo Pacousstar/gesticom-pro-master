@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       montant: margin + 180,
     }
 
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('N° Facture', colPositions.numero, currentY)
     doc.text('Date', colPositions.date, currentY)
     doc.text('Client', colPositions.client, currentY)
@@ -79,14 +79,14 @@ export async function GET(request: NextRequest) {
     currentY += lineHeight
     doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     let totalMontant = 0
 
     for (const a of archives) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('N° Facture', colPositions.numero, currentY)
         doc.text('Date', colPositions.date, currentY)
         doc.text('Client', colPositions.client, currentY)
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         doc.text('Montant', colPositions.montant, currentY, { align: 'right' })
         currentY += lineHeight
         doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const dateStr = new Date(a.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
       currentY += lineHeight
     }
 
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
     doc.text('TOTAUX', colPositions.numero, currentY)
     doc.text(`${totalMontant.toLocaleString('fr-FR')} F`, colPositions.montant, currentY, { align: 'right' })

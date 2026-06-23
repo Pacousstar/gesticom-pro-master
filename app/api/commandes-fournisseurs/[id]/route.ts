@@ -51,6 +51,26 @@ export async function PATCH(
     const cfData = vres.data
     const entiteId = await getEntiteId(session)
 
+    // Validation de la machine à états si un statut est fourni
+    if (cfData.statut) {
+      const current = await prisma.commandeFournisseur.findUnique({
+        where: { id },
+        select: { statut: true }
+      })
+      if (!current) return notFound('Commande introuvable')
+
+      const validTransitions: Record<string, string[]> = {
+        BROUILLON: ['BROUILLON', 'ENVOYEE', 'ANNULEE'],
+        ENVOYEE: ['ENVOYEE', 'RECUE'],
+        RECUE: ['RECUE'],
+        ANNULEE: ['ANNULEE']
+      }
+      const allowed = validTransitions[current.statut] || []
+      if (!allowed.includes(cfData.statut)) {
+        return badRequest(`Transition de statut invalide : ${current.statut} → ${cfData.statut}`)
+      }
+    }
+
     // Modification complète (Full Update)
     if (cfData.lignes) {
       await prisma.$transaction([

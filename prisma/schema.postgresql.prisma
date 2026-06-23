@@ -233,7 +233,7 @@ model Vente {
   clientLibre    String? // saisie libre si pas de fiche Client
   montantTotal   Float
   montantPaye    Float       @default(0) // avance / montant déjà encaissé
-  statutPaiement String      @default("PAYE") // "PAYE" | "PARTIEL" | "CREDIT"
+  statutPaiement String      @default("PAYE") // "PAYE" | "PARTIEL" | "CREDIT" | "REMBOURSE"
   modePaiement   String // "ESPECES" | "MOBILE_MONEY" | "CREDIT"
   statut         String      @default("VALIDEE") // "VALIDEE" | "ANNULEE"
   observation    String?

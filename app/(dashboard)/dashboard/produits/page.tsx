@@ -34,6 +34,7 @@ type Produit = {
   stockConsolide?: number
   stocks: StockInfo[]
   createdAt: string
+  actif?: boolean
 }
 
 type Stats = { total: number; enStock: number }
@@ -58,9 +59,9 @@ export default function ProduitsPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isPermanentDelete, setIsPermanentDelete] = useState(false)
   const [restoring, setRestoring] = useState<number | null>(null)
-  const [params, setParams] = useState<any>(null)
   const [allProductsForPrint, setAllProductsForPrint] = useState<Produit[]>([])
   const [isPrinting, setIsPrinting] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE_REPORT = 25
@@ -80,17 +81,11 @@ export default function ProduitsPage() {
     quantiteInitiale: '0',
   })
 
-  const [dateDebut, setDateDebut] = useState('')
-  const [dateFin, setDateFin] = useState('')
-  const [entreprise, setEntreprise] = useState<any>(null)
-
   const handlePrintAll = async () => {
     setIsPrinting(true)
     try {
       const params = new URLSearchParams({ limit: '10000' })
       if (q) params.set('q', q)
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
       const res = await fetch('/api/produits?' + params.toString())
       if (res.ok) {
         const response = await res.json()
@@ -108,7 +103,9 @@ export default function ProduitsPage() {
   const fetcher = (url: string) => fetch(url).then(r => r.json())
 
   const { data: listData, isLoading: listLoading, mutate } = useSWR(
-    `/api/produits?page=${currentPage}&limit=20${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+    showArchived
+      ? `/api/produits?complet=1${q ? `&q=${encodeURIComponent(q)}` : ''}`
+      : `/api/produits?page=${currentPage}&limit=20${q ? `&q=${encodeURIComponent(q)}` : ''}`,
     fetcher,
     { keepPreviousData: true, revalidateOnFocus: false, dedupingInterval: 2000 }
   )
@@ -124,10 +121,6 @@ export default function ProduitsPage() {
   useEffect(() => {
     setCurrentPage(1)
   }, [q])
-
-  useEffect(() => {
-    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
-  }, [])
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -150,20 +143,13 @@ export default function ProduitsPage() {
       fetch('/api/produits/categories').then((r) => (r.ok ? r.json() : ['DIVERS'])),
       fetch('/api/magasins').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/fournisseurs?complet=1').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/parametres').then((r) => (r.ok ? r.json() : null)),
-    ]).then(([st, cat, mags, fours, p]) => {
+    ]).then(([st, cat, mags, fours]) => {
       setStats(st)
       setCategories(Array.isArray(cat) && cat.length ? cat : ['DIVERS'])
       setMagasins(Array.isArray(mags) ? mags : [])
       setFournisseurs(Array.isArray(fours) ? fours : [])
-      setParams(p)
     }).catch(() => {})
   }, [])
-
-  useEffect(() => {
-    fetchStats()
-    fetchCategories()
-  }, [list])
 
   const openEditProduit = (p: Produit) => {
     setEditing(p)
@@ -436,7 +422,6 @@ export default function ProduitsPage() {
         fetchStats()
         window.dispatchEvent(new CustomEvent('produit-created'))
         showSuccess(`Produit ${data.code} créé avec succès.`)
-        setTimeout(() => mutate(), 500)
         setTimeout(() => fetchStats(), 1000)
       } else {
         const errorMsg = formatApiError(data.error || 'Erreur lors de la création.')
@@ -518,6 +503,15 @@ export default function ProduitsPage() {
             className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-gray-900"
           />
         </div>
+        <label className="flex items-center gap-2 cursor-pointer shrink-0">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => { setShowArchived(e.target.checked); setCurrentPage(1) }}
+            className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+          />
+          <span className="text-sm font-bold text-white/80">Archivés</span>
+        </label>
       </div>
 
       {form && (
@@ -744,13 +738,17 @@ export default function ProduitsPage() {
                     <td className="px-4 py-3 text-sm text-gray-900">{p.designation}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{p.categorie}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {p.stocks && p.stocks.length > 0 ? (
-                        <span className="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800">
-                          Mag-{p.stocks[0].magasinId}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">—</span>
-                      )}
+                      {(() => {
+                        const magasinId = p.stocks?.[0]?.magasinId
+                        const magasin = magasinId ? magasins.find(m => m.id === magasinId) : null
+                        return magasin ? (
+                          <span className="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800">
+                            {magasin.nom}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-gray-600">
                       {p.prixAchat != null && p.prixAchat > 0 ? `${Number(p.prixAchat).toLocaleString('fr-FR')} F` : '—'}
@@ -765,12 +763,22 @@ export default function ProduitsPage() {
                         onBlur={async (e) => {
                           const val = Number(e.target.value)
                           if (val === p.prixVente) return
-                          await fetch(`/api/produits/${p.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ prixVente: val })
-                          })
-                          showSuccess(`${p.code}: Prix de vente mis à jour.`)
+                          try {
+                            const res = await fetch(`/api/produits/${p.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ prixVente: val })
+                            })
+                            if (res.ok) {
+                              showSuccess(`${p.code}: Prix de vente mis à jour.`)
+                              mutate()
+                            } else {
+                              const d = await res.json()
+                              showError(d.error || 'Erreur mise à jour prix vente')
+                            }
+                          } catch (e) {
+                            showError('Erreur réseau')
+                          }
                         }}
                         className="w-20 rounded border border-transparent hover:border-gray-300 px-1 text-right focus:border-orange-500 outline-none transition-all"
                       />
@@ -782,12 +790,22 @@ export default function ProduitsPage() {
                         onBlur={async (e) => {
                           const val = Number(e.target.value)
                           if (val === p.prixMinimum) return
-                          await fetch(`/api/produits/${p.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ prixMinimum: val })
-                          })
-                          showSuccess(`${p.code}: Prix minimum mis à jour.`)
+                          try {
+                            const res = await fetch(`/api/produits/${p.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ prixMinimum: val })
+                            })
+                            if (res.ok) {
+                              showSuccess(`${p.code}: Prix minimum mis à jour.`)
+                              mutate()
+                            } else {
+                              const d = await res.json()
+                              showError(d.error || 'Erreur mise à jour prix minimum')
+                            }
+                          } catch (e) {
+                            showError('Erreur réseau')
+                          }
                         }}
                         className="w-20 rounded border border-transparent hover:border-red-300 px-1 text-right focus:border-red-500 outline-none bg-transparent transition-all"
                       />
@@ -808,31 +826,45 @@ export default function ProduitsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEditProduit(p)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-orange-600"
-                          title="Modifier produit (Nom, Prix, Fournisseur)"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setDeleting(p); setIsPermanentDelete(false); }}
-                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-orange-600"
-                          title="Archiver ce produit (le masquer)"
-                        >
-                          <Archive className="h-4 w-4" />
-                        </button>
-                        {(p.stockConsolide ?? 0) === 0 && (
+                        {p.actif === false ? (
                           <button
                             type="button"
-                            onClick={() => { setDeleting(p); setIsPermanentDelete(true); }}
-                            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
-                            title="Supprimer définitivement ce produit"
+                            onClick={() => handleRestore(p.id)}
+                            disabled={restoring === p.id}
+                            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-emerald-600"
+                            title="Restaurer ce produit"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {restoring === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
                           </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditProduit(p)}
+                              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-orange-600"
+                              title="Modifier produit (Nom, Prix, Fournisseur)"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setDeleting(p); setIsPermanentDelete(false); }}
+                              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-orange-600"
+                              title="Archiver ce produit (le masquer)"
+                            >
+                              <Archive className="h-4 w-4" />
+                            </button>
+                            {(p.stockConsolide ?? 0) === 0 && (
+                              <button
+                                type="button"
+                                onClick={() => { setDeleting(p); setIsPermanentDelete(true); }}
+                                className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
+                                title="Supprimer définitivement ce produit"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
@@ -1018,39 +1050,44 @@ export default function ProduitsPage() {
       <div className="hidden print:block">
         {(() => {
           const data = allProductsForPrint.length > 0 ? allProductsForPrint : list
-          const periode = (dateDebut || dateFin)
-            ? (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...')
-            : 'Toutes périodes'
-          const chunks = paginateForPrint(data)
-
+          const ROW_H = 22
+          const TH_H = 24
+          const PAGE_H = 718
+          const HEADER_H = 200
+          const firstSize = Math.max(5, Math.floor((PAGE_H - HEADER_H - TH_H) / ROW_H))
+          const otherSize = Math.max(5, Math.floor((PAGE_H - TH_H) / ROW_H))
+          const chunks = paginateForPrint(data, { firstPageSize: firstSize, otherPagesSize: otherSize })
+          let totalValeurVente = 0, totalValeurAchat = 0, totalStock = 0
+          let numOffset = 0
           return chunks.map((chunk, index, allChunks) => {
-            let totalValeurVente = 0, totalValeurAchat = 0, totalStock = 0
-
+            const pageStart = numOffset + 1
+            numOffset += chunk.length
             return (
               <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
                 <ListPrintWrapper
                   title="Liste des produits"
-                  subtitle={q ? `Filtre: "${q}"` : periode}
+                  subtitle={q ? `Filtre: "${q}"` : 'Toutes périodes'}
                   pageNumber={index + 1}
                   totalPages={allChunks.length}
                   layout="landscape"
+                  hideHeader={index > 0}
                 >
-                  <table className="w-full text-[14px] border-collapse border border-gray-300">
+                  <table className="w-full text-[13px] border-collapse border border-gray-300">
                     <thead>
                       <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                        <th className="border border-gray-300 px-2 py-3 text-center">N°</th>
-                        <th className="border border-gray-300 px-2 py-3 text-left">Code</th>
-                        <th className="border border-gray-300 px-2 py-3 text-left">Désignation</th>
-                        <th className="border border-gray-300 px-2 py-3 text-left">Catégorie</th>
-                        <th className="border border-gray-300 px-2 py-3 text-left">Magasin</th>
-                        <th className="border border-gray-300 px-2 py-3 text-right">PAMP</th>
-                        <th className="border border-gray-300 px-2 py-3 text-right">Prix vente</th>
-                        <th className="border border-gray-300 px-2 py-3 text-right">Prix Min.</th>
-                        <th className="border border-gray-300 px-2 py-3 text-right">Stock</th>
-                        <th className="border border-gray-300 px-2 py-3 text-right">Seuil</th>
-                        <th className="border border-gray-300 px-2 py-3 text-left">Date création</th>
-                        <th className="border border-gray-300 px-2 py-3 text-right">Valeur vente</th>
-                        <th className="border border-gray-300 px-2 py-3 text-right">Valeur achat</th>
+                        <th style={{width:'3%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">N°</th>
+                        <th style={{width:'9%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Code</th>
+                        <th style={{width:'18%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Désignation</th>
+                        <th style={{width:'8%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Catégorie</th>
+                        <th style={{width:'5%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Magasin</th>
+                        <th style={{width:'7%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">PAMP</th>
+                        <th style={{width:'8%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Prix vente</th>
+                        <th style={{width:'6%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Prix Min.</th>
+                        <th style={{width:'5%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Stock</th>
+                        <th style={{width:'4%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Seuil</th>
+                        <th style={{width:'8%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Date</th>
+                        <th style={{width:'9%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Valeur vente</th>
+                        <th style={{width:'10%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Valeur achat</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1067,32 +1104,32 @@ export default function ProduitsPage() {
                         const magName = p.stocks && p.stocks.length > 0 ? 'Mag-' + p.stocks[0].magasinId : '—'
                         return (
                           <tr key={idx} className="border-b border-gray-200">
-                            <td className="border border-gray-300 px-2 py-2 text-center font-bold">{idx + 1}</td>
-                            <td className="border border-gray-300 px-2 py-2 font-mono">{p.code || '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2 font-bold">{p.designation || '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2">{p.categorie || '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2">{magName}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right">{prixAchat > 0 ? prixAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right">{prixVente > 0 ? prixVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right">{p.prixMinimum ? Number(p.prixMinimum).toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right font-bold">{stock}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right">{p.seuilMin || '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right">{valeurVente !== 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right">{valeurAchat !== 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center font-bold whitespace-nowrap">{pageStart + idx}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 font-mono whitespace-nowrap">{p.code || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 font-bold whitespace-nowrap">{p.designation || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 whitespace-nowrap">{p.categorie || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 whitespace-nowrap">{magName}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{prixAchat > 0 ? prixAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{prixVente > 0 ? prixVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{p.prixMinimum ? Number(p.prixMinimum).toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-right font-bold whitespace-nowrap">{stock}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{p.seuilMin || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 whitespace-nowrap">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{valeurVente !== 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{valeurAchat !== 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
                           </tr>
                         )
                       })}
                     </tbody>
                     {index === allChunks.length - 1 && (
                       <tfoot>
-                        <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
-                          <td colSpan={8} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAUX</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{totalStock.toLocaleString('fr-FR')}</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">—</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">—</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{totalValeurVente.toLocaleString('fr-FR') + ' F'}</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{totalValeurAchat.toLocaleString('fr-FR') + ' F'}</td>
+                        <tr className="bg-gray-100 font-black text-[13px] border-t-2 border-black">
+                          <td colSpan={8} className="border border-gray-300 px-1 py-1 text-right uppercase italic whitespace-nowrap">TOTAUX</td>
+                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">{totalStock.toLocaleString('fr-FR')}</td>
+                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">—</td>
+                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">—</td>
+                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">{totalValeurVente.toLocaleString('fr-FR') + ' F'}</td>
+                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">{totalValeurAchat.toLocaleString('fr-FR') + ' F'}</td>
                         </tr>
                       </tfoot>
                     )}

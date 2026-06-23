@@ -61,6 +61,7 @@ export async function calculerAutonomieStock(produitId: number, entiteId?: numbe
  */
 export async function getProduitsEnAlerte(entiteId?: number) {
     const whereProduit: any = { actif: true }
+    if (entiteId) whereProduit.entiteId = entiteId
     const produits = await prisma.produit.findMany({
         where: whereProduit,
         select: { id: true, designation: true, code: true }

@@ -3,12 +3,13 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { recalculerSoldeCaisse } from '@/lib/caisse'
+import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
-import { estModeBanque } from '@/lib/banque'
+import { estModeBanque, enregistrerOperationBancaire } from '@/lib/banque'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { reglementAchatSchema } from '@/lib/validations'
+import { comptabiliserReglementAchat } from '@/lib/comptabilisation'
 
 export async function DELETE(
   _request: NextRequest,
@@ -221,7 +222,6 @@ export async function PATCH(
       }
 
       if (payeDepuisCaisse && estModeEspeces(updated.modePaiement)) {
-        const { enregistrerMouvementCaisse } = await import('@/lib/caisse')
         await enregistrerMouvementCaisse({
           magasinId: updated.achat?.magasinId || 1,
           type: 'SORTIE',
@@ -235,7 +235,6 @@ export async function PATCH(
       }
       if (payeDepuisBanque) {
         const banqueIdVal = banqueId ?? null
-        const { enregistrerOperationBancaire } = await import('@/lib/banque')
         await enregistrerOperationBancaire({
           banqueId: banqueIdVal,
           entiteId: updated.entiteId ?? entiteId ?? 1,
@@ -249,7 +248,6 @@ export async function PATCH(
         }, tx)
       }
 
-      const { comptabiliserReglementAchat } = await import('@/lib/comptabilisation')
       await comptabiliserReglementAchat({
         reglementId: updated.id,
         achatId: updated.achatId ?? 0,

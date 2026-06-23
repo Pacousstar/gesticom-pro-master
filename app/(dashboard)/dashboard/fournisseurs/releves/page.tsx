@@ -111,7 +111,7 @@ export default function FournisseurRelevesPage() {
     setTimeout(() => {
       setIsPrinting(false)
       window.print()
-    }, 500)
+    }, 0)
   }
 
   const paginatedData = useMemo(() => {

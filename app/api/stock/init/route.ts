@@ -19,9 +19,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({} as any))
-    validateApiRequest(stockInventaireSchema, body)
-    const produitId = body?.produitId != null ? Number(body.produitId) : null
-    const magasinId = body?.magasinId != null ? Number(body.magasinId) : null
+    const vres = validateApiRequest(stockInventaireSchema, body)
+    if (!vres.success) return vres.response
+    const validated = vres.data
+    const produitId = validated?.produitId != null ? Number(validated.produitId) : null
+    const magasinId = validated?.magasinId != null ? Number(validated.magasinId) : null
     const oneOnly = Number.isInteger(produitId) && produitId! > 0 && Number.isInteger(magasinId) && magasinId! > 0
 
     if (oneOnly) {

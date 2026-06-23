@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { comptabiliserAchat } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
-import { estModeBanque } from '@/lib/banque'
+import { estModeBanque, enregistrerOperationBancaire } from '@/lib/banque'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import {
@@ -89,12 +89,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const [achats, total, aggregates] = await Promise.all([
+  const [achats, total, aggregates, payeAggregate] = await Promise.all([
     prisma.achat.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { date: 'desc' },
       include: {
         magasin: { select: { code: true, nom: true } },
         fournisseur: { select: { id: true, code: true, nom: true, telephone: true, email: true, localisation: true, ncc: true } },
@@ -108,9 +108,15 @@ export async function GET(request: NextRequest) {
       where,
       _sum: {
         montantTotal: true,
-        montantPaye: true,
       }
-    })
+    }),
+    prisma.reglementAchatLigne.aggregate({
+      where: {
+        achat: where,
+        reglement: { modePaiement: { not: 'CREDIT' } },
+      },
+      _sum: { montant: true },
+    }),
   ])
 
   const dataWithRealPaye = achats.map(a => {
@@ -129,9 +135,9 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  // Utiliser l'agrégat SQL pour les totaux (couvre TOUS les achats filtrés, pas seulement la page)
+  // Totaux : montantTotal via agrégat SQL, montantPaye via ReglementAchatLigne (exclut CREDIT)
   const totalMontant = aggregates._sum.montantTotal || 0
-  const totalPaye = aggregates._sum.montantPaye || 0
+  const totalPaye = payeAggregate._sum.montant || 0
 
   const res = NextResponse.json({
     data: dataWithRealPaye,
@@ -476,7 +482,6 @@ let montantFactureHT = 0
           await recalculerSoldeCaisse(magasinId, tx)
         }
         if (reg.payeDepuisBanque) {
-          const { enregistrerOperationBancaire } = await import('@/lib/banque')
           await enregistrerOperationBancaire({
             banqueId: body?.banqueId ? Number(body.banqueId) : null,
             entiteId,

@@ -437,6 +437,7 @@ model Parametre {
   registreCommerce    String?
   mentionSpeciale     String?   @default("Les produits sortis du magasin ne seront plus repris. Veuillez exiger votre facture avant de partir.")
   dateCloture         DateTime?
+  modeInstallation    String    @default("MODE_1")
 }
 
 model Vente {
@@ -452,7 +453,7 @@ model Vente {
   fraisApproche       Float                 @default(0)
   remiseGlobale       Float                 @default(0)
   montantPaye         Float                 @default(0)
-  statutPaiement      String                @default("CREDIT")
+  statutPaiement      String                @default("CREDIT") // "PAYE" | "PARTIEL" | "CREDIT" | "REMBOURSE"
   modePaiement        String
   pointsGagnes        Int                   @default(0)
   statut              String                @default("VALIDEE")
@@ -598,7 +599,7 @@ model Achat {
   fraisApproche       Float                 @default(0)
   montantPaye         Float?                @default(0)
   statut              String                @default("VALIDEE")
-  statutPaiement      String                @default("CREDIT")
+  statutPaiement      String                @default("CREDIT") // "PAYE" | "PARTIEL" | "CREDIT" | "REMBOURSE"
   modePaiement        String                @default("ESPECES")
   numeroCamion        String?
   observation         String?
@@ -679,7 +680,7 @@ model Depense {
   libelle            String
   montant            Float
   montantPaye        Float       @default(0)
-  statutPaiement     String      @default("PAYE")
+  statutPaiement     String      @default("PAYE") // "PAYE" | "PARTIEL" | "CREDIT" | "REMBOURSE"
   modePaiement       String
   beneficiaire       String?
   pieceJustificative String?

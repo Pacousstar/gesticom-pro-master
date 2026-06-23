@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const magasinId = request.nextUrl.searchParams.get('magasinId')?.trim()
+    const search = request.nextUrl.searchParams.get('search')?.trim() || ''
+    const categorie = request.nextUrl.searchParams.get('categorie')
     
     if (!magasinId) {
       return NextResponse.json({ error: 'Magasin requis' }, { status: 400 })
@@ -30,9 +32,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Magasin invalide' }, { status: 400 })
     }
 
+    const searchConditions = search ? {
+      OR: [
+        { designation: { contains: search } },
+        { code: { contains: search } }
+      ]
+    } : {}
+    const categorieCondition = categorie && categorie !== 'TOUT' ? { categorie } : {}
+
     const [tousProduits, stocksExistants, magasin] = await Promise.all([
       prisma.produit.findMany({
-        where: { actif: true, entiteId },
+        where: { actif: true, entiteId, ...searchConditions, ...categorieCondition },
         select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, pamp: true },
         orderBy: { code: 'asc' },
       }),

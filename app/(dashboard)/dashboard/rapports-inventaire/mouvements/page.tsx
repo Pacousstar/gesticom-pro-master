@@ -202,7 +202,7 @@ useEffect(() => {
                 const d = await res.json()
                 setAllDataForPrint(Array.isArray(d.data) ? d.data : [])
               }
-              setTimeout(() => { window.print(); setIsPrinting(false) }, 1000)
+              setTimeout(() => { window.print(); setIsPrinting(false) }, 0)
             } catch (e) {
               console.error(e)
               setIsPrinting(false)
@@ -217,7 +217,7 @@ useEffect(() => {
           <button 
             onClick={async () => {
               try {
-                let url = `/api/rapports/inventaire/mouvements?dateDebut=${startDate}&dateFin=${endDate}&export=all&includeTotals=true`
+                let url = `/api/rapports/inventaire/mouvements?dateDebut=${startDate}&dateFin=${endDate}&export=all&limit=10000&includeTotals=true`
                 if (selectedProduct !== 'TOUT') url += `&produitId=${selectedProduct}`
                 if (selectedMagasin !== 'TOUT') url += `&magasinId=${selectedMagasin}`
                 if (selectedType !== 'TOUT') url += `&type=${selectedType}`
@@ -304,9 +304,9 @@ useEffect(() => {
         {(() => {
           const dataForPrint = allDataForPrint.length > 0 ? allDataForPrint : filteredData
           const pages = paginateForPrint(dataForPrint, { otherPagesSize: 22 })
-          const totalEntrees = dataForPrint.reduce((s, m) => s + (m.type === 'ENTREE' ? (Number(m.quantite) || 0) : 0), 0)
-          const totalSorties = dataForPrint.reduce((s, m) => s + (m.type === 'SORTIE' ? (Number(m.quantite) || 0) : 0), 0)
-          const netFlux = totalEntrees - totalSorties
+          const printEntrees = dataForPrint.reduce((s, m) => s + ((m.typeRaw === 'ENTREE' || m.type === 'ENTREE') ? (Number(m.quantite) || 0) : 0), 0)
+          const printSorties = dataForPrint.reduce((s, m) => s + ((m.typeRaw === 'SORTIE' || m.type === 'SORTIE') ? (Number(m.quantite) || 0) : 0), 0)
+          const printNet = printEntrees - printSorties
           return pages.map((pageData, pageIdx) => (
             <div key={pageIdx} className="print-page">
               <ListPrintWrapper
@@ -315,6 +315,7 @@ useEffect(() => {
                 dateRange={{ start: startDate, end: endDate }}
                 pageNumber={pageIdx + 1}
                 totalPages={pages.length}
+                hideHeader={pageIdx > 0}
               >
                 <table className="w-full text-[10px] border-collapse border border-gray-300">
                   <thead>
@@ -355,10 +356,10 @@ useEffect(() => {
                       <tr className="bg-gray-50 font-black text-sm">
                         <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Bilan des Flux (Période)</td>
                         <td className="border border-gray-300 px-3 py-4 text-right text-orange-700">
-                          {netFlux > 0 ? '+' : ''}{netFlux.toLocaleString()} UNITÉS
+                          {printNet > 0 ? '+' : ''}{printNet.toLocaleString()} UNITÉS
                         </td>
                         <td className="border border-gray-300 px-3 py-4 text-[9px] text-gray-500 font-normal">
-                          E: {totalEntrees.toLocaleString()} / S: {totalSorties.toLocaleString()}
+                          E: {printEntrees.toLocaleString()} / S: {printSorties.toLocaleString()}
                         </td>
                       </tr>
                     </tfoot>
@@ -426,7 +427,6 @@ useEffect(() => {
               <option value="AJUSTEMENT">Ajustements</option>
             </select>
           </div>
-          <input type="hidden" name="includeTransferts" value="true" />
           <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md font-bold hover:bg-blue-700 flex items-center gap-2 transition-all">
             <Filter className="h-4 w-4" /> Filtrer
           </button>

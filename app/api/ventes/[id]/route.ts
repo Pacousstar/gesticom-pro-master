@@ -11,7 +11,8 @@ import {
 } from '@/lib/calculs-commerciaux'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
-import { estModeBanque } from '@/lib/banque'
+import { estModeBanque, enregistrerOperationBancaire } from '@/lib/banque'
+import { comptabiliserLivraisonCommande, comptabiliserReglementVente, comptabiliserVente } from '@/lib/comptabilisation'
 import { verifierCloture } from '@/lib/cloture'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
@@ -229,7 +230,7 @@ export async function PATCH(
   const id = Number((await params).id)
   try {
     const body = await request.json()
-    const action = body?.action || (body?.lignes ? 'FULL_UPDATE' : 'PAGEMENT')
+    const action = body?.action || (body?.lignes ? 'FULL_UPDATE' : 'PAIEMENT')
 
     // RETRAIT_PARTIEL et LIVRER ont leur propre validation inline, pas besoin de venteSchema
     if (action !== 'RETRAIT_PARTIEL' && action !== 'LIVRER') {
@@ -314,7 +315,6 @@ export async function PATCH(
           await tx.vente.update({ where: { id }, data: { dateLivraison: maintenant } })
         }
 
-        const { comptabiliserLivraisonCommande } = await import('@/lib/comptabilisation')
         await comptabiliserLivraisonCommande({
           venteId: id, numeroVente: vente.numero, date: maintenant,
           montantTotal: montantTotalLivraison, entiteId: vente.entiteId,
@@ -428,7 +428,6 @@ export async function PATCH(
           }
         })
 
-        const { comptabiliserLivraisonCommande } = await import('@/lib/comptabilisation')
         await comptabiliserLivraisonCommande({
           venteId: id, numeroVente: vente.numero, date: dateRetrait,
           montantTotal: montantTotalRetrait, entiteId: vente.entiteId,
@@ -440,7 +439,7 @@ export async function PATCH(
       }, { timeout: 20000 })
     }
 
-    if (action === 'PAGEMENT') {
+    if (action === 'PAIEMENT') {
       const montantReglement = Math.max(0, Number(body?.montant) || 0)
       const modePaiement = body?.modePaiement || 'ESPECES'
       const banqueId = body?.banqueId ? Number(body.banqueId) : null
@@ -554,7 +553,6 @@ export async function PATCH(
           if (!banqueId || !Number.isFinite(banqueId)) {
             throw new Error('Banque requise pour les règlements non espèces.')
           }
-          const { enregistrerOperationBancaire } = await import('@/lib/banque')
           await enregistrerOperationBancaire({
             banqueId,
             entiteId: vente.entiteId,
@@ -573,7 +571,6 @@ export async function PATCH(
         const totalQte = vente.lignes.reduce((s: number, l: any) => s + Number(l.quantite || 0), 0)
         const retraitDiffereNonFini = vente.retraitDiffere && totalLivreePaiement < totalQte
         const isCommandeNonLivree = (vente.typeVente === 'COMMANDE' && !vente.dateLivraison) || retraitDiffereNonFini
-        const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
         await comptabiliserReglementVente({
           reglementId: reglement.id,
           venteId: vente.id,
@@ -873,7 +870,6 @@ export async function PATCH(
               }, tx)
               await recalculerSoldeCaisse(updated.magasinId, tx)
             } else if (estModeBanque(modeR)) {
-              const { enregistrerOperationBancaire } = await import('@/lib/banque')
               await enregistrerOperationBancaire({
                 banqueId: r.banqueId ? Number(r.banqueId) : null,
                 entiteId: updated.entiteId,
@@ -890,7 +886,6 @@ export async function PATCH(
         }
 
         // 7. Comptabilisation
-        const { comptabiliserVente, comptabiliserReglementVente } = await import('@/lib/comptabilisation')
         if (!estCommandeNonLivree) {
           await comptabiliserVente({
             venteId: updated.id,

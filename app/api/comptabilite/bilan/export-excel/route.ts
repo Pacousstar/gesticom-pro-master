@@ -50,8 +50,8 @@ export async function GET(request: NextRequest) {
     }
 
     const [resultN, resultN1] = await Promise.all([
-      getBilanForYear(entiteId, annee, dateDebut, dateFin, dateDebutPrec, dateFinPrec),
-      getBilanForYear(entiteId, anneePrecedente, dateDebutPrec, dateFinPrec, dateDebutPrec, dateFinPrec),
+      getBilanForYear(entiteId, annee, dateDebut, dateFin),
+      getBilanForYear(entiteId, anneePrecedente, dateDebutPrec, dateFinPrec),
     ])
 
     const { bilan } = resultN

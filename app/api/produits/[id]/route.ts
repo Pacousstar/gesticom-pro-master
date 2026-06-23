@@ -23,7 +23,7 @@ export async function PATCH(
 
   try {
     const existing = await prisma.produit.findFirst({
-      where: { id, entiteId: session.entiteId },
+      where: { id, ...(session.role !== 'SUPER_ADMIN' && session.entiteId ? { entiteId: session.entiteId } : {}) },
       select: {
         id: true, code: true, designation: true, categorie: true,
         prixAchat: true, prixVente: true, prixMinimum: true, seuilMin: true,
@@ -85,6 +85,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Aucune donnée à mettre à jour.' }, { status: 400 })
     }
 
+    // Validation croisée : prix vente >= prix minimum
+    const finalPrixVente = data.prixVente !== undefined ? data.prixVente : existing.prixVente
+    const finalPrixMinimum = data.prixMinimum !== undefined ? data.prixMinimum : existing.prixMinimum
+    if (finalPrixVente != null && finalPrixMinimum != null && finalPrixVente < finalPrixMinimum) {
+      return NextResponse.json({ error: `Le prix de vente (${finalPrixVente.toLocaleString('fr-FR')} F) ne peut pas être inférieur au prix minimum (${finalPrixMinimum.toLocaleString('fr-FR')} F).` }, { status: 400 })
+    }
+
     const p = await prisma.produit.update({
       where: { id },
       data,
@@ -130,7 +137,7 @@ export async function DELETE(
 
   try {
     const existing = await prisma.produit.findFirst({
-      where: { id, entiteId: session!.entiteId },
+      where: { id, ...(session!.role !== 'SUPER_ADMIN' && session!.entiteId ? { entiteId: session!.entiteId } : {}) },
       include: { stocks: { select: { quantite: true } } },
     })
     if (!existing) {
@@ -197,7 +204,7 @@ export async function POST(
   if (body?.action === 'restore') {
     try {
       const existing = await prisma.produit.findFirst({
-        where: { id, entiteId: session!.entiteId },
+        where: { id, ...(session!.role !== 'SUPER_ADMIN' && session!.entiteId ? { entiteId: session!.entiteId } : {}) },
       })
       if (!existing) {
         return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })
@@ -231,7 +238,7 @@ export async function POST(
   if (body?.action === 'archive') {
     try {
       const existing = await prisma.produit.findFirst({
-        where: { id, entiteId: session!.entiteId },
+        where: { id, ...(session!.role !== 'SUPER_ADMIN' && session!.entiteId ? { entiteId: session!.entiteId } : {}) },
       })
       if (!existing) {
         return NextResponse.json({ error: 'Produit introuvable ou accès refusé.' }, { status: 404 })

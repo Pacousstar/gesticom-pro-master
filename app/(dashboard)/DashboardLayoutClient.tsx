@@ -54,6 +54,7 @@ import SupportModal from '@/components/SupportModal'
 import UpdateChecker from '@/components/UpdateChecker'
 import { useTheme } from '@/components/ThemeProvider'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import { labelModeInstallation } from '@/lib/enums-commerce'
 
 // Diagnostic DB banner
 type DbInfo = { nodeEnv?: string; databaseUrl?: string }
@@ -190,6 +191,7 @@ export default function DashboardLayoutClient({
   const [toutesLues, setToutesLues] = useState(false)
   const [expandedSections, setExpandedSections] = useState<string[]>(['🛒 COMMERCE']) // Commerce ouvert par défaut
   const [dailyPerformance, setDailyPerformance] = useState({ ca: 0, count: 0 })
+  const [modeInstallation, setModeInstallation] = useState('MODE_1')
   const [supportOpen, setSupportOpen] = useState(false)
   const [sidebarCounters, setSidebarCounters] = useState<Record<string, any>>({})
   const [licenceCheck, setLicenceCheck] = useState<{
@@ -229,13 +231,20 @@ export default function DashboardLayoutClient({
 
   const fetchDailyPerformance = async () => {
     try {
-      const res = await fetch('/api/dashboard/bilan-journalier')
-      if (res.ok) {
-        const data = await res.json()
+      const [perfRes, modeRes] = await Promise.all([
+        fetch('/api/dashboard/bilan-journalier'),
+        fetch('/api/parametres/mode-installation'),
+      ])
+      if (perfRes.ok) {
+        const data = await perfRes.json()
         setDailyPerformance({ 
           ca: data.ca || 0, 
           count: data.count || 0
         })
+      }
+      if (modeRes.ok) {
+        const data = await modeRes.json()
+        setModeInstallation(data.modeInstallation || 'MODE_1')
       }
     } catch (e) {
       console.error('Erreur fetch performance:', e)
@@ -652,8 +661,13 @@ export default function DashboardLayoutClient({
                       </div>
                       <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-tighter">Serveur Local OK</span>
                     </div>
-                    <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">
-                      v{process.env.NEXT_PUBLIC_APP_VERSION || '—'} PRO
+                    <div className="flex items-center gap-2">
+                      <div className="text-[9px] font-black text-emerald-300/60 uppercase tracking-widest">
+                        {labelModeInstallation(modeInstallation)}
+                      </div>
+                      <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">
+                        v{process.env.NEXT_PUBLIC_APP_VERSION || '—'} PRO
+                      </div>
                     </div>
                   </div>
                 </div>

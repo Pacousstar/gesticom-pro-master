@@ -5,10 +5,10 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { logAction, getIpAddress } from '@/lib/audit'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
-import { estModeEspeces } from '@/lib/enums-commerce'
+import { enregistrerOperationBancaire } from '@/lib/banque'
+import { comptabiliserCaisse, comptabiliserOperationBancaire } from '@/lib/comptabilisation'
+import { estModeEspeces, calculerStatutPaiement } from '@/lib/enums-commerce'
 import { handleApiError, unauthorized, badRequest, notFound } from '@/lib/api-error'
-import { validateApiRequest } from '@/lib/validation-helpers'
-import { archiveVenteSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -53,8 +53,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!Number.isInteger(venteId) || venteId < 1) return badRequest('ID vente invalide.')
 
     const body = await request.json()
-    const vres = validateApiRequest(archiveVenteSchema, body)
-    if (!vres.success) return vres.response
     const lignesRetour: { produitId: number; quantite: number }[] = body.lignes || []
     const remboursement = body.remboursement !== false
     const modeRemboursement = body.modeRemboursement || 'ESPECES'
@@ -172,7 +170,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           }, tx)
           await recalculerSoldeCaisse(vente.magasinId, tx)
           if (mvtCaisse) {
-            const { comptabiliserCaisse } = await import('@/lib/comptabilisation')
             await comptabiliserCaisse({
               caisseId: mvtCaisse.id,
               date: new Date(),
@@ -184,36 +181,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               sousType: 'RETOUR',
             }, tx)
           }
-        } else {
-          const { enregistrerOperationBancaire } = await import('@/lib/banque')
-          if (body.banqueId) {
-            const opBancaire = await enregistrerOperationBancaire({
+        } else if (body.banqueId) {
+          const opBancaire = await enregistrerOperationBancaire({
+            banqueId: Number(body.banqueId),
+            entiteId,
+            date: new Date(),
+            type: 'RETOUR_CLIENT',
+            libelle: `Remboursement retour Vente ${vente.numero}`,
+            montant: montantTotal,
+            utilisateurId: session.userId,
+            reference: retour.numero,
+            beneficiaire: vente.client?.nom || 'Client',
+          }, tx)
+          if (opBancaire) {
+            await comptabiliserOperationBancaire({
+              operationId: opBancaire.id,
               banqueId: Number(body.banqueId),
-              entiteId,
               date: new Date(),
               type: 'RETOUR_CLIENT',
-              libelle: `Remboursement retour Vente ${vente.numero}`,
               montant: montantTotal,
-              utilisateurId: session.userId,
-              reference: retour.numero,
-              beneficiaire: vente.client?.nom || 'Client',
-            }, tx)
-            if (opBancaire) {
-              const { comptabiliserOperationBancaire } = await import('@/lib/comptabilisation')
-              await comptabiliserOperationBancaire({
-                operationId: opBancaire.id,
-                banqueId: Number(body.banqueId),
-                date: new Date(),
-                type: 'RETOUR_CLIENT',
-                montant: montantTotal,
               libelle: motifRetour,
-                compteId: null,
-                utilisateurId: session.userId,
-                entiteId,
-              }, tx)
-            }
+              compteId: null,
+              utilisateurId: session.userId,
+              entiteId,
+            }, tx)
           }
         }
+      }
+
+      if (remboursement && montantTotal > 0) {
+        const nouveauMontantPaye = Math.max(0, (vente.montantPaye || 0) - montantTotal)
+        const nouveauStatut = calculerStatutPaiement(nouveauMontantPaye, vente.montantTotal)
+        await tx.vente.update({
+          where: { id: venteId },
+          data: { montantPaye: nouveauMontantPaye, statutPaiement: nouveauStatut },
+        })
       }
 
       const ip = getIpAddress(request)

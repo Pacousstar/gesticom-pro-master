@@ -753,6 +753,160 @@ function getCaptureImage(name: string): string | null {
   return captureImages[name] || null
 }
 
+function contentToHtml(content: string[]): string {
+  const lines = content.join('\n').split('\n')
+  let html = ''
+  const rows: string[] = []
+  let inTable = false
+
+  function flushTable() {
+    if (inTable && rows.length > 0) {
+      const isHeader = rows[0].includes('<th>')
+      let tableHtml = '<table>'
+      if (isHeader) {
+        tableHtml += '<thead>' + rows[0] + '</thead><tbody>'
+        for (let i = 1; i < rows.length; i++) tableHtml += rows[i]
+        tableHtml += '</tbody>'
+      } else {
+        for (const r of rows) tableHtml += r
+      }
+      html += tableHtml + '</table>\n'
+      rows.length = 0
+      inTable = false
+    }
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd()
+    if (line.startsWith('## ')) {
+      flushTable()
+      html += `<h3>${line.replace('## ', '')}</h3>\n`
+    } else if (line.startsWith('### ')) {
+      flushTable()
+      html += `<h4>${line.replace('### ', '')}</h4>\n`
+    } else if (line.match(/^- /)) {
+      flushTable()
+      html += `<li>${line.replace(/^- /, '')}</li>\n`
+    } else if (line.match(/^\d+\. /)) {
+      flushTable()
+      html += `<li class="num">${line.replace(/^\d+\. /, '')}</li>\n`
+    } else if (line.startsWith('> ')) {
+      flushTable()
+      html += `<blockquote>${line.replace('> ', '')}</blockquote>\n`
+    } else if (line.startsWith('| ')) {
+      if (line.includes('---')) continue
+      const cells = line.split('|').filter(c => c.trim()).map(c => c.trim())
+      if (cells.length > 0) {
+        const isHeaderRow = rows.length === 0
+        rows.push('<tr>' + cells.map(c => isHeaderRow ? `<th>${c}</th>` : `<td>${c}</td>`).join('') + '</tr>')
+        inTable = true
+      }
+    } else if (line.startsWith('[CAPTURE') && line.endsWith(']')) {
+      flushTable()
+      const captureName = line.slice(1, -1)
+      const imgSrc = getCaptureImage(captureName)
+      if (imgSrc) {
+        html += `<figure><img src="${imgSrc}" alt="${captureName}" /><figcaption>${captureName.replace('CAPTURE : ', '')}</figcaption></figure>\n`
+      }
+    } else if (line.startsWith('```')) {
+      flushTable()
+    } else if (line === '' || line.trim() === '') {
+      flushTable()
+    } else {
+      flushTable()
+      html += `<p>${line}</p>\n`
+    }
+  }
+  flushTable()
+  return html
+}
+
+function getPrintStyles(includePageBreaks = true): string {
+  return `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; line-height: 1.7; color: #1a1a1a; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .header { background: linear-gradient(135deg, #1e293b, #334155); color: #fff; padding: 28px 40px; }
+    .header h1 { font-size: 26px; font-weight: 900; margin: 0; }
+    .header .sub { opacity: .85; font-size: 13px; margin-top: 4px; }
+    .header .meta { font-size: 11px; opacity: .7; margin-top: 8px; }
+    .content { padding: 24px 40px; max-width: 900px; margin: 0 auto; }
+    h3 { font-size: 17px; font-weight: 900; color: #111827; margin-top: 28px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #f97316; }
+    h4 { font-size: 14px; font-weight: 700; color: #1f2937; margin-top: 18px; margin-bottom: 6px; }
+    p { font-size: 12px; color: #1a1a1a; line-height: 1.7; margin-bottom: 6px; }
+    li { font-size: 12px; color: #374151; margin: 2px 0 2px 24px; line-height: 1.6; }
+    li.num { list-style: decimal; }
+    li::marker { color: #f97316; font-weight: 700; }
+    table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 11px; border-radius: 6px; overflow: hidden; page-break-inside: avoid; }
+    th { background: #f3f4f6; padding: 8px 12px; text-align: left; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: .04em; font-size: 10px; border-bottom: 2px solid #e5e7eb; }
+    td { padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #4b5563; }
+    tr:last-child td { border-bottom: none; }
+    figure { margin: 14px 0; page-break-inside: avoid; }
+    img { max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.1); display: block; }
+    figcaption { background: linear-gradient(135deg, #fff7ed, #fffbeb); padding: 6px 14px; text-align: center; font-size: 10px; font-weight: 700; color: #c2410c; text-transform: uppercase; letter-spacing: .04em; border-top: 1px solid #fed7aa; border-radius: 0 0 8px 8px; }
+    blockquote { border-left: 4px solid #f97316; padding: 10px 18px; margin: 12px 0; background: #fff7ed; border-radius: 0 6px 6px 0; font-style: italic; color: #525252; font-size: 12px; }
+    code { background: #f3f4f6; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-family: 'Consolas','Courier New',monospace; color: #dc2626; }
+    .footer { text-align: center; margin-top: 32px; padding: 16px 40px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; }
+    @media print {
+      @page { margin: 18mm 15mm; }
+      body { font-size: 11px; }
+      h3 { font-size: 15px; margin-top: 22px; }
+      p, li { font-size: 11px; }
+      table { font-size: 10px; }
+      figure { page-break-inside: avoid; }
+      img { max-width: 90% !important; }
+      ${includePageBreaks ? '.chapter-break { page-break-before: always; }' : ''}
+    }
+    .no-print { display: none !important; }
+    .actions { text-align: center; padding: 20px 40px; }
+    .actions button { background: #f97316; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; margin: 0 6px; }
+    .actions button:hover { background: #ea580c; }
+  `
+}
+
+function getChapterPrintHtml(section: { number: string; title: string; subtitle: string; content: string[] }): string {
+  const base = typeof window !== 'undefined' ? window.location.origin : ''
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${section.title} — GestiCom Pro</title><base href="${base}/"><style>${getPrintStyles(false)}</style></head><body>
+<div class="header"><h1>Chapitre ${section.number} — ${section.title}</h1><p class="sub">${section.subtitle}</p></div>
+<div class="content">${contentToHtml(section.content)}</div>
+<div class="footer">GestiCom Pro — ${section.title} — ${new Date().toLocaleDateString('fr-FR')}</div>
+<script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
+</body></html>`
+}
+
+function getFullManualPrintHtml(sections: { number: string; title: string; subtitle: string; content: string[] }[]): string {
+  const base = typeof window !== 'undefined' ? window.location.origin : ''
+  const chapters = sections.map((s, i) => {
+    const cls = i === 0 ? '' : ' class="chapter-break"'
+    return `<div${cls}><h2 style="font-size:20px;font-weight:900;color:#111827;margin-bottom:4px">Chapitre ${s.number} — ${s.title}</h2><p style="font-size:12px;color:#6b7280;margin-bottom:16px">${s.subtitle}</p>${contentToHtml(s.content)}</div>`
+  }).join('\n')
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Manuel Utilisateur — GestiCom Pro</title><base href="${base}/"><style>${getPrintStyles(true)}</style></head><body>
+<div class="header"><h1>Manuel Utilisateur</h1><p class="sub">GestiCom Pro — Guide complet d'utilisation</p><p class="meta">Version ${process.env.NEXT_PUBLIC_APP_VERSION || '3.31.0'} — ${new Date().toLocaleDateString('fr-FR')}</p></div>
+<div class="content">${chapters}</div>
+<div class="footer">GestiCom Pro © ${new Date().getFullYear()} — Tous droits réservés</div>
+<script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
+</body></html>`
+}
+
+function openPrintWindow(html: string) {
+  const w = window.open('', '_blank')
+  if (w) {
+    w.document.write(html)
+    w.document.close()
+  }
+}
+
+function downloadHtml(html: string, filename: string) {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 function renderContent(text: string) {
   const lines = text.split('\n')
   const elements: JSX.Element[] = []
@@ -789,11 +943,13 @@ function renderContent(text: string) {
           elements[elements.length - 1] = (
             <table key={key++} className="w-full text-xs border-collapse my-4 shadow-sm rounded-lg overflow-hidden">
               {table.props.children}
-              <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                {cells.map((c, i) => (
-                  <td key={i} className="px-4 py-2.5 text-gray-600">{c}</td>
-                ))}
-              </tr>
+              <tbody>
+                <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                  {cells.map((c, i) => (
+                    <td key={i} className="px-4 py-2.5 text-gray-600">{c}</td>
+                  ))}
+                </tr>
+              </tbody>
             </table>
           )
         } else {
@@ -903,31 +1059,20 @@ export default function ManuelUtilisateurPage() {
         @media print {
           body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
-          .min-h-screen { background: white !important; }
           aside { display: none !important; }
           footer { display: none !important; }
           [class*="fixed"] { display: none !important; }
+          .min-h-screen { background: white !important; padding: 0 !important; margin: 0 !important; }
           article { page-break-inside: avoid; break-inside: avoid; box-shadow: none !important; border: 1px solid #e5e7eb !important; border-radius: 8px !important; margin-bottom: 20px !important; }
           article > button { background: #1e293b !important; padding: 16px 24px !important; border-radius: 8px 8px 0 0 !important; cursor: default !important; }
           article > button h2 { font-size: 20px !important; color: white !important; }
           article > button div[class*="flex items-center gap-2"]:last-child { display: none !important; }
           article > button p { color: rgba(255,255,255,0.8) !important; }
           article > div { display: block !important; }
-          article > div > div > div:first-child { margin-top: 0 !important; }
           img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; }
           table { font-size: 11px !important; page-break-inside: avoid; }
-          th, td { padding: 6px 10px !important; }
           h3 { font-size: 16px !important; margin-top: 20px !important; }
           p, li { font-size: 12px !important; line-height: 1.6 !important; color: #1a1a1a !important; }
-          code { font-size: 11px !important; }
-          [class*="rounded-2xl"] { border-radius: 8px !important; }
-          [class*="shadow-"] { box-shadow: none !important; }
-          .group\\/kpi, [class*="kpi"] { box-shadow: none !important; }
-          div[class*="bg-gradient-to-r"] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .px-6 { padding-left: 24px !important; padding-right: 24px !important; }
-          .py-6 { padding-top: 16px !important; padding-bottom: 16px !important; }
-          .px-8 { padding-left: 24px !important; padding-right: 24px !important; }
-          .py-8 { padding-top: 16px !important; padding-bottom: 16px !important; }
           .hidden { display: none !important; }
           .print\\:block { display: block !important; }
         }
@@ -993,11 +1138,18 @@ export default function ManuelUtilisateurPage() {
                   Sommaire
                 </button>
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => openPrintWindow(getFullManualPrintHtml(sections))}
                   className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-rose-600 px-5 py-2.5 text-sm font-bold text-white hover:from-orange-600 hover:to-rose-700 shadow-lg shadow-orange-500/20 transition-all uppercase tracking-wider"
                 >
                   <Printer className="h-4 w-4" />
                   Imprimer
+                </button>
+                <button
+                  onClick={() => downloadHtml(getFullManualPrintHtml(sections).replace('<script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>', ''), 'manuel-utilisateur-gesticom-pro.html')}
+                  className="hidden sm:flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20 border border-white/20 backdrop-blur-sm transition-all"
+                >
+                  <Download className="h-4 w-4" />
+                  Télécharger
                 </button>
               </div>
             </div>
@@ -1140,52 +1292,33 @@ export default function ManuelUtilisateurPage() {
                       </div>
                     </div>
                     <div className="relative flex items-center gap-3 no-print">
-                      <button
+                      <span
                         onClick={(e) => {
                           e.stopPropagation()
-                          const el = document.getElementById(`print-chapter-${section.id}`)
-                          if (el) {
-                          const w = open('', '_blank')
-                          if (w) {
-                            w.document.write(`<!DOCTYPE html><html><head><title>${section.title}</title>
-                              <style>
-                                * { box-sizing: border-box; margin: 0; padding: 0; }
-                                body { font-family: 'Segoe UI', Arial, sans-serif; padding: 0; font-size: 13px; line-height: 1.7; color: #1a1a1a; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                                .chapter-header { background: linear-gradient(135deg, #1e293b, #334155); color: white; padding: 24px 40px; }
-                                .chapter-header h1 { font-size: 24px; font-weight: 900; margin: 0; }
-                                .chapter-header p { opacity: 0.85; font-size: 13px; margin-top: 4px; }
-                                .content { padding: 32px 40px; max-width: 900px; margin: 0 auto; }
-                                h3 { font-size: 17px; font-weight: 900; color: #111827; margin-top: 28px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #f97316; display: flex; align-items: center; gap: 8px; }
-                                h4 { font-size: 14px; font-weight: 700; color: #1f2937; margin-top: 18px; margin-bottom: 6px; }
-                                p { font-size: 13px; color: #1a1a1a; line-height: 1.7; margin-bottom: 8px; white-space: pre-wrap; }
-                                li { font-size: 13px; color: #374151; margin: 3px 0 3px 22px; line-height: 1.6; }
-                                li::marker { color: #f97316; font-weight: 700; }
-                                table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 12px; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); page-break-inside: avoid; }
-                                th { background: #f3f4f6; padding: 10px 14px; text-align: left; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; border-bottom: 2px solid #e5e7eb; }
-                                td { padding: 8px 14px; border-bottom: 1px solid #e5e7eb; color: #4b5563; }
-                                tr:last-child td { border-bottom: none; }
-                                img { max-width: 100%; height: auto; margin: 16px 0 0; border-radius: 12px 12px 0 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); page-break-inside: avoid; display: block; }
-                                img + div { background: linear-gradient(135deg, #fff7ed, #fffbeb); padding: 8px 16px; text-align: center; font-size: 11px; font-weight: 700; color: #c2410c; text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid #fed7aa; margin-bottom: 16px; border-radius: 0 0 12px 12px; }
-                                blockquote { border-left: 4px solid #f97316; padding: 12px 20px; margin: 16px 0; background: #fff7ed; border-radius: 0 8px 8px 0; font-style: italic; color: #525252; font-size: 13px; }
-                                code { background: #f3f4f6; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: 'Consolas', 'Courier New', monospace; color: #dc2626; }
-                                pre { background: #1e293b; color: #e2e8f0; padding: 16px 20px; border-radius: 8px; font-size: 12px; font-family: 'Consolas', monospace; line-height: 1.5; margin: 16px 0; overflow-x: auto; white-space: pre-wrap; }
-                                hr { border: none; border-top: 2px solid #e5e7eb; margin: 24px 0; }
-                                .footer { text-align: center; margin-top: 40px; padding: 20px 40px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; }
-                              </style></head><body>
-                              <div class="chapter-header"><h1>${section.title}</h1><p>${section.subtitle}</p></div>
-                              <div class="content">${el.innerHTML}</div>
-                              <div class="footer">GestiCom Pro — ${section.title} — ${new Date().toLocaleDateString('fr-FR')}</div>
-                            </body></html>`)
-                              w.document.close()
-                            }
-                          }
+                          openPrintWindow(getChapterPrintHtml(section))
                         }}
-                        className="flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25 backdrop-blur-sm transition-all"
+                        className="cursor-pointer flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25 backdrop-blur-sm transition-all"
                         title="Imprimer ce chapitre"
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openPrintWindow(getChapterPrintHtml(section)) } }}
                       >
                         <Printer className="h-3.5 w-3.5" />
                         Chapitre
-                      </button>
+                      </span>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          downloadHtml(getChapterPrintHtml(section).replace('<script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>', ''), `chapitre-${section.number}-${section.title}.html`.replace(/[^a-zA-Z0-9-]/g, '_'))
+                        }}
+                        className="cursor-pointer flex items-center gap-1.5 rounded-xl bg-white/15 px-3 py-2 text-xs font-bold text-white hover:bg-white/25 backdrop-blur-sm transition-all"
+                        title="Télécharger ce chapitre"
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); downloadHtml(getChapterPrintHtml(section).replace('<script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>', ''), `chapitre-${section.number}-${section.title}.html`.replace(/[^a-zA-Z0-9-]/g, '_')) } }}
+                      >
+                        <Download className="h-3 w-3" />
+                      </span>
                       {activeSection === section.id || searchQuery
                         ? <ChevronDown className="h-5 w-5 transition-transform duration-300" />
                         : <ChevronRight className="h-5 w-5 transition-transform duration-300" />}

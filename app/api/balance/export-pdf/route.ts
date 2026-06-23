@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 // Fonction pour formater les montants correctement pour jsPDF
 function formatMontant(n: number): string {
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
     const lineY = (y: number) => { doc.line(margin, y, margin + colW, y) }
 
     // En-têtes du tableau
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Classe', margin, currentY)
     doc.text('Numéro', margin + 20, currentY)
     doc.text('Libellé', margin + 50, currentY)
@@ -169,12 +169,12 @@ export async function GET(request: NextRequest) {
     currentY += lineHeight
     lineY(currentY - 2)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     for (const entry of result) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Classe', margin, currentY)
         doc.text('Numéro', margin + 20, currentY)
         doc.text('Libellé', margin + 50, currentY)
@@ -184,15 +184,15 @@ export async function GET(request: NextRequest) {
         doc.text('Solde', margin + 175, currentY)
         currentY += lineHeight
         lineY(currentY - 2)
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       if (entry.compte.classe !== currentClasse) {
         currentClasse = entry.compte.classe
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text(`CLASSE ${currentClasse}`, margin, currentY)
         currentY += lineHeight
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const libelle = entry.compte.libelle.length > 20 ? entry.compte.libelle.substring(0, 20) + '...' : entry.compte.libelle
@@ -209,18 +209,18 @@ export async function GET(request: NextRequest) {
 
       const isLastOfClasse = result.findIndex((e, idx) => idx > result.indexOf(entry) && e.compte.classe === currentClasse) === -1
       if (isLastOfClasse && totauxParClasse[currentClasse]) {
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text(`TOTAL CLASSE ${currentClasse}`, margin + 50, currentY)
         doc.text(formatMontant(totauxParClasse[currentClasse].debit), margin + 130, currentY)
         doc.text(formatMontant(totauxParClasse[currentClasse].credit), margin + 155, currentY)
         currentY += lineHeight
         lineY(currentY - 1)
         currentY += lineHeight
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
     }
 
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     lineY(currentY - 1)
     currentY += 2
     doc.text('TOTAL GÉNÉRAL', margin + 50, currentY)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
@@ -20,10 +21,8 @@ export async function GET(request: NextRequest) {
     const magasinIdParam = request.nextUrl.searchParams.get('magasinId')?.trim()
 
     const where: any = {}
-    
-    if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-      where.entiteId = session.entiteId
-    }
+    const entiteId = getEntiteId(session)
+    if (entiteId) where.entiteId = entiteId
 
     if (dateDebut && dateFin) {
       where.date = {

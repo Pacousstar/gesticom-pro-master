@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const magasinId = request.nextUrl.searchParams.get('magasinId')?.trim()
+    const search = request.nextUrl.searchParams.get('search')?.trim() || ''
+    const categorie = request.nextUrl.searchParams.get('categorie')
     
     if (!magasinId) {
       return NextResponse.json({ error: 'Magasin requis' }, { status: 400 })
@@ -30,9 +32,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Magasin invalide' }, { status: 400 })
     }
 
+    const searchConditions = search ? {
+      OR: [
+        { designation: { contains: search } },
+        { code: { contains: search } }
+      ]
+    } : {}
+    const categorieCondition = categorie && categorie !== 'TOUT' ? { categorie } : {}
+
     const [tousProduits, stocksExistants] = await Promise.all([
       prisma.produit.findMany({
-        where: { actif: true, entiteId },
+        where: { actif: true, entiteId, ...searchConditions, ...categorieCondition },
         select: { id: true, code: true, designation: true, categorie: true, seuilMin: true },
         orderBy: { code: 'asc' },
         take: 10000,
@@ -79,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     let y = 40
     doc.setFontSize(9)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Code', 15, y)
     doc.text('Désignation', 40, y)
     doc.text('Catégorie', 100, y)
@@ -89,7 +99,7 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.line(15, y, 195, y)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     let totalProduits = 0
     let totalQuantite = 0
 
@@ -97,7 +107,7 @@ export async function GET(request: NextRequest) {
       if (y > 270) {
         doc.addPage()
         y = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Code', 15, y)
         doc.text('Désignation', 40, y)
         doc.text('Catégorie', 100, y)
@@ -106,7 +116,7 @@ export async function GET(request: NextRequest) {
         y += 5
         doc.line(15, y, 195, y)
         y += 5
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       totalProduits++
@@ -128,7 +138,7 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.line(15, y, 195, y)
     y += 5
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text(`Total produits: ${totalProduits}`, 15, y)
     doc.text(`Total quantité: ${totalQuantite}`, 140, y)
 

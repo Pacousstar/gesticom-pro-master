@@ -5,6 +5,7 @@ import {
   DollarSign, Wallet, Eye, RotateCcw, XCircle, Trash2, Loader2, Pencil, Truck, ShoppingBag,
 } from 'lucide-react'
 import { formatDate } from '@/lib/format-date'
+import { getStatutPaiementLabel, getStatutPaiementColors } from '@/lib/enums-commerce'
 
 interface VenteTableRowProps {
   v: any
@@ -14,7 +15,7 @@ interface VenteTableRowProps {
   loadingDetail: number | null
   livrant: number | null
   onEdit: (v: any) => void
-  onPay: (payload: { id: number; numero: string; reste: number }) => void
+  onPay?: (payload: { id: number; numero: string; reste: number }) => void
   onView: (id: number) => void
   onReturn: (v: any) => void
   onCancel: (v: any) => void
@@ -44,7 +45,7 @@ function VenteTableRowInner({
       <td className="px-4 py-3 text-sm text-gray-700 font-medium">
         {v.client?.nom || v.clientLibre || <span className="text-gray-400 italic">—</span>}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600">{v.magasin.code}</td>
+      <td className="px-4 py-3 text-sm text-gray-600">{v.magasin?.code || '—'}</td>
       <td className="px-4 py-3 text-right font-medium text-gray-900">
         {Number(v.montantTotal).toLocaleString('fr-FR')} F
       </td>
@@ -101,17 +102,12 @@ function VenteTableRowInner({
           ) : (
             <Wallet className="h-3.5 w-3.5 text-blue-500" />
           )}
-          {v.modePaiement.replace('_', ' ')}
+          {(v.modePaiement || '').replace('_', ' ')}
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className={`rounded px-2 py-0.5 text-xs font-medium ${v.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' :
-          v.statutPaiement === 'PARTIEL' ? 'bg-yellow-100 text-yellow-800' :
-            'bg-orange-100 text-orange-800'
-        }`}>
-          {v.statutPaiement === 'PAYE' ? 'Payé' :
-            v.statutPaiement === 'PARTIEL' ? 'Partiel' :
-              'Crédit'}
+        <span className={`rounded px-2 py-0.5 text-xs font-medium ${(() => { const c = getStatutPaiementColors(v.statutPaiement); return `${c.bg} ${c.text} ${c.border}` })()}`}>
+          {getStatutPaiementLabel(v.statutPaiement)}
         </span>
       </td>
       <td className="px-4 py-3 text-right font-medium text-gray-900">
@@ -119,15 +115,17 @@ function VenteTableRowInner({
       </td>
       <td className="px-4 py-3">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+          v.statutPaiement === 'REMBOURSE' ? 'bg-purple-100 text-purple-700' :
           v.statut === 'ANNULEE' ? 'bg-gray-200 text-gray-700' :
             'bg-green-100 text-green-800'
         }`}>
-          {v.statut === 'ANNULEE' ? 'Annulée' : 'Validée'}
+          {v.statutPaiement === 'REMBOURSE' ? 'Remboursé' :
+           v.statut === 'ANNULEE' ? 'Annulée' : 'Validée'}
         </span>
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1">
-          {v.statutPaiement !== 'PAYE' && v.statut !== 'ANNULEE' && (
+          {onPay && v.statutPaiement !== 'PAYE' && v.statut !== 'ANNULEE' && v.statutPaiement !== 'REMBOURSE' && (
             <button
               onClick={() => onPay({ id: v.id, numero: v.numero, reste: resteAPayer })}
               className="rounded p-1.5 text-orange-600 hover:bg-orange-100"
@@ -180,7 +178,7 @@ function VenteTableRowInner({
           >
             {loadingDetail === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
           </button>
-          {v.statut === 'VALIDEE' && (
+          {v.statut === 'VALIDEE' && v.statutPaiement !== 'REMBOURSE' && (
             <>
               <button
                 onClick={() => onReturn(v)}
@@ -199,7 +197,7 @@ function VenteTableRowInner({
               </button>
             </>
           )}
-          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && v.statutPaiement !== 'PAYE' && v.statutPaiement !== 'REMBOURSE' && (
             <button
               onClick={() => onDelete(v)}
               disabled={supprimant === v.id}
@@ -208,7 +206,7 @@ function VenteTableRowInner({
             >
               <Trash2 className="h-4 w-4" />
             </button>
-          )}
+          )} 
         </div>
       </td>
     </tr>

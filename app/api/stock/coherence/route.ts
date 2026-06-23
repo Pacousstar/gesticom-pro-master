@@ -131,9 +131,11 @@ export async function POST(request: NextRequest) {
   if (!entiteId) return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
 
   const body = await request.json().catch(() => ({} as any))
-  validateApiRequest(stockInventaireSchema, body)
-  const mode = String(body?.mode || 'simulate').toLowerCase() === 'apply' ? 'apply' : 'simulate'
-  const maxItems = Math.max(1, Number(body?.maxItems) || 5000)
+  const vres = validateApiRequest(stockInventaireSchema, body)
+  if (!vres.success) return vres.response
+  const validated = vres.data
+  const mode = String(validated?.mode || 'simulate').toLowerCase() === 'apply' ? 'apply' : 'simulate'
+  const maxItems = Math.max(1, Number(validated?.maxItems) || 5000)
 
   const { details, stockMap } = await calculerCoherenceStock(entiteId)
   const ecarts = details

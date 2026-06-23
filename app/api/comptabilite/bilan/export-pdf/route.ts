@@ -6,7 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 import { getBilanForYear } from '../route'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 function formatMontant(n: number): string {
   const num = Math.round(n)
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       entiteId = firstEntite?.id || 1
     }
 
-    const { bilan } = await getBilanForYear(entiteId, annee, dateDebut, dateFin, dateDebutPrec, dateFinPrec)
+    const { bilan } = await getBilanForYear(entiteId, annee, dateDebut, dateFin)
 
     const cumulActifImmobilise = bilan.actif.immobilise.reduce((s: number, i: any) => s + i.montant, 0)
     const cumulActifStocks = bilan.actif.stocks.reduce((s: number, i: any) => s + i.montant, 0)
@@ -114,11 +114,11 @@ export async function GET(request: NextRequest) {
 
     // Enterprise header
     doc.setFontSize(13)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text(entrepriseNom, margin, y)
     y += 6
     doc.setFontSize(9)
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     if (entrepriseLocalisation) {
       doc.text(entrepriseLocalisation, margin, y)
       y += 5
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
     // Title
     y += 4
     doc.setFontSize(15)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('BILAN COMPTABLE', 105, y, { align: 'center' })
     y += 7
     doc.setFontSize(11)
@@ -140,13 +140,13 @@ export async function GET(request: NextRequest) {
 
     // Column headers
     doc.setFontSize(8)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('ACTIF', margin, y)
     doc.text('PASSIF', colMid + 4, y)
     y += lineH
     doc.line(margin, y - 1, 195, y - 1)
     y += 2
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
 
     // Build actif and passif section data
     const actifSections = [
@@ -211,13 +211,13 @@ export async function GET(request: NextRequest) {
         doc.addPage()
         y = 20
         doc.setFontSize(8)
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('ACTIF', margin, y)
         doc.text('PASSIF', colMid + 4, y)
         y += lineH
         doc.line(margin, y - 1, 195, y - 1)
         y += 2
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       // Left column row
@@ -226,10 +226,10 @@ export async function GET(request: NextRequest) {
         if (row.length === 1 && row[0] === null) {
           // spacer
         } else if (row.length === 2) {
-          doc.setFont(undefined, 'bold')
+          doc.setFont('helvetica', 'bold')
           doc.setFontSize(8)
           doc.text(row[0]!, margin, y)
-          doc.setFont(undefined, 'normal')
+          doc.setFont('helvetica', 'normal')
         } else {
           doc.setFontSize(7)
           doc.text(row[0]!, margin, y)
@@ -244,10 +244,10 @@ export async function GET(request: NextRequest) {
         if (row.length === 1 && row[0] === null) {
           // spacer
         } else if (row.length === 2) {
-          doc.setFont(undefined, 'bold')
+          doc.setFont('helvetica', 'bold')
           doc.setFontSize(8)
           doc.text(row[0]!, colMid + 4, y)
-          doc.setFont(undefined, 'normal')
+          doc.setFont('helvetica', 'normal')
         } else {
           doc.setFontSize(7)
           doc.text(row[0]!, colMid + 4, y)
@@ -268,7 +268,7 @@ export async function GET(request: NextRequest) {
     }
     y += 2
     doc.line(margin, y - 1, 195, y - 1)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('TOTAL ACTIF', margin, y)
     doc.text(formatMontant(totalActif), 95, y, { align: 'right' })
@@ -284,11 +284,11 @@ export async function GET(request: NextRequest) {
       y = 20
     }
     doc.setFontSize(10)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('RATIOS FINANCIERS', margin, y)
     y += 8
     doc.setFontSize(8)
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     doc.text(`FRNG (Fonds de Roulement Net Global)  : ${formatMontant(frng)} FCFA`, margin, y)
     const frngLabel = frng >= 0 ? 'Ressources durables > Emplois stables' : 'Déséquilibre financier'
     doc.text(frngLabel, margin + 90, y)

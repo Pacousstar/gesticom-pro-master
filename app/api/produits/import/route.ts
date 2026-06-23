@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { parseExcel } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
+import { comptabiliserMouvementStock } from '@/lib/comptabilisation'
 
 const CODE_PADDING = 3
 
@@ -147,7 +148,6 @@ export async function POST(req: NextRequest) {
               }
             })
 
-            const { comptabiliserMouvementStock } = await import('@/lib/comptabilisation')
             const lastMvt = await prisma.mouvement.findFirst({
               where: { produitId, entiteId },
               orderBy: { id: 'desc' },

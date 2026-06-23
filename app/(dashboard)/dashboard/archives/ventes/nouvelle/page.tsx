@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
-import { Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X, 
+import { Plus, Loader2, Trash2, Eye, FileText, Printer, X, 
   Search, Pencil, CreditCard, Wallet, 
   AlertTriangle, XCircle
 } from 'lucide-react'
@@ -870,7 +870,7 @@ export default function ArchivesVentesNouvellePage() {
           className="rounded-lg border-2 border-green-500 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 flex items-center gap-1.5"
           title="Exporter la liste des ventes en Excel"
         >
-          <FileSpreadsheet className="h-4 w-4" />
+          <FileText className="h-4 w-4" />
           Exporter Excel
         </button>
         <button
@@ -884,7 +884,7 @@ export default function ArchivesVentesNouvellePage() {
           className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 flex items-center gap-1.5"
           title="Exporter la liste des ventes en PDF"
         >
-          <FileSpreadsheet className="h-4 w-4" />
+          <FileText className="h-4 w-4" />
           Exporter PDF
         </button>
       </div>

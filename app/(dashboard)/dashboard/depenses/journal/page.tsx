@@ -82,7 +82,7 @@ export default function DepenseJournalPage() {
     setTimeout(() => {
       window.print()
       setIsPrinting(false)
-    }, 500)
+    }, 0)
   }
 
   const total = depenses.reduce((acc, d) => acc + d.montant, 0)

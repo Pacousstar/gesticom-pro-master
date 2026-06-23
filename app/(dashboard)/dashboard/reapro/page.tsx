@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
   Loader2, Search, ShoppingCart, AlertTriangle,
   Package, Truck, CheckCircle, XCircle, Building2,
-  ChevronDown, FileText, Filter, Warehouse, Tag, Clock, DollarSign
+  FileText, DollarSign
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
+import { formatApiError } from '@/lib/validation-helpers'
 import Pagination from '@/components/ui/Pagination'
 
 type Fournisseur = { id: number; nom: string }
@@ -31,7 +31,6 @@ type Suggestion = {
 }
 
 export default function ReaproPage() {
-  const router = useRouter()
   const { success: showSuccess, error: showError } = useToast()
 
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
@@ -61,8 +60,8 @@ export default function ReaproPage() {
       setSuggestions(data.suggestions || [])
       setMagasins(data.magasins || [])
       setCategories(data.categories || [])
-    } catch {
-      showError('Erreur lors du chargement des suggestions.')
+    } catch (e) {
+      showError(formatApiError(e))
     } finally {
       setLoading(false)
     }
@@ -70,22 +69,18 @@ export default function ReaproPage() {
 
   useEffect(() => { fetchSuggestions() }, [fetchSuggestions])
 
-  const filtered = suggestions.filter(s => {
-    if (!search) return true
+  const filtered = useMemo(() => {
+    if (!search) return suggestions
     const q = search.toLowerCase()
-    return s.code.toLowerCase().includes(q) || s.designation.toLowerCase().includes(q)
-  })
+    return suggestions.filter(s => s.code.toLowerCase().includes(q) || s.designation.toLowerCase().includes(q))
+  }, [suggestions, search])
 
-  const totalCout = filtered.reduce((s, sg) => s + sg.coutEstime, 0)
-  const totalQte = filtered.reduce((s, sg) => s + sg.quantiteSuggeree, 0)
+  const totalCout = useMemo(() => suggestions.reduce((s, sg) => s + sg.coutEstime, 0), [suggestions])
+  const totalQte = useMemo(() => suggestions.reduce((s, sg) => s + sg.quantiteSuggeree, 0), [suggestions])
 
   const itemsPerPage = 10
   const totalPages = Math.ceil(filtered.length / itemsPerPage)
   const paginatedData = filtered.slice((rpPage - 1) * itemsPerPage, rpPage * itemsPerPage)
-
-  useEffect(() => {
-    setRpPage(1)
-  }, [search, magasinId, categorie])
 
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
@@ -128,8 +123,8 @@ export default function ReaproPage() {
       setSelectedIds(new Set())
       showSuccess(`${data.count} bon(s) de commande généré(s).`)
       fetchSuggestions()
-    } catch (e: any) {
-      showError(e.message || 'Erreur lors de la génération.')
+    } catch (e) {
+      showError(formatApiError(e))
     } finally {
       setGenerating(false)
     }
@@ -168,7 +163,7 @@ export default function ReaproPage() {
               { label: "Produits sous seuil", val: String(suggestions.length), sub: "Articles à réapprovisionner", icon: AlertTriangle, color: "bg-rose-600" },
               { label: "Qté suggérée totale", val: String(totalQte), sub: "Unités recommandées", icon: Package, color: "bg-amber-600" },
               { label: "Coût estimé total", val: formatFcfa(totalCout), sub: "Budget nécessaire", icon: DollarSign, color: "bg-blue-600" },
-              { label: "Fournisseurs concernés", val: String(new Set(filtered.map(s => s.fournisseur?.nom).filter(Boolean)).size), sub: "Partenaires à solliciter", icon: Building2, color: "bg-indigo-600" },
+              { label: "Fournisseurs concernés", val: String(new Set(suggestions.map(s => s.fournisseur?.nom).filter(Boolean)).size), sub: "Partenaires à solliciter", icon: Building2, color: "bg-indigo-600" },
             ].map((c, i) => (
               <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl hover:scale-[1.02] transition-transform group`}>
                 <div className="relative z-10 text-white flex flex-col justify-between h-full">
@@ -189,12 +184,12 @@ export default function ReaproPage() {
           <div className="flex flex-wrap items-end gap-4 flex-1">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              <input type="text" value={search} onChange={e => { setSearch(e.target.value); setRpPage(1); setSelectedIds(new Set()) }}
                 placeholder="Rechercher un produit..."
                 className="w-full rounded-2xl border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-bold focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
               />
             </div>
-            <select value={magasinId} onChange={e => setMagasinId(e.target.value)}
+            <select value={magasinId} onChange={e => { setMagasinId(e.target.value); setRpPage(1); setSelectedIds(new Set()) }}
               className="rounded-2xl border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
             >
               <option value="">Tous les magasins</option>
@@ -202,7 +197,7 @@ export default function ReaproPage() {
                 <option key={m.id} value={String(m.id)}>{m.nom}</option>
               ))}
             </select>
-            <select value={categorie} onChange={e => setCategorie(e.target.value)}
+            <select value={categorie} onChange={e => { setCategorie(e.target.value); setRpPage(1); setSelectedIds(new Set()) }}
               className="rounded-2xl border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
             >
               <option value="">Toutes catégories</option>
@@ -279,8 +274,12 @@ export default function ReaproPage() {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-20">
               <Package className="h-16 w-16" />
-              <p className="text-sm font-black uppercase tracking-widest italic">Aucun produit sous seuil critique</p>
-              <p className="text-xs font-bold text-gray-400">Tous les stocks sont suffisants.</p>
+              <p className="text-sm font-black uppercase tracking-widest italic">
+                {suggestions.length > 0 ? 'Aucun produit ne correspond aux filtres' : 'Aucun produit sous seuil critique'}
+              </p>
+              <p className="text-xs font-bold text-gray-400">
+                {suggestions.length > 0 ? 'Modifiez les filtres pour voir plus de résultats.' : 'Tous les stocks sont suffisants.'}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -446,6 +445,51 @@ export default function ReaproPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* VUE IMPRESSION */}
+      <div className="hidden print:block p-8">
+        <div className="text-center mb-6 border-b-2 border-gray-900 pb-4">
+          <h1 className="text-xl font-black uppercase">Bons de Réapprovisionnement</h1>
+          <p className="text-sm text-gray-600">Suggestions de réapprovisionnement — {new Date().toLocaleDateString('fr-FR')}</p>
+        </div>
+        {filtered.length === 0 ? (
+          <p className="text-center text-gray-500 italic">Aucune suggestion disponible.</p>
+        ) : (
+          <table className="w-full text-[11px] border-collapse border border-gray-400">
+            <thead>
+              <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                <th className="border border-gray-400 px-2 py-2">Code</th>
+                <th className="border border-gray-400 px-2 py-2">Désignation</th>
+                <th className="border border-gray-400 px-2 py-2">Stock</th>
+                <th className="border border-gray-400 px-2 py-2">Seuil</th>
+                <th className="border border-gray-400 px-2 py-2">Ventes 30j</th>
+                <th className="border border-gray-400 px-2 py-2">Qté suggérée</th>
+                <th className="border border-gray-400 px-2 py-2 text-right">Coût estimé</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(s => (
+                <tr key={s.produitId} className="border-b border-gray-300">
+                  <td className="border border-gray-400 px-2 py-1.5 font-mono font-bold">{s.code}</td>
+                  <td className="border border-gray-400 px-2 py-1.5 font-bold">{s.designation}</td>
+                  <td className="border border-gray-400 px-2 py-1.5 text-center">{s.stock}</td>
+                  <td className="border border-gray-400 px-2 py-1.5 text-center">{s.seuil}</td>
+                  <td className="border border-gray-400 px-2 py-1.5 text-center">{s.ventes30j}</td>
+                  <td className="border border-gray-400 px-2 py-1.5 text-center font-bold">{s.quantiteSuggeree}</td>
+                  <td className="border border-gray-400 px-2 py-1.5 text-right font-bold">{s.coutEstime.toLocaleString('fr-FR')} F</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-100 font-black">
+                <td colSpan={5} className="border border-gray-400 px-2 py-3 text-right uppercase">{filtered.length} produit(s)</td>
+                <td className="border border-gray-400 px-2 py-3 text-center">{filtered.reduce((s, sg) => s + sg.quantiteSuggeree, 0)}</td>
+                <td className="border border-gray-400 px-2 py-3 text-right">{filtered.reduce((s, sg) => s + sg.coutEstime, 0).toLocaleString('fr-FR')} F</td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
       </div>
     </div>
   )

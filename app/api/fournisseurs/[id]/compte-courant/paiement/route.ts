@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { comptabiliserCaisse } from '@/lib/comptabilisation'
 import { estModeEspeces } from '@/lib/enums-commerce'
+import { enregistrerOperationBancaire, estModeBanque } from '@/lib/banque'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { reglementCompteCourantSchema } from '@/lib/validations'
@@ -166,7 +167,6 @@ export async function POST(
         }
         await recalculerSoldeCaisse(Number(magasinId), tx)
       } else {
-        const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
         if (estModeBanque(modePaiement)) {
           await enregistrerOperationBancaire({
             banqueId: banqueId ? Number(banqueId) : null,

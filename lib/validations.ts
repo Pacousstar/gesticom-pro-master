@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod'
-import { MODES_PAIEMENT, TYPES_CLIENT, TYPES_CHARGE, STATUTS_OPERATION } from './enums-commerce'
+import { MODES_PAIEMENT, TYPES_CLIENT, TYPES_CHARGE, STATUTS_OPERATION, TYPES_OPERATION_BANCAIRE } from './enums-commerce'
 
 const MAX_STRING = 500
 const MAX_TEXT = 2000
@@ -78,6 +78,9 @@ export const parametresPatchSchema = z.object({
   fideliteSeuilPoints: z.coerce.number().min(1).optional(),
   fideliteTauxRemise: z.coerce.number().min(0).max(100).optional(),
   dateCloture: z.string().nullable().optional(),
+
+  // Installation
+  modeInstallation: z.enum(['MODE_1', 'MODE_2', 'MODE_3']).optional(),
 })
 
 /** Valide et normalise un code-barres EAN-13 */
@@ -336,9 +339,9 @@ export const banqueSchema = z.object({
 export const banqueOperationSchema = z.object({
   banqueId: z.coerce.number().int().positive('La banque est requise.'),
   date: z.string().min(1, 'La date est requise.'),
-  type: z.enum(['ENTREE', 'SORTIE'], { message: 'Le type doit être ENTREE ou SORTIE.' }),
+  type: z.enum([...TYPES_OPERATION_BANCAIRE] as [string, ...string[]], { message: 'Le type est invalide.' }),
   montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
-  description: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  libelle: z.string().max(MAX_TEXT).trim().nullable().optional(),
   modePaiement: z.string().max(50).optional(),
   pieceJointe: z.string().max(MAX_STRING).trim().nullable().optional(),
   beneficiaire: z.string().max(MAX_STRING).trim().nullable().optional(),
@@ -389,6 +392,7 @@ export const commandeFournisseurSchema = z.object({
   fournisseurLibre: z.string().max(MAX_STRING).trim().nullable().optional(),
   magasinId: z.coerce.number().int().positive('Le magasin est requis.'),
   date: z.string().optional(),
+  statut: z.enum(['BROUILLON', 'ENVOYEE', 'RECUE', 'ANNULEE']).optional(),
   montantTotal: z.coerce.number().min(0).optional().default(0),
   observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
   lignes: z.array(commandeFournisseurLigneSchema).min(1, 'Au moins une ligne est requise.'),
@@ -422,8 +426,11 @@ export const reglementAchatSchema = z.object({
 /** Inventaire stock */
 export const stockInventaireSchema = z.object({
   magasinId: z.coerce.number().int().positive('Le magasin est requis.'),
+  produitId: z.coerce.number().int().positive().optional(),
   date: z.string().optional(),
   observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  mode: z.enum(['simulate', 'apply']).optional().default('simulate'),
+  maxItems: z.coerce.number().int().positive().optional().default(5000),
   lignes: z.array(z.object({
     produitId: z.coerce.number().int().positive('Le produit est requis.'),
     quantiteTheorique: z.coerce.number().min(0),
@@ -473,9 +480,7 @@ export const notificationSchema = z.object({
 /** Lettrage comptes courants */
 export const lettrageSchema = z.object({
   compteCourantId: z.coerce.number().int().positive('Le compte courant est requis.'),
-  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
-  date: z.string().optional(),
-  observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
+  transactionId: z.string().min(1, 'Transaction requise.'),
 })
 
 /** Compensation comptes courants */
@@ -513,7 +518,12 @@ export const reaproSchema = z.object({
   type: z.enum(['AUTO', 'MANUEL']).default('AUTO'),
   lignes: z.array(z.object({
     produitId: z.coerce.number().int().positive('Le produit est requis.'),
-    quantiteRecommande: z.coerce.number().min(1, 'La quantité doit être au moins 1.'),
+    designation: z.string().optional().default(''),
+    quantite: z.coerce.number().min(1, 'La quantité doit être au moins 1.'),
+    prixUnitaire: z.coerce.number().optional().default(0),
+    tva: z.coerce.number().optional().default(0),
+    remise: z.coerce.number().optional().default(0),
+    montant: z.coerce.number().optional().default(0),
   })).min(1, 'Au moins une ligne est requise.'),
 })
 

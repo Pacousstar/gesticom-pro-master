@@ -74,7 +74,7 @@ export default function SoldesFournisseursPage() {
     setTimeout(() => {
       window.print()
       setIsPrinting(false)
-    }, 1000)
+    }, 0)
   }
 
   const filteredData = data.filter(f => 

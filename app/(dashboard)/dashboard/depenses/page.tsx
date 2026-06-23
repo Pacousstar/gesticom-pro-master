@@ -8,6 +8,7 @@ import { depenseSchema } from '@/lib/validations'
 import { validateForm, formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
+import { extractList, extractPagination } from '@/lib/api-client'
 
 type Magasin = { id: number; code: string; nom: string }
 type Depense = {
@@ -136,8 +137,8 @@ export default function DepensesPage() {
       const res = await fetch(`/api/depenses?${params.toString()}&t=${Date.now()}`)
       if (res.ok) {
         const data = await res.json()
-        setDepenses(data.data || [])
-        setPagination(data.pagination || null)
+        setDepenses(extractList(data))
+        setPagination(extractPagination(data))
         setTotalAmount(data.totalAmount || 0)
       }
     } catch (e) {

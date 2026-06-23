@@ -4,6 +4,7 @@ import { useState, useEffect, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/swr-fetcher'
+import { extractList } from '@/lib/api-client'
 import { Search, Plus, Loader2, Pencil, Trash2, X, Download, Clock, Calendar, FileText, ChevronRight, DollarSign, Printer, Users, AlertTriangle } from 'lucide-react'
 import PaymentModal from '@/components/dashboard/PaymentModal'
 import { useToast } from '@/hooks/useToast'
@@ -87,7 +88,7 @@ export default function ClientsPage() {
     { keepPreviousData: true, revalidateOnFocus: false, dedupingInterval: 2000 }
   )
 
-  const list: Client[] = listData?.data || (Array.isArray(listData) ? listData : [])
+  const list: Client[] = extractList(listData)
   const pagination = listData?.pagination || null
   const loading = listLoading && !listData
 
@@ -113,11 +114,11 @@ export default function ClientsPage() {
       const res = await fetch('/api/clients?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        setAllClientsForPrint(response.data || [])
+        setAllClientsForPrint(extractList(response))
         setTimeout(() => {
           window.print()
           setIsPrinting(false)
-        }, 500)
+        }, 0)
       }
     } catch (e) {
       console.error(e)

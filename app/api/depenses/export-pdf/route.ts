@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 function formatMontant(n: number): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
@@ -102,19 +102,19 @@ export async function GET(request: NextRequest) {
         y = 20
       }
 
-      doc.setFont(undefined, 'bold')
+      doc.setFont('helvetica', 'bold')
       doc.setFontSize(10)
       doc.text(categorie, margin, y)
       y += 6
 
-      doc.setFont(undefined, 'normal')
+      doc.setFont('helvetica', 'normal')
       doc.setFontSize(9)
-      doc.setFont(undefined, 'bold')
+      doc.setFont('helvetica', 'bold')
       doc.text('Date', colDate, y)
       doc.text('Libellé', colLib, y)
       doc.text('Montant', colMontant, y)
       y += 5
-      doc.setFont(undefined, 'normal')
+      doc.setFont('helvetica', 'normal')
       // Ligne sous l'en-tête de la catégorie uniquement (pas sur toute la page)
       doc.line(colDate, y - 1, colDate + colWidth, y - 1)
       y += 2
@@ -124,12 +124,12 @@ export async function GET(request: NextRequest) {
         if (y > 270) {
           doc.addPage()
           y = 20
-          doc.setFont(undefined, 'bold')
+          doc.setFont('helvetica', 'bold')
           doc.text('Date', colDate, y)
           doc.text('Libellé', colLib, y)
           doc.text('Montant', colMontant, y)
           y += 5
-          doc.setFont(undefined, 'normal')
+          doc.setFont('helvetica', 'normal')
         }
         sousTotal += d.montant
         total += d.montant
@@ -140,14 +140,14 @@ export async function GET(request: NextRequest) {
         y += 6
       }
 
-      doc.setFont(undefined, 'bold')
+      doc.setFont('helvetica', 'bold')
       doc.text(`Sous-total ${categorie}:`, colLib - 5, y)
       doc.text(`${formatMontant(sousTotal)} F`, colMontant, y)
       y += 8
-      doc.setFont(undefined, 'normal')
+      doc.setFont('helvetica', 'normal')
     }
 
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.line(margin, y, margin + colWidth, y)
     y += 6
     doc.text('Total général:', margin, y)

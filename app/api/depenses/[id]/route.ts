@@ -97,6 +97,7 @@ export async function PATCH(
     if (data.montant != null) updateData.montant = data.montant
     if (data.modePaiement) updateData.modePaiement = data.modePaiement
     if (data.montantPaye != null) updateData.montantPaye = data.montantPaye
+    if (data.banqueId !== undefined) updateData.banqueId = data.banqueId ?? null
     if (data.beneficiaire !== undefined) updateData.beneficiaire = data.beneficiaire ?? null
     if (data.pieceJustificative !== undefined) updateData.pieceJustificative = data.pieceJustificative ?? null
     if (data.observation !== undefined) updateData.observation = data.observation ?? null

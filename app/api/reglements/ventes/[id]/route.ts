@@ -5,7 +5,8 @@ import { deleteEcrituresByReference } from '@/lib/delete-ecritures'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
-import { estModeBanque } from '@/lib/banque'
+import { estModeBanque, enregistrerOperationBancaire } from '@/lib/banque'
+import { comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { reglementVenteSchema } from '@/lib/validations'
@@ -251,7 +252,6 @@ include: { vente: { include: { client: { select: { nom: true } } } } }
         await recalculerSoldeCaisse(updated.vente?.magasinId || 1, tx)
       } else if (estModeBanque(modeFinal)) {
         const banqueIdVal = banqueId ?? null
-        const { enregistrerOperationBancaire } = await import('@/lib/banque')
         await enregistrerOperationBancaire({
           banqueId: banqueIdVal,
           entiteId: entiteId || 1,
@@ -265,7 +265,6 @@ include: { vente: { include: { client: { select: { nom: true } } } } }
         }, tx)
       }
 
-      const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
       await comptabiliserReglementVente({
         venteId: updated.venteId ?? 0,
         numeroVente: updated.vente?.numero || 'SANS_NUMERO',

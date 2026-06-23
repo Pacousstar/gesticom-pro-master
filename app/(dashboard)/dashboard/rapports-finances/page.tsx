@@ -83,6 +83,28 @@ export default function RapportFinancesPage() {
         window.open(`/api/rapports/finances/etat-paiements/export-pdf?${params.toString()}`, '_blank')
     }
 
+    const handlePrint = async () => {
+        setIsPrinting(true)
+        try {
+            const params = new URLSearchParams()
+            params.set('type', type)
+            if (startDate) params.set('dateDebut', startDate)
+            if (endDate) params.set('dateFin', endDate)
+            if (filter) params.set('filter', filter)
+            params.set('limit', '10000')
+            const res = await fetch(`/api/rapports/finances/etat-paiements?${params.toString()}`)
+            if (res.ok) {
+                const d = await res.json()
+                setAllDataForPrint(d.data || d || [])
+            }
+            setIsPreviewOpen(true)
+        } catch {
+            showError('Erreur lors de la préparation de l\'impression.')
+        } finally {
+            setIsPrinting(false)
+        }
+    }
+
     const totalMontant = data.reduce((acc, curr) => acc + curr.montantTotal, 0)
     const totalPaye = data.reduce((acc, curr) => acc + curr.montantPaye, 0)
     const totalSolde = data.reduce((acc, curr) => acc + curr.solde, 0)
@@ -118,6 +140,14 @@ export default function RapportFinancesPage() {
                     >
                         <Download className="h-5 w-5" />
                         PDF
+                    </button>
+                    <button
+                        onClick={handlePrint}
+                        disabled={isPrinting}
+                        className="bg-blue-600 text-white px-6 py-2 rounded-xl text-sm font-black hover:bg-blue-700 flex items-center gap-3 transition-all active:scale-95 shadow-lg border-2 border-blue-500 disabled:opacity-50"
+                    >
+                        <Printer className="h-5 w-5" />
+                        {isPrinting ? 'Préparation...' : 'Imprimer'}
                     </button>
                     <div className="bg-white/10 p-1 rounded-lg flex border border-white/20">
                         <button 

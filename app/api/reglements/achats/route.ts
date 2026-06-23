@@ -9,6 +9,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { reglementAchatSchema } from '@/lib/validations'
+import { enregistrerOperationBancaire } from '@/lib/banque'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -153,7 +154,6 @@ export async function POST(request: NextRequest) {
         await recalculerSoldeCaisse(data.magasinId!, tx)
       }
       if (payeDepuisBanque) {
-        const { enregistrerOperationBancaire } = await import('@/lib/banque')
         await enregistrerOperationBancaire({
           banqueId: data.banqueId ?? null,
           entiteId,

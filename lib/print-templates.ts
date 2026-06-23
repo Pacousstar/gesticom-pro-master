@@ -29,6 +29,9 @@ export type TemplateData = {
   CLIENT_NCC?: string
   FOURNISSEUR_NOM?: string
   FOURNISSEUR_TELEPHONE?: string
+  FOURNISSEUR_LOCALISATION?: string
+  FOURNISSEUR_CODE?: string
+  FOURNISSEUR_NCC?: string
   NUMERO_CAMION?: string
 
   // Données lignes

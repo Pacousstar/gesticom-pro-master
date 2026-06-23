@@ -3,12 +3,12 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { logAction, getIpAddress } from '@/lib/audit'
-import { comptabiliserVente } from '@/lib/comptabilisation'
+import { comptabiliserVente, comptabiliserReglementVente } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
-import { estModeBanque } from '@/lib/banque'
+import { estModeBanque, enregistrerOperationBancaire } from '@/lib/banque'
 import { ApiError, unauthorized, badRequest, conflict, forbidden, handleApiError } from '@/lib/api-error'
 import {
   montantLigneTTC,
@@ -485,6 +485,7 @@ export async function POST(request: NextRequest) {
       }
 
       let resteReglement = montantTotal
+      let hasCashPayment = false
       const reglementsEffectifs: { mode: string; montant: number }[] = []
       for (const reg of listReglements) {
         const montantReg = Math.min(reg.montant, resteReglement)
@@ -515,6 +516,7 @@ export async function POST(request: NextRequest) {
 
         // ✅ SYNCHRO PHYSIQUE (Caisse ou Banque)
         if (estModeEspeces(reg.mode)) {
+          hasCashPayment = true
           await enregistrerMouvementCaisse({
             magasinId,
             type: 'ENTREE',
@@ -524,27 +526,22 @@ export async function POST(request: NextRequest) {
             entiteId,
             date: dateVente,
           }, tx)
-          await recalculerSoldeCaisse(magasinId, tx)
-        } else {
-          const { enregistrerOperationBancaire } = await import('@/lib/banque')
-          if (estModeBanque(reg.mode)) {
-            await enregistrerOperationBancaire({
-              banqueId: body?.banqueId ? Number(body.banqueId) : null,
-              entiteId,
-              date: dateVente,
-              type: 'VENTE',
-              libelle: `Vente ${num}`,
-              montant: montantReg,
-              utilisateurId: session.userId,
-              reference: num,
-              beneficiaire: v?.client?.nom || clientLibre || null,
-            }, tx)
-          }
+        } else if (estModeBanque(reg.mode)) {
+          await enregistrerOperationBancaire({
+            banqueId: body?.banqueId ? Number(body.banqueId) : null,
+            entiteId,
+            date: dateVente,
+            type: 'VENTE',
+            libelle: `Vente ${num}`,
+            montant: montantReg,
+            utilisateurId: session.userId,
+            reference: num,
+            beneficiaire: v?.client?.nom || clientLibre || null,
+          }, tx)
         }
 
         // COMMANDE ou retrait différé : comptabiliser l'avance client (4191) dès la création du règlement
         if (typeVente === 'COMMANDE' || retraitDiffere) {
-          const { comptabiliserReglementVente } = await import('@/lib/comptabilisation')
           await comptabiliserReglementVente({
             reglementId: rv.id,
             venteId: v.id,
@@ -558,6 +555,10 @@ export async function POST(request: NextRequest) {
             estAcompte: true,
           }, tx)
         }
+      }
+
+      if (hasCashPayment) {
+        await recalculerSoldeCaisse(magasinId, tx)
       }
 
       if (typeVente !== 'COMMANDE' && !retraitDiffere) {

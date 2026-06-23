@@ -1,12 +1,9 @@
-const fs = require('fs')
-const path = require('path')
-
 const withBundleAnalyzer = process.env.ANALYZE === 'true'
   ? require('@next/bundle-analyzer')()
   : (config) => config
 
 /** @type {import('next').NextConfig} */
-const pkgVersion = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version
+const pkgVersion = require('./package.json').version
 
 const csp = [
   `default-src 'self'`,
@@ -49,6 +46,8 @@ const nextConfig = {
       '**/lib/sauvegarde-db*',
       '**/api/sauvegarde/**/*',
       '**/*.disabled',
+      '**/*.ts',
+      '**/*.tsx',
       'e2e/**',
     ],
   },

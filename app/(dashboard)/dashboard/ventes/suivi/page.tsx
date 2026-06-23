@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, X, Filter, Loader2, Truck, ShoppingBag, Printer, ExternalLink, ArrowLeft } from 'lucide-react'
+import { Search, X, Filter, Loader2, Truck, ShoppingBag, Printer, ArrowLeft } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { VenteTableRow } from '@/components/dashboard/ventes/VenteTableRow'
@@ -145,7 +145,7 @@ export default function SuiviVentesPage() {
       if (res.ok) {
         const d = await res.json()
         setAllVentesForPrint(d.data || [])
-        setTimeout(() => { window.print(); setIsPrinting(false) }, 500)
+        setTimeout(() => { window.print(); setIsPrinting(false) }, 0)
       } else {
         setIsPrinting(false)
       }
@@ -341,7 +341,7 @@ export default function SuiviVentesPage() {
                 <VenteTableRow
                   key={v.id} v={v} userRole={userRole}
                   annulant={annulant} supprimant={supprimant} loadingDetail={loadingDetail} livrant={livrant}
-                  onEdit={() => {}} onPay={() => {}} onView={handleVoirDetail} onReturn={() => {}}
+                  onEdit={() => {}} onView={handleVoirDetail} onReturn={(v) => router.push(`/dashboard/ventes/retours?venteId=${v.id}`)}
                   onCancel={handleAnnuler} onDelete={handleSupprimer}
                   onDeliver={handleLivrer} onRetrait={handleRetrait}
                 />
@@ -372,7 +372,8 @@ export default function SuiviVentesPage() {
                 const tq = detailVente.lignes?.reduce((a: number, l: any) => a + Number(l.quantite || 0), 0) || 0
                 const tl = detailVente.lignes?.reduce((a: number, l: any) => a + Number(l.quantiteLivree || 0), 0) || 0
                 if (tl >= tq) return <p><strong>Retrait :</strong> <span className="text-green-600">Complété</span></p>
-                return <p><strong>Retrait :</strong> {tl}/{tq} ({Math.round(tl/tq*100)}%)</p>
+                const pct = tq > 0 ? Math.round(tl/tq*100) : 0
+                return <p><strong>Retrait :</strong> {tl}/{tq} ({pct}%)</p>
               })()}
               {detailVente.observation && <p><strong>Observation :</strong> {detailVente.observation}</p>}
             </div>

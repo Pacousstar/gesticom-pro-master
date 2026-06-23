@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
+import { sendRelanceEmail } from '@/lib/mail'
 import { z } from 'zod'
 
 const genererRelanceSchema = z.object({
@@ -57,7 +58,6 @@ export async function POST(request: NextRequest) {
         let statutEnvoi = 'ENVOYE'
         if (canal === 'EMAIL' && client.email) {
           try {
-            const { sendRelanceEmail } = await import('@/lib/mail')
             await sendRelanceEmail({
               to: client.email,
               subject: `Relance Paiement - ${enterprise?.nomEntreprise || 'GestiCom Pro'}`,

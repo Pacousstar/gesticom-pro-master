@@ -78,7 +78,9 @@ export async function GET(request: NextRequest) {
       'N° Camion': a.numeroCamion || '—',
       Montant: a.montantTotal,
       Paiement: a.modePaiement,
-      'Statut paiement': a.statutPaiement === 'PAYE' ? 'Payé' : a.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit',
+      'Statut paiement': ['PAYE', 'PARTIEL', 'CREDIT', 'REMBOURSE'].includes(a.statutPaiement)
+  ? ({ PAYE: 'Payé', PARTIEL: 'Partiel', CREDIT: 'Crédit', REMBOURSE: 'Remboursé' } as Record<string, string>)[a.statutPaiement]
+  : 'Crédit',
       'Reste à payer': reste,
     })
   }

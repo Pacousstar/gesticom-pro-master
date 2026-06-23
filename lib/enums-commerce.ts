@@ -48,7 +48,7 @@ export const MODE_PAIEMENT_MULTI = 'MULTI' as const
 
 // ─── STATUTS DE PAIEMENT ──────────────────────────────────────────────
 
-export const STATUTS_PAIEMENT = ['PAYE', 'PARTIEL', 'CREDIT'] as const
+export const STATUTS_PAIEMENT = ['PAYE', 'PARTIEL', 'CREDIT', 'REMBOURSE'] as const
 export type StatutPaiement = (typeof STATUTS_PAIEMENT)[number]
 
 export const STATUTS_PAIEMENT_ALIAS: Record<string, StatutPaiement> = {
@@ -68,9 +68,32 @@ export function normaliserStatutPaiement(v: string): StatutPaiement | null {
 
 /** Calcule le statut de paiement à partir des montants */
 export function calculerStatutPaiement(montantPaye: number, montantTotal: number): StatutPaiement {
+  if (montantPaye <= 0 && montantTotal > 0) return 'REMBOURSE'
   if (montantPaye >= montantTotal) return 'PAYE'
   if (montantPaye > 0) return 'PARTIEL'
   return 'CREDIT'
+}
+
+const STATUT_LABELS: Record<StatutPaiement, string> = {
+  PAYE: 'Payé',
+  PARTIEL: 'Partiel',
+  CREDIT: 'Crédit',
+  REMBOURSE: 'Remboursé',
+}
+
+const STATUT_COLORS: Record<StatutPaiement, { bg: string; text: string; border: string }> = {
+  PAYE: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  PARTIEL: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+  CREDIT: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' },
+  REMBOURSE: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+}
+
+export function getStatutPaiementLabel(statut: string): string {
+  return STATUT_LABELS[statut as StatutPaiement] || statut
+}
+
+export function getStatutPaiementColors(statut: string) {
+  return STATUT_COLORS[statut as StatutPaiement] || STATUT_COLORS.CREDIT
 }
 
 // ─── STATUTS D'OPÉRATION ──────────────────────────────────────────────
@@ -150,6 +173,25 @@ export type TypeCharge = (typeof TYPES_CHARGE)[number]
 export function estModeEspeces(mode: string): boolean {
   const m = normaliserModePaiement(mode)
   return m === 'ESPECES'
+}
+
+// ─── MODES D'INSTALLATION ──────────────────────────────────────────────
+
+export const MODES_INSTALLATION = [
+  'MODE_1',
+  'MODE_2',
+  'MODE_3',
+] as const
+export type ModeInstallation = (typeof MODES_INSTALLATION)[number]
+
+export const LABELS_MODE_INSTALLATION: Record<ModeInstallation, string> = {
+  MODE_1: 'Poste unique (Local)',
+  MODE_2: 'Réseau (Serveur interne)',
+  MODE_3: 'Migration (MODE_1 → MODE_2)',
+}
+
+export function labelModeInstallation(mode: string): string {
+  return LABELS_MODE_INSTALLATION[mode as ModeInstallation] || mode
 }
 
 export function estModeBanque(mode: string): boolean {

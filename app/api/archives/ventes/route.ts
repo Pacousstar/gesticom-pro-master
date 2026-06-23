@@ -4,8 +4,7 @@ import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
-import { validateApiRequest } from '@/lib/validation-helpers'
-import { archiveVenteSchema } from '@/lib/validations'
+
 
 export async function GET(req: NextRequest) {
   try {
@@ -81,8 +80,6 @@ export async function POST(req: NextRequest) {
     if (authError) return authError
 
     const body = await req.json()
-    const vres = validateApiRequest(archiveVenteSchema, body)
-    if (!vres.success) return vres.response
     const { 
       numeroFactureOrigine, 
       date, 

@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     let currentY = y
 
     // En-têtes du tableau (Landscape)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     const colPositions = {
       n: margin,
       bon: margin + 25,
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     currentY += lineHeight
     doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     let totalMontant = 0
     let totalReste = 0
 
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
         doc.addPage()
         currentY = 20
         // Redraw headers on new page
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('N°', colPositions.n, currentY)
         doc.text('Bon N°', colPositions.bon, currentY)
         doc.text('Date', colPositions.date, currentY)
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
         doc.text('Statut', colPositions.statut, currentY)
         currentY += lineHeight
         doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const dateStr = new Date(v.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -138,7 +138,9 @@ export async function GET(request: NextRequest) {
       doc.text(v.magasin.code, colPositions.magasin, currentY)
       doc.text(v.montantTotal.toLocaleString('fr-FR'), colPositions.montant, currentY, { align: 'right' })
       doc.text(v.modePaiement, colPositions.paiement, currentY)
-      doc.text(v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit', colPositions.statutPaiement, currentY)
+      doc.text(['PAYE', 'PARTIEL', 'CREDIT', 'REMBOURSE'].includes(v.statutPaiement)
+  ? ({ PAYE: 'Payé', PARTIEL: 'Partiel', CREDIT: 'Crédit', REMBOURSE: 'Remboursé' } as Record<string, string>)[v.statutPaiement]
+  : 'Crédit', colPositions.statutPaiement, currentY)
       doc.text(reste.toLocaleString('fr-FR'), colPositions.reste, currentY, { align: 'right' })
       doc.text(v.statut === 'VALIDEE' ? 'Validée' : v.statut, colPositions.statut, currentY)
 
@@ -146,7 +148,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Ligne de totaux
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.line(margin, currentY - 2, pageWidth - margin, currentY - 2)
     doc.text('TOTAUX', colPositions.n, currentY)
     doc.text(totalMontant.toLocaleString('fr-FR') + ' F', colPositions.montant, currentY, { align: 'right' })

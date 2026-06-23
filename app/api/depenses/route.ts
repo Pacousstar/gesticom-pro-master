@@ -6,6 +6,7 @@ import { comptabiliserDepense } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces, estModeBanque } from '@/lib/enums-commerce'
+import { enregistrerOperationBancaire } from '@/lib/banque'
 import fs from 'fs'
 import path from 'path'
 import { depenseSchema } from '@/lib/validations'
@@ -249,7 +250,6 @@ export async function POST(request: NextRequest) {
           await recalculerSoldeCaisse(targetMagasinId, tx)
         } else {
           // ✅ SYNCHRO BANQUE : Dépense par Chèque/Virement/MM
-          const { enregistrerOperationBancaire, estModeBanque } = await import('@/lib/banque')
           if (montantPaye > 0 && estModeBanque(modePaiement)) {
             await enregistrerOperationBancaire({
               banqueId: body.banqueId ? Number(body.banqueId) : null,

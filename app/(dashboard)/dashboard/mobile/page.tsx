@@ -65,7 +65,7 @@ export default function MobileDashboardPage() {
   const trend = calcTrend(data?.transactionsJour || 0, data?.transactionsHier || 0)
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5rem)]">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-2">

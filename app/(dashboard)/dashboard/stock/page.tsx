@@ -8,6 +8,7 @@ import { formatDate } from '@/lib/format-date'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import Pagination from '@/components/ui/Pagination'
 import { paginateForPrint } from '@/lib/print-helpers'
+import { extractList } from '@/lib/api-client'
 type Magasin = { id: number; code: string; nom: string }
 type Produit = { id: number; code: string; designation: string; prixAchat?: number | null }
 type StockRow = {
@@ -78,7 +79,6 @@ export default function StockPage() {
   const [deletingStock, setDeletingStock] = useState<StockRow | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
   const [createProduitData, setCreateProduitData] = useState<{ magasinId: string; produitId?: string; afterCreate?: () => void } | null>(null)
   const [produitForm, setProduitForm] = useState({
     code: '',
@@ -135,7 +135,7 @@ export default function StockPage() {
         setAlertesRupture(data)
       }
     } catch (e) {
-      console.error(e)
+      showError('Erreur lors du chargement des alertes.')
     } finally {
       setLoadingIntelligence(false)
     }
@@ -149,7 +149,7 @@ export default function StockPage() {
         const data = await res.json()
         setRecommendations(data)
         // Sélectionner tout par défaut
-        setSelectedRecommendations(new Set(data.map((_: any, i: number) => i)))
+        setSelectedRecommendations(new Set(data.map((_: Recommendation, i: number) => i)))
       }
     } catch (e) {
       showError("Erreur lors du chargement des recommandations")
@@ -186,6 +186,7 @@ export default function StockPage() {
       })
 
       let successCount = 0
+      let failCount = 0
       for (const [_, payload] of transfersMap) {
         const res = await fetch('/api/stock/transferts', {
           method: 'POST',
@@ -193,9 +194,15 @@ export default function StockPage() {
           body: JSON.stringify(payload)
         })
         if (res.ok) successCount++
+        else failCount++
       }
 
-      showSuccess(`${successCount} transfert(s) généré(s) avec succès.`)
+      if (failCount > 0) {
+        showError(`${failCount} transfert(s) ont échoué.`)
+      }
+      if (successCount > 0) {
+        showSuccess(`${successCount} transfert(s) généré(s) avec succès.`)
+      }
       setShowTransferAssistant(false)
       refetch()
     } catch (e) {
@@ -210,24 +217,17 @@ export default function StockPage() {
   }, [])
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/magasins').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/produits?complet=1').then((r) => (r.ok ? r.json() : [])).then((res) => {
-        return Array.isArray(res) ? res : []
-      }),
-      fetch('/api/produits/categories').then((r) => (r.ok ? r.json() : ['DIVERS'])),
-      fetch('/api/parametres').then((r) => (r.ok ? r.json() : null)),
-    ]).then(([m, p, cat, ent]) => {
+    const loadMagasins = fetch('/api/magasins').then((r) => (r.ok ? r.json() : [])).catch(() => [])
+    const loadProduits = fetch('/api/produits?complet=1').then((r) => (r.ok ? r.json() : [])).then((res) => Array.isArray(res) ? res : []).catch(() => [])
+    const loadCategories = fetch('/api/produits/categories').then((r) => (r.ok ? r.json() : ['DIVERS'])).catch(() => ['DIVERS'])
+    const loadEntreprise = fetch('/api/parametres').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+    
+    Promise.all([loadMagasins, loadProduits, loadCategories, loadEntreprise]).then(([m, p, cat, ent]) => {
       setMagasins(Array.isArray(m) ? m : [])
       setProduits(Array.isArray(p) ? p : [])
       setCategories(Array.isArray(cat) && cat.length ? cat : ['DIVERS'])
       setEntreprise(ent)
     })
-      .catch(() => {
-        setMagasins([])
-        setProduits([])
-        setCategories(['DIVERS'])
-      })
   }, [])
 
   useEffect(() => {
@@ -261,21 +261,16 @@ export default function StockPage() {
         const response = await res.json()
         if (Array.isArray(response)) {
           setList(response)
-          setPagination(null)
-        } else if (response.data && response.pagination) {
+        } else if (response?.data) {
           setList(response.data)
-          setPagination(response.pagination)
         } else {
           setList([])
-          setPagination(null)
         }
       } else {
         setList([])
-        setPagination(null)
       }
     } catch {
       setList([])
-      setPagination(null)
     } finally {
       setLoading(false)
     }
@@ -320,12 +315,11 @@ export default function StockPage() {
       const res = await fetch('/api/stock?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        const data = Array.isArray(response) ? response : (response.data || [])
-        setAllStocksForPrint(data)
+        setAllStocksForPrint(extractList(response))
         setTimeout(() => {
           window.print()
           setIsPrinting(false)
-        }, 500)
+        }, 0)
       }
     } catch (e) {
       console.error(e)
@@ -334,12 +328,11 @@ export default function StockPage() {
   }
 
   const refetch = () => {
-    fetchList(currentPage)
+    fetchList(currentPage, searchTerm, selectedCategory)
   }
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchList(page)
   }
 
   const searchLower = searchTerm.trim().toLowerCase()
@@ -390,7 +383,6 @@ export default function StockPage() {
       if (res.ok) {
         setShowEntree(false)
         refetch()
-        setTimeout(() => refetch(), 500)
       } else {
         if (data.error?.includes("n'existe pas dans ce magasin") || data.error?.includes("Creez d'abord le produit")) {
           setCreateProduitData({
@@ -436,7 +428,6 @@ export default function StockPage() {
       if (res.ok) {
         setShowSortie(false)
         refetch()
-        setTimeout(() => refetch(), 500)
         showSuccess('Sortie de stock enregistrée avec succès.')
       } else {
         if (data.error?.includes("n'existe pas dans ce magasin") || data.error?.includes("Creez d'abord le produit")) {
@@ -580,7 +571,7 @@ export default function StockPage() {
     setErr('')
     setInventaireSaving(true)
     try {
-      const lignes = filteredList
+      const lignes = list
         .filter((s) => s.id != null)
         .map((s) => {
           const key = stockKey(s)
@@ -589,7 +580,7 @@ export default function StockPage() {
             val !== '' && val !== undefined
               ? Math.max(0, Number(val) || 0) // Libération décimales
               : s.quantite
-          return { stockId: s.id!, quantiteReelle }
+          return { produitId: s.produit.id, quantiteTheorique: s.quantite, quantitePhysique: quantiteReelle }
         })
       const res = await fetch('/api/stock/inventaire', {
         method: 'POST',
@@ -605,7 +596,6 @@ export default function StockPage() {
         setShowInventaire(false)
         setInventaireReelles({})
         refetch()
-        setTimeout(() => refetch(), 500)
         showSuccess(data.regularise !== undefined ? `${data.regularise} ligne(s) régularisée(s).` : 'Inventaire enregistré avec succès.')
       } else {
         const errorMsg = formatApiError(data.error || 'Erreur lors de l\'enregistrement.')
@@ -653,7 +643,6 @@ export default function StockPage() {
           setShowEdit(false)
           setEditRow(null)
           refetch()
-          setTimeout(() => refetch(), 500)
           showSuccess('Stock initialisé avec succès.')
         } else {
           const d = await res.json()
@@ -685,7 +674,6 @@ export default function StockPage() {
         setShowEdit(false)
         setEditRow(null)
         refetch()
-        setTimeout(() => refetch(), 500)
         showSuccess('Stock modifié avec succès.')
       } else {
         const d = await res.json()
@@ -833,7 +821,7 @@ export default function StockPage() {
                 const allData = Array.isArray(d) ? d : (d.data || [])
                 const csv = [
                   ['Code', 'Désignation', 'Catégorie', 'Magasin', 'Quantité', 'PAMP', 'Valeur'].join(';'),
-                  ...allData.map((s: any) => [
+                  ...allData.map((s: StockRow) => [
                     s.produit?.code || '',
                     s.produit?.designation || '',
                     s.produit?.categorie || '',
@@ -844,9 +832,9 @@ export default function StockPage() {
                   ].join(';'))
                 ].join('\n')
                 
-                const totalQte = allData.reduce((acc: number, s: any) => acc + (s.quantite || 0), 0)
-                const totalVal = allData.reduce((acc: number, s: any) => acc + (s.quantite || 0) * (s.produit?.pamp || s.produit?.prixAchat || 0), 0)
-                const totalRow = ['TOTAL', '', '', '', d.totals?.totalQuantite ?? totalQte, '', d.totals?.totalValeur ?? totalVal].join(';')
+                const totalQte = allData.reduce((acc: number, s: StockRow) => acc + (s.quantite || 0), 0)
+                const totalVal = allData.reduce((acc: number, s: StockRow) => acc + (s.quantite || 0) * (s.produit?.pamp || s.produit?.prixAchat || 0), 0)
+                const totalRow = ['TOTAL', '', '', '', totalQte, '', totalVal].join(';')
                 const bom = '\uFEFF'
                 const blob = new Blob([bom + csv + '\n' + totalRow], { type: 'text/csv;charset=utf-8;' })
                 const blobUrl = window.URL.createObjectURL(blob)
@@ -1584,7 +1572,7 @@ export default function StockPage() {
                   <AlertTriangle className="h-6 w-6 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 text-blue-800">Intelligence Prédictive : Alertes 10 Jours</h3>
+                  <h3 className="text-xl font-bold text-blue-800">Intelligence Prédictive : Alertes 10 Jours</h3>
                   <p className="text-sm text-gray-500">Basé sur les tendances de vente des 30 derniers jours</p>
                 </div>
               </div>

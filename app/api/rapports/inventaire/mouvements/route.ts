@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
           utilisateur: { select: { nom: true } },
           transfert: { select: { id: true, numero: true } }
         },
-        orderBy: [{ dateOperation: 'desc' }, { id: 'desc' }],
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
       })
 
       let totalEntrees = 0
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
           utilisateur: { select: { nom: true } },
           transfert: { select: { id: true, numero: true } }
         },
-        orderBy: [{ dateOperation: 'desc' }, { id: 'desc' }],
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
         skip,
         take: limit,
       }),

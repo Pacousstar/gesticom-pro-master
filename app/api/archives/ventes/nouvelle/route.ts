@@ -4,8 +4,7 @@ import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/require-role'
 import { montantLigneTTC, montantTotalVenteDocument } from '@/lib/calculs-commerciaux'
 import { apiCatch } from '@/lib/log-error'
-import { validateApiRequest } from '@/lib/validation-helpers'
-import { archiveVenteSchema } from '@/lib/validations'
+
 
 export async function POST(req: Request) {
   try {
@@ -17,8 +16,6 @@ export async function POST(req: Request) {
     const currentUser = { id: session.userId, entiteId: session.entiteId, role: session.role }
 
     const body = await req.json()
-    const vres = validateApiRequest(archiveVenteSchema, body)
-    if (!vres.success) return vres.response
     const {
       magasinId,
       clientId,

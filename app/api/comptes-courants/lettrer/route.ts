@@ -10,10 +10,9 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   const body = await request.json()
-  if (!validateApiRequest(lettrageSchema, body).success) {
-    // Schema doesn't match; fall through with raw body
-  }
-  const { compteCourantId, transactionId } = body
+  const validation = validateApiRequest(lettrageSchema, body)
+  if (!validation.success) return validation.response
+  const { compteCourantId, transactionId } = validation.data
   if (!compteCourantId || !transactionId) {
     return NextResponse.json({ error: 'Paramètres manquants.' }, { status: 400 })
   }

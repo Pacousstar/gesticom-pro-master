@@ -74,7 +74,9 @@ export async function GET(request: NextRequest) {
       Magasin: v.magasin?.code || '—',
       Montant: v.montantTotal,
       Paiement: v.modePaiement,
-      'Statut paiement': v.statutPaiement === 'PAYE' ? 'Payé' : v.statutPaiement === 'PARTIEL' ? 'Partiel' : 'Crédit',
+      'Statut paiement': ['PAYE', 'PARTIEL', 'CREDIT', 'REMBOURSE'].includes(v.statutPaiement)
+  ? ({ PAYE: 'Payé', PARTIEL: 'Partiel', CREDIT: 'Crédit', REMBOURSE: 'Remboursé' } as Record<string, string>)[v.statutPaiement]
+  : 'Crédit',
       'Reste à payer': reste,
       Statut: v.statut === 'VALIDEE' ? 'Validée' : v.statut,
     })

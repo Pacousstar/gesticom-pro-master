@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Les dates de début et de fin sont requises.' }, { status: 400 })
   }
 
-  const dateDebutParsed = new Date(dateDebut + 'T00:00:00')
-  const dateFinParsed = new Date(dateFin + 'T23:59:59')
+  const dateDebutParsed = new Date(dateDebut + 'T00:00:00Z')
+  const dateFinParsed = new Date(dateFin + 'T23:59:59Z')
   if (isNaN(dateDebutParsed.getTime()) || isNaN(dateFinParsed.getTime())) {
     return NextResponse.json({ error: 'Format de date invalide.' }, { status: 400 })
   }
@@ -30,9 +30,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'La date de début doit être antérieure à la date de fin.' }, { status: 400 })
   }
 
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+  const limit = Math.min(10000, Math.max(1, parseInt(searchParams.get('limit') || '10000')))
+  const skip = (page - 1) * limit
+
   const where: any = {
     entiteId,
-    statut: { in: ['VALIDE', 'VALIDEE'] },
+    statut: 'VALIDEE',
     date: {
       gte: dateDebutParsed,
       lte: dateFinParsed,
@@ -40,20 +44,26 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const ventes = await prisma.vente.findMany({
-      where,
-      include: {
-        client: { select: { nom: true, code: true } },
-        utilisateur: { select: { nom: true } },
-        magasin: { select: { nom: true } },
-        lignes: { select: { designation: true } },
-        reglements: { select: { id: true, modePaiement: true } },
-        ReglementVenteLigne: { select: { reglementId: true, montant: true } },
-      },
-      orderBy: { date: 'desc' },
-    })
-
+    const [ventes, total] = await Promise.all([
+      prisma.vente.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          client: { select: { nom: true, code: true } },
+          utilisateur: { select: { nom: true } },
+          magasin: { select: { nom: true } },
+          lignes: { select: { designation: true } },
+          reglements: { select: { id: true, modePaiement: true } },
+          ReglementVenteLigne: { select: { reglementId: true, montant: true } },
+        },
+        orderBy: { date: 'desc' },
+      }),
+      prisma.vente.count({ where }),
+    ])
+  
     const formatted = ventes.map(v => {
+      const lignesDesignations = (v.lignes || []).map(l => l.designation).filter(Boolean)
       const creditReglementIds = new Set(
         (v.reglements || [])
           .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
@@ -74,12 +84,12 @@ export async function GET(request: NextRequest) {
         statutPaiement: v.statutPaiement,
         modePaiement: v.modePaiement,
         vendeur: v.utilisateur?.nom || 'Inconnu',
-        magasin: v.magasin.nom,
-        produits: v.lignes.map(l => l.designation).join(', ')
+        magasin: v.magasin?.nom || '—',
+        produits: lignesDesignations.join(', ')
       }
     })
 
-    return NextResponse.json(formatted)
+    return NextResponse.json({ data: formatted, total, page, limit })
   } catch (error) {
     await apiCatch(error, 'api/rapports/ventes/liste')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

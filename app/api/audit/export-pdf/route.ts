@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 const EXPORT_MAX_ROWS = 1000
 
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     doc.setFontSize(8)
     let currentY = y
 
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Date', margin, currentY)
     doc.text('Utilisateur', margin + 35, currentY)
     doc.text('Action', margin + 70, currentY)
@@ -110,12 +110,12 @@ export async function GET(request: NextRequest) {
     currentY += lineHeight
     doc.line(margin, currentY - 2, 195, currentY - 2)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     for (const log of logs) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Date', margin, currentY)
         doc.text('Utilisateur', margin + 35, currentY)
         doc.text('Action', margin + 70, currentY)
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
         doc.text('Description', margin + 115, currentY)
         currentY += lineHeight
         doc.line(margin, currentY - 2, 195, currentY - 2)
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const dateFormatted = new Date(log.date).toLocaleString('fr-FR', {

@@ -7,6 +7,7 @@ import {
   comptabiliserVente,
   comptabiliserReglementVente,
 } from '@/lib/comptabilisation'
+import { repairCaisseIntegrity, repairStockIntegrity, repairBankIntegrity } from '@/lib/repair'
 
 export async function POST() {
   const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
@@ -209,8 +210,6 @@ export async function PUT() {
   }
 
   try {
-    const { repairCaisseIntegrity, repairStockIntegrity, repairBankIntegrity } = await import('@/lib/repair')
-
     const [caissesRepaired, stocksRepaired, banksRepaired] = await Promise.all([
       repairCaisseIntegrity(),
       repairStockIntegrity(),

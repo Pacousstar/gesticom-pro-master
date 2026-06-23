@@ -97,7 +97,7 @@ export default function PaiementsClientsPage() {
           <p className="text-sm text-white/90 font-medium">Historique chronologique des encaissements clients</p>
         </div>
         <button 
-          onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 500); }}
+          onClick={() => { setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false); }, 0); }}
           disabled={isPrinting}
           className="flex items-center gap-2 rounded-xl border-2 border-orange-500 bg-orange-50 px-6 py-3 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-lg transition-all active:scale-95 disabled:opacity-50"
         >

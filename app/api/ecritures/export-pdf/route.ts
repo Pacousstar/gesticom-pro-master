@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 // Fonction pour formater les montants correctement pour jsPDF
 function formatMontant(n: number): string {
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
     let currentY = startY
 
     // En-têtes du tableau
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Date', margin, currentY)
     doc.text('N°', margin + 20, currentY)
     doc.text('Journal', margin + 35, currentY)
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
     currentY += lineHeight
     doc.line(margin, currentY - 2, 200, currentY - 2)
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     let totalDebit = 0
     let totalCredit = 0
 
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
       if (currentY > pageHeight - 30) {
         doc.addPage()
         currentY = 20
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Date', margin, currentY)
         doc.text('N°', margin + 20, currentY)
         doc.text('Journal', margin + 35, currentY)
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
         doc.text('Crédit', margin + 170, currentY, { align: 'right' })
         currentY += lineHeight
         doc.line(margin, currentY - 2, 200, currentY - 2)
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const dateStr = new Date(e.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
     currentY += 2
     doc.line(margin, currentY, 200, currentY)
     currentY += lineHeight
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('TOTAUX', margin + 90, currentY)
     doc.text(formatMontant(totalDebit), margin + 150, currentY, { align: 'right' })
     doc.text(formatMontant(totalCredit), margin + 170, currentY, { align: 'right' })

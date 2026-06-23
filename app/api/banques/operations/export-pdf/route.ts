@@ -5,7 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
  
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 function formatMontant(n: number): string {
   const num = Math.round(n)
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
     // En-tête du tableau
     let y = 45
     doc.setFontSize(9)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Date', 15, y)
     doc.text('Type', 40, y)
     doc.text('Libellé', 70, y)
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     doc.line(15, y, 195, y)
 
     // Lignes de données
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     let totalDepots = 0
     let totalRetraits = 0
 
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
         doc.addPage()
         y = 20
         // Réimprimer l'en-tête
-        doc.setFont(undefined, 'bold')
+        doc.setFont('helvetica', 'bold')
         doc.text('Date', 15, y)
         doc.text('Type', 40, y)
         doc.text('Libellé', 70, y)
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
         y += 5
         doc.line(15, y, 195, y)
         y += 5
-        doc.setFont(undefined, 'normal')
+        doc.setFont('helvetica', 'normal')
       }
 
       const dateStr = new Date(op.date).toLocaleDateString('fr-FR')
@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
     y += 5
     doc.line(15, y, 195, y)
     y += 5
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Total dépôts:', 15, y)
     doc.text(`${formatMontant(totalDepots)} F`, 125, y, { align: 'right' })
     y += 5

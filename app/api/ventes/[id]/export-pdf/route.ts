@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { apiCatch } from '@/lib/log-error'
 
-const { jsPDF } = require('jspdf')
+import jsPDF from 'jspdf'
 
 export async function GET(
   _request: NextRequest,
@@ -53,11 +53,11 @@ export async function GET(
 
     // En-tête entreprise
     doc.setFontSize(18)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text(nomEntreprise, pageWidth / 2, y, { align: 'center' })
     y += 8
     doc.setFontSize(9)
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     if (localisationEntreprise) {
       doc.text(localisationEntreprise, pageWidth / 2, y, { align: 'center' })
       y += 5
@@ -70,28 +70,28 @@ export async function GET(
 
     // Titre
     doc.setFontSize(16)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('FACTURE', pageWidth / 2, y, { align: 'center' })
     y += 10
 
     // Informations document
     doc.setFontSize(10)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text(`N° ${vente.numero}`, margin, y)
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     const dateStr = new Date(vente.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
     doc.text(`Date: ${dateStr}`, pageWidth - margin, y, { align: 'right' })
     y += 7
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     doc.text(`Magasin: ${vente.magasin.nom} (${vente.magasin.code})`, margin, y)
     y += 7
 
     // Client
     y += 3
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('Client:', margin, y)
     y += 6
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     const clientNom = vente.client?.nom || vente.clientLibre || 'Client occasionnel'
     doc.text(clientNom, margin, y)
     y += 5
@@ -116,7 +116,7 @@ export async function GET(
     let xPos = startX
 
     doc.setFontSize(8)
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.setFillColor(240, 240, 240)
     doc.rect(startX, y - 4, colWidths.designation, lineHeight, 'F')
     doc.text('DESIGNATION', startX + 2, y)
@@ -134,7 +134,7 @@ export async function GET(
     doc.text('TOTAL', xPos + 2, y)
     y += lineHeight + 1
 
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     let totalHT = 0
     let totalTVA = 0
     let totalRemise = 0
@@ -182,7 +182,7 @@ export async function GET(
     // Totaux
     const totX = pageWidth - margin - 60
     doc.setFontSize(10)
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
 
     if (vente.remiseGlobale) {
       doc.text('Remise globale:', totX, y)
@@ -190,13 +190,13 @@ export async function GET(
       y += 7
     }
 
-    doc.setFont(undefined, 'bold')
+    doc.setFont('helvetica', 'bold')
     doc.text('TOTAL TTC:', totX, y)
     doc.text(`${vente.montantTotal.toLocaleString('fr-FR')} F`, pageWidth - margin, y, { align: 'right' })
     y += 8
 
     // Paiement
-    doc.setFont(undefined, 'normal')
+    doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.text(`Mode de paiement: ${vente.modePaiement}`, margin, y)
     y += 6

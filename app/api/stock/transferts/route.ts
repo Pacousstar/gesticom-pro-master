@@ -7,6 +7,7 @@ import { logModification } from '@/lib/audit'
 import { transfertSchema } from '@/lib/validations'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { apiCatch } from '@/lib/log-error'
+import { comptabiliserTransfert } from '@/lib/comptabilisation'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -180,7 +181,6 @@ export async function POST(request: NextRequest) {
       }
 
       if (montantTotalTransfert > 0) {
-        const { comptabiliserTransfert } = await import('@/lib/comptabilisation')
         const magasinOrigine = await tx.magasin.findUnique({ where: { id: transfert.magasinOrigineId } })
         const magasinDest = await tx.magasin.findUnique({ where: { id: transfert.magasinDestId } })
 

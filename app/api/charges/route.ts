@@ -4,10 +4,13 @@ import { prisma } from '@/lib/db'
 import { comptabiliserCharge } from '@/lib/comptabilisation'
 import { getEntiteId, getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { estModeEspeces } from '@/lib/enums-commerce'
+import { estModeBanque, enregistrerOperationBancaire } from '@/lib/banque'
 import { requirePermission } from '@/lib/require-role'
 import { chargeSchema } from '@/lib/validations'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { apiCatch } from '@/lib/log-error'
+import { successList } from '@/lib/api-response'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -93,20 +96,7 @@ export async function GET(request: NextRequest) {
 
   const totalAmount = totalAgg._sum.montant || 0
 
-  return NextResponse.json({
-    charges,
-    totalAmount,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    }
-  }, {
-    headers: {
-      'Cache-Control': 'no-store, max-age=0',
-    },
-  })
+  return successList(charges, { page, limit, total, totalPages: Math.ceil(total / limit) }, { totalAmount })
 }
 
 export async function POST(request: NextRequest) {
@@ -157,8 +147,6 @@ export async function POST(request: NextRequest) {
       }
     }
     const modePaiementRaw = modePaiement || 'ESPECES'
-    const { estModeEspeces } = await import('@/lib/enums-commerce')
-    const { estModeBanque } = await import('@/lib/banque')
     if (estModeBanque(modePaiementRaw) && !banqueId) {
       return NextResponse.json({ error: 'Banque requise pour ce mode de paiement.' }, { status: 400 })
     }
@@ -240,7 +228,6 @@ export async function POST(request: NextRequest) {
         await recalculerSoldeCaisse(targetMagasinId, tx)
       } else {
         // ✅ SYNCHRO BANQUE : Charge par Chèque/Virement/MM
-        const { enregistrerOperationBancaire } = await import('@/lib/banque')
         if (estModeBanque(modePaiementRaw)) {
 await enregistrerOperationBancaire({
             banqueId,
