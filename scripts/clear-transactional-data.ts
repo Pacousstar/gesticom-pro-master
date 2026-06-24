@@ -1,5 +1,24 @@
 import { prisma } from '../lib/db'
 
+const args = process.argv.slice(2)
+
+async function checkData() {
+  if (args.includes('--force')) return
+  const [ventes, achats, ecritures] = await Promise.all([
+    prisma.vente.count().catch(() => 0),
+    prisma.achat.count().catch(() => 0),
+    prisma.ecritureComptable.count().catch(() => 0),
+  ])
+  if (ventes + achats + ecritures > 0) {
+    console.log('⚠️  ATTENTION: Ce script va SUPPRIMER toutes les transactions!')
+    console.log(`   Ventes: ${ventes}, Achats: ${achats}, Écritures: ${ecritures}`)
+    console.log('\nPour confirmer, ajoutez --force : npx tsx scripts/clear-transactional-data.ts --force')
+    process.exit(1)
+  }
+}
+
+await checkData()
+
 async function main() {
   console.log('=== Nettoyage des données transactionnelles ===')
   console.log('Conserve : User, Magasin, Produit, Stock, Client, Fournisseur, Banque, PlanCompte, Journal, Parametre, Entite\n')

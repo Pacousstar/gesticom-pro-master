@@ -11,6 +11,8 @@
 
 import { PrismaClient } from '@prisma/client'
 import { execSync } from 'child_process'
+import * as fs from 'fs'
+import * as path from 'path'
 
 const prisma = new PrismaClient()
 const args = process.argv.slice(2)
@@ -19,6 +21,22 @@ const isReset = args.includes('--reset')
 function run(cmd: string) {
   console.log(`\n> ${cmd}`)
   execSync(cmd, { stdio: 'inherit', cwd: process.cwd() })
+}
+
+async function backupDatabase() {
+  const envPath = path.join(process.cwd(), '.env')
+  const envContent = fs.readFileSync(envPath, 'utf8')
+  const match = envContent.match(/DATABASE_URL="?file:(.*?)"?/)
+  if (!match) return console.log('  ⚠ Backup automatique non supporté pour ce type de base.')
+  const dbPath = match[1].trim()
+  const resolved = path.isAbsolute(dbPath) ? dbPath : path.join(process.cwd(), dbPath)
+  if (!fs.existsSync(resolved)) return console.log('  ⚠ Fichier base introuvable, skip backup.')
+  const backupDir = path.join(process.cwd(), 'backups')
+  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true })
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupFile = path.join(backupDir, `pre-reset-${timestamp}.db`)
+  fs.copyFileSync(resolved, backupFile)
+  console.log(`  ✓ Backup créé : ${backupFile}`)
 }
 
 async function main() {
@@ -32,7 +50,10 @@ async function main() {
 
   // 2. Reset si demandé (NOUVEAU CLIENT)
   if (isReset) {
-    console.log('\n--- Étape 2 : Reset des données ---')
+    console.log('\n--- Étape 2 : Backup de sécurité avant reset ---')
+    await backupDatabase()
+
+    console.log('\n--- Étape 3 : Reset des données ---')
     const tables = [
       'archiveVenteLigne', 'archiveVente', 'archiveSoldeClient',
       'reglementAchatLigne', 'reglementAchat', 'reglementVenteLigne', 'reglementVente',
@@ -74,8 +95,8 @@ async function main() {
     console.log('\n  ✅ Toutes les données supprimées.')
   }
 
-  // 3. Seed (crée admin/magasin/entité si absents)
-  console.log('\n--- Étape 3 : Seed ---')
+  // 4. Seed (crée admin/magasin/entité si absents)
+  console.log('\n--- Étape 4 : Seed ---')
   run('node scripts/seed.js')
 
   console.log('\n========================================')

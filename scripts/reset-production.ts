@@ -1,11 +1,31 @@
 /**
  * Script de reset complet de la BD pour production
  * A exécuter APRÈS les tests
+ * Usage: npx tsx scripts/reset-production.ts --force
  */
 
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
+const args = process.argv.slice(2)
+
+if (!args.includes('--force')) {
+  const [ventes, achats, clients, fournisseurs, produits, ecritures] = await Promise.all([
+    prisma.vente.count().catch(() => 0),
+    prisma.achat.count().catch(() => 0),
+    prisma.client.count().catch(() => 0),
+    prisma.fournisseur.count().catch(() => 0),
+    prisma.produit.count().catch(() => 0),
+    prisma.ecritureComptable.count().catch(() => 0),
+  ])
+  console.log('⚠️  ATTENTION: Ce script va SUPPRIMER toutes les données!')
+  if (ventes + achats + clients + fournisseurs + produits + ecritures > 0) {
+    console.log(`   Ventes: ${ventes}, Achats: ${achats}, Clients: ${clients}`)
+    console.log(`   Fournisseurs: ${fournisseurs}, Produits: ${produits}, Écritures: ${ecritures}`)
+    console.log('\nPour confirmer, ajoutez --force : npx tsx scripts/reset-production.ts --force')
+    process.exit(1)
+  }
+}
 
 const tablesToClean = [
   'archiveVenteLigne',

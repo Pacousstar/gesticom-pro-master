@@ -36,7 +36,37 @@ if ($dbUrl -match "file:(.*)") {
     Write-Error "Fichier DB introuvable : $dbFile"
     exit 1
   }
-} elseif ($dbUrl -match "postgres|mysql|sqlserver") {
+} elseif ($dbUrl -match "postgresql://(.*?)@(.*?):(\d+)/(.*)") {
+  $pgHost = $Matches[2]
+  $pgPort = $Matches[3]
+  $pgDb = $Matches[4]
+  Write-Output "Base PostgreSQL détectée : $pgHost:$pgPort/$pgDb"
+  $pgDump = Get-Command "pg_dump" -ErrorAction SilentlyContinue
+  if (-not $pgDump) {
+    $possiblePaths = @(
+      "$env:ProgramFiles\PostgreSQL\*\bin\pg_dump.exe",
+      "${env:ProgramFiles(x86)}\PostgreSQL\*\bin\pg_dump.exe",
+      "C:\tools\postgresql\*\bin\pg_dump.exe"
+    )
+    foreach ($pattern in $possiblePaths) {
+      $found = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($found) { $pgDump = $found; break }
+    }
+  }
+  if ($pgDump) {
+    $backupFile = Join-Path -Path $backupPath -ChildPath "gesticom-pro-$timestamp.sql"
+    $env:PGPASSWORD = $Matches[1] -replace '.*:'
+    & $pgDump.Source -h $pgHost -p $pgPort -U ($Matches[1] -replace ':.*') -F c -f $backupFile $pgDb
+    if ($LASTEXITCODE -eq 0) {
+      Write-Output "Backup PostgreSQL créé : $backupFile"
+    } else {
+      Write-Error "Échec du backup PostgreSQL. Vérifiez que pg_dump est installé et accessible."
+    }
+  } else {
+    Write-Output "pg_dump introuvable. Backup manuel requis depuis :"
+    Write-Output "  $dbUrl"
+  }
+} elseif ($dbUrl -match "mysql|sqlserver") {
   Write-Output "Backup de base distante non automatisé. Exportez manuellement depuis :"
   Write-Output "  $dbUrl"
 } else {

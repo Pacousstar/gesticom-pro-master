@@ -1,5 +1,25 @@
 import { prisma } from '../lib/db'
 
+const args = process.argv.slice(2)
+
+async function checkData() {
+  if (args.includes('--force')) return
+  const [ventes, achats, produits, ecritures] = await Promise.all([
+    prisma.vente.count().catch(() => 0),
+    prisma.achat.count().catch(() => 0),
+    prisma.produit.count().catch(() => 0),
+    prisma.ecritureComptable.count().catch(() => 0),
+  ])
+  if (ventes + achats + produits + ecritures > 0) {
+    console.log('⚠️  ATTENTION: Ce script va SUPPRIMER toutes les données!')
+    console.log(`   Ventes: ${ventes}, Achats: ${achats}, Produits: ${produits}, Écritures: ${ecritures}`)
+    console.log('\nPour confirmer, ajoutez --force : npx tsx scripts/reset-all.ts --force')
+    process.exit(1)
+  }
+}
+
+await checkData()
+
 async function resetDatabase() {
   console.log('🗑️ Reset complet de la base de données...\n')
 

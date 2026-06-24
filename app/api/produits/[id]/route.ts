@@ -152,6 +152,18 @@ export async function DELETE(
       }, { status: 400 })
     }
 
+    // Vérifier que le produit n'est référencé dans aucune vente, achat ou mouvement
+    const [venteCount, achatCount, mouvementCount] = await Promise.all([
+      prisma.venteLigne.count({ where: { produitId: id }, take: 1 }),
+      prisma.achatLigne.count({ where: { produitId: id }, take: 1 }),
+      prisma.mouvement.count({ where: { produitId: id }, take: 1 }),
+    ])
+    if (venteCount > 0 || achatCount > 0 || mouvementCount > 0) {
+      return NextResponse.json({
+        error: 'Impossible de supprimer ce produit : il est référencé dans des ventes, achats ou mouvements. Archivez-le plutôt.',
+      }, { status: 400 })
+    }
+
     // Suppression réelle (Prisma cascade supprime la ligne de stock orpheline)
     const p = await prisma.produit.delete({
       where: { id },
