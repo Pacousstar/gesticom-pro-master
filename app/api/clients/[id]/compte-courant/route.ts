@@ -247,6 +247,7 @@ export async function POST(
       })
 
       let resteAPayer = montant
+      let premiereVenteAlloueeId: number | null = null
 
       for (const vente of ventesNonSoldees) {
         if (resteAPayer <= 0) break
@@ -258,6 +259,7 @@ export async function POST(
         const montantARegler = Math.min(montantDu, resteAPayer)
 
         if (montantARegler > 0) {
+          if (premiereVenteAlloueeId === null) premiereVenteAlloueeId = vente.id
           const nouveauPaye = realMontantPaye + montantARegler
           const nouveauStatut = nouveauPaye >= (vente.montantTotal || 0) ? 'PAYE' : 'PARTIEL'
 
@@ -312,7 +314,7 @@ export async function POST(
         await enregistrerMouvementCaisse({
           magasinId: Number(magasinId),
           type: 'ENTREE',
-          motif: `Règlement client : ${observation || 'Acompte compte courant'}${client.nom ? ' - ' + client.nom : ''}`,
+          motif: `REGLEMENT:${reglement.id} Règlement client : ${observation || 'Acompte compte courant'}${client.nom ? ' - ' + client.nom : ''}`,
           montant,
           utilisateurId: session.userId,
           entiteId,
@@ -328,7 +330,7 @@ export async function POST(
             libelle: `Règlement client ${client.nom || ''} - ${observation || 'Compte courant'}`,
             montant,
             utilisateurId: session.userId,
-            reference: `CC-CLI-${clientId}-${Date.now()}`,
+            reference: `REGLEMENT_${reglement.id}`,
             beneficiaire: client.nom || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
@@ -336,10 +338,10 @@ export async function POST(
           console.warn(`[paiement client] Mode de paiement non géré pour trésorerie: ${modePaiement}`)
         }
 
-      // ✅ COMPTABILISATION
+      // ✅ COMPTABILISATION (411 si alloué à une facture, 4191 si acompte pur)
       await comptabiliserReglementVente({
         reglementId: reglement.id,
-        venteId: 0,
+        venteId: premiereVenteAlloueeId ?? 0,
         numeroVente: `CC-CLI-${clientId}`,
         date: dateReglement,
         montant,

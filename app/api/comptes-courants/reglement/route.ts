@@ -5,6 +5,7 @@ import { comptabiliserReglementVente, comptabiliserReglementAchat } from '@/lib/
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 import { reglementCompteCourantSchema } from '@/lib/validations'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { apiCatch } from '@/lib/log-error'
@@ -13,6 +14,8 @@ import { enregistrerOperationBancaire } from '@/lib/banque'
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
 
   try {
     const body = await request.json()
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
           await enregistrerMouvementCaisse({
             magasinId: magasinId!,
             type: 'ENTREE',
-            motif: `Règlement CC Client ${client?.nom || ''} #${compteCourantId}`,
+            motif: `REGLEMENT:${reglement.id} Règlement CC Client ${client?.nom || ''}`,
             montant: montantFinal,
             utilisateurId: session.userId,
             entiteId,
@@ -90,7 +93,7 @@ export async function POST(request: NextRequest) {
             libelle: `Règlement CC Client #${compteCourantId}`,
             montant: montantFinal,
             utilisateurId: session.userId,
-            reference: `CC-${compteCourantId}`,
+            reference: `REGLEMENT_${reglement.id}`,
             beneficiaire: undefined,
             observation: `Paiement via ${modePaiement}`,
           }, tx)
@@ -142,7 +145,7 @@ export async function POST(request: NextRequest) {
           await enregistrerMouvementCaisse({
             magasinId: magasinId!,
             type: 'SORTIE',
-            motif: `Règlement CC Fournisseur ${fournisseur?.nom || ''} #${compteCourantId}`,
+            motif: `REGLEMENT:${reglement.id} Règlement CC Fournisseur ${fournisseur?.nom || ''}`,
             montant: montantFinal,
             utilisateurId: session.userId,
             entiteId,
@@ -158,7 +161,7 @@ export async function POST(request: NextRequest) {
             libelle: `Règlement CC Fournisseur #${compteCourantId}`,
             montant: montantFinal,
             utilisateurId: session.userId,
-            reference: `CC-${compteCourantId}`,
+            reference: `REGLEMENT_${reglement.id}`,
             beneficiaire: undefined,
             observation: `Paiement via ${modePaiement}`,
           }, tx)

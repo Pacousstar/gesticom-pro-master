@@ -123,10 +123,10 @@ export default function FournisseursPage() {
       setFormData({
         code: f.code || '',
         nom: f.nom,
-        telephone: f.telephone || '',
-        email: f.email || '',
+        telephone: (f.telephone === 'null' ? '' : f.telephone) || '',
+        email: (f.email === 'null' ? '' : f.email) || '',
         ncc: f.ncc || '',
-        localisation: f.localisation || '',
+        localisation: (f.localisation === 'null' ? '' : f.localisation) || '',
         numeroCamion: f.numeroCamion || '',
         soldeInitial: String(f.soldeInitial || 0),
         avoirInitial: String(f.avoirInitial || 0),
@@ -387,8 +387,8 @@ export default function FournisseursPage() {
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="border border-gray-300 px-3 py-2 font-mono">{f.code || '-'}</td>
                       <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{f.nom}</td>
-                      <td className="border border-gray-300 px-3 py-2 italic">{f.telephone || '-'}</td>
-                      <td className="border border-gray-300 px-3 py-2">{f.localisation || '-'}</td>
+                      <td className="border border-gray-300 px-3 py-2 italic">{(f.telephone === 'null' ? null : f.telephone) || '-'}</td>
+                      <td className="border border-gray-300 px-3 py-2">{(f.localisation === 'null' ? null : f.localisation) || '-'}</td>
                       <td className="border border-gray-300 px-3 py-2 font-medium">{f.numeroCamion || '-'}</td>
                       <td className="border border-gray-300 px-3 py-2 text-right text-[12px]">{(f.soldeInitial || 0).toLocaleString()} F</td>
                       <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(f.dette ?? 0) > 0 ? 'text-red-700 bg-red-50' : 'text-emerald-700'}`}>
@@ -450,74 +450,83 @@ export default function FournisseursPage() {
                     { label: 'Nbre Achats', value: `${historyForPrint.length}` },
                   ]}
                 >
-                  <table className="w-full text-[14px] border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                        <th className="border border-gray-300 px-3 py-3 text-left">N° Facture</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Statut</th>
-                        <th className="border border-gray-300 px-3 py-3 text-right">Montant Total</th>
-                        <th className="border border-gray-300 px-3 py-3 text-right">Montant Payé</th>
-                        <th className="border border-gray-300 px-3 py-3 text-right">Reste</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {chunk.map((h: any, idx: number) => (
-                        <Fragment key={idx}>
-                          <tr className="border-b border-gray-200">
-                            <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{h.numero || '-'}</td>
-                            <td className="border border-gray-300 px-3 py-2">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
-                            <td className="border border-gray-300 px-3 py-2">
-                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
-                                {h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'}
-                              </span>
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
-                            <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(h.montantTotal - (h.montantPaye || 0)) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                              {(Math.max(0, h.montantTotal - (h.montantPaye || 0))).toLocaleString()} F
-                            </td>
-                          </tr>
+                  {(() => {
+                    const itemsBefore = allChunks.slice(0, index).reduce((sum: number, c: any[]) => sum + c.length, 0)
+                    return chunk.map((h: any, idx: number) => {
+                      const globalNum = itemsBefore + idx + 1
+                      const badgeClass = h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                      const badgeText = h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'
+                      const resteH = Math.max(0, h.montantTotal - (h.montantPaye || 0))
+                      const resteColor = resteH > 0 ? 'text-red-700' : 'text-emerald-700'
+
+                      return (
+                        <div key={idx} className="border-2 border-black mb-4 p-3 print-box" style={{ border: '2px solid black', marginBottom: '16px', padding: '10px' }}>
+                          <div className="font-black text-[16px] mb-3" style={{ fontSize: '16px', fontWeight: 900, marginBottom: '12px' }}>
+                            N°{globalNum} – Achat #{h.numero || '-'}
+                          </div>
+                          <table className="w-full text-[14px] border-collapse border border-gray-300 mb-3" style={{ marginBottom: '12px' }}>
+                            <tbody>
+                              <tr>
+                                <td className="border border-gray-300 px-3 py-2 font-bold w-[15%]">Date</td>
+                                <td className="border border-gray-300 px-3 py-2 w-[35%]">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
+                                <td className="border border-gray-300 px-3 py-2 font-bold w-[15%]">Statut</td>
+                                <td className="border border-gray-300 px-3 py-2 w-[35%]">
+                                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${badgeClass}`}>{badgeText}</span>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td className="border border-gray-300 px-3 py-2 font-bold">Total</td>
+                                <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
+                                <td className="border border-gray-300 px-3 py-2 font-bold">Payé</td>
+                                <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
+                              </tr>
+                              <tr>
+                                <td className="border border-gray-300 px-3 py-2 font-bold">Reste</td>
+                                <td className={`border border-gray-300 px-3 py-2 text-right font-black ${resteColor}`}>{resteH.toLocaleString()} F</td>
+                                <td colSpan={2} className="border border-gray-300 px-3 py-2"></td>
+                              </tr>
+                            </tbody>
+                          </table>
                           {h.lignes && h.lignes.length > 0 && (
-                            <tr className="no-page-break-inside">
-                              <td colSpan={6} className="border border-gray-300 px-3 py-1 bg-gray-50">
-                                <table className="w-full text-[11px] border-collapse">
-                                  <thead>
-                                    <tr className="text-gray-500 uppercase font-bold text-[10px]">
-                                      <th className="px-2 py-1 text-left w-10">Qté</th>
-                                      <th className="px-2 py-1 text-left">Désignation</th>
-                                      <th className="px-2 py-1 text-right">P.U.</th>
-                                      <th className="px-2 py-1 text-right">Total</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {h.lignes.map((l: any, li: number) => (
-                                      <tr key={li} className="border-t border-gray-200">
-                                        <td className="px-2 py-1 text-center font-bold">{l.quantite}</td>
-                                        <td className="px-2 py-1">{l.designation || '-'}</td>
-                                        <td className="px-2 py-1 text-right">{(l.prixUnitaire || 0).toLocaleString()} F</td>
-                                        <td className="px-2 py-1 text-right font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </td>
-                            </tr>
+                            <table className="w-full text-[11px] border-collapse border border-gray-300">
+                              <thead>
+                                <tr className="text-gray-500 uppercase font-bold text-[10px] bg-gray-50">
+                                  <th className="border border-gray-300 px-2 py-1 text-left w-10">Qté</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-left">Désignation</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-right">P.U.</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-right">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {h.lignes.map((l: any, li: number) => (
+                                  <tr key={li} className="border-t border-gray-200">
+                                    <td className="border border-gray-300 px-2 py-1 text-center font-bold">{l.quantite}</td>
+                                    <td className="border border-gray-300 px-2 py-1">{l.designation || '-'}</td>
+                                    <td className="border border-gray-300 px-2 py-1 text-right">{(l.prixUnitaire || 0).toLocaleString()} F</td>
+                                    <td className="border border-gray-300 px-2 py-1 text-right font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           )}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                    {index === allChunks.length - 1 && (
-                      <tfoot>
-                        <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
-                          <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAL GÉNÉRAL</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{totalAchats.toLocaleString()} F</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{totalPaye.toLocaleString()} F</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{reste.toLocaleString()} F</td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
+                        </div>
+                      )
+                    })
+                  })()}
+                  {index === allChunks.length - 1 && (
+                    <div className="border-t-2 border-black mt-4 pt-3 font-black text-[14px]" style={{ borderTop: '2px solid black', marginTop: '16px', paddingTop: '10px' }}>
+                      <table className="w-full">
+                        <tbody>
+                          <tr className="text-[15px]">
+                            <td className="text-right uppercase italic px-3 py-2 font-bold" style={{ width: '40%' }}>TOTAL GÉNÉRAL</td>
+                            <td className="text-right font-black px-3 py-2" style={{ width: '15%' }}>{totalAchats.toLocaleString()} F</td>
+                            <td className="text-right font-black px-3 py-2" style={{ width: '15%' }}>{totalPaye.toLocaleString()} F</td>
+                            <td className={`text-right font-black px-3 py-2 ${reste > 0 ? 'text-red-700' : 'text-emerald-700'}`} style={{ width: '15%' }}>{reste.toLocaleString()} F</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </ListPrintWrapper>
               </div>
             ))
@@ -668,7 +677,7 @@ export default function FournisseursPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-bold text-slate-900 uppercase italic group-hover:text-orange-600 transition-colors">{f.nom}</span>
-                        <span className="text-[10px] font-bold text-slate-400">{f.telephone || 'Aucun contact'}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{(f.telephone === 'null' ? null : f.telephone) || 'Aucun contact'}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -677,7 +686,7 @@ export default function FournisseursPage() {
                         <span className="text-[11px] font-black text-orange-700 uppercase tracking-tighter">{f.numeroCamion || 'FLOTTE'}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-xs font-bold text-slate-400 italic font-medium uppercase">{f.localisation || '—'}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-400 italic font-medium uppercase">{(f.localisation === 'null' ? null : f.localisation) || '—'}</td>
                     <td className="px-6 py-4 text-sm text-slate-500 font-bold text-right italic">{Number(f.soldeInitial || 0).toLocaleString('fr-FR')} F</td>
                     <td className={`px-6 py-4 text-right text-base font-black italic tabular-nums bg-slate-50/50 ${f.dette && f.dette > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                       {Number(f.dette ?? 0).toLocaleString('fr-FR')} F

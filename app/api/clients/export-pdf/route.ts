@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       where: { actif: true, entiteId },
       take: 10000,
       orderBy: { nom: 'asc' },
-      select: { id: true, nom: true, telephone: true, type: true, plafondCredit: true, ncc: true },
+      select: { id: true, nom: true, telephone: true, type: true, plafondCredit: true, ncc: true, soldeInitial: true, avoirInitial: true },
     })
     
     const filtered = q
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       for (const c of filtered) {
         const totalVentes = venteMap[c.id] || 0
         const totalPaiements = paieMap[c.id] || 0
-        detteByClient[c.id] = totalVentes - totalPaiements + (c.plafondCredit || 0)
+        detteByClient[c.id] = totalVentes - totalPaiements + (c.soldeInitial || 0) - (c.avoirInitial || 0)
       }
     }
 

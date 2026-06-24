@@ -105,6 +105,7 @@ export const produitSchema = z.object({
 
 /** Client : nom, téléphone, type, plafond crédit */
 export const clientSchema = z.object({
+  code: z.string().max(50, 'Le code ne peut pas dépasser 50 caractères.').trim().nullable().optional(),
   nom: z.string().min(1, 'Le nom est requis.').max(MAX_STRING, 'Le nom ne peut pas dépasser 500 caractères.').trim(),
   telephone: z.string().max(20, 'Le téléphone ne peut pas dépasser 20 caractères.').trim().nullable().optional(),
   type: z.enum(TYPES_CLIENT as unknown as [string, ...string[]], { message: 'Le type doit être CASH ou CREDIT.' }),
@@ -264,11 +265,13 @@ export const achatSchema = z.object({
   date: z.string().max(20).optional(),
   modePaiement: z.string().max(50).optional().default('ESPECES'),
   montantPaye: z.coerce.number().min(0).nullable().optional(),
+  banqueId: z.coerce.number().int().positive().nullable().optional(),
   reglements: z.array(z.object({
     mode: z.string().max(50),
     montant: z.coerce.number().min(0),
     payeDepuisCaisse: z.boolean().optional(),
     payeDepuisBanque: z.boolean().optional(),
+    banqueId: z.coerce.number().int().positive().nullable().optional(),
   })).optional(),
   lignes: z.array(achatLigneSchema).min(1, 'Au moins une ligne est requise.'),
 })

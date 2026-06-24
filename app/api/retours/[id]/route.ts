@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { logSuppression, getIpAddress } from '@/lib/audit'
 import { recalculerSoldeCaisse } from '@/lib/caisse'
 import { verifierCloture } from '@/lib/cloture'
+import { requireRole } from '@/lib/require-role'
+import { ROLES_ADMIN } from '@/lib/roles-permissions'
 import { apiCatch } from '@/lib/log-error'
 
 export async function DELETE(
@@ -13,9 +15,8 @@ export async function DELETE(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  if (session!.role !== 'SUPER_ADMIN' && session!.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Action interdite : Seul le Super Administrateur ou l\'Administrateur peut supprimer un retour.' }, { status: 403 })
-  }
+  const authError = requireRole(session, ROLES_ADMIN)
+  if (authError) return authError
 
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id < 1) {

@@ -46,16 +46,32 @@ export async function DELETE(
     await prisma.$transaction(async (tx) => {
       await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
 
+      // Caisse : chercher par motif standardisé [REGLEMENT:${id}] + fallback ancien format
       if (estModeEspeces(reglement.modePaiement)) {
-        const motif = reglement.vente?.numero || `R${reglement.id}`
-        await tx.caisse.deleteMany({
-          where: { motif: { contains: motif } }
+        const caisses = await tx.caisse.findMany({
+          where: {
+            OR: [
+              { motif: { contains: `REGLEMENT:${id}` } },
+              ...(reglement.vente?.numero ? [{ motif: { contains: reglement.vente.numero } }] : []),
+            ]
+          }
         })
-        const magasinId = reglement.vente?.magasinId
-        if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+        if (caisses.length > 0) {
+          const caisseIds = caisses.map((c: any) => c.id)
+          await tx.caisse.deleteMany({ where: { id: { in: caisseIds } } })
+          const magasinId = reglement.vente?.magasinId || caisses[0].magasinId
+          if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+        }
       } else if (estModeBanque(reglement.modePaiement)) {
+        // Banque : chercher par ref standardisée + fallback ancien format
         const opsBancaires = await tx.operationBancaire.findMany({
-          where: { reference: reglement.vente?.numero || `REG-${id}` }
+          where: {
+            OR: [
+              { reference: `REGLEMENT_${id}` },
+              ...(reglement.vente?.numero ? [{ reference: reglement.vente.numero }] : []),
+              { reference: `REG-${id}` },
+            ]
+          }
         })
         for (const op of opsBancaires) {
           const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
@@ -64,31 +80,62 @@ export async function DELETE(
             data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
           })
         }
-        await tx.operationBancaire.deleteMany({
-          where: { reference: reglement.vente?.numero || `REG-${id}` }
-        })
+        if (opsBancaires.length > 0) {
+          await tx.operationBancaire.deleteMany({
+            where: { id: { in: opsBancaires.map((o: any) => o.id) } }
+          })
+        }
       }
 
-      if (reglement.venteId) {
-        const v = await tx.vente.findUnique({ where: { id: reglement.venteId } })
-        if (v) {
-          await tx.reglementVenteLigne.deleteMany({
-            where: { reglementId: id }
+      // Nettoyer les lignes de lettrage (avec ou sans venteId direct)
+      const lignesLettrage = await tx.reglementVenteLigne.findMany({
+        where: { reglementId: id },
+        select: { venteId: true, montant: true }
+      })
+
+      if (lignesLettrage.length > 0) {
+        await tx.reglementVenteLigne.deleteMany({ where: { reglementId: id } })
+
+        const venteIds = [...new Set(lignesLettrage.map((l: any) => l.venteId))]
+        let clientIdDeduct: number | null = null
+
+        for (const venteId of venteIds) {
+          const v = await tx.vente.findUnique({
+            where: { id: venteId },
+            select: { id: true, montantTotal: true, clientId: true }
           })
+          if (!v) continue
+          if (v.clientId) clientIdDeduct = v.clientId
 
           const remainingLignes = await tx.reglementVenteLigne.findMany({
-            where: { venteId: reglement.venteId },
+            where: { venteId },
             select: { montant: true }
           })
-          const newTotalFromLignes = remainingLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
-          const nouveauPaye = Math.max(0, newTotalFromLignes)
+          const nouveauPaye = remainingLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+          const nouveauStatut = nouveauPaye >= v.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
+          await tx.vente.update({
+            where: { id: venteId },
+            data: { montantPaye: nouveauPaye, statutPaiement: nouveauStatut }
+          })
+        }
+
+        const totalRegle = lignesLettrage.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+        const pts = Math.floor(Math.max(0, totalRegle) / 1000)
+        if (pts > 0 && clientIdDeduct) {
+          await tx.client.update({
+            where: { id: clientIdDeduct },
+            data: { pointsFidelite: { decrement: pts } }
+          }).catch(() => {})
+        }
+      } else if (reglement.venteId) {
+        // Fallback : reglement avec venteId direct mais sans ligne de lettrage
+        const v = await tx.vente.findUnique({ where: { id: reglement.venteId } })
+        if (v) {
+          const nouveauPaye = Math.max(0, (v.montantPaye || 0) - reglement.montant)
           const nouveauStatut = nouveauPaye >= v.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
           await tx.vente.update({
             where: { id: reglement.venteId },
-            data: {
-              montantPaye: nouveauPaye,
-              statutPaiement: nouveauStatut
-            }
+            data: { montantPaye: nouveauPaye, statutPaiement: nouveauStatut }
           })
 
           if (v.clientId) {
@@ -153,15 +200,28 @@ export async function PATCH(
       await deleteEcrituresByReference('VENTE_REGLEMENT', id, tx)
 
       if (estModeEspeces(old.modePaiement)) {
-        const motif = old.vente?.numero || `R${id}`
-        await tx.caisse.deleteMany({
-          where: { motif: { contains: motif } }
+        const caisses = await tx.caisse.findMany({
+          where: {
+            OR: [
+              { motif: { contains: `REGLEMENT:${id}` } },
+              ...(old.vente?.numero ? [{ motif: { contains: old.vente.numero } }] : []),
+            ]
+          }
         })
-        const magasinId = old.vente?.magasinId
-        if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+        if (caisses.length > 0) {
+          await tx.caisse.deleteMany({ where: { id: { in: caisses.map((c: any) => c.id) } } })
+          const magasinId = old.vente?.magasinId || caisses[0].magasinId
+          if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+        }
       } else if (estModeBanque(old.modePaiement)) {
         const opsBancaires = await tx.operationBancaire.findMany({
-          where: { reference: old.vente?.numero || `REG-${id}` }
+          where: {
+            OR: [
+              { reference: `REGLEMENT_${id}` },
+              ...(old.vente?.numero ? [{ reference: old.vente.numero }] : []),
+              { reference: `REG-${id}` },
+            ]
+          }
         })
         for (const op of opsBancaires) {
           const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
@@ -170,9 +230,11 @@ export async function PATCH(
             data: { soldeActuel: estEntree ? { decrement: op.montant } : { increment: op.montant } }
           })
         }
-        await tx.operationBancaire.deleteMany({
-          where: { reference: old.vente?.numero || `REG-${id}` }
-        })
+        if (opsBancaires.length > 0) {
+          await tx.operationBancaire.deleteMany({
+            where: { id: { in: opsBancaires.map((o: any) => o.id) } }
+          })
+        }
       }
 
       const montantFinal = montant != null ? Math.max(0, montant) : old.montant
@@ -243,7 +305,7 @@ include: { vente: { include: { client: { select: { nom: true } } } } }
         await enregistrerMouvementCaisse({
           magasinId: updated.vente?.magasinId || 1,
           type: 'ENTREE',
-          motif: `Règlement Vente ${updated.vente?.numero || updated.id}`,
+          motif: `REGLEMENT:${id} Règlement Vente ${updated.vente?.numero || ''}`,
           montant: montantFinal,
           utilisateurId: session.userId,
           entiteId: entiteId || 1,
@@ -260,7 +322,7 @@ include: { vente: { include: { client: { select: { nom: true } } } } }
           libelle: `Règlement Vente ${updated.vente?.numero || updated.id}`,
           montant: montantFinal,
           utilisateurId: session.userId,
-          reference: updated.vente?.numero || `REG-${updated.id}`,
+          reference: `REGLEMENT_${id}`,
           beneficiaire: updated.vente?.client?.nom || updated.vente?.clientLibre || null,
         }, tx)
       }

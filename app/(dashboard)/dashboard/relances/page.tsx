@@ -266,10 +266,10 @@ export default function RelancesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-0.5">
-                          {c.email && <span className="text-xs text-gray-800 dark:text-gray-200">{c.email}</span>}
-                          {c.telephone && <span className="text-xs text-gray-700 dark:text-gray-300">{c.telephone}</span>}
+                          {c.email && c.email !== 'null' && <span className="text-xs text-gray-800 dark:text-gray-200">{c.email}</span>}
+                          {c.telephone && c.telephone !== 'null' && <span className="text-xs text-gray-700 dark:text-gray-300">{c.telephone}</span>}
                         </div>
-                        {!c.email && !c.telephone && <span className="text-xs text-gray-500 dark:text-gray-400 italic">Aucun</span>}
+                        {(!c.email || c.email === 'null') && (!c.telephone || c.telephone === 'null') && <span className="text-xs text-gray-500 dark:text-gray-400 italic">Aucun</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="font-bold text-red-600 dark:text-red-400">

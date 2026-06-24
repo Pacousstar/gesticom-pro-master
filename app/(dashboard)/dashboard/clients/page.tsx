@@ -28,6 +28,7 @@ type Client = {
   soldeInitial: number
   avoirInitial: number
   dette?: number
+  dettePeriode?: number
   derniereFacture?: string | null
 }
 
@@ -96,10 +97,6 @@ export default function ClientsPage() {
     setQ(qFromUrl)
   }, [qFromUrl])
 
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [q, dateDebut, dateFin])
-
   const handlePrintAll = async (type: 'PORTEFEUILLE' | 'REPERTOIRE') => {
     setHistoryForPrint([])
     setPrintType(type)
@@ -153,12 +150,12 @@ export default function ClientsPage() {
       setFormData({
         code: c.code || '',
         nom: c.nom,
-        telephone: c.telephone || '',
-        email: c.email || '',
+        telephone: (c.telephone === 'null' ? '' : c.telephone) || '',
+        email: (c.email === 'null' ? '' : c.email) || '',
         type: c.type,
         plafondCredit: c.plafondCredit != null ? String(c.plafondCredit) : '',
         ncc: c.ncc || '',
-        localisation: c.localisation || '',
+        localisation: (c.localisation === 'null' ? '' : c.localisation) || '',
         soldeInitial: c.soldeInitial != null ? String(c.soldeInitial) : '',
         avoirInitial: c.avoirInitial != null ? String(c.avoirInitial) : '',
       })
@@ -312,15 +309,10 @@ export default function ClientsPage() {
   const openPaymentModal = async (c: Client) => {
     try {
       const timestamp = Date.now()
-      const res = await fetch(`/api/rapports/finances/etat-paiements?type=VENTE&filter=NON_SOLDER&dateDebut=2000-01-01&dateFin=2100-12-31&_=${timestamp}`)
+      const res = await fetch(`/api/rapports/finances/etat-paiements?type=VENTE&filter=NON_SOLDER&clientId=${c.id}&dateDebut=2000-01-01&dateFin=2100-12-31&_=${timestamp}`)
       if (res.ok) {
-        const allInvoices = await res.json()
-        const clientInvoices = allInvoices.filter((inv: any) => {
-          if (inv.clientId && c.id) return inv.clientId === c.id
-          const tierName = inv.tier || (inv.client?.nom) || (typeof inv.client === 'string' ? inv.client : null)
-          return tierName === c.nom || tierName === c.nom?.trim()
-        })
-        setPaymentModal({ client: c, invoices: clientInvoices })
+        const clientInvoices = await res.json()
+        setPaymentModal({ client: c, invoices: Array.isArray(clientInvoices) ? clientInvoices : [] })
       }
     } catch (e) {
       showError("Erreur lors de la récupération des factures.")
@@ -423,7 +415,7 @@ export default function ClientsPage() {
               type="search"
               placeholder="Rechercher nom, code, téléphone..."
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => { setQ(e.target.value); setCurrentPage(1) }}
               className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 focus:outline-none bg-white text-sm text-gray-900 transition-all font-medium"
             />
           </div>
@@ -433,7 +425,7 @@ export default function ClientsPage() {
           <input 
             type="date"
             value={dateDebut}
-            onChange={e => setDateDebut(e.target.value)}
+            onChange={e => { setDateDebut(e.target.value); setCurrentPage(1) }}
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 text-gray-900 w-40"
           />
         </div>
@@ -442,14 +434,14 @@ export default function ClientsPage() {
           <input 
             type="date"
             value={dateFin}
-            onChange={e => setDateFin(e.target.value)}
+            onChange={e => { setDateFin(e.target.value); setCurrentPage(1) }}
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 text-gray-900 w-40"
           />
         </div>
         <div className="flex gap-2">
           {(dateDebut || dateFin) && (
             <button 
-              onClick={() => { setDateDebut(''); setDateFin(''); }}
+              onClick={() => { setDateDebut(''); setDateFin(''); setCurrentPage(1) }}
               className="bg-white/20 hover:bg-white/30 text-white rounded-lg px-3 py-2 text-[10px] font-black transition-all h-[42px] uppercase"
             >
               Reset
@@ -609,7 +601,7 @@ export default function ClientsPage() {
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs font-bold text-gray-600">{c.code || '—'}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">{c.nom}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{c.telephone || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{(c.telephone === 'null' ? null : c.telephone) || '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2 py-1 text-xs font-medium ${c.type === 'CREDIT' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'}`}>
                         {c.type}
@@ -617,7 +609,7 @@ export default function ClientsPage() {
                     </td>
 
                     <td className="px-4 py-3 text-sm text-gray-600">{c.ncc || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{c.localisation || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{(c.localisation === 'null' ? null : c.localisation) || '—'}</td>
                      <td className="px-4 py-3 text-right text-sm text-gray-600">
                       {c.type === 'CREDIT' && c.plafondCredit != null
                         ? `${Number(c.plafondCredit).toLocaleString('fr-FR')} F`
@@ -893,7 +885,7 @@ export default function ClientsPage() {
                           <td className="border border-gray-300 px-3 py-2 font-medium">{c.type}</td>
                           {dateDebut && dateFin && (
                             <td className="border border-gray-300 px-3 py-2 text-right font-black bg-orange-50 italic text-[11px]">
-                              {((c as any).dettePeriode ?? 0).toLocaleString('fr-FR')} F
+                        {((c.dettePeriode ?? 0)).toLocaleString('fr-FR')} F
                             </td>
                           )}
                           <td className={`border border-gray-300 px-3 py-2 text-right font-black ${Number(c.dette ?? 0) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
@@ -903,9 +895,9 @@ export default function ClientsPage() {
                       ) : (
                         <>
                           <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{c.nom}</td>
-                          <td className="border border-gray-300 px-3 py-2">{c.telephone || '-'}</td>
-                          <td className="border border-gray-300 px-3 py-2 text-xs truncate max-w-[150px]">{c.email || '-'}</td>
-                          <td className="border border-gray-300 px-3 py-2 italic text-xs">{c.localisation || '-'}</td>
+                          <td className="border border-gray-300 px-3 py-2">{(c.telephone === 'null' ? null : c.telephone) || '-'}</td>
+                          <td className="border border-gray-300 px-3 py-2 text-xs truncate max-w-[150px]">{(c.email === 'null' ? null : c.email) || '-'}</td>
+                          <td className="border border-gray-300 px-3 py-2 italic text-xs">{(c.localisation === 'null' ? null : c.localisation) || '-'}</td>
                           <td className="border border-gray-300 px-3 py-2 text-xs">{c.ncc || '-'}</td>
                         </>
                       )}
@@ -980,74 +972,83 @@ export default function ClientsPage() {
                     { label: 'Nbre Factures', value: `${historyForPrint.length}` },
                   ]}
                 >
-                  <table className="w-full text-[14px] border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                        <th className="border border-gray-300 px-3 py-3 text-left">N° Facture</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Date</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Statut</th>
-                        <th className="border border-gray-300 px-3 py-3 text-right">Montant Total</th>
-                        <th className="border border-gray-300 px-3 py-3 text-right">Montant Payé</th>
-                        <th className="border border-gray-300 px-3 py-3 text-right">Reste</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {chunk.map((h: any, idx: number) => (
-                        <Fragment key={idx}>
-                          <tr className="border-b border-gray-200">
-                            <td className="border border-gray-300 px-3 py-2 font-mono font-bold">{h.numero || '-'}</td>
-                            <td className="border border-gray-300 px-3 py-2">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
-                            <td className="border border-gray-300 px-3 py-2">
-                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                {h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'}
-                              </span>
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
-                            <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(h.montantTotal - (h.montantPaye || 0)) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                              {(Math.max(0, h.montantTotal - (h.montantPaye || 0))).toLocaleString()} F
-                            </td>
-                          </tr>
+                  {(() => {
+                    const itemsBefore = allChunks.slice(0, index).reduce((sum: number, c: any[]) => sum + c.length, 0)
+                    return chunk.map((h: any, idx: number) => {
+                      const globalNum = itemsBefore + idx + 1
+                      const badgeClass = h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      const badgeText = h.statutPaiement === 'PAYE' ? 'Payé' : 'Impayé'
+                      const resteH = Math.max(0, h.montantTotal - (h.montantPaye || 0))
+                      const resteColor = resteH > 0 ? 'text-red-700' : 'text-emerald-700'
+
+                      return (
+                        <div key={idx} className="border-2 border-black mb-4 p-3 print-box" style={{ border: '2px solid black', marginBottom: '16px', padding: '10px' }}>
+                          <div className="font-black text-[16px] mb-3" style={{ fontSize: '16px', fontWeight: 900, marginBottom: '12px' }}>
+                            N°{globalNum} – Facture #{h.numero || '-'}
+                          </div>
+                          <table className="w-full text-[14px] border-collapse border border-gray-300 mb-3" style={{ marginBottom: '12px' }}>
+                            <tbody>
+                              <tr>
+                                <td className="border border-gray-300 px-3 py-2 font-bold w-[15%]">Date</td>
+                                <td className="border border-gray-300 px-3 py-2 w-[35%]">{h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '-'}</td>
+                                <td className="border border-gray-300 px-3 py-2 font-bold w-[15%]">Statut</td>
+                                <td className="border border-gray-300 px-3 py-2 w-[35%]">
+                                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${badgeClass}`}>{badgeText}</span>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td className="border border-gray-300 px-3 py-2 font-bold">Total</td>
+                                <td className="border border-gray-300 px-3 py-2 text-right font-bold">{(h.montantTotal || 0).toLocaleString()} F</td>
+                                <td className="border border-gray-300 px-3 py-2 font-bold">Payé</td>
+                                <td className="border border-gray-300 px-3 py-2 text-right">{(h.montantPaye || 0).toLocaleString()} F</td>
+                              </tr>
+                              <tr>
+                                <td className="border border-gray-300 px-3 py-2 font-bold">Reste</td>
+                                <td className={`border border-gray-300 px-3 py-2 text-right font-black ${resteColor}`}>{resteH.toLocaleString()} F</td>
+                                <td colSpan={2} className="border border-gray-300 px-3 py-2"></td>
+                              </tr>
+                            </tbody>
+                          </table>
                           {h.lignes && h.lignes.length > 0 && (
-                            <tr className="no-page-break-inside">
-                              <td colSpan={6} className="border border-gray-300 px-3 py-1 bg-gray-50">
-                                <table className="w-full text-[11px] border-collapse">
-                                  <thead>
-                                    <tr className="text-gray-500 uppercase font-bold text-[10px]">
-                                      <th className="px-2 py-1 text-left w-10">Qté</th>
-                                      <th className="px-2 py-1 text-left">Désignation</th>
-                                      <th className="px-2 py-1 text-right">P.U.</th>
-                                      <th className="px-2 py-1 text-right">Total</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {h.lignes.map((l: any, li: number) => (
-                                      <tr key={li} className="border-t border-gray-200">
-                                        <td className="px-2 py-1 text-center font-bold">{l.quantite}</td>
-                                        <td className="px-2 py-1">{l.produit?.designation || l.designation || '-'}</td>
-                                        <td className="px-2 py-1 text-right">{(l.prixUnitaire || 0).toLocaleString()} F</td>
-                                        <td className="px-2 py-1 text-right font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </td>
-                            </tr>
+                            <table className="w-full text-[11px] border-collapse border border-gray-300">
+                              <thead>
+                                <tr className="text-gray-500 uppercase font-bold text-[10px] bg-gray-50">
+                                  <th className="border border-gray-300 px-2 py-1 text-left w-10">Qté</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-left">Désignation</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-right">P.U.</th>
+                                  <th className="border border-gray-300 px-2 py-1 text-right">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {h.lignes.map((l: any, li: number) => (
+                                  <tr key={li} className="border-t border-gray-200">
+                                    <td className="border border-gray-300 px-2 py-1 text-center font-bold">{l.quantite}</td>
+                                    <td className="border border-gray-300 px-2 py-1">{l.produit?.designation || l.designation || '-'}</td>
+                                    <td className="border border-gray-300 px-2 py-1 text-right">{(l.prixUnitaire || 0).toLocaleString()} F</td>
+                                    <td className="border border-gray-300 px-2 py-1 text-right font-bold">{(l.quantite * l.prixUnitaire).toLocaleString()} F</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           )}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                    {index === allChunks.length - 1 && (
-                      <tfoot>
-                        <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
-                          <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">TOTAL GÉNÉRAL</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{totalFacture.toLocaleString()} F</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{totalPaye.toLocaleString()} F</td>
-                          <td className="border border-gray-300 px-3 py-4 text-right">{reste.toLocaleString()} F</td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
+                        </div>
+                      )
+                    })
+                  })()}
+                  {index === allChunks.length - 1 && (
+                    <div className="border-t-2 border-black mt-4 pt-3 font-black text-[14px]" style={{ borderTop: '2px solid black', marginTop: '16px', paddingTop: '10px' }}>
+                      <table className="w-full">
+                        <tbody>
+                          <tr className="text-[15px]">
+                            <td className="text-right uppercase italic px-3 py-2 font-bold" style={{ width: '40%' }}>TOTAL GÉNÉRAL</td>
+                            <td className="text-right font-black px-3 py-2" style={{ width: '15%' }}>{totalFacture.toLocaleString()} F</td>
+                            <td className="text-right font-black px-3 py-2" style={{ width: '15%' }}>{totalPaye.toLocaleString()} F</td>
+                            <td className={`text-right font-black px-3 py-2 ${reste > 0 ? 'text-red-700' : 'text-emerald-700'}`} style={{ width: '15%' }}>{reste.toLocaleString()} F</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </ListPrintWrapper>
               </div>
             ))

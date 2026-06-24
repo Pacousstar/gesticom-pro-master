@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 import { handleApiError, unauthorized, badRequest } from '@/lib/api-error'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+  const authError = requirePermission(session, 'ventes:view')
+  if (authError) return authError
 
   try {
     const entiteId = await getEntiteId(session)

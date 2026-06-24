@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         skip: (page - 1) * limit,
         include: {
           fournisseur: { select: { code: true, nom: true } },
-          achat: { select: { numero: true } },
+          achat: { select: { numero: true, fournisseur: { select: { nom: true } } } },
         },
         orderBy: { date: 'desc' },
       }),
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       id: p.id,
       date: p.date,
       fournisseurCode: p.fournisseur?.code,
-      fournisseurNom: p.fournisseur?.nom || 'Inconnu',
+      fournisseurNom: p.fournisseur?.nom || p.achat?.fournisseur?.nom || 'Inconnu',
       modePaiement: p.modePaiement,
       achatNumero: p.achat?.numero || 'Règlement Compte',
       montant: p.montant,

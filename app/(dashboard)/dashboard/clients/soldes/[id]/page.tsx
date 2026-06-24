@@ -109,10 +109,13 @@ export default function CompteCourantClientPage() {
           } else {
             showSuccess(`${result.alloue.toLocaleString('fr-FR')} F alloués.`)
           }
-          if (unpaidInvoices.length <= 1) {
-            const plusPetitReste = Math.min(...unpaidInvoices.filter(v => v.id !== venteId).map(v => v.montantTotal - (v.montantPaye || 0)))
-            if (nouveauRestant < plusPetitReste) {
-              setLettrageError(`Reste ${nouveauRestant.toLocaleString('fr-FR')} F non lettrable : montant insuffisant pour les factures restantes.`)
+          if (unpaidInvoices.length > 1) {
+            const remaining = unpaidInvoices.filter(v => v.id !== venteId)
+            if (remaining.length > 0) {
+              const plusPetitReste = Math.min(...remaining.map(v => v.montantTotal - (v.montantPaye || 0)))
+              if (nouveauRestant < plusPetitReste) {
+                setLettrageError(`Reste ${nouveauRestant.toLocaleString('fr-FR')} F non lettrable : montant insuffisant pour les factures restantes.`)
+              }
             }
           }
         }

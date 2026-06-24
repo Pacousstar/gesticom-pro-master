@@ -25,6 +25,7 @@ export default function PaiementsClientsPage() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
   const itemsPerPage = 20
   const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
@@ -48,10 +49,13 @@ export default function PaiementsClientsPage() {
     setLoading(true)
     try {
       const pageNum = p || currentPage
-      const res = await fetch(`/api/clients/paiements?dateDebut=${start}&dateFin=${end}&page=${pageNum}&limit=99999`)
+      const res = await fetch(`/api/clients/paiements?dateDebut=${start}&dateFin=${end}&page=${pageNum}&limit=${itemsPerPage}`)
       if (res.ok) {
         const json = await res.json()
         setData(Array.isArray(json) ? json : (json.data || []))
+        if (json.pagination) {
+          setTotalPages(json.pagination.totalPages)
+        }
       } else {
         showError('Impossible de charger les paiements.')
       }
@@ -77,8 +81,8 @@ export default function PaiementsClientsPage() {
 
   const total = filteredData.reduce((acc, p) => acc + p.montant, 0)
   
-  const paginatedData = Array.isArray(filteredData) ? filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) : []
-  const totalPages = Math.ceil((Array.isArray(filteredData) ? filteredData.length : 0) / itemsPerPage)
+  const paginatedData = search ? filteredData : data
+  const displayTotalPages = search ? Math.ceil(filteredData.length / itemsPerPage) : totalPages
   
   const totalsByMode = useMemo(() => {
     const modes: Record<string, number> = {}
@@ -221,10 +225,10 @@ export default function PaiementsClientsPage() {
             </table>
           </div>
         )}
-        {totalPages > 1 && (
+        {displayTotalPages > 1 && (
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages}
+            totalPages={displayTotalPages}
             totalItems={filteredData.length}
             itemsPerPage={itemsPerPage}
             onPageChange={setCurrentPage}
@@ -252,22 +256,12 @@ export default function PaiementsClientsPage() {
                     <p className="text-[10px] font-black uppercase tracking-widest">Total Encaissé</p>
                     <p className="text-lg font-black">{total.toLocaleString('fr-FR')} F</p>
                   </div>
-                  <div className="flex-1 border-2 border-black p-3 text-center">
-                    <p className="text-[10px] font-black uppercase tracking-widest">Espèces</p>
-                    <p className="text-lg font-black">{(totalsByMode['ESPECES'] || 0).toLocaleString('fr-FR')} F</p>
-                  </div>
-                  <div className="flex-1 border-2 border-black p-3 text-center">
-                    <p className="text-[10px] font-black uppercase tracking-widest">Chèque</p>
-                    <p className="text-lg font-black">{(totalsByMode['CHEQUE'] || 0).toLocaleString('fr-FR')} F</p>
-                  </div>
-                  <div className="flex-1 border-2 border-black p-3 text-center">
-                    <p className="text-[10px] font-black uppercase tracking-widest">Virement</p>
-                    <p className="text-lg font-black">{(totalsByMode['VIREMENT'] || 0).toLocaleString('fr-FR')} F</p>
-                  </div>
-                  <div className="flex-1 border-2 border-black p-3 text-center">
-                    <p className="text-[10px] font-black uppercase tracking-widest">Mobile Money</p>
-                    <p className="text-lg font-black">{(totalsByMode['MOBILE_MONEY'] || 0).toLocaleString('fr-FR')} F</p>
-                  </div>
+                  {Object.entries(totalsByMode).map(([mode, montant]) => (
+                    <div key={mode} className="flex-1 border-2 border-black p-3 text-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest">{mode}</p>
+                      <p className="text-lg font-black">{montant.toLocaleString('fr-FR')} F</p>
+                    </div>
+                  ))}
                 </div>
                 <table className="w-full text-xs border-collapse border-2 border-black">
                   <thead>

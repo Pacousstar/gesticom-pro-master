@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission, requireRole } from '@/lib/require-role'
+import { ROLES_ADMIN } from '@/lib/roles-permissions'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { compteCourantSchema } from '@/lib/validations'
 
@@ -11,6 +13,8 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
   const entiteId = await getEntiteId(session)
 
   const id = Number((await params).id)
@@ -43,6 +47,8 @@ export async function PATCH(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:view')
+  if (authError) return authError
   const entiteId = await getEntiteId(session)
 
   const id = Number((await params).id)
@@ -70,6 +76,8 @@ export async function DELETE(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requireRole(session, ROLES_ADMIN)
+  if (authError) return authError
   const entiteId = await getEntiteId(session)
 
   const id = Number((await params).id)

@@ -329,7 +329,7 @@ export default function SoldesClientsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-xs font-bold text-slate-500 italic uppercase">
-                      {c.localisation || '—'}
+                      {c.localisation && c.localisation !== 'null' ? c.localisation : '—'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-black text-slate-700">
                       {c.factures.toLocaleString('fr-FR')} F

@@ -1827,78 +1827,76 @@ export default function StockPage() {
 
       {/* Rendu Système (Impression Native) */}
       <div className="hidden print:block absolute inset-0 bg-white">
-          {(() => {
-                const dataToPrint = allStocksForPrint.length > 0 ? allStocksForPrint : list;
-                const chunks = paginateForPrint(dataToPrint);
-                const offsetBefore = (pageIndex: number) =>
-                  chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
-                
-                return chunks.map((chunk, index, allChunks) => (
-                  <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-                    <ListPrintWrapper
-                      title="ÉTAT PHYSIQUE DES STOCKS"
-                      subtitle={magasinId ? `Dépôt : ${magasins.find(m => String(m.id) === magasinId)?.nom || magasinId}` : "Inventaire Multisites Global"}
-                      pageNumber={index + 1}
-                      totalPages={allChunks.length}
-                      enterprise={entreprise}
-                    >
-                       <table className="w-full text-[14px] border-collapse border-2 border-black font-sans">
-                        <thead>
-                          <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                            <th className="border border-black px-1 py-3 text-center w-10">N°</th>
-                            <th className="border border-black px-2 py-3 text-left">Article</th>
-                            <th className="border border-black px-2 py-3 text-left">Code / Réf</th>
-                            <th className="border border-black px-2 py-3 text-left">Établissement</th>
-                            <th className="border border-black px-2 py-3 text-right">Quantité</th>
-                            <th className="border border-black px-2 py-3 text-right">PAMP (Pro)</th>
-                            <th className="border border-black px-2 py-3 text-center uppercase text-[10px]">Statut</th>
+        {(() => {
+          const dataToPrint = allStocksForPrint.length > 0 ? allStocksForPrint : list;
+          const firstSize = 16;
+          const otherSize = 21;
+          const firstRowH = Math.floor((718 - 200 - 28) / firstSize);
+          const otherRowH = Math.floor((718 - 28) / otherSize);
+          const chunks = paginateForPrint(dataToPrint, { firstPageSize: firstSize, otherPagesSize: otherSize });
+          let totalQte = 0;
+          let numOffset = 0;
+          return chunks.map((chunk, index, allChunks) => {
+            const pageStart = numOffset + 1;
+            numOffset += chunk.length;
+            return (
+              <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
+                <ListPrintWrapper
+                  title="ÉTAT PHYSIQUE DES STOCKS"
+                  subtitle={magasinId ? `Dépôt : ${magasins.find(m => String(m.id) === magasinId)?.nom || magasinId}` : "Inventaire Multisites Global"}
+                  pageNumber={index + 1}
+                  totalPages={allChunks.length}
+                  layout="landscape"
+                  hideHeader={index > 0}
+                >
+                  <table className="w-full text-[14px] border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100 uppercase font-black text-gray-700">
+                        <th style={{width:'4%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">N°</th>
+                        <th style={{width:'10%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Code</th>
+                        <th style={{width:'38%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Désignation</th>
+                        <th style={{width:'14%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">P.A (Init)</th>
+                        <th style={{width:'10%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Qté</th>
+                        <th style={{width:'24%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">STATUT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {chunk.map((s, idx) => {
+                        const rowH = index === 0 ? firstRowH : otherRowH;
+                        const isAlerte = s.quantite < s.produit.seuilMin;
+                        totalQte += s.quantite;
+                        return (
+                          <tr key={idx} className="border-b border-gray-200" style={{height: rowH + 'px'}}>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center font-bold whitespace-nowrap align-middle overflow-hidden">{pageStart + idx}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 font-mono text-center whitespace-nowrap align-middle overflow-hidden">{s.produit.code || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 font-bold text-left whitespace-nowrap align-middle overflow-hidden">{s.produit.designation || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">{s.produit.prixAchat != null ? Number(s.produit.prixAchat).toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center font-bold whitespace-nowrap align-middle overflow-hidden">{s.quantite.toLocaleString()}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">
+                              <span className={`text-[11px] font-black uppercase px-3 py-1 rounded-full ${isAlerte ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}`}>
+                                {isAlerte ? 'RUPTURE' : 'OK'}
+                              </span>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {chunk.map((s, idx) => {
-                            const isAlerte = s.quantite < s.produit.seuilMin;
-                            return (
-                              <tr key={idx} className="border border-black">
-                                <td className="border border-black px-1 py-2 text-center font-bold">
-                                  {offsetBefore(index) + idx + 1}
-                                </td>
-                                <td className="border border-black px-2 py-2">
-                                  <div className="font-black uppercase text-[13px]">{s.produit.designation}</div>
-                                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{s.produit.categorie}</div>
-                                </td>
-                                <td className="border border-black px-2 py-2 font-mono text-[11px] font-bold">{s.produit.code}</td>
-                                <td className="border border-black px-2 py-2 uppercase font-bold text-gray-600 text-[11px]">{s.magasin.nom}</td>
-                                <td className="border border-black px-2 py-2 text-right font-black text-[15px]">{s.quantite.toLocaleString()}</td>
-                                <td className="border border-black px-2 py-2 text-right italic text-gray-500">
-                                  {s.produit.pamp != null ? `${s.produit.pamp.toLocaleString()} F` : '—'}
-                                </td>
-                                <td className="border border-black px-2 py-2 text-center">
-                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${isAlerte ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'}`}>
-                                    {isAlerte ? 'Alerte' : 'Ok'}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        {index === allChunks.length - 1 && (
-                          <tfoot>
-                            <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic shadow-inner">
-                              <td colSpan={4} className="border border-black px-3 py-6 text-right tracking-widest bg-white">RÉCAPITULATIF DU STOCK ({dataToPrint.length} RÉFÉRENCES) :</td>
-                              <td className="border border-black px-3 py-6 text-right tabular-nums bg-slate-900 text-white shadow-2xl">
-                                {dataToPrint.reduce((acc, s) => acc + s.quantite, 0).toLocaleString()}
-                              </td>
-                              <td colSpan={2} className="border border-black px-3 py-6 text-center text-[10px] bg-white font-bold text-gray-400 italic">
-                                --- Fin du rapport ---
-                              </td>
-                            </tr>
-                          </tfoot>
-                        )}
-                      </table>
-                    </ListPrintWrapper>
-                  </div>
-                ));
-          })()}
+                        );
+                      })}
+                    </tbody>
+                    {index === allChunks.length - 1 && (
+                      <tfoot>
+                        <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black">
+                          <td colSpan={3} className="border border-gray-300 px-1 py-1 text-right uppercase italic whitespace-nowrap">TOTAUX</td>
+                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">—</td>
+                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">{totalQte.toLocaleString('fr-FR')}</td>
+                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">—</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </ListPrintWrapper>
+              </div>
+            );
+          });
+        })()}
       </div>
     </div>
   )

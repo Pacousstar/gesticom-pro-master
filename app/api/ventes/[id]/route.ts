@@ -542,7 +542,7 @@ export async function PATCH(
           await enregistrerMouvementCaisse({
             magasinId: vente.magasinId,
             type: 'ENTREE',
-            motif: `Règlement Vente ${vente.numero}`,
+            motif: `REGLEMENT:${reglement.id} Règlement Vente ${vente.numero}`,
             montant: montantReglementApplique,
             utilisateurId: session!.userId,
             entiteId: vente.entiteId,
@@ -561,7 +561,7 @@ export async function PATCH(
             libelle: `Règlement Vente ${vente.numero}`,
             montant: montantReglementApplique,
             utilisateurId: session!.userId,
-            reference: vente.numero,
+            reference: `REGLEMENT_${reglement.id}`,
             beneficiaire: vente.client?.nom || vente.clientLibre || null,
             observation: `Paiement via ${modePaiement}`,
           }, tx)
@@ -862,7 +862,7 @@ export async function PATCH(
               await enregistrerMouvementCaisse({
                 magasinId: updated.magasinId,
                 type: 'ENTREE',
-                motif: `Règlement Vente ${updated.numero}`,
+                motif: `REGLEMENT:${regl.id} Règlement Vente ${updated.numero}`,
                 montant: mntR,
                 utilisateurId: session!.userId,
                 entiteId: updated.entiteId,
@@ -878,7 +878,7 @@ export async function PATCH(
                 libelle: `Règlement Vente ${updated.numero}`,
                 montant: mntR,
                 utilisateurId: session!.userId,
-                reference: updated.numero,
+                reference: `REGLEMENT_${regl.id}`,
                 beneficiaire: updated.client?.nom || updated.clientLibre || null,
               }, tx)
             }

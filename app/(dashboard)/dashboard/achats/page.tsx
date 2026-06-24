@@ -464,7 +464,7 @@ export default function AchatsPage() {
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalHTNet: 0, totalAchatTTC: 0 }
   )
   const total = montantTotalAchatSommeLignes([totalAchatTTC])
-  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()))
+  const needsBanque = formData.reglements.some((r) => ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(r.mode).toUpperCase()) || (r as any).payeDepuisBanque === true)
 
   // Récupérer le templateId par défaut pour ACHAT
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
@@ -744,7 +744,7 @@ export default function AchatsPage() {
         body: JSON.stringify({
           montant,
           modePaiement: reglementData.modePaiement,
-          banqueId: ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(reglementData.modePaiement).toUpperCase()) && reglementData.banqueId
+          banqueId: reglementData.payeDepuisBanque && reglementData.banqueId
             ? Number(reglementData.banqueId)
             : undefined,
           date: reglementData.date,
@@ -1981,7 +1981,7 @@ export default function AchatsPage() {
                 </label>
               )}
 
-              {['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(reglementData.modePaiement).toUpperCase()) && (
+              {(reglementData.payeDepuisBanque || ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(reglementData.modePaiement).toUpperCase())) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Compte bancaire <span className="text-red-600">*</span>

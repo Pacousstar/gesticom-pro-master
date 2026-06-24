@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')
   const dateFin = request.nextUrl.searchParams.get('dateFin')
   const filter = request.nextUrl.searchParams.get('filter') // 'TOUT', 'SOLDER', 'NON_SOLDER'
+  const clientId = request.nextUrl.searchParams.get('clientId')
   const entiteIdFilter = await getEntiteIdOrAll(session)
 
   const dateFilter = dateDebut && dateFin ? {
@@ -84,6 +85,7 @@ export async function GET(request: NextRequest) {
       statut: { in: ['VALIDE', 'VALIDEE'] }
     }
     if (entiteIdFilter) where.entiteId = entiteIdFilter
+    if (clientId) where.clientId = Number(clientId)
     if (filter === 'NON_SOLDER') where.statutPaiement = { in: ['PARTIEL', 'CREDIT'] }
     if (filter === 'SOLDER') where.statutPaiement = 'PAYE'
 

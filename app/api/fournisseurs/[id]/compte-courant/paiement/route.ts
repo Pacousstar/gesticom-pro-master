@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
-import { comptabiliserCaisse } from '@/lib/comptabilisation'
+import { comptabiliserReglementAchat } from '@/lib/comptabilisation'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { enregistrerOperationBancaire, estModeBanque } from '@/lib/banque'
 import { apiCatch } from '@/lib/log-error'
@@ -83,6 +83,7 @@ export async function POST(
       })
 
       let resteAPayer = montant
+      let premierAchatAlloueId: number | null = null
 
       for (const achat of achatsNonSoldes) {
         if (resteAPayer <= 0) break
@@ -93,6 +94,7 @@ export async function POST(
         const montantARegler = Math.min(montantDu, resteAPayer)
 
         if (montantARegler > 0) {
+          if (premierAchatAlloueId === null) premierAchatAlloueId = achat.id
           const nouveauPaye = realMontantPaye + montantARegler
           const nouveauStatut = nouveauPaye >= (achat.montantTotal || 0) ? 'PAYE' : 'PARTIEL'
 
@@ -144,30 +146,17 @@ export async function POST(
       }
 
       if (estModeEspeces(modePaiement)) {
-        const opCaisse = await enregistrerMouvementCaisse({
+        await enregistrerMouvementCaisse({
           magasinId: Number(magasinId),
           type: 'SORTIE',
-          motif: `Paiement fournisseur : ${fournisseur.nom || ''}`,
+          motif: `REGLEMENT:${reglement.id} Paiement fournisseur : ${fournisseur.nom || ''}`,
           montant,
           utilisateurId: session.userId,
           entiteId,
           date: dateReglement,
         }, tx)
-        if (opCaisse) {
-          await comptabiliserCaisse({
-            caisseId: opCaisse.id,
-            date: dateReglement,
-            type: 'SORTIE',
-            montant,
-            motif: opCaisse.motif,
-            utilisateurId: session.userId,
-            entiteId,
-            sousType: 'MANUEL',
-          }, tx)
-        }
         await recalculerSoldeCaisse(Number(magasinId), tx)
-      } else {
-        if (estModeBanque(modePaiement)) {
+      } else if (estModeBanque(modePaiement)) {
           await enregistrerOperationBancaire({
             banqueId: banqueId ? Number(banqueId) : null,
             entiteId,
@@ -176,14 +165,27 @@ export async function POST(
             libelle: `Paiement fournisseur ${fournisseur.nom || ''}`,
             montant,
             utilisateurId: session.userId,
-            reference: `CC-FOURN-${fournisseurId}-${Date.now()}`,
+            reference: `REGLEMENT_${reglement.id}`,
             beneficiaire: fournisseur.nom || null,
             observation: `Paiement via ${modePaiement}`
           }, tx)
-        } else {
+      } else {
           console.warn(`[paiement fournisseur] Mode de paiement non géré pour trésorerie: ${modePaiement}`)
-        }
       }
+
+      // ✅ COMPTABILISATION
+      await comptabiliserReglementAchat({
+        reglementId: reglement.id,
+        achatId: premierAchatAlloueId ?? 0,
+        numeroAchat: `CC-FOURN-${fournisseurId}`,
+        date: dateReglement,
+        montant,
+        modePaiement,
+        entiteId,
+        utilisateurId: session.userId,
+        magasinId: magasinId ? Number(magasinId) : undefined,
+        paiementDirect: false,
+      }, tx)
 
       return reglement
     }, { timeout: 20000 })

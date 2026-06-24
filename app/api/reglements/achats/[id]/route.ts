@@ -50,15 +50,28 @@ export async function DELETE(
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
 
       if (estModeEspeces(reglement.modePaiement)) {
-        const motif = reglement.achat?.numero || `R${reglement.id}`
-        await tx.caisse.deleteMany({
-          where: { motif: { contains: motif } }
+        const caisses = await tx.caisse.findMany({
+          where: {
+            OR: [
+              { motif: { contains: `REGLEMENT:${id}` } },
+              ...(reglement.achat?.numero ? [{ motif: { contains: reglement.achat.numero } }] : []),
+            ]
+          }
         })
-        const magasinId = reglement.achat?.magasinId
-        if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+        if (caisses.length > 0) {
+          await tx.caisse.deleteMany({ where: { id: { in: caisses.map((c: any) => c.id) } } })
+          const magasinId = reglement.achat?.magasinId || caisses[0].magasinId
+          if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+        }
       } else if (estModeBanque(reglement.modePaiement)) {
         const opsBancaires = await tx.operationBancaire.findMany({
-          where: { reference: reglement.achat?.numero || `REG-A-${id}` }
+          where: {
+            OR: [
+              { reference: `REGLEMENT_${id}` },
+              ...(reglement.achat?.numero ? [{ reference: reglement.achat.numero }] : []),
+              { reference: `REG-A-${id}` },
+            ]
+          }
         })
         for (const op of opsBancaires) {
           const estSortie = ['RETRAIT', 'VIREMENT_SORTANT', 'FRAIS', 'REGLEMENT_FOURNISSEUR', 'ACHAT', 'SORTIE'].includes(op.type.toUpperCase())
@@ -67,31 +80,51 @@ export async function DELETE(
             data: { soldeActuel: estSortie ? { increment: op.montant } : { decrement: op.montant } }
           })
         }
-        await tx.operationBancaire.deleteMany({
-          where: { reference: reglement.achat?.numero || `REG-A-${id}` }
-        })
+        if (opsBancaires.length > 0) {
+          await tx.operationBancaire.deleteMany({
+            where: { id: { in: opsBancaires.map((o: any) => o.id) } }
+          })
+        }
       }
 
-      if (reglement.achatId) {
-        await tx.reglementAchatLigne.deleteMany({
-          where: { reglementId: id }
-        })
+      // Nettoyer les lignes de lettrage (avec ou sans achatId direct)
+      const lignesLettrage = await tx.reglementAchatLigne.findMany({
+        where: { reglementId: id },
+        select: { achatId: true, montant: true }
+      })
 
-        const a = await tx.achat.findUnique({ where: { id: reglement.achatId } })
-        if (a) {
+      if (lignesLettrage.length > 0) {
+        await tx.reglementAchatLigne.deleteMany({ where: { reglementId: id } })
+
+        const achatIds = [...new Set(lignesLettrage.map((l: any) => l.achatId))]
+
+        for (const achatId of achatIds) {
+          const a = await tx.achat.findUnique({
+            where: { id: achatId },
+            select: { id: true, montantTotal: true }
+          })
+          if (!a) continue
+
           const remainingLignes = await tx.reglementAchatLigne.findMany({
-            where: { achatId: reglement.achatId },
+            where: { achatId },
             select: { montant: true }
           })
-          const newTotalFromLignes = remainingLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
-          const nouveauPaye = Math.max(0, newTotalFromLignes)
+          const nouveauPaye = remainingLignes.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+          const nouveauStatut = nouveauPaye >= a.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
+          await tx.achat.update({
+            where: { id: achatId },
+            data: { montantPaye: nouveauPaye, statutPaiement: nouveauStatut }
+          })
+        }
+      } else if (reglement.achatId) {
+        // Fallback : reglement avec achatId direct mais sans ligne de lettrage
+        const a = await tx.achat.findUnique({ where: { id: reglement.achatId } })
+        if (a) {
+          const nouveauPaye = Math.max(0, (a.montantPaye || 0) - reglement.montant)
           const nouveauStatut = nouveauPaye >= a.montantTotal ? 'PAYE' : nouveauPaye > 0 ? 'PARTIEL' : 'CREDIT'
           await tx.achat.update({
             where: { id: reglement.achatId },
-            data: {
-              montantPaye: nouveauPaye,
-              statutPaiement: nouveauStatut
-            }
+            data: { montantPaye: nouveauPaye, statutPaiement: nouveauStatut }
           })
         }
       }
@@ -147,15 +180,28 @@ export async function PATCH(
       await deleteEcrituresByReference('ACHAT_REGLEMENT', id, tx)
 
       if (estModeEspeces(old.modePaiement)) {
-        const motif = old.achat?.numero || `R${id}`
-        await tx.caisse.deleteMany({
-          where: { motif: { contains: motif } }
+        const caisses = await tx.caisse.findMany({
+          where: {
+            OR: [
+              { motif: { contains: `REGLEMENT:${id}` } },
+              ...(old.achat?.numero ? [{ motif: { contains: old.achat.numero } }] : []),
+            ]
+          }
         })
-        const magasinId = old.achat?.magasinId
-        if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+        if (caisses.length > 0) {
+          await tx.caisse.deleteMany({ where: { id: { in: caisses.map((c: any) => c.id) } } })
+          const magasinId = old.achat?.magasinId || caisses[0].magasinId
+          if (magasinId) await recalculerSoldeCaisse(magasinId, tx)
+        }
       } else if (estModeBanque(old.modePaiement)) {
         const opsBancaires = await tx.operationBancaire.findMany({
-          where: { reference: old.achat?.numero || `REG-A-${id}` }
+          where: {
+            OR: [
+              { reference: `REGLEMENT_${id}` },
+              ...(old.achat?.numero ? [{ reference: old.achat.numero }] : []),
+              { reference: `REG-A-${id}` },
+            ]
+          }
         })
         for (const op of opsBancaires) {
           const estSortie = ['RETRAIT', 'VIREMENT_SORTANT', 'FRAIS', 'REGLEMENT_FOURNISSEUR', 'ACHAT', 'SORTIE'].includes(op.type.toUpperCase())
@@ -164,9 +210,11 @@ export async function PATCH(
             data: { soldeActuel: estSortie ? { increment: op.montant } : { decrement: op.montant } }
           })
         }
-        await tx.operationBancaire.deleteMany({
-          where: { reference: old.achat?.numero || `REG-A-${id}` }
-        })
+        if (opsBancaires.length > 0) {
+          await tx.operationBancaire.deleteMany({
+            where: { id: { in: opsBancaires.map((o: any) => o.id) } }
+          })
+        }
       }
 
       const updated = await tx.reglementAchat.update({
@@ -225,7 +273,7 @@ export async function PATCH(
         await enregistrerMouvementCaisse({
           magasinId: updated.achat?.magasinId || 1,
           type: 'SORTIE',
-          motif: `Règlement Achat ${updated.achat?.numero || updated.id}`,
+          motif: `REGLEMENT:${id} Règlement Achat ${updated.achat?.numero || ''}`,
           montant: updated.montant,
           utilisateurId: session.userId,
           entiteId: updated.entiteId ?? entiteId ?? 1,
@@ -243,7 +291,7 @@ export async function PATCH(
           libelle: `Règlement Achat ${updated.achat?.numero || updated.id}`,
           montant: updated.montant,
           utilisateurId: session.userId,
-          reference: updated.achat?.numero || `REG-A-${updated.id}`,
+          reference: `REGLEMENT_${id}`,
           beneficiaire: updated.achat?.fournisseur?.nom || updated.achat?.fournisseurLibre || null,
         }, tx)
       }

@@ -42,6 +42,7 @@ export default function ClientRelevesPage() {
 
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId || '')
+  const [selectedClientDette, setSelectedClientDette] = useState(0)
   const [dateDebut, setDateDebut] = useState<string>(() => {
     const d = new Date()
     d.setDate(1) // Premier du mois
@@ -74,8 +75,8 @@ export default function ClientRelevesPage() {
     setLoading(true)
     try {
       const params = new URLSearchParams({
-        start: dateDebut,
-        end: dateFin
+        dateDebut,
+        dateFin
       })
       const res = await fetch(`/api/rapports/ventes/clients/${selectedClientId}/history?${params.toString()}`)
       if (res.ok) {
@@ -91,11 +92,15 @@ export default function ClientRelevesPage() {
   }
 
   useEffect(() => {
-    if (selectedClientId) {
+    if (!loadingClients && selectedClientId) {
       setCurrentPage(1)
       fetchReleve()
+      fetch(`/api/clients/${selectedClientId}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(c => setSelectedClientDette(c?.dette ?? 0))
+        .catch(() => {})
     }
-  }, [selectedClientId, dateDebut, dateFin])
+  }, [loadingClients, selectedClientId, dateDebut, dateFin])
 
   const selectedClient = clients.find(c => c.id === Number(selectedClientId))
 
@@ -213,7 +218,7 @@ export default function ClientRelevesPage() {
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Solde Global Client</span>
               </div>
               <p className="text-3xl font-black text-white tracking-tighter italic">
-                {(selectedClient?.dette || 0).toLocaleString()} F
+                {(selectedClientDette || 0).toLocaleString()} F
               </p>
             </div>
           </div>
@@ -408,7 +413,7 @@ export default function ClientRelevesPage() {
                         {index === allChunks.length - 1 && (
                           <div className="mt-6 p-4 border-2 border-black bg-gray-50 rounded-lg">
                              <p className="text-[15px] font-black uppercase text-gray-900 italic">Solde de clôture global du client au {formatDate(dateFin)} :</p>
-                             <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedClient?.dette || 0).toLocaleString()} FCFA</p>
+                             <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedClientDette || 0).toLocaleString()} FCFA</p>
                           </div>
                         )}
                       </ListPrintWrapper>
@@ -475,7 +480,7 @@ export default function ClientRelevesPage() {
                       {index === allChunks.length - 1 && (
                         <div className="mt-6 p-4 border-2 border-black bg-gray-50">
                           <p className="text-[15px] font-black uppercase text-gray-900 italic">Solde de clôture global du client au {formatDate(dateFin)} :</p>
-                          <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedClient?.dette || 0).toLocaleString()} FCFA</p>
+                          <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedClientDette || 0).toLocaleString()} FCFA</p>
                         </div>
                       )}
                     </ListPrintWrapper>

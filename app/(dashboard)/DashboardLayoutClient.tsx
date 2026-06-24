@@ -653,21 +653,25 @@ export default function DashboardLayoutClient({
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                  <div className="pt-4 border-t border-white/5 space-y-2">
                     <div className="flex items-center gap-2">
-                      <div className="relative">
+                      <div className="relative shrink-0">
                         <div className="h-2.5 w-2.5 rounded-full bg-orange-500" />
                         <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-orange-500 animate-ping opacity-75" />
                       </div>
                       <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-tighter">Serveur Local OK</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="text-[9px] font-black text-emerald-300/60 uppercase tracking-widest">
-                        {labelModeInstallation(modeInstallation)}
+                      <div className="relative shrink-0">
+                        <div className="h-2.5 w-2.5 rounded-full bg-orange-500" />
                       </div>
-                      <div className="text-[9px] font-black text-white/20 uppercase tracking-widest">
-                        v{process.env.NEXT_PUBLIC_APP_VERSION || '—'} PRO
+                      <span className="text-[10px] font-bold text-emerald-300/80 uppercase tracking-tighter">{labelModeInstallation(modeInstallation)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative shrink-0">
+                        <div className="h-2.5 w-2.5 rounded-full bg-orange-500" />
                       </div>
+                      <span className="text-[10px] font-bold text-white/30 uppercase tracking-tighter">v{process.env.NEXT_PUBLIC_APP_VERSION || '—'} PRO</span>
                     </div>
                   </div>
                 </div>

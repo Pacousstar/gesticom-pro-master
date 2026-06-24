@@ -184,14 +184,14 @@ export async function POST(request: NextRequest) {
 
     let montantPaye = 0
     let autoReglementComplet = false
-    let listReglements: { mode: string; montant: number; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean }[] = []
+    let listReglements: { mode: string; montant: number; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean; banqueId?: number }[] = []
 
     if (reglementsPayload.length > 0) {
       for (const r of reglementsPayload) {
         const amt = r.montant
         const mode = r.mode.toUpperCase()
         if (amt > 0 && mode !== 'CREDIT') {
-          listReglements.push({ mode, montant: amt, payeDepuisCaisse: r.payeDepuisCaisse === true, payeDepuisBanque: r.payeDepuisBanque === true })
+          listReglements.push({ mode, montant: amt, payeDepuisCaisse: r.payeDepuisCaisse === true, payeDepuisBanque: r.payeDepuisBanque === true, banqueId: (r as any).payeDepuisBanque && (r as any).banqueId ? Number((r as any).banqueId) : undefined })
           montantPaye += amt
         }
       }
@@ -314,7 +314,7 @@ let montantFactureHT = 0
         error: `Paiement invalide : le total versé (${montantPaye.toLocaleString()} F) dépasse l'achat (${montantTotal.toLocaleString()} F).`
       }, { status: 400 })
     }
-    const needsBanque = listReglements.some((r) => estModeBanque(r.mode))
+    const needsBanque = listReglements.some((r) => estModeBanque(r.mode) || r.payeDepuisBanque === true)
     if (needsBanque && !Number(body?.banqueId)) {
       return NextResponse.json({ error: 'Banque requise pour les règlements cochés "Payé depuis la banque".' }, { status: 400 })
     }
@@ -482,8 +482,9 @@ let montantFactureHT = 0
           await recalculerSoldeCaisse(magasinId, tx)
         }
         if (reg.payeDepuisBanque) {
+          const banquePourReg = reg.banqueId || (body?.banqueId ? Number(body.banqueId) : null)
           await enregistrerOperationBancaire({
-            banqueId: body?.banqueId ? Number(body.banqueId) : null,
+            banqueId: banquePourReg,
             entiteId,
             date: dateAchat,
             type: 'REGLEMENT_FOURNISSEUR',

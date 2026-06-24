@@ -1050,12 +1050,10 @@ export default function ProduitsPage() {
       <div className="hidden print:block">
         {(() => {
           const data = allProductsForPrint.length > 0 ? allProductsForPrint : list
-          const ROW_H = 22
-          const TH_H = 24
-          const PAGE_H = 718
-          const HEADER_H = 200
-          const firstSize = Math.max(5, Math.floor((PAGE_H - HEADER_H - TH_H) / ROW_H))
-          const otherSize = Math.max(5, Math.floor((PAGE_H - TH_H) / ROW_H))
+          const firstSize = 16
+          const otherSize = 21
+          const firstRowH = Math.floor((718 - 200 - 28) / firstSize)
+          const otherRowH = Math.floor((718 - 28) / otherSize)
           const chunks = paginateForPrint(data, { firstPageSize: firstSize, otherPagesSize: otherSize })
           let totalValeurVente = 0, totalValeurAchat = 0, totalStock = 0
           let numOffset = 0
@@ -1072,64 +1070,56 @@ export default function ProduitsPage() {
                   layout="landscape"
                   hideHeader={index > 0}
                 >
-                  <table className="w-full text-[13px] border-collapse border border-gray-300">
+                  <table className="w-full text-[14px] border-collapse border border-gray-300">
                     <thead>
                       <tr className="bg-gray-100 uppercase font-black text-gray-700">
                         <th style={{width:'3%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">N°</th>
-                        <th style={{width:'9%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Code</th>
-                        <th style={{width:'18%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Désignation</th>
-                        <th style={{width:'8%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Catégorie</th>
-                        <th style={{width:'5%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Magasin</th>
-                        <th style={{width:'7%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">PAMP</th>
-                        <th style={{width:'8%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Prix vente</th>
-                        <th style={{width:'6%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Prix Min.</th>
-                        <th style={{width:'5%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Stock</th>
-                        <th style={{width:'4%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Seuil</th>
-                        <th style={{width:'8%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Date</th>
-                        <th style={{width:'9%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Valeur vente</th>
-                        <th style={{width:'10%'}} className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">Valeur achat</th>
+                        <th style={{width:'7%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Code</th>
+                        <th style={{width:'22%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Désignation</th>
+                        <th style={{width:'9%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Catégorie</th>
+                        <th style={{width:'9%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Prix achat</th>
+                        <th style={{width:'10%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Prix vente</th>
+                        <th style={{width:'8%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Prix Min.</th>
+                        <th style={{width:'8%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Stock</th>
+                        <th style={{width:'12%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Valeur vente</th>
+                        <th style={{width:'12%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Valeur achat</th>
                       </tr>
                     </thead>
                     <tbody>
                       {chunk.map((p, idx) => {
+                        const rowH = index === 0 ? firstRowH : otherRowH
                         const stock = p.stocks && p.stocks.length > 0
                           ? p.stocks.reduce((sum: number, s: any) => sum + (s.quantite || 0), 0) : 0
                         const prixVente = Number(p.prixVente) || 0
-                        const prixAchat = Number(p.pamp) || Number(p.prixAchat) || 0
+                        const coutUnitaire = Number(p.pamp) || Number(p.prixAchat) || 0
                         const valeurVente = stock * prixVente
-                        const valeurAchat = stock * prixAchat
+                        const valeurAchat = stock * coutUnitaire
                         totalValeurVente += valeurVente
                         totalValeurAchat += valeurAchat
                         totalStock += stock
-                        const magName = p.stocks && p.stocks.length > 0 ? 'Mag-' + p.stocks[0].magasinId : '—'
                         return (
-                          <tr key={idx} className="border-b border-gray-200">
-                            <td className="border border-gray-300 px-1 py-0.5 text-center font-bold whitespace-nowrap">{pageStart + idx}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 font-mono whitespace-nowrap">{p.code || '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 font-bold whitespace-nowrap">{p.designation || '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 whitespace-nowrap">{p.categorie || '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 whitespace-nowrap">{magName}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{prixAchat > 0 ? prixAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{prixVente > 0 ? prixVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{p.prixMinimum ? Number(p.prixMinimum).toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-right font-bold whitespace-nowrap">{stock}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{p.seuilMin || '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 whitespace-nowrap">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{valeurVente !== 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-right whitespace-nowrap">{valeurAchat !== 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                          <tr key={idx} className="border-b border-gray-200" style={{height: rowH + 'px'}}>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center font-bold whitespace-nowrap align-middle overflow-hidden">{pageStart + idx}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 font-mono text-center whitespace-nowrap align-middle overflow-hidden">{p.code || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 font-bold text-left whitespace-nowrap align-middle overflow-hidden">{p.designation || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">{p.categorie || '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">{p.prixAchat != null && p.prixAchat > 0 ? Number(p.prixAchat).toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">{prixVente > 0 ? prixVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">{p.prixMinimum ? Number(p.prixMinimum).toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center font-bold whitespace-nowrap align-middle overflow-hidden">{stock}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">{valeurVente !== 0 ? valeurVente.toLocaleString('fr-FR') + ' F' : '—'}</td>
+                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">{valeurAchat !== 0 ? valeurAchat.toLocaleString('fr-FR') + ' F' : '—'}</td>
                           </tr>
                         )
                       })}
                     </tbody>
                     {index === allChunks.length - 1 && (
                       <tfoot>
-                        <tr className="bg-gray-100 font-black text-[13px] border-t-2 border-black">
-                          <td colSpan={8} className="border border-gray-300 px-1 py-1 text-right uppercase italic whitespace-nowrap">TOTAUX</td>
-                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">{totalStock.toLocaleString('fr-FR')}</td>
-                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">—</td>
-                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">—</td>
-                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">{totalValeurVente.toLocaleString('fr-FR') + ' F'}</td>
-                          <td className="border border-gray-300 px-1 py-1 text-right whitespace-nowrap">{totalValeurAchat.toLocaleString('fr-FR') + ' F'}</td>
+                        <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black">
+                          <td colSpan={7} className="border border-gray-300 px-1 py-1 text-right uppercase italic font-black text-[15px] whitespace-nowrap">TOTAUX</td>
+                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">{totalStock.toLocaleString('fr-FR')}</td>
+                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">{totalValeurVente.toLocaleString('fr-FR') + ' F'}</td>
+                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">{totalValeurAchat.toLocaleString('fr-FR') + ' F'}</td>
                         </tr>
                       </tfoot>
                     )}

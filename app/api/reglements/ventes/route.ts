@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         await enregistrerMouvementCaisse({
           magasinId: Number(body.magasinId),
           type: 'ENTREE',
-          motif: `Règlement Vente ${v?.numero || 'R'+reglement.id} : ${observation}${v?.numeroBon ? ' (BON: ' + v.numeroBon + ')' : ''}`,
+          motif: `REGLEMENT:${reglement.id} Règlement Vente ${v?.numero || ''} : ${observation}${v?.numeroBon ? ' (BON: ' + v.numeroBon + ')' : ''}`,
           montant,
           utilisateurId: session.userId,
           entiteId,
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
             libelle: `Règlement Vente ${v?.numero || ''} - ${observation}`,
             montant,
             utilisateurId: session.userId,
-            reference: v?.numero || `REG-${reglement.id}`,
+            reference: `REGLEMENT_${reglement.id}`,
             beneficiaire: client?.nom || v?.clientLibre || null,
           observation: `Paiement via ${modePaiement}`
         }, tx)

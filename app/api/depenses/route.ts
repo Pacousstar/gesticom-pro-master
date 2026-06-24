@@ -16,6 +16,8 @@ import { apiCatch } from '@/lib/log-error'
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'depenses:view')
+  if (authError) return authError
 
   const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1)
   const limit = Math.min(200, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 100))

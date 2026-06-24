@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
+import { requirePermission } from '@/lib/require-role'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { compensationSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const authError = requirePermission(session, 'comptabilite:rapports')
+  if (authError) return authError
 
   const body = await request.json()
   if (!validateApiRequest(compensationSchema, body).success) {

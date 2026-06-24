@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Search, Plus, Trash2, ArrowLeftRight, UserCheck, Printer, FileSpreadsheet } from 'lucide-react'
+import { Loader2, Search, Plus, Trash2, ArrowLeftRight, UserCheck, Printer, FileSpreadsheet, X } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 
 interface CompteCourant {
@@ -142,7 +142,13 @@ export default function ComptesCourantsPage() {
       {/* Matches */}
       {showDetect && matches.length > 0 && (
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
-          <h3 className="font-bold text-gray-900 mb-3">Correspondances détectées</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-gray-900">Correspondances détectées</h3>
+            <button onClick={() => setShowDetect(false)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-all">
+              <X className="h-3.5 w-3.5" /> Fermer
+            </button>
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-gray-500 text-xs uppercase">
@@ -172,8 +178,14 @@ export default function ComptesCourantsPage() {
       )}
 
       {showDetect && matches.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4 text-center text-sm text-gray-500 shadow-sm">
-          Aucune nouvelle correspondance détectée.
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">Aucune nouvelle correspondance détectée.</span>
+            <button onClick={() => setShowDetect(false)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-all">
+              <X className="h-3.5 w-3.5" /> Fermer
+            </button>
+          </div>
         </div>
       )}
 

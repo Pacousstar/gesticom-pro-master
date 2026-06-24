@@ -246,7 +246,7 @@ export default function RecherchePage() {
                       className="flex items-center justify-between rounded-lg border border-gray-100 p-3 hover:bg-orange-50"
                     >
                       <span className="font-medium text-gray-900">{f.nom}</span>
-                      <span className="text-sm text-gray-500">{f.telephone || f.email || '—'}</span>
+                      <span className="text-sm text-gray-500">{((f.telephone === 'null' ? null : f.telephone) || (f.email === 'null' ? null : f.email)) || '—'}</span>
                     </Link>
                   </li>
                 ))}
