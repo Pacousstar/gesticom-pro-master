@@ -60,6 +60,11 @@ export default function CompteCourantFournisseurPage() {
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [lettrageError, setLettrageError] = useState('')
   const [params, setParams] = useState<any>(null)
+  const [userRole, setUserRole] = useState<string>('')
+
+  useEffect(() => {
+    fetch('/api/auth/check').then(r => r.ok && r.json()).then(d => d && setUserRole(d.role)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const d = new Date()
@@ -520,14 +525,16 @@ export default function CompteCourantFournisseurPage() {
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
-                          <button 
-                            onClick={() => handleDeleteReglement(op.id!)}
-                            disabled={isDeleting === op.id}
-                            className={`p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-sm ${isDeleting === op.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title="Supprimer ce règlement"
-                          >
-                            {isDeleting === op.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                          </button>
+                          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                            <button 
+                              onClick={() => handleDeleteReglement(op.id!)}
+                              disabled={isDeleting === op.id}
+                              className={`p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-sm ${isDeleting === op.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title="Supprimer ce règlement"
+                            >
+                              {isDeleting === op.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

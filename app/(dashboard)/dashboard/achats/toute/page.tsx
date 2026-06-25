@@ -409,7 +409,7 @@ export default function TousLesAchatsPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                          {userRole === 'SUPER_ADMIN' && (
+                          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                           <button
                             onClick={() => handleSupprimer(a.id, a.numero)}
                             disabled={supprimant === a.id}

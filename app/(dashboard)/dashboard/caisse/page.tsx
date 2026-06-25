@@ -605,7 +605,7 @@ export default function CaissePage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">{o.utilisateur.nom}</td>
                       <td className="px-4 py-3">
-                        {userRole === 'SUPER_ADMIN' && (
+                        {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                           <button
                             type="button"
                             onClick={async () => {

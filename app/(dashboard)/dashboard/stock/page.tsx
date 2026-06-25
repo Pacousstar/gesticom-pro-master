@@ -72,6 +72,11 @@ export default function StockPage() {
   const [editForm, setEditForm] = useState({ quantite: '', quantiteInitiale: '' })
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
+  const [userRole, setUserRole] = useState<string>('')
+
+  useEffect(() => {
+    fetch('/api/auth/check').then(r => r.ok && r.json()).then(d => d && setUserRole(d.role)).catch(() => {})
+  }, [])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('TOUT')
   const [searchInput, setSearchInput] = useState('')
@@ -1283,13 +1288,15 @@ export default function StockPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => setDeletingStock(s)}
-                            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
-                            title={s.id ? "Supprimer cette ligne de stock" : "Supprimer définitivement ce produit"}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                           {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                             <button
+                               onClick={() => setDeletingStock(s)}
+                               className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
+                               title={s.id ? "Supprimer cette ligne de stock" : "Supprimer définitivement ce produit"}
+                             >
+                               <Trash2 className="h-4 w-4" />
+                             </button>
+                           )}
                         </div>
                       </td>
                     </tr>

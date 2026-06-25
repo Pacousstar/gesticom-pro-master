@@ -99,7 +99,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Vérifier les permissions
-    if (session.role !== 'SUPER_ADMIN' && banque.entiteId !== session.entiteId) {
+    if (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
     }
 

@@ -686,14 +686,14 @@ export default function BanquePage() {
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
-                    {userRole === 'SUPER_ADMIN' && (
+                    {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
                           handleDeleteBanque(banque.id)
                         }}
                         className="p-1 text-red-600 hover:bg-red-50 rounded"
-                        title="Supprimer (Super Admin)"
+                        title="Supprimer"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -891,7 +891,7 @@ export default function BanquePage() {
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Bénéficiaire</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Montant</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Solde après</th>
-                      {userRole === 'SUPER_ADMIN' && <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 w-20">Actions</th>}
+                      {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 w-20">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
@@ -940,7 +940,7 @@ export default function BanquePage() {
                             <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-900">
                               {op.soldeApres.toLocaleString('fr-FR')} FCFA
                             </td>
-                            {userRole === 'SUPER_ADMIN' && (
+                            {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                               <td className="px-4 py-3">
                                 <button
                                   type="button"
@@ -976,7 +976,7 @@ export default function BanquePage() {
                           })}
                           {totalPages > 1 && (
                             <tr>
-                              <td colSpan={userRole === 'SUPER_ADMIN' ? (selectedBanque ? 8 : 9) : (selectedBanque ? 7 : 8)} className="px-0 py-0 border-t border-gray-200">
+                              <td colSpan={userRole === 'SUPER_ADMIN' || userRole === 'ADMIN' ? (selectedBanque ? 8 : 9) : (selectedBanque ? 7 : 8)} className="px-0 py-0 border-t border-gray-200">
                                 <div className="bg-white px-4 py-3">
                                   <Pagination
                                     currentPage={currentPage}

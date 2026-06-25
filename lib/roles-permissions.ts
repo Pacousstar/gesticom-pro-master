@@ -164,18 +164,19 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ADMIN: [
     // Gestion opérationnelle complète
     'dashboard:view',
-    'produits:view', 'produits:create', 'produits:edit',
+    'produits:view', 'produits:create', 'produits:edit', 'produits:delete',
     'stocks:view', 'stocks:entree', 'stocks:sortie', 'stocks:init',
     'ventes:view', 'ventes:create', 'ventes:edit', 'ventes:annuler',
     'achats:view', 'achats:create', 'achats:edit',
-    'depenses:view', 'depenses:create', 'depenses:edit',
-    'charges:view', 'charges:create', 'charges:edit',
+    'depenses:view', 'depenses:create', 'depenses:edit', 'depenses:delete',
+    'charges:view', 'charges:create', 'charges:edit', 'charges:delete',
     'comptabilite:view', 'comptabilite:rapports',
 
     'users:view', 'users:create', 'users:edit',
     'parametres:view', 'parametres:edit',
     'magasins:view', 'magasins:create', 'magasins:edit',
-    'caisse:view', 'caisse:create',
+    'caisse:view', 'caisse:create', 'caisse:delete',
+    'banque:view', 'banque:delete',
     'sauvegardes:view', 'sauvegardes:create',
     'audit:view',
     'rapports:view', 'rapports:ventes',

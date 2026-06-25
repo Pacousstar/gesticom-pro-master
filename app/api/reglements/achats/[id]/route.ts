@@ -18,9 +18,9 @@ export async function DELETE(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  if (session.role !== 'SUPER_ADMIN') {
+  if (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN') {
     return NextResponse.json(
-      { error: 'Action interdite : Les règlements validés ne peuvent être supprimés que par la Direction Générale (Super Administrateur).' },
+      { error: 'Action interdite : Seul le Super Administrateur ou l\'Administrateur peut supprimer un règlement.' },
       { status: 403 }
     )
   }

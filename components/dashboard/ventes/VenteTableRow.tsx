@@ -197,7 +197,7 @@ function VenteTableRowInner({
               </button>
             </>
           )}
-          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && v.statutPaiement !== 'PAYE' && v.statutPaiement !== 'REMBOURSE' && (
+          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
             <button
               onClick={() => onDelete(v)}
               disabled={supprimant === v.id}

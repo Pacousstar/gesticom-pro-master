@@ -433,7 +433,7 @@ export default function ToutesLesVentesPage() {
                                 <Pencil className="h-4 w-4" />
                               </button>
                             )}
-                            {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && v.statutPaiement !== 'PAYE' && v.statutPaiement !== 'REMBOURSE' && (
+                            {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                               <button
                                 onClick={() => handleSupprimer(v.id, v.numero)}
                                 disabled={supprimant === v.id}

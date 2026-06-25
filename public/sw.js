@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gesticom-3.44.1'
+const CACHE_NAME = 'gesticom-3.44.4'
 
 const PRECACHE_URLS = [
   '/manifest.json',
@@ -30,22 +30,20 @@ self.addEventListener('message', (event) => {
 })
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return
   const url = new URL(event.request.url)
-  // Seuls les assets statiques (images, fonts, manifest) sont cachés
+  // Ne rien intercepter → le navigateur fait la requête normalement
+  if (url.pathname.startsWith('/api/')) return
+  if (event.request.method !== 'GET') return
+  // Seuls les assets statiques (images, fonts, manifest) sont mis en cache
   const isStaticAsset = /\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf|eot)$/i.test(url.pathname) || url.pathname === '/manifest.json'
-  if (!isStaticAsset) {
-    // JS, CSS, HTML, API : toujours au réseau, jamais de cache
-    event.respondWith(fetch(event.request).catch(() => caches.match('/')))
-    return
-  }
+  if (!isStaticAsset) return
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request.url, { redirect: 'follow' }).then((response) => {
+    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       if (response.ok && !response.redirected) {
         const clone = response.clone()
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
       }
       return response
-    }).catch(() => caches.match('/')))
+    }).catch(() => new Response('', { status: 503 })))
   )
 })

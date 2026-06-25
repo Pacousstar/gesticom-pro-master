@@ -55,6 +55,11 @@ export default function ProduitsPage() {
   const [err, setErr] = useState('')
   const [savingPrix, setSavingPrix] = useState(false)
   const [savingForm, setSavingForm] = useState(false)
+  const [userRole, setUserRole] = useState<string>('')
+
+  useEffect(() => {
+    fetch('/api/auth/check').then(r => r.ok && r.json()).then(d => d && setUserRole(d.role)).catch(() => {})
+  }, [])
   const [deleting, setDeleting] = useState<Produit | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isPermanentDelete, setIsPermanentDelete] = useState(false)
@@ -854,7 +859,7 @@ export default function ProduitsPage() {
                             >
                               <Archive className="h-4 w-4" />
                             </button>
-                            {(p.stockConsolide ?? 0) === 0 && (
+                            {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (p.stockConsolide ?? 0) === 0 && (
                               <button
                                 type="button"
                                 onClick={() => { setDeleting(p); setIsPermanentDelete(true); }}
