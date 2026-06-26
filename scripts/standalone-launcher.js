@@ -352,7 +352,18 @@ if (isPostgres()) {
   try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch {}
 }
 
-// 6. PLANIFICATEUR DE SAUVEGARDE (tâche de fond)
+// 6. CORRECTION RÉTROACTIVE DES ANNULATIONS (bug quantiteLivree)
+try {
+  const correctionScript = path.join(__dirname, 'corriger-annulations-auto.mjs');
+  if (fs.existsSync(correctionScript)) {
+    execSync(`node "${correctionScript}"`, { cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true });
+    l('Correction annulations stock exécutée');
+  }
+} catch (err) {
+  l('Correction annulations non applicable: ' + (err.message || ''));
+}
+
+// 7. PLANIFICATEUR DE SAUVEGARDE (tâche de fond)
 let backupScheduler = null;
 try {
   const scheduler = require('./scheduled-backup');
