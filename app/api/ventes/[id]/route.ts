@@ -621,6 +621,9 @@ export async function PATCH(
         const totalLivreeVente = oldVente.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
         const stockPasDeduit = (oldVente.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (oldVente.retraitDiffere && totalLivreeVente === 0)
         const estCommandeNonLivree = stockPasDeduit
+        if (!stockPasDeduit && (oldVente.typeVente === 'COMMANDE' || oldVente.retraitDiffere)) {
+          throw new Error("Modification impossible : cette commande a déjà des livraisons partielles. Veuillez annuler et recréer.")
+        }
         // Le nouveau type déterminera si le stock doit être déduit après modification
         const nouveauType = typeVente || oldVente.typeVente
         const nouveauRetraitDiffere = retraitDiffere === true

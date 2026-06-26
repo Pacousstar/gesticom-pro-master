@@ -65,10 +65,11 @@ export async function POST(
 
       const totalLivreeVente = v.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
       const stockPasDeduit = (v.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (v.retraitDiffere && totalLivreeVente === 0)
+      const estCommandeOuDiffere = v.typeVente === 'COMMANDE' || v.retraitDiffere
 
       if (!stockPasDeduit) {
         for (const l of v.lignes) {
-          const qteARembourser = l.quantiteLivree || 0
+          const qteARembourser = estCommandeOuDiffere ? (l.quantiteLivree || 0) : l.quantite
           if (qteARembourser > 0) {
             await tx.stock.updateMany({
               where: { produitId: l.produitId, magasinId: v.magasinId, entiteId: v.entiteId },

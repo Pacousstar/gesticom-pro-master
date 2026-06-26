@@ -265,7 +265,6 @@ export async function POST(request: NextRequest) {
           lignesUpdate.push({ id: ligneVente.id, quantiteLivree })
         }
 
-        const ratio = lv.quantite / lv.quantite
         montantTotalRetrait += lv.montant
         lignesRetirees.push({
           produitId: lv.produitId,
