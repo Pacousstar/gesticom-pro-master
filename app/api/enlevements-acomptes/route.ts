@@ -354,6 +354,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (e) {
+    console.error('[enlevements-acomptes] ERROR:', e)
     await apiCatch(e, 'api/enlevements-acomptes')
     const message = e instanceof Error ? e.message : 'Erreur serveur'
     return NextResponse.json({ error: message }, { status: 500 })
