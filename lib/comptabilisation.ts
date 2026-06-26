@@ -473,6 +473,7 @@ export async function comptabiliserLivraisonCommande(data: {
   numeroVente: string
   date: Date
   montantTotal: number
+  montantRembourse?: number
   entiteId?: number
   utilisateurId: number
   magasinId: number
@@ -593,6 +594,39 @@ export async function comptabiliserLivraisonCommande(data: {
         utilisateurId: data.utilisateurId,
       }, tx)
     }
+  }
+
+  // 5. Remboursement espèces sur acompte (4191 → 531)
+  if (data.montantRembourse && data.montantRembourse > 0) {
+    const compteCaisse = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journalOD.id,
+      entiteId,
+      piece: data.numeroVente,
+      libelle: `Remb. acompte ${data.numeroVente}`,
+      compteId: compteAvance.id,
+      debit: data.montantRembourse,
+      credit: 0,
+      reference: data.numeroVente,
+      referenceType: 'COMMANDE_LIVRAISON',
+      referenceId: data.venteId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journalOD.id,
+      entiteId,
+      piece: data.numeroVente,
+      libelle: `Remb. acompte ${data.numeroVente}`,
+      compteId: compteCaisse.id,
+      debit: 0,
+      credit: data.montantRembourse,
+      reference: data.numeroVente,
+      referenceType: 'COMMANDE_LIVRAISON',
+      referenceId: data.venteId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
   }
 }
 
