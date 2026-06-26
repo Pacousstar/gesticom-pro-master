@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       client: { select: { code: true, nom: true } },
       magasin: { select: { code: true } },
       lignes: { include: { produit: { select: { designation: true } } } },
+      retours: { select: { montantTotal: true } },
     },
     orderBy: { date: 'desc' },
   })
@@ -54,16 +55,20 @@ export async function GET(request: NextRequest) {
   let totalMontant = 0
   let totalPaye = 0
   let totalReste = 0
+  let totalRetourne = 0
 
   for (const v of filteredVentes) {
     const dateStr = v.date.toISOString().slice(0, 10)
     const clientNom = v.client?.nom || v.clientLibre || '—'
     const clientCode = v.client?.code || '—'
-    const reste = Math.max(0, v.montantTotal - (v.montantPaye || 0))
+    const montantRetourne = (v.retours || []).reduce((s: number, r: any) => s + r.montantTotal, 0)
+    const montantNet = v.montantTotal - montantRetourne
+    const reste = Math.max(0, montantNet - (v.montantPaye || 0))
 
     totalMontant += v.montantTotal
     totalPaye += v.montantPaye || 0
     totalReste += reste
+    totalRetourne += montantRetourne
 
     rows.push({
       'N°': v.numero,
@@ -73,6 +78,8 @@ export async function GET(request: NextRequest) {
       Client: clientNom,
       Magasin: v.magasin?.code || '—',
       Montant: v.montantTotal,
+      Retourné: montantRetourne,
+      Net: montantNet,
       Paiement: v.modePaiement,
       'Statut paiement': ['PAYE', 'PARTIEL', 'CREDIT', 'REMBOURSE'].includes(v.statutPaiement)
   ? ({ PAYE: 'Payé', PARTIEL: 'Partiel', CREDIT: 'Crédit', REMBOURSE: 'Remboursé' } as Record<string, string>)[v.statutPaiement]
@@ -92,6 +99,8 @@ export async function GET(request: NextRequest) {
       Client: '',
       Magasin: '',
       Montant: totalMontant,
+      Retourné: totalRetourne,
+      Net: totalMontant - totalRetourne,
       Paiement: '',
       'Statut paiement': '',
       'Reste à payer': totalReste,
@@ -100,7 +109,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (rows.length === 0) {
-    rows.push({ 'N°': '', 'Bon N°': '', Date: '', 'Code Client': '', Client: '', Magasin: '', Montant: '', Paiement: '', 'Statut paiement': '', 'Reste à payer': '', Statut: '' })
+    rows.push({ 'N°': '', 'Bon N°': '', Date: '', 'Code Client': '', Client: '', Magasin: '', Montant: '', Retourné: '', Net: '', Paiement: '', 'Statut paiement': '', 'Reste à payer': '', Statut: '' })
   }
 
   const buf = await rowsToBuffer(rows, 'Ventes')

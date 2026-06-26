@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       include: {
         magasin: { select: { code: true, nom: true } },
         client: { select: { code: true, nom: true } },
+        retours: { select: { montantTotal: true } },
       },
     })
 
@@ -70,16 +71,18 @@ export async function GET(request: NextRequest) {
     doc.setFont('helvetica', 'bold')
     const colPositions = {
       n: margin,
-      bon: margin + 25,
-      date: margin + 50,
-      codeClient: margin + 70,
-      client: margin + 95,
-      magasin: margin + 140,
-      montant: margin + 180, // Right align at this pos
-      paiement: margin + 185,
+      bon: margin + 22,
+      date: margin + 44,
+      codeClient: margin + 62,
+      client: margin + 85,
+      magasin: margin + 125,
+      montant: margin + 158, // Right align
+      retourne: margin + 161, // Right align
+      net: margin + 188, // Right align
+      paiement: margin + 191,
       statutPaiement: margin + 215,
-      reste: margin + 255, // Right align at this pos
-      statut: margin + 260
+      reste: margin + 250, // Right align
+      statut: margin + 255
     }
 
     doc.text('N°', colPositions.n, currentY)
@@ -89,6 +92,8 @@ export async function GET(request: NextRequest) {
     doc.text('Client', colPositions.client, currentY)
     doc.text('Mag.', colPositions.magasin, currentY)
     doc.text('Montant', colPositions.montant, currentY, { align: 'right' })
+    doc.text('Retourné', colPositions.retourne, currentY, { align: 'right' })
+    doc.text('Net', colPositions.net, currentY, { align: 'right' })
     doc.text('Payé par', colPositions.paiement, currentY)
     doc.text('Statut Paiement', colPositions.statutPaiement, currentY)
     doc.text('Reste', colPositions.reste, currentY, { align: 'right' })
@@ -114,6 +119,8 @@ export async function GET(request: NextRequest) {
         doc.text('Client', colPositions.client, currentY)
         doc.text('Mag.', colPositions.magasin, currentY)
         doc.text('Montant', colPositions.montant, currentY, { align: 'right' })
+        doc.text('Retourné', colPositions.retourne, currentY, { align: 'right' })
+        doc.text('Net', colPositions.net, currentY, { align: 'right' })
         doc.text('Payé par', colPositions.paiement, currentY)
         doc.text('Statut Paiement', colPositions.statutPaiement, currentY)
         doc.text('Reste', colPositions.reste, currentY, { align: 'right' })
@@ -125,7 +132,9 @@ export async function GET(request: NextRequest) {
 
       const dateStr = new Date(v.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
       const clientStr = v.client?.nom || v.clientLibre || '—'
-      const reste = v.montantTotal - (v.montantPaye || 0)
+      const montantRetourne = (v.retours || []).reduce((s: number, r: any) => s + r.montantTotal, 0)
+      const montantNet = v.montantTotal - montantRetourne
+      const reste = montantNet - (v.montantPaye || 0)
       
       totalMontant += v.montantTotal
       totalReste += reste
@@ -137,6 +146,8 @@ export async function GET(request: NextRequest) {
       doc.text(clientStr.length > 25 ? clientStr.substring(0, 25) + '.' : clientStr, colPositions.client, currentY)
       doc.text(v.magasin.code, colPositions.magasin, currentY)
       doc.text(v.montantTotal.toLocaleString('fr-FR'), colPositions.montant, currentY, { align: 'right' })
+      doc.text(montantRetourne.toLocaleString('fr-FR'), colPositions.retourne, currentY, { align: 'right' })
+      doc.text(montantNet.toLocaleString('fr-FR'), colPositions.net, currentY, { align: 'right' })
       doc.text(v.modePaiement, colPositions.paiement, currentY)
       doc.text(['PAYE', 'PARTIEL', 'CREDIT', 'REMBOURSE'].includes(v.statutPaiement)
   ? ({ PAYE: 'Payé', PARTIEL: 'Partiel', CREDIT: 'Crédit', REMBOURSE: 'Remboursé' } as Record<string, string>)[v.statutPaiement]

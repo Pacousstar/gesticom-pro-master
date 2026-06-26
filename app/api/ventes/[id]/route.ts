@@ -34,15 +34,16 @@ export async function GET(
 
   const vente = await prisma.vente.findUnique({
     where: { id },
-    include: {
-      magasin: { select: { id: true, code: true, nom: true, localisation: true } },
-      client: { select: { id: true, code: true, nom: true, telephone: true, type: true, adresse: true, ncc: true } },
-      lignes: {
-        include: { produit: { select: { id: true, code: true, designation: true } } },
+      include: {
+        magasin: { select: { id: true, code: true, nom: true, localisation: true } },
+        client: { select: { id: true, code: true, nom: true, telephone: true, type: true, adresse: true, ncc: true } },
+        lignes: {
+          include: { produit: { select: { id: true, code: true, designation: true } } },
+        },
+        reglements: true,
+        ReglementVenteLigne: { select: { reglementId: true, montant: true } },
+        retours: { select: { montantTotal: true } },
       },
-      reglements: true,
-      ReglementVenteLigne: { select: { reglementId: true, montant: true } },
-    },
   })
 
   if (!vente) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
@@ -59,14 +60,18 @@ export async function GET(
   const totalLignePaye = (vente.ReglementVenteLigne || [])
     .filter(l => !creditReglementIds.has(l.reglementId))
     .reduce((s, l) => s + (l.montant || 0), 0)
+  const montantRetourne = (vente.retours || []).reduce((s, r: any) => s + r.montantTotal, 0)
   const venteWithRealPaye = {
     ...vente,
     montantPaye: totalLignePaye > 0 ? totalLignePaye : (vente.montantPaye || 0),
+    montantRetourne,
+    montantNet: vente.montantTotal - montantRetourne,
     reglements: vente.reglements?.map((r: any) => {
       const { ReglementVenteLigne, ...rest } = r
       return rest
     }),
     ReglementVenteLigne: undefined,
+    retours: undefined,
   }
 
   return NextResponse.json(venteWithRealPaye)
@@ -616,11 +621,18 @@ export async function PATCH(
         const totalLivreeVente = oldVente.lignes.reduce((s: number, l: any) => s + Number(l.quantiteLivree || 0), 0)
         const stockPasDeduit = (oldVente.typeVente === 'COMMANDE' && totalLivreeVente === 0) || (oldVente.retraitDiffere && totalLivreeVente === 0)
         const estCommandeNonLivree = stockPasDeduit
+        // Le nouveau type déterminera si le stock doit être déduit après modification
+        const nouveauType = typeVente || oldVente.typeVente
+        const nouveauRetraitDiffere = retraitDiffere === true
+        const nouveauStockADeduire = nouveauType !== 'COMMANDE' && !nouveauRetraitDiffere
 
         // 1. Rollback stocks (uniquement si stock déjà déduit)
+        const stockDejaDeduit = oldVente.typeVente !== 'COMMANDE' && !oldVente.retraitDiffere
         if (!estCommandeNonLivree) {
           for (const l of oldVente.lignes) {
-            const qteARembourser = l.quantiteLivree || 0
+            // À la création, LIVRAISON_IMMEDIATE déduit l.quantite, pas quantiteLivree
+            // Utiliser quantiteLivree uniquement si le stock n'a pas été déduit à la création
+            const qteARembourser = stockDejaDeduit ? l.quantite : (l.quantiteLivree || 0)
             if (qteARembourser > 0) {
               await tx.stock.updateMany({
                 where: { produitId: l.produitId, magasinId: oldVente.magasinId, entiteId: oldVente.entiteId },
@@ -790,8 +802,8 @@ export async function PATCH(
           }
         })
 
-        // 5. Appliquer stocks (uniquement si pas une commande non livrée)
-        if (!estCommandeNonLivree) {
+        // 5. Appliquer stocks (uniquement si le nouveau type nécessite une déduction)
+        if (nouveauStockADeduire) {
           for (const l of lignesAcreer) {
             await tx.stock.updateMany({
               where: { produitId: l.produitId, magasinId: updated.magasinId, entiteId: updated.entiteId },
@@ -886,7 +898,7 @@ export async function PATCH(
         }
 
         // 7. Comptabilisation
-        if (!estCommandeNonLivree) {
+        if (nouveauStockADeduire) {
           await comptabiliserVente({
             venteId: updated.id,
             numeroVente: updated.numero,

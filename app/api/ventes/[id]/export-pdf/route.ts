@@ -31,6 +31,7 @@ export async function GET(
         client: { select: { code: true, nom: true, telephone: true, localisation: true } },
         lignes: { include: { produit: { select: { designation: true } } } },
         utilisateur: { select: { nom: true } },
+        retours: { select: { numero: true, createdAt: true, montantTotal: true, observation: true } },
       },
     })
 
@@ -204,7 +205,29 @@ export async function GET(
     y += 6
     const reste = Math.max(0, vente.montantTotal - (vente.montantPaye || 0))
     doc.text(`Reste à payer: ${reste.toLocaleString('fr-FR')} F`, margin, y)
-    y += 10
+    y += 6
+
+    // Retours
+    const retours = vente.retours || []
+    if (retours.length > 0) {
+      const montantRetourne = retours.reduce((s: number, r: any) => s + r.montantTotal, 0)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Retours (${retours.length}):`, margin, y)
+      y += 6
+      doc.setFont('helvetica', 'normal')
+      for (const r of retours) {
+        const dateRetour = new Date(r.createdAt).toLocaleDateString('fr-FR')
+        if (y > pageHeight - 30) { doc.addPage(); y = margin + 10 }
+        doc.text(`  ${r.numero} - ${dateRetour} : ${r.montantTotal.toLocaleString('fr-FR')} F${r.observation ? ` (${r.observation})` : ''}`, margin, y)
+        y += 5
+      }
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Total retourné: ${montantRetourne.toLocaleString('fr-FR')} F`, margin + 2, y)
+      y += 6
+      doc.text(`Net: ${(vente.montantTotal - montantRetourne).toLocaleString('fr-FR')} F`, margin + 2, y)
+      y += 6
+    }
+    doc.setFont('helvetica', 'normal')
 
     if (vente.observation) {
       doc.setFontSize(8)

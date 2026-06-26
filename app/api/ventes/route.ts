@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
         lignes: { include: { produit: { select: { code: true, designation: true } } } },
         reglements: true,
         ReglementVenteLigne: { select: { reglementId: true, montant: true } },
+        retours: { select: { montantTotal: true } },
       },
     }),
     prisma.vente.count({ where }),
@@ -129,11 +130,15 @@ export async function GET(request: NextRequest) {
     const totalLignePaye = (v.ReglementVenteLigne || [])
       .filter(l => !creditReglementIds.has(l.reglementId))
       .reduce((s, l) => s + (l.montant || 0), 0)
+    const montantRetourne = (v.retours || []).reduce((s, r) => s + r.montantTotal, 0)
     return {
       ...v,
       montantPaye: totalLignePaye > 0 ? totalLignePaye : (v.montantPaye || 0),
+      montantRetourne,
+      montantNet: v.montantTotal - montantRetourne,
       ReglementVenteLigne: undefined,
       reglements: undefined,
+      retours: undefined,
     }
   })
 
