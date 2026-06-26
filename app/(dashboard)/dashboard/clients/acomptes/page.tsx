@@ -158,7 +158,7 @@ export default function EnlevementsAcomptesPage() {
   const montantRembNum = Number(montantRembourse) || 0
   const montantProduits = Math.max(0, montantNum - montantRembNum)
   const diff = Math.abs(totalProduits - montantProduits)
-  const isValid = montantNum > 0 && lignes.length > 0 && diff <= 100 && (
+  const isValid = montantNum > 0 && lignes.length > 0 && diff <= 100 && dateReglement.length > 0 && (
     clientType === 'counter' ? clientLibre.trim().length > 0 : !!selectedClient
   )
 

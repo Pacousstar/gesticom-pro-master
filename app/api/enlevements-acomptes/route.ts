@@ -52,7 +52,12 @@ export async function POST(request: NextRequest) {
         where: { code: 'COMPTOIR' },
         select: { id: true, code: true, nom: true },
       })
-      if (!client) return NextResponse.json({ error: 'Client COMPTOIR introuvable.' }, { status: 500 })
+      if (!client) {
+        client = await prisma.client.create({
+          data: { code: 'COMPTOIR', nom: 'CLIENT AU COMPTOIR', entiteId, type: 'PARTICULIER' },
+          select: { id: true, code: true, nom: true },
+        })
+      }
       clientLibreValue = clientLibre || 'Client au comptoir'
     }
 
@@ -133,7 +138,9 @@ export async function POST(request: NextRequest) {
       }
 
       if (reglements.length === 0 && clientLibreValue) {
-        const dateRegl = dateReglement ? new Date(dateReglement) : maintenant
+        const dateRegl = dateReglement && typeof dateReglement === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateReglement)
+          ? new Date(dateReglement + 'T00:00:00')
+          : maintenant
         const nouveauReglement = await tx.reglementVente.create({
           data: {
             clientId: client.id,
