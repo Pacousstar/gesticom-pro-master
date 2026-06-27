@@ -579,6 +579,8 @@ export default function AnciennesVentesPage() {
                       <th className="border p-1 text-left">Client</th>
                       <th className="border p-1 text-left">Magasin</th>
                       <th className="border p-1 text-right">Montant</th>
+                      <th className="border p-1 text-right">Retourné</th>
+                      <th className="border p-1 text-right">Net</th>
                       <th className="border p-1 text-left">Paiement</th>
                       <th className="border p-1 text-left">Statut</th>
                       <th className="border p-1 text-right">Payé</th>
@@ -595,6 +597,8 @@ export default function AnciennesVentesPage() {
                           <td className="border p-1">{v.client?.nom || v.clientLibre || '—'}</td>
                           <td className="border p-1">{(v.magasin as any)?.code || v.magasinId || '—'}</td>
                           <td className="border p-1 text-right">{Number(v.montantTotal).toLocaleString('fr-FR')} F</td>
+                          <td className="border p-1 text-right text-amber-600">{(v.montantRetourne || 0).toLocaleString('fr-FR')} F</td>
+                          <td className="border p-1 text-right">{(v.montantNet ?? v.montantTotal).toLocaleString('fr-FR')} F</td>
                           <td className="border p-1">{v.modePaiement}</td>
                           <td className="border p-1">{getStatutPaiementLabel(v.statutPaiement || '')}</td>
                           <td className="border p-1 text-right">{(v.montantPaye || 0).toLocaleString('fr-FR')} F</td>

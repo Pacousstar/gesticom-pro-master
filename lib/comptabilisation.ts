@@ -474,6 +474,7 @@ export async function comptabiliserLivraisonCommande(data: {
   date: Date
   montantTotal: number
   montantRembourse?: number
+  montantRegle?: number
   entiteId?: number
   utilisateurId: number
   magasinId: number
@@ -622,6 +623,39 @@ export async function comptabiliserLivraisonCommande(data: {
       compteId: compteCaisse.id,
       debit: 0,
       credit: data.montantRembourse,
+      reference: data.numeroVente,
+      referenceType: 'COMMANDE_LIVRAISON',
+      referenceId: data.venteId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
+
+  // 6. Encaissement initial pour acompte synthétique (531 → 4191)
+  if (data.montantRegle && data.montantRegle > 0) {
+    const compteCaisse = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journalOD.id,
+      entiteId,
+      piece: data.numeroVente,
+      libelle: `Encaissement acompte ${data.numeroVente}`,
+      compteId: compteCaisse.id,
+      debit: data.montantRegle,
+      credit: 0,
+      reference: data.numeroVente,
+      referenceType: 'COMMANDE_LIVRAISON',
+      referenceId: data.venteId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journalOD.id,
+      entiteId,
+      piece: data.numeroVente,
+      libelle: `Encaissement acompte ${data.numeroVente}`,
+      compteId: compteAvance.id,
+      debit: 0,
+      credit: data.montantRegle,
       reference: data.numeroVente,
       referenceType: 'COMMANDE_LIVRAISON',
       referenceId: data.venteId,

@@ -10,7 +10,8 @@ import {
     BookOpen,
     ChevronDown,
     ChevronUp,
-    Calculator
+    Calculator,
+    BarChart3
 } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ComptabiliteNav from '../ComptabiliteNav'
@@ -466,142 +467,189 @@ export default function BilanPage() {
                     </div>
 
                     {/* VUE ÉCRAN : DEUX COLONNES AVEC N-1 */}
-                    <div className="grid gap-8 lg:grid-cols-2 no-print">
-                        {/* COLONNE ACTIF */}
-                        <div className="space-y-6">
-                            <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-                                <div className="bg-emerald-600 px-6 py-4">
-                                    <h2 className="text-xl font-black text-white flex justify-between items-center uppercase">
-                                        <span>Actif</span>
-                                        <span className="text-sm font-medium normal-case opacity-80">(Emplois)</span>
-                                    </h2>
-                                </div>
-                                <div className="p-0">
-                                    {actifImm.merged.length > 0 && <BilanSection title="Actif Immobilisé" section={actifImm} color="emerald" />}
-                                    {actifStk.merged.length > 0 && <BilanSection title="Stocks" section={actifStk} color="emerald" />}
-                                    {actifCre.merged.length > 0 && <BilanSection title="Créances & Autres" section={actifCre} color="emerald" />}
-                                    {actifTre.merged.length > 0 && <BilanSection title="Trésorerie Actif" section={actifTre} color="emerald" />}
-                                    {actifImm.merged.length === 0 && actifStk.merged.length === 0 && actifCre.merged.length === 0 && actifTre.merged.length === 0 && (
-                                        <div className="p-8 text-center text-gray-400 italic">Aucun mouvement — Actif</div>
-                                    )}
-                                </div>
-                                <div className="bg-emerald-50 px-6 py-5 border-t border-emerald-100">
-                                    <div className="flex justify-between items-center text-sm text-emerald-600 mb-1">
-                                        <span className="font-medium">N-1 ({annee - 1})</span>
-                                        <span className="font-bold">{formatFcfa(totalActifN1)}</span>
+                    <div className="no-print space-y-8">
+                        {/* LIGNE 1 : CARTES ACTIF / PASSIF (MÊME HAUTEUR) */}
+                        <div className="grid gap-8 lg:grid-cols-2 items-stretch">
+                            {/* COLONNE ACTIF */}
+                            <div className="flex flex-col h-full">
+                                <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden flex-1 flex flex-col">
+                                    <div className="bg-emerald-600 px-6 py-4 shrink-0">
+                                        <h2 className="text-xl font-black text-white flex justify-between items-center uppercase">
+                                            <span>Actif</span>
+                                            <span className="text-sm font-medium normal-case opacity-80">(Emplois)</span>
+                                        </h2>
                                     </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-lg font-black text-emerald-900 uppercase">Total Général Actif N</span>
-                                        <span className="text-xl font-black text-emerald-700">{formatFcfa(totalActifN)}</span>
+                                    <div className="p-0 flex-1">
+                                        {actifImm.merged.length > 0 && <BilanSection title="Actif Immobilisé" section={actifImm} color="emerald" />}
+                                        {actifStk.merged.length > 0 && <BilanSection title="Stocks" section={actifStk} color="emerald" />}
+                                        {actifCre.merged.length > 0 && <BilanSection title="Créances & Autres" section={actifCre} color="emerald" />}
+                                        {actifTre.merged.length > 0 && <BilanSection title="Trésorerie Actif" section={actifTre} color="emerald" />}
+                                        {actifImm.merged.length === 0 && actifStk.merged.length === 0 && actifCre.merged.length === 0 && actifTre.merged.length === 0 && (
+                                            <div className="p-8 text-center text-gray-400 italic">Aucun mouvement — Actif</div>
+                                        )}
+                                    </div>
+                                    <div className="bg-emerald-50 px-6 py-5 border-t border-emerald-100 shrink-0">
+                                        <div className="flex justify-between items-center text-sm text-emerald-600 mb-1">
+                                            <span className="font-medium">N-1 ({annee - 1})</span>
+                                            <span className="font-bold">{formatFcfa(totalActifN1)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-lg font-black text-emerald-900 uppercase">Total Général Actif N</span>
+                                            <span className="text-xl font-black text-emerald-700">{formatFcfa(totalActifN)}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 flex gap-3">
-                                <Info className="h-5 w-5 text-blue-500 shrink-0" />
-                                <p className="text-xs text-blue-700 leading-relaxed font-medium">
-                                    Le Bilan est un "instantané" de la situation de l'entreprise à la date de clôture.
-                                    Il présente ce que l'entreprise possède (Actif) et ce qu'elle doit (Passif).
-                                    Les montants N-1 sont indiqués pour comparaison.
-                                </p>
+                            {/* COLONNE PASSIF */}
+                            <div className="flex flex-col h-full">
+                                <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden flex-1 flex flex-col">
+                                    <div className="bg-blue-700 px-6 py-4 shrink-0">
+                                        <h2 className="text-xl font-black text-white flex justify-between items-center uppercase">
+                                            <span>Passif</span>
+                                            <span className="text-sm font-medium normal-case opacity-80">(Ressources)</span>
+                                        </h2>
+                                    </div>
+                                    <div className="p-0 flex-1">
+                                        {passifCap.merged.length > 0 && <BilanSection title="Capitaux Propres" section={passifCap} color="blue" />}
+                                        {passifDet.merged.length > 0 && <BilanSection title="Dettes & Tiers" section={passifDet} color="blue" />}
+                                        {passifTre.merged.length > 0 && <BilanSection title="Trésorerie Passif" section={passifTre} color="blue" />}
+                                        {passifCap.merged.length === 0 && passifDet.merged.length === 0 && passifTre.merged.length === 0 && (
+                                            <div className="p-8 text-center text-gray-400 italic">Aucun mouvement — Passif</div>
+                                        )}
+                                    </div>
+                                    <div className="bg-blue-50 px-6 py-5 border-t border-blue-100 shrink-0">
+                                        <div className="flex justify-between items-center text-sm text-blue-600 mb-1">
+                                            <span className="font-medium">N-1 ({annee - 1})</span>
+                                            <span className="font-bold">{formatFcfa(totalPassifN1)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-lg font-black text-blue-900 uppercase">Total Général Passif N</span>
+                                            <span className="text-xl font-black text-blue-700">{formatFcfa(totalPassifN)}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        {/* COLONNE PASSIF */}
-                        <div className="space-y-6">
-                            <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-                                <div className="bg-blue-700 px-6 py-4">
-                                    <h2 className="text-xl font-black text-white flex justify-between items-center uppercase">
-                                        <span>Passif</span>
-                                        <span className="text-sm font-medium normal-case opacity-80">(Ressources)</span>
-                                    </h2>
-                                </div>
-                                <div className="p-0">
-                                    {passifCap.merged.length > 0 && <BilanSection title="Capitaux Propres" section={passifCap} color="blue" />}
-                                    {passifDet.merged.length > 0 && <BilanSection title="Dettes & Tiers" section={passifDet} color="blue" />}
-                                    {passifTre.merged.length > 0 && <BilanSection title="Trésorerie Passif" section={passifTre} color="blue" />}
-                                    {passifCap.merged.length === 0 && passifDet.merged.length === 0 && passifTre.merged.length === 0 && (
-                                        <div className="p-8 text-center text-gray-400 italic">Aucun mouvement — Passif</div>
-                                    )}
-                                </div>
-                                <div className="bg-blue-50 px-6 py-5 border-t border-blue-100">
-                                    <div className="flex justify-between items-center text-sm text-blue-600 mb-1">
-                                        <span className="font-medium">N-1 ({annee - 1})</span>
-                                        <span className="font-bold">{formatFcfa(totalPassifN1)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-lg font-black text-blue-900 uppercase">Total Général Passif N</span>
-                                        <span className="text-xl font-black text-blue-700">{formatFcfa(totalPassifN)}</span>
+                        {/* LIGNE 2 : INFOS COMPLÉMENTAIRES */}
+                        <div className="grid gap-8 lg:grid-cols-2 items-start">
+                            {/* GAUCHE : INFO BILAN + STRUCTURE DE L'ACTIF */}
+                            <div className="space-y-6">
+                                <div className="rounded-2xl p-6 border flex items-center justify-between bg-white border-gray-200">
+                                    <div className="flex gap-3 items-center">
+                                        <Info className="h-5 w-5 text-blue-500 shrink-0" />
+                                        <div>
+                                            <h3 className="font-bold text-gray-900">Comprendre le Bilan</h3>
+                                            <p className="text-sm text-gray-600">Le Bilan est un "instantané" de la situation de l'entreprise à la date de clôture. Il présente ce que l'entreprise possède (Actif) et ce qu'elle doit (Passif). Les montants N-1 sont indiqués pour comparaison.</p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* ÉQUILIBRE */}
-                            <div className={`rounded-2xl p-6 border flex items-center justify-between ${totalActifN === totalPassifN ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-                                <div>
-                                    <h3 className="font-bold text-gray-900">Équilibre du Bilan</h3>
-                                    <p className="text-sm text-gray-600">Différence Actif / Passif</p>
-                                </div>
-                                <div className="text-right">
-                                    <span className={`text-xl font-black ${totalActifN === totalPassifN ? 'text-emerald-600' : 'text-red-600'}`}>
-                                        {formatFcfa(totalActifN - totalPassifN)}
-                                    </span>
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Conformité SYSCOHADA</p>
-                                </div>
-                            </div>
-
-                            {/* RATIOS */}
-                            {r && (
                                 <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-                                    <div className="bg-gray-900 px-6 py-4">
+                                    <div className="bg-emerald-700 px-6 py-4">
                                         <h3 className="text-lg font-black text-white flex items-center gap-2 uppercase">
-                                            <TrendingUp className="h-5 w-5" />
-                                            Ratios Financiers
+                                            <BarChart3 className="h-5 w-5" />
+                                            Structure de l'Actif
                                         </h3>
                                     </div>
                                     <div className="p-6 space-y-5">
-                                        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-                                            <div>
-                                                <span className="font-black text-gray-900 text-lg">FRNG</span>
-                                                <p className="text-xs text-gray-500 mt-0.5">Fonds de Roulement Net Global</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className={`text-xl font-black ${r.frng >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    {formatFcfa(r.frng)}
-                                                </span>
-                                                <p className="text-[10px] text-gray-400 mt-0.5">{r.frngLabel}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-                                            <div>
-                                                <span className="font-black text-gray-900 text-lg">BFR</span>
-                                                <p className="text-xs text-gray-500 mt-0.5">Besoin en Fonds de Roulement</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className={`text-xl font-black ${r.bfr >= 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                                    {formatFcfa(r.bfr)}
-                                                </span>
-                                                <p className="text-[10px] text-gray-400 mt-0.5">{r.bfrLabel}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <span className="font-black text-gray-900 text-lg">TN</span>
-                                                <p className="text-xs text-gray-500 mt-0.5">Trésorerie Nette</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className={`text-xl font-black ${r.tn >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    {formatFcfa(r.tn)}
-                                                </span>
-                                                <p className="text-[10px] text-gray-400 mt-0.5">{r.tnLabel}</p>
-                                            </div>
-                                        </div>
-                                        <div className="mt-4 pt-3 border-t border-gray-100 italic text-xs text-gray-400">
-                                            <p>FRNG - BFR = TN : {formatFcfa(r.frng)} - {formatFcfa(r.bfr)} = {formatFcfa(r.tn)}</p>
-                                        </div>
+                                        {(() => {
+                                            const total = totalActifN
+                                            const sections = [
+                                                { label: 'Actif Immobilisé', valeur: actifImm.total, color: 'bg-indigo-500' },
+                                                { label: 'Stocks', valeur: actifStk.total, color: 'bg-amber-500' },
+                                                { label: 'Créances & Autres', valeur: actifCre.total, color: 'bg-cyan-500' },
+                                                { label: 'Trésorerie Actif', valeur: actifTre.total, color: 'bg-emerald-500' },
+                                            ]
+                                            return sections.map(s => {
+                                                const pct = total > 0 ? (s.valeur / total) * 100 : 0
+                                                return (
+                                                    <div key={s.label}>
+                                                        <div className="flex justify-between items-center mb-1.5">
+                                                            <span className="text-sm font-semibold text-gray-700">{s.label}</span>
+                                                            <span className="text-sm font-bold text-gray-900">{pct.toFixed(1)}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                                                            <div className={`${s.color} h-full rounded-full transition-all duration-500`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 mt-0.5">{formatFcfa(s.valeur)}</div>
+                                                    </div>
+                                                )
+                                            })
+                                        })()}
                                     </div>
                                 </div>
-                            )}
+                            </div>
+
+                            {/* DROITE : ÉQUILIBRE + RATIOS */}
+                            <div className="space-y-6">
+                                {/* ÉQUILIBRE */}
+                                <div className={`rounded-2xl p-6 border flex items-center justify-between ${totalActifN === totalPassifN ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`} style={{ minHeight: '113px' }}>
+                                    <div>
+                                        <h3 className="font-bold text-gray-900">Équilibre du Bilan</h3>
+                                        <p className="text-sm text-gray-600">Différence Actif / Passif</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <span className={`text-xl font-black ${totalActifN === totalPassifN ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {formatFcfa(totalActifN - totalPassifN)}
+                                        </span>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Conformité SYSCOHADA</p>
+                                    </div>
+                                </div>
+
+                                {/* RATIOS */}
+                                {r && (
+                                    <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden" style={{ minHeight: '65px' }}>
+                                        <div className="bg-gray-900 px-6 py-4">
+                                            <h3 className="text-lg font-black text-white flex items-center gap-2 uppercase">
+                                                <TrendingUp className="h-5 w-5" />
+                                                Ratios Financiers
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 space-y-5">
+                                            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                                                <div>
+                                                    <span className="font-black text-gray-900 text-lg">FRNG</span>
+                                                    <p className="text-xs text-gray-500 mt-0.5">Fonds de Roulement Net Global</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className={`text-xl font-black ${r.frng >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                        {formatFcfa(r.frng)}
+                                                    </span>
+                                                    <p className="text-[10px] text-gray-400 mt-0.5">{r.frngLabel}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                                                <div>
+                                                    <span className="font-black text-gray-900 text-lg">BFR</span>
+                                                    <p className="text-xs text-gray-500 mt-0.5">Besoin en Fonds de Roulement</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className={`text-xl font-black ${r.bfr >= 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                        {formatFcfa(r.bfr)}
+                                                    </span>
+                                                    <p className="text-[10px] text-gray-400 mt-0.5">{r.bfrLabel}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <span className="font-black text-gray-900 text-lg">TN</span>
+                                                    <p className="text-xs text-gray-500 mt-0.5">Trésorerie Nette</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className={`text-xl font-black ${r.tn >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                        {formatFcfa(r.tn)}
+                                                    </span>
+                                                    <p className="text-[10px] text-gray-400 mt-0.5">{r.tnLabel}</p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-4 pt-3 border-t border-gray-100 italic text-xs text-gray-400">
+                                                <p>FRNG - BFR = TN : {formatFcfa(r.frng)} - {formatFcfa(r.bfr)} = {formatFcfa(r.tn)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 

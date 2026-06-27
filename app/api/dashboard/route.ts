@@ -180,6 +180,11 @@ export async function GET(request: NextRequest) {
         where: { statut: { in: ['VALIDE', 'VALIDEE'] }, ...entiteCondition as any },
         _sum: { montantTotal: true, montantPaye: true }
       }).catch(() => ({ _sum: { montantTotal: 0, montantPaye: 0 } })),
+      // 12b - Retours (soustraits des créances clients)
+      prisma.retour.aggregate({
+        where: { ...entiteCondition as any, vente: { statut: { in: ['VALIDE', 'VALIDEE'] } } },
+        _sum: { montantTotal: true }
+      }).catch(() => ({ _sum: { montantTotal: 0 } })),
 
       // 13 - Alertes Système
       prisma.systemAlerte.findMany({
@@ -249,7 +254,6 @@ export async function GET(request: NextRequest) {
           .map(([jour, montant]) => ({ jour: Number(jour), montant }))
           .sort((a, b) => a.jour - b.jour)
       }).catch(catchEmpty('caJournalier')),
-      // 17 - (réservé)
     ])
 
     const timeoutFallback: any[] = [
@@ -266,10 +270,11 @@ export async function GET(request: NextRequest) {
       { _sum: { debit: 0, credit: 0 } }, // 10
       { _sum: { montantTotal: 0, montantPaye: 0, fraisApproche: 0 } }, // 11
       { _sum: { montantTotal: 0, montantPaye: 0 } }, // 12
-      [], // 13
+      { _sum: { montantTotal: 0 } }, // 13 (retours)
       [], // 14
       [], // 15
       [], // 16
+      [], // 17
     ]
 
 const result = await Promise.race([
@@ -297,6 +302,7 @@ const result = await Promise.race([
       soldeCompte,
       dettesAgg,
       creancesAgg,
+      retoursAgg,
       systemAlertesRaw,
       tendancesRaw,
       caCategorieRaw,
@@ -347,7 +353,7 @@ const result = await Promise.race([
     tresorerieCaisse = entrees - sorties
 
     const totalDettes = (toNum(dettesAgg._sum?.montantTotal) + toNum(dettesAgg._sum?.fraisApproche)) - toNum(dettesAgg._sum?.montantPaye)
-    const totalCreances = toNum(creancesAgg._sum?.montantTotal) - toNum(creancesAgg._sum?.montantPaye)
+    const totalCreances = toNum(creancesAgg._sum?.montantTotal) - toNum(creancesAgg._sum?.montantPaye) - toNum(retoursAgg._sum?.montantTotal)
 
     // Formattage Catégories
     const totalCat = categoriesRaw.reduce((acc: number, c: any) => acc + (c._count?.id ?? 0), 0)
@@ -440,16 +446,24 @@ const result = await Promise.race([
         if (clientsWithPlafond.length === 0) return []
 
         // Optimisation : une seule requête d'agrégation groupée par client
-        const debts = await prisma.vente.groupBy({
-          by: ['clientId'],
-          where: { 
-            clientId: { in: clientsWithPlafond.map(c => c.id) },
-            statut: { in: ['VALIDE', 'VALIDEE'] }
-          },
-          _sum: { montantTotal: true, montantPaye: true }
-        })
+        const [debts, retoursParClient] = await Promise.all([
+          prisma.vente.groupBy({
+            by: ['clientId'],
+            where: { 
+              clientId: { in: clientsWithPlafond.map(c => c.id) },
+              statut: { in: ['VALIDE', 'VALIDEE'] }
+            },
+            _sum: { montantTotal: true, montantPaye: true }
+          }),
+          prisma.retour.groupBy({
+            by: ['clientId'],
+            where: { clientId: { in: clientsWithPlafond.map(c => c.id) } },
+            _sum: { montantTotal: true }
+          })
+        ])
 
-        const debtMap = new Map(debts.map(d => [d.clientId, (toNum(d._sum.montantTotal) - toNum(d._sum.montantPaye))]))
+        const retourMap = new Map(retoursParClient.map(r => [r.clientId, toNum(r._sum.montantTotal)]))
+        const debtMap = new Map(debts.map(d => [d.clientId, (toNum(d._sum.montantTotal) - toNum(d._sum.montantPaye)) - (retourMap.get(d.clientId) || 0)]))
         
         const alerts: any[] = []
         for (const c of clientsWithPlafond) {

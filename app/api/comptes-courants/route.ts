@@ -90,6 +90,12 @@ async function calculerSolde(clientId: number | null, fournisseurId: number | nu
       _sum: { montant: true },
     })
     totalEncaissements = encaissements._sum.montant || 0
+
+    const retoursAgg = await prisma.retour.aggregate({
+      where: { clientId, vente: { statut: { not: 'ANNULEE' } } },
+      _sum: { montantTotal: true },
+    })
+    totalVentes -= retoursAgg._sum.montantTotal || 0
   }
 
   // Solde = créances nettes - dettes nettes

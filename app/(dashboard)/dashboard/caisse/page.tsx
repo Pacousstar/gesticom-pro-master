@@ -247,7 +247,6 @@ export default function CaissePage() {
                   const data = await res.json()
                   setAllOperationsForPrint(data.data || [])
                   setIsPreviewOpen(true)
-                  setTimeout(() => window.print(), 0)
                 }
               } catch (e) {
                 console.error(e)
@@ -745,8 +744,8 @@ export default function CaissePage() {
 
       {/* MODALE D'APERÇU IMPRESSION CAISSE */}
       {isPreviewOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
-          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm print:bg-white print:static print:z-0">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl print:hidden">
             <div className="flex items-center gap-6">
                <div>
                  <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Journal de Caisse</h2>
@@ -776,14 +775,14 @@ export default function CaissePage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
+          <div className="flex-1 overflow-auto p-12 bg-gray-100/30 print:overflow-visible print:p-0 print:bg-white">
+            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen print:shadow-none print:max-w-none print:min-h-0">
                {(() => {
                   const dataToPrint = allOperationsForPrint.length > 0 ? allOperationsForPrint : operations;
                   const chunks = paginateForPrint(dataToPrint);
                   
                   return chunks.map((chunk, index, allChunks) => (
-                    <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8 print:border-0 print:mb-0 print:pb-0' : ''}>
                        <ListPrintWrapper
                         title="JOURNAL DE CAISSE"
                         subtitle={filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
@@ -847,69 +846,6 @@ export default function CaissePage() {
           </div>
         </div>
       )}
-
-      {/* Rendu Système (Impression Native) */}
-      <div className="hidden print:block absolute inset-0 bg-white">
-        {paginateForPrint(allOperationsForPrint.length > 0 ? allOperationsForPrint : operations).map((chunk, index, allChunks) => (
-          <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-            <ListPrintWrapper
-              title="JOURNAL DE CAISSE"
-              subtitle={filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
-              dateRange={{ start: dateDebut, end: dateFin }}
-              pageNumber={index + 1}
-              totalPages={allChunks.length}
-              hideHeader={index > 0}
-              hideVisa={index < allChunks.length - 1}
-            >
-              <table className="w-full text-[14px] border-collapse border-2 border-black">
-                <thead>
-                  <tr className="bg-gray-100 uppercase font-black text-gray-700 border-b-2 border-black">
-                    <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
-                    <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
-                    <th className="border-r-2 border-black px-3 py-3 text-left">Magasin / Utilisateur</th>
-                    <th className="border-r-2 border-black px-3 py-3 text-left">Motif</th>
-                    <th className="px-3 py-3 text-right">Montant</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {chunk.map((o, idx) => (
-                    <tr key={idx} className="border-b border-black">
-                      <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">
-                        {new Date(o.date).toLocaleDateString('fr-FR')}
-                      </td>
-                      <td className="border-r-2 border-black px-3 py-2 font-bold uppercase italic text-[11px]">
-                        {o.type}
-                      </td>
-                      <td className="border-r-2 border-black px-3 py-2 uppercase">
-                        {o.magasin.code} / {o.utilisateur.nom}
-                      </td>
-                      <td className="border-r-2 border-black px-3 py-2 text-[12px]">{o.motif}</td>
-                      <td className={`px-3 py-2 text-right font-black ${o.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
-                        {o.type === 'SORTIE' ? '-' : '+'}{o.montant.toLocaleString('fr-FR')} F
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {index === allChunks.length - 1 && (
-                  <tfoot>
-                    <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
-                        <td colSpan={3} className="border-r-2 border-black px-3 py-5 text-right bg-white">RÉCAPITULATIF MOUVEMENTS</td>
-                        <td className="border-r-2 border-black px-3 py-5 text-right bg-white leading-relaxed">
-                          TOTAL ENTRÉES: +{totalEntrees.toLocaleString('fr-FR')} F<br/>
-                          TOTAL SORTIES: -{totalSorties.toLocaleString('fr-FR')} F
-                        </td>
-                        <td className={`px-3 py-5 text-right text-sm bg-white underline decoration-double ${soldeMouvements >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                          SOLDE:<br/>
-                          {soldeMouvements.toLocaleString('fr-FR')} F
-                        </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </ListPrintWrapper>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }

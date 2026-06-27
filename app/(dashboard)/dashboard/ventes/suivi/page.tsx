@@ -324,6 +324,8 @@ export default function SuiviVentesPage() {
                 <th className="px-4 py-3 font-semibold text-left">Client</th>
                 <th className="px-4 py-3 font-semibold text-left">Mag.</th>
                 <th className="px-4 py-3 font-semibold text-right">Montant</th>
+                <th className="px-4 py-3 font-semibold text-right text-amber-600">Retourné</th>
+                <th className="px-4 py-3 font-semibold text-right">Net</th>
                 <th className="px-4 py-3 font-semibold text-left">Type</th>
                 <th className="px-4 py-3 font-semibold text-left">Paiement</th>
                 <th className="px-4 py-3 font-semibold text-left">Statut</th>
@@ -334,9 +336,9 @@ export default function SuiviVentesPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={13} className="px-4 py-16 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-orange-500" /></td></tr>
+                <tr><td colSpan={15} className="px-4 py-16 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-orange-500" /></td></tr>
               ) : ventesFiltrees.length === 0 ? (
-                <tr><td colSpan={13} className="px-4 py-16 text-center text-gray-400">Aucune commande ou retrait différé trouvé.</td></tr>
+                <tr><td colSpan={15} className="px-4 py-16 text-center text-gray-400">Aucune commande ou retrait différé trouvé.</td></tr>
               ) : ventesFiltrees.map(v => (
                 <VenteTableRow
                   key={v.id} v={v} userRole={userRole}
@@ -474,6 +476,8 @@ export default function SuiviVentesPage() {
                       <th className="border p-1 text-left">Client</th>
                       <th className="border p-1 text-left">Mag.</th>
                       <th className="border p-1 text-right">Montant</th>
+                      <th className="border p-1 text-right">Retourné</th>
+                      <th className="border p-1 text-right">Net</th>
                       <th className="border p-1 text-left">Paiement</th>
                       <th className="border p-1 text-left">Type</th>
                       <th className="border p-1 text-left">État</th>
@@ -490,6 +494,8 @@ export default function SuiviVentesPage() {
                           <td className="border p-1">{v.client?.nom || v.clientLibre || '—'}</td>
                           <td className="border p-1">{v.magasin.code}</td>
                           <td className="border p-1 text-right">{Number(v.montantTotal).toLocaleString('fr-FR')} F</td>
+                          <td className="border p-1 text-right text-amber-600">{(v.montantRetourne || 0).toLocaleString('fr-FR')} F</td>
+                          <td className="border p-1 text-right">{(v.montantNet ?? v.montantTotal).toLocaleString('fr-FR')} F</td>
                           <td className="border p-1">{v.modePaiement}</td>
                           <td className="border p-1">
                             {v.typeVente === 'COMMANDE' ? 'Commande' : v.retraitDiffere ? 'Retrait diff.' : 'Directe'}

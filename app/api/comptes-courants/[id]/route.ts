@@ -182,6 +182,23 @@ async function getTransactions(
         montantSigne: -e.montant,
       })
     }
+
+    const retours = await prisma.retour.findMany({
+      where: { clientId, vente: { statut: { not: 'ANNULEE' } } },
+      select: { id: true, createdAt: true, numero: true, montantTotal: true, observation: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    for (const r of retours) {
+      rows.push({
+        id: `RETOUR-${r.id}`,
+        date: r.createdAt,
+        libelle: `Retour ${r.numero}${r.observation ? ` - ${r.observation}` : ''}`,
+        montant: r.montantTotal,
+        type: 'RETOUR',
+        referenceType: 'RETOUR',
+        montantSigne: -r.montantTotal,
+      })
+    }
   }
 
   // Ajouter les écritures de compensation

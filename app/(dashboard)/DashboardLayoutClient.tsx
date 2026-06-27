@@ -91,6 +91,7 @@ const navigation = [
       { name: 'Relevés de comptes', href: '/dashboard/clients/releves', icon: FileText, permission: 'clients:view', key: 'relevesClients' },
       { name: 'Soldes Clients', href: '/dashboard/clients/soldes', icon: FileText, permission: 'clients:view', key: 'soldesClients' },
       { name: 'Paiements Clients', href: '/dashboard/clients/paiements', icon: Wallet, permission: 'clients:view', key: 'paiementsClients' },
+      { name: 'Enlèvements', href: '/dashboard/clients/acomptes', icon: ShoppingCart, permission: 'clients:view', key: 'acomptesClients' },
       { name: 'Fournisseurs', href: '/dashboard/fournisseurs', icon: Truck, permission: 'fournisseurs:view', key: 'fournisseurs' },
       { name: 'Relevés de comptes', href: '/dashboard/fournisseurs/releves', icon: FileText, permission: 'fournisseurs:view', key: 'relevesFournisseurs' },
       { name: 'Soldes Fournisseurs', href: '/dashboard/fournisseurs/soldes', icon: FileText, permission: 'fournisseurs:view', key: 'soldesFournisseurs' },

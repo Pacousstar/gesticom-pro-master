@@ -30,7 +30,8 @@ function VenteTableRowInner({
   v, userRole, annulant, supprimant, loadingDetail, livrant,
   onEdit, onPay, onView, onReturn, onCancel, onDelete, onEditModal, onDeliver, onRetrait, retraitant,
 }: VenteTableRowProps) {
-  const resteAPayer = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
+  const montantNet = Number(v.montantNet ?? v.montantTotal)
+  const resteAPayer = Math.max(0, montantNet - (Number(v.montantPaye) || 0))
 
   return (
     <tr key={v.id} className={v.statut === 'ANNULEE' ? 'bg-gray-100' : 'hover:bg-gray-50'}>
@@ -48,6 +49,12 @@ function VenteTableRowInner({
       <td className="px-4 py-3 text-sm text-gray-600">{v.magasin?.code || '—'}</td>
       <td className="px-4 py-3 text-right font-medium text-gray-900">
         {Number(v.montantTotal).toLocaleString('fr-FR')} F
+      </td>
+      <td className="px-4 py-3 text-right font-medium text-amber-600">
+        {Number(v.montantRetourne || 0).toLocaleString('fr-FR')} F
+      </td>
+      <td className="px-4 py-3 text-right font-medium text-gray-900">
+        {Number(v.montantNet ?? v.montantTotal).toLocaleString('fr-FR')} F
       </td>
       <td className="px-4 py-3">
         {v.typeVente === 'COMMANDE' ? (() => {

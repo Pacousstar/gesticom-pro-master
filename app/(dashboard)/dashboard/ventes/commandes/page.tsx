@@ -22,6 +22,8 @@ type Vente = {
   numero: string
   date: string
   montantTotal: number
+  montantRetourne?: number
+  montantNet?: number
   dateLivraison: string | null
   client: { id: number; nom: string } | null
   clientLibre: string | null
@@ -259,6 +261,8 @@ export default function CommandesPage() {
                     <th className="text-left px-4 py-3 font-semibold">Client</th>
                     <th className="text-left px-4 py-3 font-semibold">Date</th>
                     <th className="text-right px-4 py-3 font-semibold">Montant</th>
+                    <th className="text-right px-4 py-3 font-semibold text-amber-600">Retourné</th>
+                    <th className="text-right px-4 py-3 font-semibold">Net</th>
                     <th className="text-center px-4 py-3 font-semibold">Progrès</th>
                     <th className="text-center px-4 py-3 font-semibold">Actions</th>
                   </tr>
@@ -276,6 +280,8 @@ export default function CommandesPage() {
                         <td className="px-4 py-3 text-gray-700">{v.client?.nom || v.clientLibre || 'N/A'}</td>
                         <td className="px-4 py-3 text-gray-500">{new Date(v.date).toLocaleString('fr-FR')}</td>
                         <td className="px-4 py-3 text-right font-semibold text-gray-900">{v.montantTotal.toLocaleString('fr-FR')} F</td>
+                        <td className="px-4 py-3 text-right font-medium text-amber-600">{(v.montantRetourne || 0).toLocaleString('fr-FR')} F</td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-900">{(v.montantNet ?? v.montantTotal).toLocaleString('fr-FR')} F</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3 justify-center">
                             <div className="w-24 bg-gray-200 rounded-full h-2.5 overflow-hidden">

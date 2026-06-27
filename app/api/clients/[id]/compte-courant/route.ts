@@ -65,7 +65,7 @@ export async function GET(
     }
 
     // Calcul global pour le solde (toutes les ventes validées - tous les règlements validés + soldes initiaux)
-    const [ventesGlobalesAgg, reglementsGlobauxAgg] = await Promise.all([
+    const [ventesGlobalesAgg, reglementsGlobauxAgg, retoursGlobauxAgg] = await Promise.all([
       prisma.vente.aggregate({
         where: { clientId, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] } },
         _sum: { montantTotal: true, montantPaye: true }
@@ -73,11 +73,16 @@ export async function GET(
       prisma.reglementVente.aggregate({
         where: { clientId, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] } },
         _sum: { montant: true }
+      }),
+      prisma.retour.aggregate({
+        where: { clientId, entiteId },
+        _sum: { montantTotal: true }
       })
     ])
 
     const totalDebitGlobal = (Number(ventesGlobalesAgg._sum?.montantTotal) || 0) + (client.soldeInitial || 0)
-    const totalCreditGlobal = (Number(reglementsGlobauxAgg._sum?.montant) || 0) + (client.avoirInitial || 0)
+    const totalRetours = Number(retoursGlobauxAgg._sum?.montantTotal) || 0
+    const totalCreditGlobal = (Number(reglementsGlobauxAgg._sum?.montant) || 0) + (client.avoirInitial || 0) + totalRetours
     const globalSolde = (totalDebitGlobal - totalCreditGlobal)
 
     const [ventes, reglements] = await Promise.all([
@@ -137,7 +142,21 @@ export async function GET(
         libelle: `Règlement ${r.modePaiement}${r.observation ? ' - ' + r.observation : ''}`,
         reference: r.venteId ? r.vente?.numero || `V${r.venteId}` : '-',
         mode: r.modePaiement
-      }))
+      })),
+      ...((await prisma.retour.findMany({
+        where: { clientId, entiteId },
+        select: { id: true, createdAt: true, numero: true, montantTotal: true, observation: true },
+        orderBy: { createdAt: 'asc' },
+      })).map((r: any) => ({
+        id: r.id,
+        date: r.createdAt,
+        createdAt: r.createdAt,
+        numero: r.numero,
+        type: 'RETOUR' as const,
+        debit: 0,
+        credit: r.montantTotal,
+        libelle: `Retour ${r.numero}${r.observation ? ' - ' + r.observation : ''}`
+      })))
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     // Ajouter les soldes initiaux au début de l'historique si ils existent

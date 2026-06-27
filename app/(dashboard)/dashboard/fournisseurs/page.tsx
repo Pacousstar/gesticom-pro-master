@@ -49,6 +49,8 @@ export default function FournisseursPage() {
   const [allFournisseursForPrint, setAllFournisseursForPrint] = useState<Fournisseur[]>([])
   const [entreprise, setEntreprise] = useState<any>(null)
   const [historyForPrint, setHistoryForPrint] = useState<any[]>([])
+  const [printDateDebut, setPrintDateDebut] = useState('')
+  const [printDateFin, setPrintDateFin] = useState('')
 
   useEffect(() => {
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => {})
@@ -756,10 +758,35 @@ export default function FournisseursPage() {
               <p className="text-orange-100 text-xs uppercase tracking-widest font-bold">Historique Complet des Achats</p>
             </div>
             <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={printDateDebut}
+                onChange={e => setPrintDateDebut(e.target.value)}
+                className="w-32 rounded-lg bg-white/20 px-2 py-1.5 text-xs text-white placeholder:text-white/50 border border-white/20 focus:outline-none"
+                placeholder="Début"
+              />
+              <span className="text-white/60 text-xs">→</span>
+              <input
+                type="date"
+                value={printDateFin}
+                onChange={e => setPrintDateFin(e.target.value)}
+                className="w-32 rounded-lg bg-white/20 px-2 py-1.5 text-xs text-white placeholder:text-white/50 border border-white/20 focus:outline-none"
+                placeholder="Fin"
+              />
               <button 
                 onClick={() => {
                   if (historyData.length === 0) return
-                  setHistoryForPrint(historyData)
+                  let dataToPrint = historyData
+                  if (printDateDebut) {
+                    const debut = new Date(printDateDebut + 'T00:00:00')
+                    dataToPrint = dataToPrint.filter((h: any) => new Date(h.date) >= debut)
+                  }
+                  if (printDateFin) {
+                    const fin = new Date(printDateFin + 'T23:59:59')
+                    dataToPrint = dataToPrint.filter((h: any) => new Date(h.date) <= fin)
+                  }
+                  if (dataToPrint.length === 0) return
+                  setHistoryForPrint(dataToPrint)
                   setTimeout(() => {
                     window.print()
                     setTimeout(() => setHistoryForPrint([]), 5000)

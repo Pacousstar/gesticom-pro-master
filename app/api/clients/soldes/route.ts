@@ -84,10 +84,17 @@ export async function GET(request: NextRequest) {
       _sum: { montant: true },
     })
 
+    const retoursGlobaux = await prisma.retour.groupBy({
+      by: ['clientId'],
+      where: entiteFilter,
+      _sum: { montantTotal: true },
+    })
+
     const venteMap = Object.fromEntries(ventes.map((v: any) => [v.clientId, v._sum.montantTotal || 0]))
     const reglementMap = Object.fromEntries(reglements.map((r: any) => [r.clientId, r._sum.montant || 0]))
     const venteGlobaleMap = Object.fromEntries(ventesGlobales.map((v: any) => [v.clientId, v._sum.montantTotal || 0]))
     const reglementGlobaleMap = Object.fromEntries(reglementsGlobaux.map((r: any) => [r.clientId, r._sum.montant || 0]))
+    const retourGlobaleMap = Object.fromEntries(retoursGlobaux.map((r: any) => [r.clientId, r._sum.montantTotal || 0]))
 
     let data = await Promise.all(clients.map(async (c: any) => {
       const factures = venteMap[c.id] || 0
@@ -95,12 +102,13 @@ export async function GET(request: NextRequest) {
       
       const facturesGlobal = venteGlobaleMap[c.id] || 0
       const paiementsGlobal = reglementGlobaleMap[c.id] || 0
+      const retoursGlobal = retourGlobaleMap[c.id] || 0
       // soldeInitial = dette initiale existante avant usage de GestiCom (doit être AJOUTÉE)
       const soldeInitial = c.soldeInitial || 0
       
-      const variationPeriode = factures - paiements
-      // ✅ FORMULE UNIFIÉE : SoldeGlobal = Dettes(factures-paiements) + DetteDépart - AvoirDépart
-      const soldeClient = facturesGlobal - paiementsGlobal + (c.soldeInitial || 0) - (c.avoirInitial || 0)
+      const variationPeriode = factures - paiements - retoursGlobal
+      // ✅ FORMULE UNIFIÉE : SoldeGlobal = Dettes(factures-paiements) + DetteDépart - AvoirDépart - Retours
+      const soldeClient = facturesGlobal - paiementsGlobal - retoursGlobal + (c.soldeInitial || 0) - (c.avoirInitial || 0)
 
       const statut = soldeClient > 0.01 ? 'DOIT' : soldeClient < -0.01 ? 'CREDIT' : 'SOLDE'
 

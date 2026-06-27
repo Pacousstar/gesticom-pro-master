@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
         select: { id: true, code: true, nom: true },
       })
       if (!client) return NextResponse.json({ error: 'Client introuvable.' }, { status: 404 })
+      if (client && clientLibre) {
+        clientLibreValue = clientLibre
+      }
     } else {
       client = await prisma.client.findFirst({
         where: { code: 'COMPTOIR' },
@@ -62,6 +65,12 @@ export async function POST(request: NextRequest) {
     }
 
     const maintenant = new Date()
+    const heures = String(maintenant.getHours()).padStart(2, '0')
+    const minutes = String(maintenant.getMinutes()).padStart(2, '0')
+    const secondes = String(maintenant.getSeconds()).padStart(2, '0')
+    const dateTransaction = dateReglement && typeof dateReglement === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateReglement)
+      ? new Date(`${dateReglement}T${heures}:${minutes}:${secondes}`)
+      : maintenant
 
     // ----- Magasin -----
     let magasinId = magasinSaisi ? Number(magasinSaisi) : 0
@@ -118,6 +127,7 @@ export async function POST(request: NextRequest) {
 
     // ----- Transaction unique -----
     const numVente = `V${Date.now()}`
+    let montantRegleCompta = 0
 
     const result = await prisma.$transaction(async (tx) => {
       // 0. Récupérer/créer les acomptes (atomicité totale)
@@ -138,13 +148,11 @@ export async function POST(request: NextRequest) {
       }
 
       if (reglements.length === 0 && clientLibreValue) {
-        const dateRegl = dateReglement && typeof dateReglement === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateReglement)
-          ? new Date(dateReglement + 'T00:00:00')
-          : maintenant
+        montantRegleCompta = montant
         const nouveauReglement = await tx.reglementVente.create({
           data: {
             clientId: client.id,
-            date: dateRegl,
+            date: dateTransaction,
             montant,
             modePaiement: 'ESPECES',
             statut: 'VALIDEE',
@@ -181,7 +189,7 @@ export async function POST(request: NextRequest) {
       const vente = await tx.vente.create({
         data: {
           numero: numVente,
-          date: maintenant,
+          date: dateTransaction,
           magasinId, entiteId,
           clientId: client.id,
           clientLibre: clientLibreValue,
@@ -306,7 +314,18 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // 5. Mouvement caisse pour remboursement
+      // 5. Mouvements caisse
+      if (montantRegleCompta > 0) {
+        await enregistrerMouvementCaisse({
+          magasinId,
+          type: 'ENTREE',
+          motif: `Encaissement acompte ${numVente}`,
+          montant: montantRegleCompta,
+          utilisateurId: session!.userId,
+          entiteId,
+          date: maintenant,
+        }, tx)
+      }
       if (montantRemb > 0 && estModeEspeces(reglements[0].modePaiement)) {
         await enregistrerMouvementCaisse({
           magasinId,
@@ -317,6 +336,8 @@ export async function POST(request: NextRequest) {
           entiteId,
           date: maintenant,
         }, tx)
+      }
+      if (montantRegleCompta > 0 || (montantRemb > 0 && estModeEspeces(reglements[0].modePaiement))) {
         await recalculerSoldeCaisse(magasinId, tx)
       }
 
@@ -324,9 +345,10 @@ export async function POST(request: NextRequest) {
       await comptabiliserLivraisonCommande({
         venteId: vente.id,
         numeroVente: numVente,
-        date: maintenant,
+        date: dateTransaction,
         montantTotal: montantFinal,
         montantRembourse: montantRemb,
+        montantRegle: montantRegleCompta || undefined,
         entiteId,
         utilisateurId: session!.userId,
         magasinId,

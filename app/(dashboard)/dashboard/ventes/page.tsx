@@ -49,6 +49,8 @@ export default function VentesPage() {
     numero: string
     date: string
     montantTotal: number
+    montantRetourne?: number
+    montantNet?: number
     montantPaye?: number
     statutPaiement?: string
     modePaiement: string
@@ -66,6 +68,8 @@ export default function VentesPage() {
     numero: string
     date: string
     montantTotal: number
+    montantRetourne?: number
+    montantNet?: number
     remiseGlobale: number
     montantPaye?: number
     statutPaiement?: string
@@ -216,7 +220,7 @@ export default function VentesPage() {
         TOTAL_TVA: totalCalc.tva > 0 ? `${Math.round(totalCalc.tva).toLocaleString('fr-FR')} FCFA` : undefined,
         TOTAL: `${Number(d.montantTotal).toLocaleString('fr-FR')} FCFA`,
         MONTANT_PAYE: d.montantPaye ? `${Number(d.montantPaye).toLocaleString('fr-FR')} FCFA` : undefined,
-        RESTE: d.statutPaiement !== 'PAYE' ? `${(Number(d.montantTotal) - (Number(d.montantPaye) || 0)).toLocaleString('fr-FR')} FCFA` : undefined,
+        RESTE: d.statutPaiement !== 'PAYE' ? `${Math.max(0, (Number(d.montantNet ?? d.montantTotal) || 0) - (Number(d.montantPaye) || 0)).toLocaleString('fr-FR')} FCFA` : undefined,
         MODE_PAIEMENT: d.modePaiement,
         NUMERO_BON: d.numeroBon || undefined,
         OBSERVATION: d.observation || undefined,
@@ -1093,6 +1097,8 @@ export default function VentesPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Client</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Magasin</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Montant</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-amber-600">Retourné</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Net</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Paiement</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Statut paiement</th>
@@ -1130,6 +1136,7 @@ export default function VentesPage() {
                     <td className="px-4 py-3 text-right text-orange-700 bg-orange-100/50">
                       {totals.montantTotal.toLocaleString('fr-FR')} F
                     </td>
+                    <td colSpan={2} className="px-4 py-3 bg-gray-50/30"></td>
                     <td colSpan={3} className="px-4 py-3 bg-gray-50/30"></td>
                     <td className="px-4 py-3 text-right text-red-700 bg-red-50/50">
                       {totals.resteAPayer.toLocaleString('fr-FR')} F
@@ -1202,8 +1209,11 @@ export default function VentesPage() {
                     {getStatutPaiementLabel(detailVente.statutPaiement || '')}
                   </span>
                 </div>
+                <div><span className="font-medium text-gray-700">Montant total :</span> <span className="text-gray-900">{(Number(detailVente.montantTotal) || 0).toLocaleString('fr-FR')} FCFA</span></div>
+                <div><span className="font-medium text-gray-700">Montant retourné :</span> <span className="text-amber-600">{(Number(detailVente.montantRetourne) || 0).toLocaleString('fr-FR')} FCFA</span></div>
+                <div><span className="font-medium text-gray-700">Net :</span> <strong className="text-gray-900">{(Number(detailVente.montantNet ?? detailVente.montantTotal) || 0).toLocaleString('fr-FR')} FCFA</strong></div>
                 <div><span className="font-medium text-gray-700">Montant payé (avance) :</span> <span className="text-gray-900">{(Number(detailVente.montantPaye) || 0).toLocaleString('fr-FR')} FCFA</span></div>
-                <div><span className="font-medium text-gray-700">Reste à payer :</span> <strong className="text-amber-800">{(Number(detailVente.montantTotal) - (Number(detailVente.montantPaye) || 0)).toLocaleString('fr-FR')} FCFA</strong></div>
+                <div><span className="font-medium text-gray-700">Reste à payer :</span> <strong className="text-amber-800">{Math.max(0, (Number(detailVente.montantNet ?? detailVente.montantTotal) || 0) - (Number(detailVente.montantPaye) || 0)).toLocaleString('fr-FR')} FCFA</strong></div>
                 <div><span className="font-medium text-gray-700">Statut :</span>
                   <span className={`ml-1 rounded px-2 py-0.5 text-xs font-medium ${
                     detailVente.statut === 'ANNULEE' ? 'bg-gray-200 text-gray-700' :

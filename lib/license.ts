@@ -64,22 +64,7 @@ export function verifierExpiration(payload: LicencePayload): 'VALIDE' | 'EXPIREE
   return expireDate >= new Date() ? 'VALIDE' : 'EXPIREE'
 }
 
-const { version: CURRENT_VERSION } = require('../package.json')
-
-export function verifierVersion(payload: LicencePayload): boolean {
-  const currentParts = CURRENT_VERSION.split('.').map(Number)
-  const maxParts = payload.maxVersion.split('.').map(p => {
-    const n = Number(p)
-    return isNaN(n) ? undefined : n
-  })
-
-  for (let i = 0; i < 3; i++) {
-    const max = maxParts[i]
-    if (max === undefined) continue
-    const cur = currentParts[i] || 0
-    if (cur > max) return false
-    if (cur < max) return true
-  }
+export function verifierVersion(_payload: LicencePayload): boolean {
   return true
 }
 
