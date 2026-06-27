@@ -202,6 +202,35 @@ export default function DashboardLayoutClient({
     finValidite?: string
   } | null>(null)
 
+  const [activationCle, setActivationCle] = useState('')
+  const [activationLoading, setActivationLoading] = useState(false)
+  const [activationMessage, setActivationMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  async function activerLicence() {
+    if (!activationCle.trim()) return
+    setActivationLoading(true)
+    setActivationMessage(null)
+    try {
+      const res = await fetch('/api/license', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cle: activationCle.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setActivationMessage({ type: 'success', text: data.message || 'Licence activée avec succès' })
+        setActivationCle('')
+        setTimeout(() => window.location.reload(), 1500)
+      } else {
+        setActivationMessage({ type: 'error', text: data.error || "Erreur d'activation" })
+      }
+    } catch {
+      setActivationMessage({ type: 'error', text: 'Erreur de connexion au serveur' })
+    } finally {
+      setActivationLoading(false)
+    }
+  }
+
   // Vérification licence au démarrage
   useEffect(() => {
     fetch('/api/license/check')
@@ -1047,13 +1076,36 @@ export default function DashboardLayoutClient({
                   <p className="text-sm text-orange-400 font-bold mb-1">Veuillez contacter l&apos;Administrateur GestiCom Pro</p>
                   <p className="text-lg font-black text-white">+225 05 44 81 49 24</p>
                 </div>
-                <Link
-                  href="/dashboard/licence"
-                  className="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-orange-500 text-white font-black text-xs uppercase hover:bg-orange-600 transition-all"
-                >
-                  <Key className="h-4 w-4" />
-                  Activer une licence
-                </Link>
+                <div className="mt-6 space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Collez votre clé de licence ici..."
+                    value={activationCle}
+                    onChange={(e) => setActivationCle(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-gray-900/50 px-4 py-3 text-sm text-white font-mono focus:border-orange-500 outline-none transition-all placeholder:text-white/20"
+                  />
+                  <button
+                    onClick={activerLicence}
+                    disabled={activationLoading || !activationCle.trim()}
+                    className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-orange-500 text-white font-black text-xs uppercase hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Key className="h-4 w-4" />
+                    {activationLoading ? 'Activation...' : 'Activer une licence'}
+                  </button>
+                  {activationMessage && (
+                    <div className={`flex items-center gap-2 text-sm p-3 rounded-xl ${
+                      activationMessage.type === 'success'
+                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                    }`}>
+                      {activationMessage.type === 'success'
+                        ? <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        : <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      }
+                      {activationMessage.text}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : (
