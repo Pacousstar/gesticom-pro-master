@@ -1,7 +1,7 @@
 ; Script d'installation GestiCom Pro - GSN EXPERTISES GROUP
 ; Version 3.41.17 - Multi-postes support
 #define MyAppName "GestiCom Pro"
-#define MyAppVersion "3.44.19"
+#define MyAppVersion "3.45.2"
 #define MyAppPublisher "GSN EXPERTISES GROUP"
 #define MyAppURL "https://www.gsnexpertises.com"
 #define MyAppExeName "node.exe"

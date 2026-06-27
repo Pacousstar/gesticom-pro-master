@@ -5,10 +5,10 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
     const entiteId = await getEntiteId(session)
     // Filtre pour le Super Admin : si entité 0, on voit tout
     const where = entiteId && entiteId > 0 ? { entiteId } : {}
