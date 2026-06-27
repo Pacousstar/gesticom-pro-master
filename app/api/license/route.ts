@@ -5,7 +5,7 @@ import { validateApiRequest } from '@/lib/validation-helpers'
 import { z } from 'zod'
 
 const licenseSchema = z.object({
-  cle: z.string().min(1, 'Clé requise.').max(200).trim(),
+  cle: z.string().min(1, 'Clé requise.').max(1000).trim(),
 })
 
 export const dynamic = 'force-dynamic'
