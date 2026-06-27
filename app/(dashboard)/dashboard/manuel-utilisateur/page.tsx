@@ -1031,6 +1031,7 @@ export default function ManuelUtilisateurPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrollProgress, setScrollProgress] = useState(0)
+  const [generatedDate, setGeneratedDate] = useState('')
 
   useEffect(() => {
     const handleScroll = () => {
@@ -1040,6 +1041,10 @@ export default function ManuelUtilisateurPage() {
     }
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  useEffect(() => {
+    setGeneratedDate(new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }))
   }, [])
 
   const toggleSection = (id: string) => {
@@ -1369,7 +1374,7 @@ export default function ManuelUtilisateurPage() {
                 Manuel Utilisateur — Version <span className="text-orange-300 font-bold">{process.env.NEXT_PUBLIC_APP_VERSION || '3.31.0'}</span>
               </p>
               <p className="text-xs text-white/70">
-                Document généré le {new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                Document généré le {generatedDate || '...'}
               </p>
               <div className="flex items-center gap-4 mt-2">
                 <span className="h-px w-12 bg-gradient-to-r from-transparent to-white/20" />
