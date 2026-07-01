@@ -157,43 +157,39 @@ export async function POST(request: NextRequest) {
       code = `${String(count + 1).padStart(6, '0')}${prefix}`
     }
 
-    const f = await prisma.$transaction(async (tx: any) => {
-      const fournisseur = await tx.fournisseur.create({
-        data: {
-          code, nom, telephone, email, ncc, localisation, numeroCamion,
-          soldeInitial, avoirInitial,
-          actif: true, entiteId
-        },
-      })
+    const f = await prisma.fournisseur.create({
+      data: {
+        code, nom, telephone, email, ncc, localisation, numeroCamion,
+        soldeInitial, avoirInitial,
+        actif: true, entiteId
+      },
+    })
 
+    try {
       if (soldeInitial > 0 || avoirInitial > 0) {
-        const count = await tx.compteCourant.count()
-        await tx.compteCourant.create({
+        const count = await prisma.compteCourant.count()
+        await prisma.compteCourant.create({
           data: {
             code: `CC-${String(count + 1).padStart(3, '0')}`,
             nom,
             ncc: ncc || null,
             entiteId,
-            fournisseurId: fournisseur.id,
+            fournisseurId: f.id,
           }
         })
-        try {
-          await comptabiliserOuvertureFournisseur({
-            fournisseurId: fournisseur.id,
-            nom,
-            soldeInitial,
-            avoirInitial,
-            date: new Date(),
-            entiteId,
-            utilisateurId: session.userId,
-          }, tx)
-        } catch (_) {
-          // Non-bloquant : la compta peut ne pas être initialisée
-        }
+        await comptabiliserOuvertureFournisseur({
+          fournisseurId: f.id,
+          nom,
+          soldeInitial,
+          avoirInitial,
+          date: new Date(),
+          entiteId,
+          utilisateurId: session.userId,
+        })
       }
-
-      return fournisseur
-    })
+    } catch (_) {
+      // Non-bloquant : la compta peut ne pas être initialisée
+    }
 
     return NextResponse.json(f)
   } catch (e: any) {
