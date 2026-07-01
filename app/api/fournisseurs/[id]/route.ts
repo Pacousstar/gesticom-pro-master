@@ -95,15 +95,19 @@ export async function PATCH(
             }
           })
         }
-        await comptabiliserOuvertureFournisseur({
-          fournisseurId: id,
-          nom: f.nom,
-          soldeInitial: finalSolde,
-          avoirInitial: finalAvoir,
-          date: new Date(),
-          entiteId: Number(f.entiteId) || session!.entiteId!,
-          utilisateurId: session!.userId,
-        })
+        try {
+          await comptabiliserOuvertureFournisseur({
+            fournisseurId: id,
+            nom: f.nom,
+            soldeInitial: finalSolde,
+            avoirInitial: finalAvoir,
+            date: new Date(),
+            entiteId: Number(f.entiteId) || session!.entiteId!,
+            utilisateurId: session!.userId,
+          })
+        } catch (_) {
+          // Non-bloquant : la compta peut ne pas être initialisée
+        }
       }
 
       return NextResponse.json(f)

@@ -177,15 +177,19 @@ export async function POST(request: NextRequest) {
             fournisseurId: fournisseur.id,
           }
         })
-        await comptabiliserOuvertureFournisseur({
-          fournisseurId: fournisseur.id,
-          nom,
-          soldeInitial,
-          avoirInitial,
-          date: new Date(),
-          entiteId,
-          utilisateurId: session.userId,
-        }, tx)
+        try {
+          await comptabiliserOuvertureFournisseur({
+            fournisseurId: fournisseur.id,
+            nom,
+            soldeInitial,
+            avoirInitial,
+            date: new Date(),
+            entiteId,
+            utilisateurId: session.userId,
+          }, tx)
+        } catch (_) {
+          // Non-bloquant : la compta peut ne pas être initialisée
+        }
       }
 
       return fournisseur

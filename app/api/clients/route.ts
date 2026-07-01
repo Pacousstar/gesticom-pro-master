@@ -206,15 +206,19 @@ export async function POST(request: NextRequest) {
             clientId: client.id,
           }
         })
-        await comptabiliserOuvertureClient({
-          clientId: client.id,
-          nom,
-          soldeInitial,
-          avoirInitial,
-          date: new Date(),
-          entiteId,
-          utilisateurId: session.userId,
-        }, tx)
+        try {
+          await comptabiliserOuvertureClient({
+            clientId: client.id,
+            nom,
+            soldeInitial,
+            avoirInitial,
+            date: new Date(),
+            entiteId,
+            utilisateurId: session.userId,
+          }, tx)
+        } catch (_) {
+          // Non-bloquant : la compta peut ne pas être initialisée
+        }
       }
 
       return client

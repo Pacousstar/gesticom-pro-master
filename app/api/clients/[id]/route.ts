@@ -121,15 +121,19 @@ export async function PATCH(
             }
           })
         }
-        await comptabiliserOuvertureClient({
-          clientId: id,
-          nom: c.nom,
-          soldeInitial: finalSolde,
-          avoirInitial: finalAvoir,
-          date: new Date(),
-          entiteId: c.entiteId,
-          utilisateurId: session!.userId,
-        })
+        try {
+          await comptabiliserOuvertureClient({
+            clientId: id,
+            nom: c.nom,
+            soldeInitial: finalSolde,
+            avoirInitial: finalAvoir,
+            date: new Date(),
+            entiteId: c.entiteId,
+            utilisateurId: session!.userId,
+          })
+        } catch (_) {
+          // Non-bloquant : la compta peut ne pas être initialisée
+        }
       }
 
       await logModification(session!, 'CLIENT', id, `Modification client ${c.nom} (${c.code || 'sans code'})`, existing, c, getIpAddress(request))
