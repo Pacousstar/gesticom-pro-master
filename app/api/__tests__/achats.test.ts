@@ -13,6 +13,9 @@ vi.mock('@/lib/db', () => ({
       count: mockAchatCount,
       aggregate: mockAchatAggregate,
     },
+    reglementAchatLigne: {
+      aggregate: mockAchatAggregate,
+    },
   },
 }))
 

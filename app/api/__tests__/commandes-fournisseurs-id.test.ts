@@ -102,13 +102,13 @@ describe('PATCH /api/commandes-fournisseurs/[id]', () => {
   })
 
   it('effectue une mise à jour simple (statut) avec succès', async () => {
-    mockUpdate.mockResolvedValue({ id: 1, statut: 'VALIDE' })
-    const res = await PATCH(mockReq({ statut: 'VALIDE' }), { params: Promise.resolve({ id: '1' }) })
+    mockUpdate.mockResolvedValue({ id: 1, statut: 'ENVOYEE' })
+    const res = await PATCH(mockReq({ statut: 'ENVOYEE' }), { params: Promise.resolve({ id: '1' }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.success).toBe(true)
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 1 }, data: expect.objectContaining({ statut: 'VALIDE' }) })
+      expect.objectContaining({ where: { id: 1 }, data: expect.objectContaining({ statut: 'ENVOYEE' }) })
     )
   })
 
@@ -128,7 +128,7 @@ describe('PATCH /api/commandes-fournisseurs/[id]', () => {
 
   it('retourne 500 en cas d erreur serveur', async () => {
     mockUpdate.mockRejectedValue(new Error('Erreur serveur'))
-    const res = await PATCH(mockReq({ statut: 'VALIDE' }), { params: Promise.resolve({ id: '1' }) })
+    const res = await PATCH(mockReq({ statut: 'ENVOYEE' }), { params: Promise.resolve({ id: '1' }) })
     expect(res.status).toBe(500)
   })
 })

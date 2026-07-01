@@ -567,7 +567,7 @@ describe('reaproSchema', () => {
   it('valide un reapro', () => {
     const r = reaproSchema.safeParse({
       magasinId: 1,
-      lignes: [{ produitId: 1, quantiteRecommande: 10 }],
+      lignes: [{ produitId: 1, quantite: 10 }],
     })
     expect(r.success).toBe(true)
   })
