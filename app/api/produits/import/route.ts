@@ -118,42 +118,64 @@ export async function POST(req: NextRequest) {
 
         if (existingStock) {
           if (qte !== existingStock.quantite) {
-            await prisma.stock.update({
-              where: { id: existingStock.id },
-              data: { quantite: qte }
+            const diff = qte - existingStock.quantite
+            const lastMvtId = await prisma.$transaction(async (tx: any) => {
+              await tx.stock.update({
+                where: { id: existingStock.id },
+                data: { quantite: qte }
+              })
+              const mvt = await tx.mouvement.create({
+                data: {
+                  type: diff > 0 ? 'ENTREE' : 'SORTIE',
+                  produitId,
+                  magasinId: existingStock.magasinId,
+                  entiteId,
+                  utilisateurId: session.userId,
+                  quantite: Math.abs(diff),
+                  dateOperation: new Date(),
+                  observation: `Ajustement import Excel (${existingStock.quantite} → ${qte}) - ${defaultMagasin.code}`,
+                }
+              })
+              return mvt.id
             })
-          }
-        } else {
-          await prisma.stock.create({
-            data: {
-              produitId,
-              magasinId: defaultMagasin.id,
-              quantite: qte,
-              quantiteInitiale: qte,
-              entiteId,
-            }
-          })
-
-          if (qte > 0) {
-            await prisma.mouvement.create({
-              data: {
-                type: 'ENTREE',
+            if (lastMvtId) {
+              await comptabiliserMouvementStock({
                 produitId,
                 magasinId: defaultMagasin.id,
-                entiteId,
+                type: diff > 0 ? 'ENTREE' : 'SORTIE',
+                quantite: Math.abs(diff),
+                date: new Date(),
+                motif: `Ajustement import Excel (${existingStock.quantite} → ${qte}) - ${defaultMagasin.code}`,
                 utilisateurId: session.userId,
+                entiteId,
+                mouvementId: lastMvtId
+              })
+            }
+          }
+        } else {
+          await prisma.$transaction(async (tx: any) => {
+            await tx.stock.create({
+              data: {
+                produitId,
+                magasinId: defaultMagasin.id,
                 quantite: qte,
-                dateOperation: new Date(),
-                observation: `Stock initial import Excel - ${defaultMagasin.code}`,
+                quantiteInitiale: qte,
+                entiteId,
               }
             })
-
-            const lastMvt = await prisma.mouvement.findFirst({
-              where: { produitId, entiteId },
-              orderBy: { id: 'desc' },
-              select: { id: true }
-            })
-            if (lastMvt) {
+            if (qte > 0) {
+              const mvt = await tx.mouvement.create({
+                data: {
+                  type: 'ENTREE',
+                  produitId,
+                  magasinId: defaultMagasin.id,
+                  entiteId,
+                  utilisateurId: session.userId,
+                  quantite: qte,
+                  dateOperation: new Date(),
+                  observation: `Stock initial import Excel - ${defaultMagasin.code}`,
+                }
+              })
               await comptabiliserMouvementStock({
                 produitId,
                 magasinId: defaultMagasin.id,
@@ -163,10 +185,10 @@ export async function POST(req: NextRequest) {
                 motif: `Stock initial import Excel - ${defaultMagasin.code}`,
                 utilisateurId: session.userId,
                 entiteId,
-                mouvementId: lastMvt.id
-              })
+                mouvementId: mvt.id
+              }, tx)
             }
-          }
+          })
         }
       }
     }

@@ -174,59 +174,62 @@ export async function POST(request: NextRequest) {
 
     const num = `HIST-${Date.now()}`
 
-    // ✅ Enregistrement IMPACTANT (Stock, Compta, Solde)
-    const vente = await prisma.vente.create({
-      data: {
-        numero: num,
-        date: dateVente,
-        magasinId,
-        entiteId,
-        utilisateurId: session.userId,
-        clientId,
-        clientLibre,
-        montantTotal,
-        remiseGlobale: Number(body?.remiseGlobale) || 0,
-        montantPaye,
-        statutPaiement,
-        modePaiement,
-        observation,
-        statut: 'VALIDEE',
-        estHistorique: true,
-        lignes: {
-          create: lignesValides.map((l) => ({
-            produitId: l.produitId,
-            designation: l.designation,
-            quantite: l.quantite,
-            prixUnitaire: l.prixUnitaire,
-            coutUnitaire: 0, // Optionnel pour historique
-            tva: l.tva,
-            remise: l.remise,
-            montant: l.montant,
-          })),
-        },
-      },
-      include: { lignes: true, magasin: { select: { code: true, nom: true } } },
-    })
-
-    // Impact Stock
-    for (const l of lignesValides) {
-      await prisma.stock.updateMany({
-        where: { produitId: l.produitId, magasinId },
-        data: { quantite: { decrement: l.quantite } },
-      })
-      await prisma.mouvement.create({
+    // ✅ Enregistrement IMPACTANT (Stock, Compta, Solde) en transaction
+    const vente = await prisma.$transaction(async (tx: any) => {
+      const v = await tx.vente.create({
         data: {
-          type: 'SORTIE',
-          produitId: l.produitId,
+          numero: num,
+          date: dateVente,
           magasinId,
           entiteId,
           utilisateurId: session.userId,
-          quantite: l.quantite,
-          date: dateVente,
-          observation: `Vente Historique ${num} (${observation || ''})`,
+          clientId,
+          clientLibre,
+          montantTotal,
+          remiseGlobale: Number(body?.remiseGlobale) || 0,
+          montantPaye,
+          statutPaiement,
+          modePaiement,
+          observation,
+          statut: 'VALIDEE',
+          estHistorique: true,
+          lignes: {
+            create: lignesValides.map((l: any) => ({
+              produitId: l.produitId,
+              designation: l.designation,
+              quantite: l.quantite,
+              prixUnitaire: l.prixUnitaire,
+              coutUnitaire: 0,
+              tva: l.tva,
+              remise: l.remise,
+              montant: l.montant,
+            })),
+          },
         },
+        include: { lignes: true, magasin: { select: { code: true, nom: true } } },
       })
-    }
+
+      for (const l of lignesValides) {
+        await tx.stock.updateMany({
+          where: { produitId: l.produitId, magasinId, entiteId },
+          data: { quantite: { decrement: l.quantite } },
+        })
+        await tx.mouvement.create({
+          data: {
+            type: 'SORTIE',
+            produitId: l.produitId,
+            magasinId,
+            entiteId,
+            utilisateurId: session.userId,
+            quantite: l.quantite,
+            date: dateVente,
+            observation: `Vente Historique ${num} (${observation || ''})`,
+          },
+        })
+      }
+
+      return v
+    })
 
     // Règlement automatique si payé
     if (modePaiement !== 'CREDIT' && montantPaye > 0 && clientId) {

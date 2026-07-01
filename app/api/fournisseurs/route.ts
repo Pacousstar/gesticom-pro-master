@@ -5,6 +5,7 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { fournisseurSchema } from '@/lib/validations'
 import { apiCatch } from '@/lib/log-error'
+import { comptabiliserOuvertureFournisseur } from '@/lib/comptabilisation'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -156,23 +157,41 @@ export async function POST(request: NextRequest) {
       code = `${String(count + 1).padStart(6, '0')}${prefix}`
     }
 
-    const f = await prisma.fournisseur.create({
-      data: { 
-        code, 
-        nom, 
-        telephone, 
-        email, 
-        ncc, 
-        localisation, 
-        numeroCamion, 
-        soldeInitial, 
-        avoirInitial, 
-        actif: true,
-        entiteId
-      },
+    const f = await prisma.$transaction(async (tx: any) => {
+      const fournisseur = await tx.fournisseur.create({
+        data: {
+          code, nom, telephone, email, ncc, localisation, numeroCamion,
+          soldeInitial, avoirInitial,
+          actif: true, entiteId
+        },
+      })
+
+      if (soldeInitial > 0 || avoirInitial > 0) {
+        const count = await tx.compteCourant.count()
+        await tx.compteCourant.create({
+          data: {
+            code: `CC-${String(count + 1).padStart(3, '0')}`,
+            nom,
+            ncc: ncc || null,
+            entiteId,
+            fournisseurId: fournisseur.id,
+          }
+        })
+        await comptabiliserOuvertureFournisseur({
+          fournisseurId: fournisseur.id,
+          nom,
+          soldeInitial,
+          avoirInitial,
+          date: new Date(),
+          entiteId,
+          utilisateurId: session.userId,
+        }, tx)
+      }
+
+      return fournisseur
     })
-    // Invalider le cache pour affichage immédiat
-            return NextResponse.json(f)
+
+    return NextResponse.json(f)
   } catch (e: any) {
     await apiCatch(e, 'api/fournisseurs')
     if (e?.code === 'P2002') {

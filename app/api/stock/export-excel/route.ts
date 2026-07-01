@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     const [tousProduits, stocksExistants, magasin] = await Promise.all([
       prisma.produit.findMany({
         where: { actif: true, entiteId, ...searchConditions, ...categorieCondition },
-        select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, pamp: true },
+        select: { id: true, code: true, designation: true, categorie: true, prixAchat: true, pamp: true },
         orderBy: { code: 'asc' },
       }),
       prisma.stock.findMany({
@@ -52,8 +52,6 @@ export async function GET(request: NextRequest) {
           id: true,
           produitId: true,
           quantite: true,
-          quantiteInitiale: true,
-          createdAt: true,
         },
       }),
       prisma.magasin.findUnique({
@@ -70,43 +68,41 @@ export async function GET(request: NextRequest) {
 
     const rows: any[] = []
     let totalQte = 0
-    let index = 1
+    let totalValeur = 0
 
     for (const p of tousProduits) {
       const stock = stocksMap.get(p.id)
       const qte = stock?.quantite || 0
+      const pamp = p.pamp && p.pamp > 0 ? p.pamp : (p.prixAchat || 0)
+      const valeur = pamp * qte
+
       totalQte += qte
+      totalValeur += valeur
 
       rows.push({
-        'N°': index++,
-        Magasin: `${magasin.code} - ${magasin.nom}`,
         Code: p.code,
         Désignation: p.designation,
-        'P.A (Init)': p.prixAchat || 0,
-        'PAMP (Pro)': p.pamp || 0,
-        Qté: qte,
-        'Qté init.': stock?.quantiteInitiale || 0,
-        Seuil: p.seuilMin,
-        'Date entrée': stock?.createdAt ? new Date(stock.createdAt).toISOString().slice(0, 10) : '—',
+        Catégorie: p.categorie,
+        Magasin: `${magasin.code} - ${magasin.nom}`,
+        Quantité: qte,
+        PAMP: pamp,
+        Valeur: valeur,
       })
     }
 
     if (rows.length > 0) {
       rows.push({
-        'N°': 'TOTAL',
-        Magasin: '',
-        Code: '',
+        Code: 'TOTAL',
         Désignation: '',
-        'P.A (Init)': '',
-        'PAMP (Pro)': '',
-        Qté: totalQte,
-        'Qté init.': '',
-        Seuil: '',
-        'Date entrée': '',
+        Catégorie: '',
+        Magasin: '',
+        Quantité: totalQte,
+        PAMP: '',
+        Valeur: totalValeur,
       })
     }
 
-    const buf = await rowsToBuffer(rows as any[], `Stock ${magasin.code}`)
+    const buf = await rowsToBuffer(rows as any[], 'Stock')
     const filename = `stock-${magasin.code}-${new Date().toISOString().split('T')[0]}.xlsx`
     return makeResponse(buf, filename)
   } catch (error) {

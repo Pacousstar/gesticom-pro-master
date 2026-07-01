@@ -6,6 +6,7 @@ import { verifierCloture } from '@/lib/cloture'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { fournisseurSchema } from '@/lib/validations'
+import { comptabiliserOuvertureFournisseur } from '@/lib/comptabilisation'
 
 export async function GET(
   _request: NextRequest,
@@ -77,7 +78,35 @@ export async function PATCH(
     if (body?.actif !== undefined) data.actif = Boolean(body.actif)
 
     const f = await prisma.fournisseur.update({ where: { id }, data: data as object })
-    return NextResponse.json(f)
+
+    const finalSolde = v.soldeInitial !== undefined ? v.soldeInitial : existing.soldeInitial
+    const finalAvoir = v.avoirInitial !== undefined ? v.avoirInitial : existing.avoirInitial
+      if (finalSolde > 0 || finalAvoir > 0) {
+        const existingCC = await prisma.compteCourant.findFirst({ where: { fournisseurId: id } })
+        if (!existingCC) {
+          const count = await prisma.compteCourant.count()
+          await prisma.compteCourant.create({
+            data: {
+              code: `CC-${String(count + 1).padStart(3, '0')}`,
+              nom: f.nom,
+              ncc: f.ncc || null,
+              entiteId: Number(f.entiteId) || session!.entiteId!,
+              fournisseurId: id,
+            }
+          })
+        }
+        await comptabiliserOuvertureFournisseur({
+          fournisseurId: id,
+          nom: f.nom,
+          soldeInitial: finalSolde,
+          avoirInitial: finalAvoir,
+          date: new Date(),
+          entiteId: Number(f.entiteId) || session!.entiteId!,
+          utilisateurId: session!.userId,
+        })
+      }
+
+      return NextResponse.json(f)
   } catch (e) {
     await apiCatch(e, 'api/fournisseurs/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

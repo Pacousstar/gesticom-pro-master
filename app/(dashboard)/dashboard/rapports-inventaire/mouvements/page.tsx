@@ -45,6 +45,8 @@ export default function MouvementsStockPage() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [selectedProduct, setSelectedProduct] = useState('TOUT')
+  const [productSearchTerm, setProductSearchTerm] = useState('')
+  const [showProductList, setShowProductList] = useState(false)
   const [selectedMagasin, setSelectedMagasin] = useState('TOUT')
   const [selectedType, setSelectedType] = useState('TOUT')
   const [search, setSearch] = useState('')
@@ -391,16 +393,67 @@ useEffect(() => {
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex-1 min-w-[200px] relative">
             <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Produit</label>
-            <select
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
+            <input
+              type="text"
+              placeholder="Taper le nom ou le code du produit..."
+              value={productSearchTerm}
+              onChange={(e) => {
+                setProductSearchTerm(e.target.value)
+                if (!e.target.value) setSelectedProduct('TOUT')
+                setShowProductList(true)
+              }}
+              onFocus={() => setShowProductList(true)}
+              onBlur={() => setTimeout(() => setShowProductList(false), 200)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="TOUT">Tous les produits</option>
-              {products.map(p => <option key={p.id} value={p.id}>{p.designation}</option>)}
-            </select>
+            />
+            {selectedProduct !== 'TOUT' && (
+              <button
+                type="button"
+                onClick={() => { setSelectedProduct('TOUT'); setProductSearchTerm(''); setShowProductList(false) }}
+                className="absolute right-2 top-7 text-gray-400 hover:text-red-500"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+            {showProductList && (
+              <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                <div className="sticky top-0 bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-600 uppercase rounded-t">
+                  {productSearchTerm ? 'Résultats' : 'Tous les produits'}
+                </div>
+                <button
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); setSelectedProduct('TOUT'); setProductSearchTerm(''); setShowProductList(false) }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 font-bold text-gray-600 border-b border-gray-50"
+                >
+                  Tous les produits
+                </button>
+                {products
+                  .filter(p => {
+                    const s = productSearchTerm.toLowerCase()
+                    return !s || p.designation?.toLowerCase().includes(s) || p.code?.toLowerCase().includes(s)
+                  })
+                  .slice(0, 50)
+                  .map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); setSelectedProduct(String(p.id)); setProductSearchTerm(p.designation); setShowProductList(false) }}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 border-b border-gray-50 last:border-0"
+                    >
+                      <span className="font-semibold text-gray-900">{p.designation}</span>
+                      <span className="ml-2 text-[10px] text-gray-400 font-mono">{p.code}</span>
+                    </button>
+                  ))}
+                {products.filter(p => {
+                  const s = productSearchTerm.toLowerCase()
+                  return !s || p.designation?.toLowerCase().includes(s) || p.code?.toLowerCase().includes(s)
+                }).length === 0 && (
+                  <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun produit trouvé.</div>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Magasin</label>

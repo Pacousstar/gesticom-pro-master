@@ -177,9 +177,6 @@ export async function POST(request: NextRequest) {
           data: { quantite: d.stockSelonMouvements },
         })
       } else {
-        // Nouveau stock : le stockSelonMouvements = quantiteInitiale + mouvements
-        // Mais il n'y a pas de mouvements existants (sinon le stock existerait)
-        // Donc quantiteInitiale = stockSelonMouvements
         await tx.stock.create({
           data: {
             produitId: d.produitId,
@@ -187,6 +184,20 @@ export async function POST(request: NextRequest) {
             entiteId,
             quantite: d.stockSelonMouvements,
             quantiteInitiale: d.stockSelonMouvements,
+          },
+        })
+      }
+      if (Math.abs(d.ecart) > 0) {
+        await tx.mouvement.create({
+          data: {
+            type: d.ecart > 0 ? 'SORTIE' : 'ENTREE',
+            produitId: d.produitId,
+            magasinId: d.magasinId,
+            entiteId,
+            utilisateurId: session.userId,
+            quantite: Math.abs(d.ecart),
+            date: new Date(),
+            observation: `Correction cohérence stock (${d.stockActuel} → ${d.stockSelonMouvements})`,
           },
         })
       }

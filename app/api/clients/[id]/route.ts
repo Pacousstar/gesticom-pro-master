@@ -7,6 +7,7 @@ import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { clientSchema } from '@/lib/validations'
+import { comptabiliserOuvertureClient } from '@/lib/comptabilisation'
 
 // Utilisation directe du client Prisma
 
@@ -103,8 +104,35 @@ export async function PATCH(
     if (actif !== undefined) data.actif = actif
 
     const c = await prisma.client.update({ where: { id }, data: data as any })
-    
-    await logModification(session!, 'CLIENT', id, `Modification client ${c.nom} (${c.code || 'sans code'})`, existing, c, getIpAddress(request))
+
+    const finalSolde = soldeInitial !== undefined ? soldeInitial : existing.soldeInitial
+    const finalAvoir = avoirInitial !== undefined ? avoirInitial : existing.avoirInitial
+      if (finalSolde > 0 || finalAvoir > 0) {
+        const existingCC = await prisma.compteCourant.findFirst({ where: { clientId: id } })
+        if (!existingCC) {
+          const count = await prisma.compteCourant.count()
+          await prisma.compteCourant.create({
+            data: {
+              code: `CC-${String(count + 1).padStart(3, '0')}`,
+              nom: c.nom,
+              ncc: c.ncc || null,
+              entiteId: c.entiteId,
+              clientId: id,
+            }
+          })
+        }
+        await comptabiliserOuvertureClient({
+          clientId: id,
+          nom: c.nom,
+          soldeInitial: finalSolde,
+          avoirInitial: finalAvoir,
+          date: new Date(),
+          entiteId: c.entiteId,
+          utilisateurId: session!.userId,
+        })
+      }
+
+      await logModification(session!, 'CLIENT', id, `Modification client ${c.nom} (${c.code || 'sans code'})`, existing, c, getIpAddress(request))
     
     return NextResponse.json(c)
   } catch (e) {

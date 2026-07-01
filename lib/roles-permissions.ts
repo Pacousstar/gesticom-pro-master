@@ -159,6 +159,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'fournisseurs:view', 'fournisseurs:create', 'fournisseurs:edit', 'fournisseurs:delete',
     'archives:view', 'archives:create', 'archives:export', 'archives:delete',
     'notifications:write',
+    'commandes:view', 'commandes:create', 'commandes:edit', 'commandes:delete',
+    'commandes:transform', 'commandes:receptionner',
   ],
 
   ADMIN: [

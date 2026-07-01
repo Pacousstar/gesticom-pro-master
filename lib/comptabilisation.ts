@@ -1708,3 +1708,179 @@ export async function initialiserComptabilite() {
   await getOrCreateCompte('701', 'Ventes de marchandises', '7', 'PRODUITS')
   await getOrCreateCompte('703', 'Ventes de produits finis', '7', 'PRODUITS')
 }
+
+/**
+ * Comptabilise les soldes initiaux d'un client (dette/avoir à l'ouverture)
+ */
+export async function comptabiliserOuvertureClient(data: {
+  clientId: number
+  nom: string
+  soldeInitial: number
+  avoirInitial: number
+  date: Date
+  entiteId: number
+  utilisateurId: number
+}, tx?: TxClient) {
+  const p = tx || prisma
+
+  if (data.soldeInitial <= 0 && data.avoirInitial <= 0) return
+
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'OUVERTURE_CLIENT', referenceId: data.clientId }
+  })
+
+  const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
+  const compteClient = await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS, 'Clients', '4', 'ACTIF', tx)
+  const compteVentes = await getOrCreateCompte(COMPTES_DEFAUT.VENTES_MARCHANDISES, 'Ventes de marchandises', '7', 'PRODUITS', tx)
+  const compteCaisse = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+
+  if (data.soldeInitial > 0) {
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: data.entiteId,
+      piece: 'OUV-CLT',
+      libelle: `Solde initial client ${data.nom} (dette reportée)`,
+      compteId: compteClient.id,
+      debit: data.soldeInitial,
+      credit: 0,
+      reference: `CLT-${data.clientId}`,
+      referenceType: 'OUVERTURE_CLIENT',
+      referenceId: data.clientId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: data.entiteId,
+      piece: 'OUV-CLT',
+      libelle: `Solde initial client ${data.nom} (dette reportée)`,
+      compteId: compteVentes.id,
+      debit: 0,
+      credit: data.soldeInitial,
+      reference: `CLT-${data.clientId}`,
+      referenceType: 'OUVERTURE_CLIENT',
+      referenceId: data.clientId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
+
+  if (data.avoirInitial > 0) {
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: data.entiteId,
+      piece: 'OUV-CLT',
+      libelle: `Avoir initial client ${data.nom} (acompte reporté)`,
+      compteId: compteCaisse.id,
+      debit: data.avoirInitial,
+      credit: 0,
+      reference: `CLT-${data.clientId}`,
+      referenceType: 'OUVERTURE_CLIENT',
+      referenceId: data.clientId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: data.entiteId,
+      piece: 'OUV-CLT',
+      libelle: `Avoir initial client ${data.nom} (acompte reporté)`,
+      compteId: compteClient.id,
+      debit: 0,
+      credit: data.avoirInitial,
+      reference: `CLT-${data.clientId}`,
+      referenceType: 'OUVERTURE_CLIENT',
+      referenceId: data.clientId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
+}
+
+/**
+ * Comptabilise les soldes initiaux d'un fournisseur (dette/avoir à l'ouverture)
+ */
+export async function comptabiliserOuvertureFournisseur(data: {
+  fournisseurId: number
+  nom: string
+  soldeInitial: number
+  avoirInitial: number
+  date: Date
+  entiteId: number
+  utilisateurId: number
+}, tx?: TxClient) {
+  const p = tx || prisma
+
+  if (data.soldeInitial <= 0 && data.avoirInitial <= 0) return
+
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'OUVERTURE_FOURNISSEUR', referenceId: data.fournisseurId }
+  })
+
+  const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
+  const compteFournisseur = await getOrCreateCompte(COMPTES_DEFAUT.FOURNISSEURS, 'Fournisseurs', '4', 'PASSIF', tx)
+  const compteAchats = await getOrCreateCompte(COMPTES_DEFAUT.ACHATS_MARCHANDISES, 'Achats de marchandises', '6', 'CHARGES', tx)
+  const compteBanque = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque', '5', 'ACTIF', tx)
+
+  if (data.soldeInitial > 0) {
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: data.entiteId,
+      piece: 'OUV-FRS',
+      libelle: `Solde initial fournisseur ${data.nom} (dette reportée)`,
+      compteId: compteAchats.id,
+      debit: data.soldeInitial,
+      credit: 0,
+      reference: `FRS-${data.fournisseurId}`,
+      referenceType: 'OUVERTURE_FOURNISSEUR',
+      referenceId: data.fournisseurId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: data.entiteId,
+      piece: 'OUV-FRS',
+      libelle: `Solde initial fournisseur ${data.nom} (dette reportée)`,
+      compteId: compteFournisseur.id,
+      debit: 0,
+      credit: data.soldeInitial,
+      reference: `FRS-${data.fournisseurId}`,
+      referenceType: 'OUVERTURE_FOURNISSEUR',
+      referenceId: data.fournisseurId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
+
+  if (data.avoirInitial > 0) {
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: data.entiteId,
+      piece: 'OUV-FRS',
+      libelle: `Avoir initial fournisseur ${data.nom} (acompte reporté)`,
+      compteId: compteFournisseur.id,
+      debit: data.avoirInitial,
+      credit: 0,
+      reference: `FRS-${data.fournisseurId}`,
+      referenceType: 'OUVERTURE_FOURNISSEUR',
+      referenceId: data.fournisseurId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId: data.entiteId,
+      piece: 'OUV-FRS',
+      libelle: `Avoir initial fournisseur ${data.nom} (acompte reporté)`,
+      compteId: compteBanque.id,
+      debit: 0,
+      credit: data.avoirInitial,
+      reference: `FRS-${data.fournisseurId}`,
+      referenceType: 'OUVERTURE_FOURNISSEUR',
+      referenceId: data.fournisseurId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
+}

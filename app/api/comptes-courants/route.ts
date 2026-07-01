@@ -63,6 +63,7 @@ async function calculerSolde(clientId: number | null, fournisseurId: number | nu
   let totalPaiements = 0
   let totalVentes = 0
   let totalEncaissements = 0
+  let ajustement = 0
 
   if (fournisseurId) {
     const achats = await prisma.achat.aggregate({
@@ -76,6 +77,12 @@ async function calculerSolde(clientId: number | null, fournisseurId: number | nu
       _sum: { montant: true },
     })
     totalPaiements = paiements._sum.montant || 0
+
+    const fournisseur = await prisma.fournisseur.findUnique({
+      where: { id: fournisseurId },
+      select: { soldeInitial: true, avoirInitial: true }
+    })
+    ajustement = -(fournisseur?.soldeInitial || 0) + (fournisseur?.avoirInitial || 0)
   }
 
   if (clientId) {
@@ -96,12 +103,15 @@ async function calculerSolde(clientId: number | null, fournisseurId: number | nu
       _sum: { montantTotal: true },
     })
     totalVentes -= retoursAgg._sum.montantTotal || 0
+
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { soldeInitial: true, avoirInitial: true }
+    })
+    ajustement = (client?.soldeInitial || 0) - (client?.avoirInitial || 0)
   }
 
-  // Solde = créances nettes - dettes nettes
-  // Positif = on a une créance nette (il nous doit)
-  // Négatif = on a une dette nette (on lui doit)
   const creanceNette = totalVentes - totalEncaissements
   const detteNette = totalAchats - totalPaiements
-  return creanceNette - detteNette
+  return creanceNette - detteNette + ajustement
 }

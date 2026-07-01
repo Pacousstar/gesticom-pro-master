@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { 
   Truck, FileText, Printer, Loader2, CreditCard,
-  TrendingDown, TrendingUp, Wallet
+  TrendingDown, TrendingUp, Wallet, X, Search
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatDate } from '@/lib/format-date'
@@ -42,6 +42,8 @@ export default function FournisseurRelevesPage() {
 
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([])
   const [selectedFournisseurId, setSelectedFournisseurId] = useState<string>(initialFournisseurId || '')
+  const [fournisseurSearchTerm, setFournisseurSearchTerm] = useState<string>('')
+  const [showFournisseurList, setShowFournisseurList] = useState(false)
   const [dateDebut, setDateDebut] = useState<string>(() => {
     const d = new Date()
     d.setDate(1)
@@ -67,6 +69,14 @@ export default function FournisseurRelevesPage() {
       })
       .catch(() => setLoadingFournisseurs(false))
   }, [])
+
+  // Sync searchTerm when fournisseurs load or selection changes
+  useEffect(() => {
+    if (selectedFournisseurId && fournisseurs.length > 0) {
+      const f = fournisseurs.find(fo => String(fo.id) === selectedFournisseurId)
+      if (f) setFournisseurSearchTerm(f.nom)
+    }
+  }, [selectedFournisseurId, fournisseurs])
 
   const fetchReleve = async () => {
     if (!selectedFournisseurId) return
@@ -143,18 +153,63 @@ export default function FournisseurRelevesPage() {
 
       {/* Barre de Filtres */}
       <div className="grid gap-4 sm:grid-cols-3 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 no-print">
-        <div className="space-y-1">
+        <div className="space-y-1 relative">
           <label className="text-[10px] font-black text-white/60 uppercase tracking-widest ml-1">Fournisseur</label>
-          <select
-            value={selectedFournisseurId}
-            onChange={(e) => setSelectedFournisseurId(e.target.value)}
-            className="w-full rounded-xl bg-white border-2 border-transparent px-4 py-3 text-sm font-bold text-gray-900 focus:border-orange-500 outline-none"
-          >
-            <option value="">— Sélectionner un fournisseur —</option>
-            {fournisseurs.map(f => (
-              <option key={f.id} value={f.id}>{f.nom} {f.code ? `(${f.code})` : ''}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Taper le nom ou le code du fournisseur..."
+              value={fournisseurSearchTerm}
+              onChange={(e) => {
+                setFournisseurSearchTerm(e.target.value)
+                if (!e.target.value) setSelectedFournisseurId('')
+                setShowFournisseurList(true)
+              }}
+              onFocus={() => setShowFournisseurList(true)}
+              onBlur={() => setTimeout(() => setShowFournisseurList(false), 200)}
+              className="w-full rounded-xl bg-white border-2 border-transparent px-10 py-3 text-sm font-bold text-gray-900 focus:border-orange-500 outline-none"
+            />
+            {selectedFournisseurId && (
+              <button
+                type="button"
+                onClick={() => { setSelectedFournisseurId(''); setFournisseurSearchTerm(''); setShowFournisseurList(false) }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {showFournisseurList && (
+            <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+              <div className="sticky top-0 bg-orange-50 px-3 py-1.5 text-[10px] font-bold text-orange-600 uppercase rounded-t">
+                {fournisseurSearchTerm ? 'Résultats' : 'Tous les fournisseurs'}
+              </div>
+              {fournisseurs
+                .filter(f => {
+                  const s = fournisseurSearchTerm.toLowerCase()
+                  return !s || f.nom.toLowerCase().includes(s) || (f.code && f.code.toLowerCase().includes(s))
+                })
+                .slice(0, 50)
+                .map(f => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); setSelectedFournisseurId(String(f.id)); setFournisseurSearchTerm(f.nom); setShowFournisseurList(false) }}
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-orange-50 border-b border-gray-50 last:border-0"
+                  >
+                    <span className="font-bold text-gray-900">{f.nom}</span>
+                    {f.code && <span className="ml-2 text-[10px] text-gray-400 font-mono">({f.code})</span>}
+                  </button>
+                ))}
+              {fournisseurs.filter(f => {
+                const s = fournisseurSearchTerm.toLowerCase()
+                return !s || f.nom.toLowerCase().includes(s) || (f.code && f.code.toLowerCase().includes(s))
+              }).length === 0 && (
+                <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun fournisseur trouvé.</div>
+              )}
+            </div>
+          )}
         </div>
         <div className="space-y-1">
           <label className="text-[10px] font-black text-white/60 uppercase tracking-widest ml-1">Date Début</label>

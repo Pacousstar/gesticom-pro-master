@@ -629,32 +629,30 @@ export async function PATCH(
         const nouveauRetraitDiffere = retraitDiffere === true
         const nouveauStockADeduire = nouveauType !== 'COMMANDE' && !nouveauRetraitDiffere
 
-        // 1. Rollback stocks (uniquement si stock déjà déduit)
+        // 1. Calculer les quantités déjà déduites avant modification
         const stockDejaDeduit = oldVente.typeVente !== 'COMMANDE' && !oldVente.retraitDiffere
+        const oldDeductedQtys: Record<number, number> = {}
         if (!estCommandeNonLivree) {
           for (const l of oldVente.lignes) {
-            // À la création, LIVRAISON_IMMEDIATE déduit l.quantite, pas quantiteLivree
-            // Utiliser quantiteLivree uniquement si le stock n'a pas été déduit à la création
-            const qteARembourser = stockDejaDeduit ? l.quantite : (l.quantiteLivree || 0)
-            if (qteARembourser > 0) {
-              await tx.stock.updateMany({
-                where: { produitId: l.produitId, magasinId: oldVente.magasinId, entiteId: oldVente.entiteId },
-                data: { quantite: { increment: qteARembourser } }
-              })
+            const qteDeduite = stockDejaDeduit ? l.quantite : (l.quantiteLivree || 0)
+            if (qteDeduite > 0) {
+              oldDeductedQtys[l.produitId] = (oldDeductedQtys[l.produitId] || 0) + qteDeduite
             }
           }
-          await tx.mouvement.deleteMany({
-             where: {
-               OR: [
-                 { observation: `Annulation vente ${oldVente.numero}` },
-                 { observation: `Vente ${oldVente.numero}` },
-                 { observation: `Modif Vente ${oldVente.numero}` },
-                 { observation: `Livraison commande ${oldVente.numero}` },
-                 { observation: `Retrait vente ${oldVente.numero}` },
-               ]
-             }
-           })
         }
+
+        // Nettoyer les anciens mouvements
+        await tx.mouvement.deleteMany({
+          where: {
+            OR: [
+              { observation: `Annulation vente ${oldVente.numero}` },
+              { observation: `Vente ${oldVente.numero}` },
+              { observation: `Modif Vente ${oldVente.numero}` },
+              { observation: `Livraison commande ${oldVente.numero}` },
+              { observation: `Retrait vente ${oldVente.numero}` },
+            ]
+          }
+        })
 
         // 2. Nettoyer compta, règlements auto et caisse
         await deleteEcrituresByReference('VENTE', id, tx)
@@ -790,7 +788,7 @@ export async function PATCH(
             remiseGlobale: globalRem,
             typeVente: typeVente || oldVente.typeVente,
             dateLivraison: dateLivraison ? new Date(dateLivraison) : oldVente.typeVente === 'LIVRAISON_IMMEDIATE' ? null : oldVente.dateLivraison,
-            retraitDiffere: retraitDiffere === true,
+            retraitDiffere: retraitDiffere !== undefined ? retraitDiffere === true : oldVente.retraitDiffere,
             montantPaye: Math.min(totalFinal, mntPaye),
             statutPaiement: mntPaye >= totalFinal ? 'PAYE' : mntPaye > 0 ? 'PARTIEL' : 'CREDIT',
             lignes: {
@@ -805,13 +803,36 @@ export async function PATCH(
           }
         })
 
-        // 5. Appliquer stocks (uniquement si le nouveau type nécessite une déduction)
+        // 5. Appliquer le delta stock (différence entre ancienne et nouvelle déduction)
+        const newDeductedQtys: Record<number, number> = {}
         if (nouveauStockADeduire) {
           for (const l of lignesAcreer) {
+            newDeductedQtys[l.produitId] = (newDeductedQtys[l.produitId] || 0) + l.quantite
+          }
+        }
+
+        const allProduitIds = new Set([...Object.keys(oldDeductedQtys).map(Number), ...Object.keys(newDeductedQtys).map(Number)])
+        for (const produitId of allProduitIds) {
+          const oldQty = oldDeductedQtys[produitId] || 0
+          const newQty = newDeductedQtys[produitId] || 0
+          const delta = oldQty - newQty
+
+          if (delta > 0) {
             await tx.stock.updateMany({
-              where: { produitId: l.produitId, magasinId: updated.magasinId, entiteId: updated.entiteId },
-              data: { quantite: { decrement: l.quantite } }
+              where: { produitId, magasinId: updated.magasinId, entiteId: updated.entiteId },
+              data: { quantite: { increment: delta } }
             })
+          } else if (delta < 0) {
+            await tx.stock.updateMany({
+              where: { produitId, magasinId: updated.magasinId, entiteId: updated.entiteId },
+              data: { quantite: { decrement: -delta } }
+            })
+          }
+        }
+
+        // Créer les mouvements Modif Vente (un par ligne, pour la traçabilité)
+        if (nouveauStockADeduire) {
+          for (const l of lignesAcreer) {
             await tx.mouvement.create({
               data: {
                 type: 'SORTIE',

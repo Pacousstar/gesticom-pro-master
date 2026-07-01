@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { 
   Users, FileText, Printer, Loader2, CreditCard,
-  TrendingDown, TrendingUp, Wallet
+  TrendingDown, TrendingUp, Wallet, X, Search
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatDate } from '@/lib/format-date'
@@ -42,7 +42,8 @@ export default function ClientRelevesPage() {
 
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId || '')
-  const [selectedClientDette, setSelectedClientDette] = useState(0)
+  const [clientSearchTerm, setClientSearchTerm] = useState<string>('')
+  const [showClientList, setShowClientList] = useState(false)
   const [dateDebut, setDateDebut] = useState<string>(() => {
     const d = new Date()
     d.setDate(1) // Premier du mois
@@ -70,6 +71,14 @@ export default function ClientRelevesPage() {
       .catch(() => setLoadingClients(false))
   }, [])
 
+  // Sync clientSearchTerm when clients load or selection changes
+  useEffect(() => {
+    if (selectedClientId && clients.length > 0) {
+      const c = clients.find(cl => String(cl.id) === selectedClientId)
+      if (c) setClientSearchTerm(c.nom)
+    }
+  }, [selectedClientId, clients])
+
   const fetchReleve = async () => {
     if (!selectedClientId) return
     setLoading(true)
@@ -95,10 +104,6 @@ export default function ClientRelevesPage() {
     if (!loadingClients && selectedClientId) {
       setCurrentPage(1)
       fetchReleve()
-      fetch(`/api/clients/${selectedClientId}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(c => setSelectedClientDette(c?.dette ?? 0))
-        .catch(() => {})
     }
   }, [loadingClients, selectedClientId, dateDebut, dateFin])
 
@@ -149,18 +154,63 @@ export default function ClientRelevesPage() {
 
       {/* Barre de Filtres */}
       <div className="grid gap-4 sm:grid-cols-3 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 no-print">
-        <div className="space-y-1">
+        <div className="space-y-1 relative">
           <label className="text-[10px] font-black text-white/60 uppercase tracking-widest ml-1">Client</label>
-          <select
-            value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
-            className="w-full rounded-xl bg-white border-2 border-transparent px-4 py-3 text-sm font-bold text-gray-900 focus:border-orange-500 outline-none"
-          >
-            <option value="">— Sélectionner un client —</option>
-            {clients.map(c => (
-              <option key={c.id} value={c.id}>{c.nom} {c.code ? `(${c.code})` : ''}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Taper le nom ou le code du client..."
+              value={clientSearchTerm}
+              onChange={(e) => {
+                setClientSearchTerm(e.target.value)
+                if (!e.target.value) setSelectedClientId('')
+                setShowClientList(true)
+              }}
+              onFocus={() => setShowClientList(true)}
+              onBlur={() => setTimeout(() => setShowClientList(false), 200)}
+              className="w-full rounded-xl bg-white border-2 border-transparent px-10 py-3 text-sm font-bold text-gray-900 focus:border-orange-500 outline-none"
+            />
+            {selectedClientId && (
+              <button
+                type="button"
+                onClick={() => { setSelectedClientId(''); setClientSearchTerm(''); setShowClientList(false) }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {showClientList && (
+            <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+              <div className="sticky top-0 bg-orange-50 px-3 py-1.5 text-[10px] font-bold text-orange-600 uppercase rounded-t">
+                {clientSearchTerm ? 'Résultats' : 'Tous les clients'}
+              </div>
+              {clients
+                .filter(c => {
+                  const s = clientSearchTerm.toLowerCase()
+                  return !s || c.nom.toLowerCase().includes(s) || (c.code && c.code.toLowerCase().includes(s))
+                })
+                .slice(0, 50)
+                .map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); setSelectedClientId(String(c.id)); setClientSearchTerm(c.nom); setShowClientList(false) }}
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-orange-50 border-b border-gray-50 last:border-0"
+                  >
+                    <span className="font-bold text-gray-900">{c.nom}</span>
+                    {c.code && <span className="ml-2 text-[10px] text-gray-400 font-mono">({c.code})</span>}
+                  </button>
+                ))}
+              {clients.filter(c => {
+                const s = clientSearchTerm.toLowerCase()
+                return !s || c.nom.toLowerCase().includes(s) || (c.code && c.code.toLowerCase().includes(s))
+              }).length === 0 && (
+                <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun client trouvé.</div>
+              )}
+            </div>
+          )}
         </div>
         <div className="space-y-1">
           <label className="text-[10px] font-black text-white/60 uppercase tracking-widest ml-1">Date Début</label>
@@ -218,7 +268,7 @@ export default function ClientRelevesPage() {
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Solde Global Client</span>
               </div>
               <p className="text-3xl font-black text-white tracking-tighter italic">
-                {(selectedClientDette || 0).toLocaleString()} F
+                {((selectedClient?.dette ?? 0)).toLocaleString()} F
               </p>
             </div>
           </div>
@@ -413,7 +463,7 @@ export default function ClientRelevesPage() {
                         {index === allChunks.length - 1 && (
                           <div className="mt-6 p-4 border-2 border-black bg-gray-50 rounded-lg">
                              <p className="text-[15px] font-black uppercase text-gray-900 italic">Solde de clôture global du client au {formatDate(dateFin)} :</p>
-                             <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedClientDette || 0).toLocaleString()} FCFA</p>
+                             <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{((selectedClient?.dette ?? 0)).toLocaleString()} FCFA</p>
                           </div>
                         )}
                       </ListPrintWrapper>
@@ -480,7 +530,7 @@ export default function ClientRelevesPage() {
                       {index === allChunks.length - 1 && (
                         <div className="mt-6 p-4 border-2 border-black bg-gray-50">
                           <p className="text-[15px] font-black uppercase text-gray-900 italic">Solde de clôture global du client au {formatDate(dateFin)} :</p>
-                          <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{(selectedClientDette || 0).toLocaleString()} FCFA</p>
+                          <p className="text-4xl font-black text-red-700 tracking-tighter mt-1">{((selectedClient?.dette ?? 0)).toLocaleString()} FCFA</p>
                         </div>
                       )}
                     </ListPrintWrapper>
