@@ -25,21 +25,14 @@ if %errorlevel% neq 0 (
 echo.
 echo [2/8] Copie de la base de donnees...
 
-REM Chercher la DB a plusieurs endroits possibles
 set "DB_FOUND="
 if exist "C:\gesticom\gesticom.db" set "DB_SOURCE=C:\gesticom\gesticom.db" & set "DB_FOUND=1"
 if exist "%SOURCE%gesticom.db" set "DB_SOURCE=%SOURCE%gesticom.db" & set "DB_FOUND=1"
 if exist "%SOURCE%prisma\gesticom.db" set "DB_SOURCE=%SOURCE%prisma\gesticom.db" & set "DB_FOUND=1"
 
 if defined DB_FOUND (
-    REM Lire DATABASE_URL depuis .env pour savoir ou copier
-    set "DB_DEST=%DEST%\prisma\gesticom.db"
-    if exist "%SOURCE%.env" (
-        for /f "tokens=2 delims==" %%a in ('type "%SOURCE%.env" ^| find "DATABASE_URL"') do (
-            set "URL=%%a"
-        )
-    )
-    copy /Y "%DB_SOURCE%" "%DB_DEST%"
+    if not exist "%DEST%\prisma" mkdir "%DEST%\prisma"
+    copy /Y "%DB_SOURCE%" "%DEST%\prisma\gesticom.db"
     echo OK - base copiee depuis %DB_SOURCE%
 ) else (
     echo ATTENTION : gesticom.db introuvable ! Une base vierge sera creee.
@@ -56,9 +49,13 @@ if exist "%SOURCE%private.pem" (
 )
 
 echo.
-echo [4/8] Copie de .env...
+echo [4/8] Copie de .env et forçage de DATABASE_URL...
 if exist "%SOURCE%.env" (
     copy /Y "%SOURCE%.env" "%DEST%\.env"
+    REM Forcer DATABASE_URL sur ./prisma/gesticom.db (coherent avec [2/8])
+    findstr /V "DATABASE_URL" "%DEST%\.env" > "%DEST%\.env.tmp"
+    echo DATABASE_URL="file:./prisma/gesticom.db" >> "%DEST%\.env.tmp"
+    move /Y "%DEST%\.env.tmp" "%DEST%\.env" >nul
     echo OK
 ) else (
     echo ATTENTION : .env introuvable. Tu devras le creer manuellement.
