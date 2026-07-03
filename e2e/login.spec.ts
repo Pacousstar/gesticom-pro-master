@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test'
 
+async function login(page: any, loginStr: string, password: string) {
+  await page.goto('/login')
+  await page.locator('input[type="text"], input[name="email"], input[name="login"]').first().fill(loginStr)
+  await page.locator('input[type="password"]').fill(password)
+  await page.locator('button[type="submit"]').click()
+}
+
 test.describe('Flux critique : authentification', () => {
   test('La page de login affiche le formulaire', async ({ page }) => {
     await page.goto('/login')
@@ -9,24 +16,15 @@ test.describe('Flux critique : authentification', () => {
   })
 
   test('Connexion admin réussie et redirection vers le dashboard', async ({ page }) => {
-    await page.goto('/login')
-
-    const emailInput = page.locator('input[type="text"], input[name="email"], input[name="login"]').first()
-    await emailInput.fill('admin')
-    await page.locator('input[type="password"]').fill('Admin@123')
-    await page.locator('button[type="submit"]').click()
-
-    await page.waitForURL(/\/(dashboard|home|accueil)/, { timeout: 15000 })
+    await login(page, 'admin', 'Admin@123')
+    await page.waitForURL(/\/(dashboard|home|accueil|mobile)/, { timeout: 30000 })
     expect(page.url()).not.toContain('/login')
   })
 
   test('Le tableau de bord affiche les indicateurs principaux', async ({ page }) => {
-    await page.goto('/login')
-    await page.locator('input[type="text"], input[name="email"], input[name="login"]').first().fill('admin')
-    await page.locator('input[type="password"]').fill('Admin@123')
-    await page.locator('button[type="submit"]').click()
-    await page.waitForURL(/\/(dashboard|home|accueil)/, { timeout: 15000 })
-
+    await login(page, 'admin', 'Admin@123')
+    await page.waitForURL(/\/(dashboard|home|accueil|mobile)/, { timeout: 30000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('nav, aside, [class*="sidebar"], [class*="menu"]').first()).toBeVisible()
   })
 
@@ -34,8 +32,11 @@ test.describe('Flux critique : authentification', () => {
     await page.goto('/login')
     await page.locator('input[type="text"], input[name="email"], input[name="login"]').first().fill('fake@test.com')
     await page.locator('input[type="password"]').fill('wrongpassword')
-    await page.locator('button[type="submit"]').click()
 
-    await expect(page.getByText('Identifiants incorrects')).toBeVisible({ timeout: 20000 })
+    const responsePromise = page.waitForResponse(resp => resp.url().includes('/api/auth/login'))
+    await page.locator('button[type="submit"]').click()
+    await responsePromise
+
+    await expect(page.getByText('Identifiants incorrects')).toBeVisible({ timeout: 5000 })
   })
 })

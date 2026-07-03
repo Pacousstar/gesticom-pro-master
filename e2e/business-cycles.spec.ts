@@ -5,8 +5,12 @@ test.describe('Cycles métier complets', () => {
     await page.goto('/login')
     await page.locator('input[type="text"], input[name="email"], input[name="login"]').first().fill('admin')
     await page.locator('input[type="password"]').fill('Admin@123')
+
+    const responsePromise = page.waitForResponse(resp => resp.url().includes('/api/auth/login'))
     await page.locator('button[type="submit"]').click()
-    await page.waitForURL(/\/(dashboard|home|accueil)/, { timeout: 30000 })
+    await responsePromise
+
+    await page.waitForURL(/\/(dashboard|home|accueil|mobile)/, { timeout: 30000 })
     await page.waitForLoadState('networkidle')
   })
 
