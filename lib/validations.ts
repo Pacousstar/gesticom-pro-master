@@ -112,21 +112,10 @@ export const clientSchema = z.object({
   plafondCredit: z.coerce.number().min(0, 'Le plafond de crédit doit être positif.').nullable().optional(),
   ncc: z.string().max(50, 'Le NCC ne peut pas dépasser 50 caractères.').trim().nullable().optional(),
   localisation: z.string().max(MAX_STRING).trim().nullable().optional(),
-  soldeInitial: z.coerce.number().min(0).default(0),
-  avoirInitial: z.coerce.number().min(0).default(0),
+  soldeInitial: z.coerce.number().min(0).optional(),
+  avoirInitial: z.coerce.number().min(0).optional(),
   email: z.string().email('Email invalide.').max(100).trim().nullable().optional().or(z.literal('')),
-}).refine(
-  (data) => {
-    if (data.type === 'CREDIT' && (!data.plafondCredit || data.plafondCredit <= 0)) {
-      return false
-    }
-    return true
-  },
-  {
-    message: 'Un plafond de crédit est requis pour les clients de type CREDIT.',
-    path: ['plafondCredit'],
-  }
-)
+})
 
 /** Fournisseur : nom, téléphone, email, NCC */
 export const fournisseurSchema = z.object({

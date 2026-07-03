@@ -59,14 +59,15 @@ export async function PATCH(
     if (!result.success) return result.response
     const v = result.data
 
-    const code = body?.code !== undefined ? (String(body.code).trim() || null) : undefined
+    const code = v.code !== undefined ? (v.code || null) : undefined
     const nom = v.nom
     const telephone = v.telephone !== undefined ? v.telephone : undefined
     const type = v.type !== undefined
       ? (String(v.type).toUpperCase() === 'CREDIT' ? 'CREDIT' : 'CASH')
       : undefined
+    const effectiveType = type !== undefined ? type : existing.type
     const plafondCredit = v.plafondCredit !== undefined
-      ? (type === 'CREDIT' ? Math.max(0, Number(v.plafondCredit) || 0) : null)
+      ? (effectiveType === 'CREDIT' ? Math.max(0, Number(v.plafondCredit) || 0) : null)
       : undefined
     const ncc = v.ncc !== undefined ? v.ncc : undefined
     const localisation = v.localisation !== undefined ? v.localisation : undefined
@@ -75,8 +76,15 @@ export async function PATCH(
     const email = v.email !== undefined ? v.email : undefined
     const actif = body?.actif !== undefined ? Boolean(body.actif) : undefined
 
+    // Validation manuelle CREDIT + plafond (remplace l'ancien .refine() qui bloquait .partial())
+    if (effectiveType === 'CREDIT' && (!plafondCredit || plafondCredit <= 0)) {
+      return NextResponse.json({
+        error: 'Un plafond de crédit valide (> 0) est requis pour les clients de type CREDIT.'
+      }, { status: 400 })
+    }
+
     // SEC-01: Vérification cloture si modification des soldes initiaux
-    const modifieSoldeInitial = v.soldeInitial !== undefined && v.soldeInitial !== existing.soldeInitial
+    const modifieSoldeInitial = soldeInitial !== undefined && soldeInitial !== existing.soldeInitial
     const modifieAvoirInitial = avoirInitial !== undefined && avoirInitial !== existing.avoirInitial
     
     if (modifieSoldeInitial || modifieAvoirInitial) {
