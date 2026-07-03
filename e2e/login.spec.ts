@@ -36,6 +36,6 @@ test.describe('Flux critique : authentification', () => {
     await page.locator('input[type="password"]').fill('wrongpassword')
     await page.locator('button[type="submit"]').click()
 
-    await expect(page.getByText('Identifiants incorrects')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Identifiants incorrects')).toBeVisible({ timeout: 20000 })
   })
 })

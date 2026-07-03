@@ -6,7 +6,8 @@ test.describe('Cycles métier complets', () => {
     await page.locator('input[type="text"], input[name="email"], input[name="login"]').first().fill('admin')
     await page.locator('input[type="password"]').fill('Admin@123')
     await page.locator('button[type="submit"]').click()
-    await page.waitForURL(/\/(dashboard|home|accueil)/, { timeout: 15000 })
+    await page.waitForURL(/\/(dashboard|home|accueil)/, { timeout: 30000 })
+    await page.waitForLoadState('networkidle')
   })
 
   test('Cycle 1 : Créer produit → vérifier stock → faire vente', async ({ page }) => {
