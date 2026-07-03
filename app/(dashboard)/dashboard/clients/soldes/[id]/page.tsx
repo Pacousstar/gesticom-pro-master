@@ -274,7 +274,7 @@ export default function CompteCourantClientPage() {
         const json = await res.json()
         setData(json)
         const opsArr = Array.isArray(json.operations) ? json.operations : []
-        setSoldeTotal(opsArr.reduce((s, o) => s + (o.debit || 0) - (o.credit || 0), 0))
+        setSoldeTotal(opsArr.reduce((s: number, o: Operation) => s + (o.debit || 0) - (o.credit || 0), 0))
       } else {
         showError("Impossible de charger le compte courant.")
       }
