@@ -25,15 +25,30 @@ export async function GET(
 
         if (!fournisseur) return NextResponse.json({ error: 'Fournisseur introuvable' }, { status: 404 })
 
+        // Filtre date optionnel
+        const searchParams = request.nextUrl.searchParams
+        const dateDebut = searchParams.get('dateDebut')
+        const dateFin = searchParams.get('dateFin')
+
+        const whereAchat: any = { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } }
+        const whereReglement: any = { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } }
+
+        if (dateDebut && dateFin) {
+            const gte = new Date(dateDebut + 'T00:00:00')
+            const lte = new Date(dateFin + 'T23:59:59')
+            whereAchat.date = { gte, lte }
+            whereReglement.date = { gte, lte }
+        }
+
         // R1: Récupérer les achats validés
         const achats = await prisma.achat.findMany({
-            where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } },
+            where: whereAchat,
             select: { id: true, numero: true, date: true, createdAt: true, montantTotal: true, observation: true }
         })
 
         // R2: Récupérer les règlements validés
         const reglements = await prisma.reglementAchat.findMany({
-            where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] } },
+            where: whereReglement,
             select: { id: true, date: true, createdAt: true, montant: true, modePaiement: true, observation: true, achat: { select: { numero: true } } }
         })
 

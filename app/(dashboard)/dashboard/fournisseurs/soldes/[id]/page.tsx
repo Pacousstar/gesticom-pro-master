@@ -61,6 +61,10 @@ export default function CompteCourantFournisseurPage() {
   const [lettrageError, setLettrageError] = useState('')
   const [params, setParams] = useState<any>(null)
   const [userRole, setUserRole] = useState<string>('')
+  const [dateDebut, setDateDebut] = useState(() => {
+    const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0]
+  })
+  const [dateFin, setDateFin] = useState(() => new Date().toISOString().split('T')[0])
 
   useEffect(() => {
     fetch('/api/auth/check').then(r => r.ok && r.json()).then(d => d && setUserRole(d.role)).catch(() => {})
@@ -77,17 +81,21 @@ export default function CompteCourantFournisseurPage() {
     fetchBanques()
   }, [id])
 
-  const fetchData = async () => {
+  const fetchData = async (dDebut?: string, dFin?: string) => {
     setLoading(true)
     try {
+      const usedDebut = dDebut ?? dateDebut
+      const usedFin = dFin ?? dateFin
+      const qs = new URLSearchParams({ dateDebut: usedDebut, dateFin: usedFin }).toString()
       const [res, pRes] = await Promise.all([
-        fetch(`/api/fournisseurs/${id}/compte-courant`),
+        fetch(`/api/fournisseurs/${id}/compte-courant?${qs}`),
         fetch('/api/parametres')
       ])
       if (res.ok) {
         const json = await res.json()
         setData(json)
-        setSoldeTotal(json.globalSolde ?? 0)
+        const opsArr = Array.isArray(json.operations) ? json.operations : []
+        setSoldeTotal(opsArr.reduce((s: number, o: Operation) => s + (o.debit || 0) - (o.credit || 0), 0))
       } else {
         showError("Erreur lors du chargement du compte courant.")
       }
@@ -280,11 +288,11 @@ export default function CompteCourantFournisseurPage() {
     return { ...op, soldeProgressif: currentSolde }
   })
 
-  const totalDebit = data?.totalDebitGlobal ?? ops.reduce((acc: number, op: Operation) => acc + (op.debit || 0), 0)
-  const totalCredit = data?.totalCreditGlobal ?? ops.reduce((acc: number, op: Operation) => acc + (op.credit || 0), 0)
+   const totalDebit = ops.reduce((acc: number, op: Operation) => acc + (op.debit || 0), 0)
+  const totalCredit = ops.reduce((acc: number, op: Operation) => acc + (op.credit || 0), 0)
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-8 pb-12">
       <style jsx global>{`
         @media print {
           .no-print { display: none !important; }
@@ -327,7 +335,7 @@ export default function CompteCourantFournisseurPage() {
         <div className="mb-6 border-l-4 border-black pl-4">
            <h3 className="text-sm font-black uppercase">Fournisseur : {data.fournisseur.nom}</h3>
            <p className="text-[10px]">Code : {data.fournisseur.code || 'N/A'}</p>
-           <p className="text-[10px]">Période : Du début à ce jour</p>
+           <p className="text-[10px]">Période : {new Date(dateDebut).toLocaleDateString('fr-FR')} au {new Date(dateFin).toLocaleDateString('fr-FR')}</p>
         </div>
 
         <div className="print-summary">
@@ -348,7 +356,7 @@ export default function CompteCourantFournisseurPage() {
 
       <div className="no-print">
       {/* HEADER PREMIUM */}
-      <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-orange-700 to-orange-950 p-8 shadow-2xl">
+      <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-orange-700 to-orange-950 p-8 shadow-2xl mb-8">
         <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-orange-500/10 blur-3xl opacity-50" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-6">
@@ -365,12 +373,12 @@ export default function CompteCourantFournisseurPage() {
                 </p>
              </div>
           </div>
-          <div className="flex gap-3">
-             <button 
-                onClick={() => setShowPayModal(true)}
-                className="flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-black text-white hover:bg-orange-600 transition-all shadow-lg hover:-translate-y-1 uppercase tracking-widest no-print"
-              >
-                <DollarSign className="h-4 w-4" /> Nouveau Paiement
+           <div className="flex gap-4">
+              <button 
+                 onClick={() => setShowPayModal(true)}
+                 className="flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-black text-white hover:bg-orange-600 transition-all shadow-lg hover:-translate-y-1 uppercase tracking-widest no-print"
+               >
+                 <DollarSign className="h-4 w-4" /> Nouveau Paiement
              </button>
              <button 
                onClick={() => window.print()}
@@ -389,10 +397,10 @@ export default function CompteCourantFournisseurPage() {
       </div>
 
       {/* BILAN RAPIDE */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex items-center justify-between group overflow-hidden">
+      <div className="grid gap-8 sm:grid-cols-3 mb-8">
+        <div className="rounded-[2rem] bg-white p-8 shadow-xl border border-gray-100 flex items-center justify-between group overflow-hidden">
           <div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Achats (Débit)</p>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Total Achats (Débit)</p>
             <h3 className="text-2xl font-black text-gray-900 tabular-nums">
               {totalDebit.toLocaleString('fr-FR')} F
             </h3>
@@ -400,9 +408,9 @@ export default function CompteCourantFournisseurPage() {
           <TrendingUp className="h-10 w-10 text-orange-500/20 group-hover:scale-110 transition-transform" />
         </div>
 
-        <div className="rounded-[2rem] bg-white p-6 shadow-xl border border-gray-100 flex items-center justify-between group overflow-hidden">
+        <div className="rounded-[2rem] bg-white p-8 shadow-xl border border-gray-100 flex items-center justify-between group overflow-hidden">
           <div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Payé (Crédit)</p>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Total Payé (Crédit)</p>
             <h3 className="text-2xl font-black text-emerald-600 tabular-nums">
               {totalCredit.toLocaleString('fr-FR')} F
             </h3>
@@ -410,23 +418,52 @@ export default function CompteCourantFournisseurPage() {
           <Wallet className="h-10 w-10 text-emerald-500/20 group-hover:scale-110 transition-transform" />
         </div>
 
-        <div className={`rounded-[2rem] p-6 shadow-xl border flex items-center justify-between group overflow-hidden ${soldeTotal > 0 ? 'bg-orange-600 border-orange-500' : 'bg-emerald-600 border-emerald-500'}`}>
+        <div className={`rounded-[2rem] p-8 shadow-xl border flex items-center justify-between group overflow-hidden ${soldeTotal > 0 ? 'bg-orange-600 border-orange-500' : 'bg-emerald-600 border-emerald-500'}`}>
           <div className="text-white">
-            <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">Solde Net Final</p>
+            <p className="text-[10px] font-black uppercase tracking-widest mb-2 opacity-80">Solde Net Final</p>
             <h3 className="text-3xl font-black tabular-nums">
-              {Math.abs(soldeTotal).toLocaleString('fr-FR')} F
+               {Math.abs(soldeTotal).toLocaleString('fr-FR')} F
             </h3>
-            <p className="text-[9px] font-bold uppercase mt-1">
-              {soldeTotal > 0 ? "Vous devez au fournisseur" : soldeTotal < 0 ? "Le fournisseur vous doit (avoir)" : "Le compte est soldé"}
+            <p className="text-[9px] font-bold uppercase mt-2">
+               {soldeTotal > 0 ? "Vous devez au fournisseur" : soldeTotal < 0 ? "Le fournisseur vous doit (avoir)" : "Le compte est soldé"}
             </p>
           </div>
           <DollarSign className="h-12 w-12 text-white/20 group-hover:scale-110 transition-transform" />
         </div>
       </div>
 
+      {/* Filtre date */}
+      <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-gray-200 bg-gray-50/80 p-6 no-print mb-8">
+        <div>
+          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Du</label>
+          <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)}
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Au</label>
+          <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)}
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none shadow-sm" />
+        </div>
+        <button onClick={() => fetchData()}
+          className="rounded-xl bg-orange-500 px-5 py-2 text-xs font-black text-white uppercase tracking-widest hover:bg-orange-600 shadow-md transition-all">
+          Filtrer
+        </button>
+        <button onClick={() => {
+          const d = new Date(); d.setDate(1)
+          const debut = d.toISOString().split('T')[0]
+          const fin = new Date().toISOString().split('T')[0]
+          setDateDebut(debut)
+          setDateFin(fin)
+          fetchData(debut, fin)
+        }}
+          className="rounded-xl bg-white border border-gray-200 px-5 py-2 text-xs font-bold text-gray-700 uppercase tracking-widest hover:bg-gray-100 shadow-sm transition-all">
+          Réinitialiser
+        </button>
+      </div>
+
       {/* TABLEAU CHRONOLOGIQUE */}
       <div className="overflow-hidden rounded-[2.5rem] bg-white shadow-2xl border border-gray-100">
-        <div className="bg-gray-50/50 px-8 py-6 border-b border-gray-100 flex items-center justify-between">
+        <div className="bg-gray-50/50 px-10 py-8 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter italic flex items-center gap-3">
             <History className="h-5 w-5 text-orange-500" />
             Détail chronologique des opérations
@@ -442,13 +479,13 @@ export default function CompteCourantFournisseurPage() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-left">
-                <th className="px-8 py-5">Date</th>
-                <th className="px-8 py-5">Libellé / Réf</th>
-                <th className="px-8 py-5 text-center">Type</th>
-                <th className="px-8 py-5 text-right bg-red-50/30">Dû (Débit +)</th>
-                <th className="px-8 py-5 text-right bg-emerald-50/30">Payé (Crédit -)</th>
-                <th className="px-8 py-5 text-right bg-orange-50/30">Solde Progressif</th>
-                <th className="px-8 py-5 text-center">Action</th>
+                <th className="px-10 py-6">Date</th>
+                <th className="px-10 py-6">Libellé / Réf</th>
+                <th className="px-10 py-6 text-center">Type</th>
+                <th className="px-10 py-6 text-right bg-red-50/30">Dû (Débit +)</th>
+                <th className="px-10 py-6 text-right bg-emerald-50/30">Payé (Crédit -)</th>
+                <th className="px-10 py-6 text-right bg-orange-50/30">Solde Progressif</th>
+                <th className="px-10 py-6 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -545,7 +582,7 @@ export default function CompteCourantFournisseurPage() {
           </table>
         </div>
 
-        <div className="bg-gray-100/50 p-8 flex items-center gap-4">
+        <div className="bg-gray-100/50 p-10 flex items-center gap-5">
           <div className="h-10 w-10 rounded-full bg-orange-500 flex items-center justify-center text-white">
             <Info className="h-6 w-6" />
           </div>
