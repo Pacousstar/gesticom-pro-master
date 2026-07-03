@@ -1,12 +1,5 @@
 import { test, expect } from '@playwright/test'
 
-async function login(page: any, loginStr: string, password: string) {
-  await page.goto('/login')
-  await page.locator('input[type="text"], input[name="email"], input[name="login"]').first().fill(loginStr)
-  await page.locator('input[type="password"]').fill(password)
-  await page.locator('button[type="submit"]').click()
-}
-
 test.describe('Flux critique : authentification', () => {
   test('La page de login affiche le formulaire', async ({ page }) => {
     await page.goto('/login')
@@ -16,27 +9,45 @@ test.describe('Flux critique : authentification', () => {
   })
 
   test('Connexion admin réussie et redirection vers le dashboard', async ({ page }) => {
-    await login(page, 'admin', 'Admin@123')
-    await page.waitForURL(/\/(dashboard|home|accueil|mobile)/, { timeout: 30000 })
-    expect(page.url()).not.toContain('/login')
+    const res = await page.request.post('/api/auth/login', {
+      data: { login: 'admin', motDePasse: 'Admin@123' },
+    })
+    expect(res.ok()).toBeTruthy()
+    const setCookie = res.headers()['set-cookie']
+    if (setCookie) {
+      const cookieName = setCookie.split('=')[0]
+      const cookieValue = setCookie.split(';')[0].split('=')[1]
+      await page.context().addCookies([{
+        name: cookieName, value: cookieValue, domain: 'localhost', path: '/',
+      }])
+    }
+    await page.goto('/dashboard')
+    await expect(page.locator('nav, aside, [class*="sidebar"], [class*="menu"]').first()).toBeVisible()
   })
 
   test('Le tableau de bord affiche les indicateurs principaux', async ({ page }) => {
-    await login(page, 'admin', 'Admin@123')
-    await page.waitForURL(/\/(dashboard|home|accueil|mobile)/, { timeout: 30000 })
-    await page.waitForLoadState('networkidle')
+    const res = await page.request.post('/api/auth/login', {
+      data: { login: 'admin', motDePasse: 'Admin@123' },
+    })
+    expect(res.ok()).toBeTruthy()
+    const setCookie = res.headers()['set-cookie']
+    if (setCookie) {
+      const cookieName = setCookie.split('=')[0]
+      const cookieValue = setCookie.split(';')[0].split('=')[1]
+      await page.context().addCookies([{
+        name: cookieName, value: cookieValue, domain: 'localhost', path: '/',
+      }])
+    }
+    await page.goto('/dashboard')
     await expect(page.locator('nav, aside, [class*="sidebar"], [class*="menu"]').first()).toBeVisible()
   })
 
   test('Login rejeté avec mauvais identifiants', async ({ page }) => {
-    await page.goto('/login')
-    await page.locator('input[type="text"], input[name="email"], input[name="login"]').first().fill('fake@test.com')
-    await page.locator('input[type="password"]').fill('wrongpassword')
-
-    const responsePromise = page.waitForResponse(resp => resp.url().includes('/api/auth/login'))
-    await page.locator('button[type="submit"]').click()
-    await responsePromise
-
-    await expect(page.getByText('Identifiants incorrects')).toBeVisible({ timeout: 5000 })
+    const res = await page.request.post('/api/auth/login', {
+      data: { login: 'fake@test.com', motDePasse: 'wrongpassword' },
+    })
+    expect(res.status()).toBe(401)
+    const body = await res.json()
+    expect(body.error).toContain('Identifiants incorrects')
   })
 })

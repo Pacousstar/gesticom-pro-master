@@ -2,16 +2,17 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Cycles métier complets', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
-    await page.locator('input[type="text"], input[name="email"], input[name="login"]').first().fill('admin')
-    await page.locator('input[type="password"]').fill('Admin@123')
-
-    const responsePromise = page.waitForResponse(resp => resp.url().includes('/api/auth/login'))
-    await page.locator('button[type="submit"]').click()
-    await responsePromise
-
-    await page.waitForURL(/\/(dashboard|home|accueil|mobile)/, { timeout: 30000 })
-    await page.waitForLoadState('networkidle')
+    const res = await page.request.post('/api/auth/login', {
+      data: { login: 'admin', motDePasse: 'Admin@123' },
+    })
+    const setCookie = res.headers()['set-cookie']
+    if (setCookie) {
+      const cookieName = setCookie.split('=')[0]
+      const cookieValue = setCookie.split(';')[0].split('=')[1]
+      await page.context().addCookies([{
+        name: cookieName, value: cookieValue, domain: 'localhost', path: '/',
+      }])
+    }
   })
 
   test('Cycle 1 : Créer produit → vérifier stock → faire vente', async ({ page }) => {
