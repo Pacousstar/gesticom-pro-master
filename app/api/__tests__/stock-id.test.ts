@@ -6,16 +6,24 @@ const mockStockFindFirst = vi.hoisted(() => vi.fn())
 const mockStockUpdate = vi.hoisted(() => vi.fn())
 const mockMouvementCreate = vi.hoisted(() => vi.fn())
 const mockApiCatch = vi.hoisted(() => vi.fn())
+const mockStockFindUnique = vi.hoisted(() => vi.fn())
+
+const mockTx = {
+  mouvement: { create: mockMouvementCreate },
+  stock: { findUnique: mockStockFindUnique, update: mockStockUpdate },
+}
 
 vi.mock('@/lib/db', () => ({
   prisma: {
     stock: {
       findFirst: mockStockFindFirst,
       update: mockStockUpdate,
+      findUnique: mockStockFindUnique,
     },
     mouvement: {
       create: mockMouvementCreate,
     },
+    $transaction: vi.fn((cb: any) => cb(mockTx)),
   },
 }))
 
@@ -88,6 +96,7 @@ describe('PATCH /api/stock/[id]', () => {
 
   it('modifie la quantité avec création de mouvement', async () => {
     mockStockFindFirst.mockResolvedValue(makeStock())
+    mockStockFindUnique.mockResolvedValue(makeStock({ quantite: 80 }))
     mockStockUpdate.mockResolvedValue(makeStock({ quantite: 80 }))
 
     const res = await PATCH(mockJson({ quantite: 80 }), mockReq('1'))
@@ -105,6 +114,7 @@ describe('PATCH /api/stock/[id]', () => {
 
   it('modifie la quantitéInitiale sans mouvement', async () => {
     mockStockFindFirst.mockResolvedValue(makeStock())
+    mockStockFindUnique.mockResolvedValue(makeStock({ quantiteInitiale: 150 }))
     mockStockUpdate.mockResolvedValue(makeStock({ quantiteInitiale: 150 }))
 
     const res = await PATCH(mockJson({ quantiteInitiale: 150 }), mockReq('1'))
@@ -117,6 +127,7 @@ describe('PATCH /api/stock/[id]', () => {
 
   it('crée un mouvement ENTREE si quantité augmente', async () => {
     mockStockFindFirst.mockResolvedValue(makeStock({ quantite: 100 }))
+    mockStockFindUnique.mockResolvedValue(makeStock({ quantite: 120 }))
     mockStockUpdate.mockResolvedValue(makeStock({ quantite: 120 }))
 
     await PATCH(mockJson({ quantite: 120 }), mockReq('1'))

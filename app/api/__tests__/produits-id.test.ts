@@ -12,6 +12,9 @@ vi.mock('@/lib/db', () => ({
       update: mockProduitUpdate,
       delete: mockProduitDelete,
     },
+    venteLigne: { count: vi.fn().mockResolvedValue(0) },
+    achatLigne: { count: vi.fn().mockResolvedValue(0) },
+    mouvement: { count: vi.fn().mockResolvedValue(0) },
   },
 }))
 

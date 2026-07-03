@@ -21,7 +21,7 @@ const mockUtilisateurFindUnique = vi.hoisted(() => vi.fn())
 
 const mockTx = {
   mouvement: { findFirst: mockMouvementFindFirst, create: mockMouvementCreate },
-  stock: { findUnique: mockStockFindUnique, create: mockStockCreate, update: mockStockUpdate },
+  stock: { findUnique: mockStockFindUnique, create: mockStockCreate, update: mockStockUpdate, delete: mockStockDelete },
   produit: { update: mockProduitUpdate },
 }
 
@@ -377,8 +377,9 @@ describe('DELETE /api/stock/[id]', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('supprime une ligne de stock', async () => {
-    mockStockFindFirst.mockResolvedValue({ id: 1 })
+    mockStockFindFirst.mockResolvedValue({ id: 1, produitId: 1, magasinId: 1, quantite: 100 })
     mockStockDelete.mockResolvedValue({ id: 1 })
+    mockMouvementCreate.mockResolvedValue({ id: 1 })
 
     const res = await DELETE_STOCK(...mockDeleteReq('1'))
     const body = await res.json()

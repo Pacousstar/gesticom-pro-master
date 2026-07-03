@@ -24,6 +24,11 @@ vi.mock('@/lib/db', () => ({
     },
     vente: { count: mockVenteCount, findFirst: vi.fn() },
     reglementVente: { count: mockReglementVenteCount },
+    compteCourant: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      count: vi.fn().mockResolvedValue(0),
+      create: vi.fn(),
+    },
   },
 }))
 
