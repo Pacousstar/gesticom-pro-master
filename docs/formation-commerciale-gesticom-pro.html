@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formation Commerciale - GestiCom Pro</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', Arial, sans-serif; color: #1a1a2e; background: #f8f9fc; padding: 24px; }
+.container { max-width: 1000px; margin: 0 auto; }
+h1 { font-size: 36px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; }
+h2 { font-size: 26px; font-weight: 700; color: #0f3460; border-left: 5px solid #e94560; padding-left: 16px; margin: 40px 0 20px; }
+h3 { font-size: 20px; font-weight: 600; color: #16213e; margin: 28px 0 12px; }
+h4 { font-size: 16px; font-weight: 600; color: #0f3460; margin: 16px 0 8px; }
+p, li { font-size: 14px; line-height: 1.7; color: #444; }
+.subtitle { font-size: 16px; color: #666; margin-bottom: 32px; }
+.sommaire { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.sommaire h3 { margin-top: 0; }
+.sommaire ol { padding-left: 20px; }
+.sommaire ol li { margin-bottom: 6px; }
+.sommaire ol li a { color: #e94560; text-decoration: none; font-weight: 500; }
+.sommaire ol li a:hover { text-decoration: underline; }
+.card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #eef0f4; }
+.card.highlight { border-left: 4px solid #e94560; }
+.card.green { border-left: 4px solid #2ecc71; }
+.card.blue { border-left: 4px solid #3498db; }
+.card.orange { border-left: 4px solid #f39c12; }
+.card p { margin-bottom: 8px; }
+.card p:last-child { margin-bottom: 0; }
+.script { background: #f0f4f8; border-radius: 8px; padding: 16px 20px; font-style: italic; margin: 8px 0; border-left: 3px solid #3498db; }
+.script strong { color: #0f3460; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+.badge { display: inline-block; background: #e94560; color: #fff; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+.badge.green { background: #2ecc71; }
+.badge.blue { background: #3498db; }
+.badge.orange { background: #f39c12; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin: 12px 0; }
+table th { background: #16213e; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; }
+table td { padding: 10px 14px; border-bottom: 1px solid #eef0f4; }
+table tr:hover td { background: #f8f9fc; }
+.footer { text-align: center; color: #888; font-size: 13px; margin-top: 48px; padding-top: 24px; border-top: 1px solid #eef0f4; }
+@media print { body { background: #fff; padding: 0; } .sommaire { break-inside: avoid; } .card { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;">
+  <a href="index.html" style="text-decoration:none;background:#e94560;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;">&larr; Accueil</a>
+  <a href="fiche-produit-gesticom-pro.html" style="text-decoration:none;background:#16213e;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;">&#x1F4C4; Fiche Produit &rarr;</a>
+</div>
+
+<h1>Formation Commerciale</h1>
+<p class="subtitle">Prospecter et vendre GestiCom Pro aux commerces &mdash; Guide du commercial</p>
+
+<div class="sommaire">
+<h3>Sommaire</h3>
+<ol>
+<li><a href="#section1">Avant l'appel : conna&icirc;tre son prospect</a></li>
+<li><a href="#section2">Les 4 grandes douleurs du commer&ccedil;ant</a></li>
+<li><a href="#section3">Argumentaire par secteur</a></li>
+<li><a href="#section4">Script d'appel t&eacute;l&eacute;phonique</a></li>
+<li><a href="#section5">Gestion des objections</a></li>
+<li><a href="#section6">Processus de vente en 5 &eacute;tapes</a></li>
+<li><a href="#section7">R&eacute;partition des prospects</a></li>
+<li><a href="#section8">Questions fr&eacute;quentes</a></li>
+</ol>
+</div>
+
+<!-- Section 1 -->
+<h2 id="section1">1. Avant l'appel : conna&icirc;tre son prospect</h2>
+<div class="card highlight">
+<p><strong>&#x1F50D; Recherche pr&eacute;paratoire (5 minutes) :</strong></p>
+<ul style="padding-left:20px;">
+<li>Quel est son secteur d'activit&eacute; ? (quincaillerie, alimentaire, pi&egrave;ces auto, etc.)</li>
+<li>Quelle taille ? (nombre de produits, employ&eacute;s, magasins)</li>
+<li>A-t-il d&eacute;j&agrave; un logiciel ? Lequel ? (QuickBooks, Excel, cahier, autre)</li>
+<li>Combien de d&eacute;p&ocirc;ts / magasins ?</li>
+<li>Fait-il du cr&eacute;dit client ?</li>
+<li>Tient-il une comptabilit&eacute; SYSCOHADA ?</li>
+</ul>
+</div>
+
+<!-- Section 2 -->
+<h2 id="section2">2. Les 4 grandes douleurs du commer&ccedil;ant</h2>
+<div class="two-col">
+<div class="card orange">
+<h4>&#x1F4CA; 1. Gestion manuelle / Excel</h4>
+<p><strong>Douleur :</strong> Le commer&ccedil;ant note tout sur un cahier ou des fichiers Excel. Il passe des heures &agrave; tout ressaisir, fait des erreurs, perd du temps.</p>
+<p><strong>Notre solution :</strong> GestiCom Pro automatise ventes, achats, stocks, comptabilit&eacute;. Une seule saisie, tout est synchronis&eacute;.</p>
+</div>
+<div class="card orange">
+<h4>&#x1F4B0; 2. Stocks inconnus / invendus</h4>
+<p><strong>Douleur :</strong> Le commer&ccedil;ant ne sait pas ce qu'il a en stock, ce qui se vend vite ou lentement. Il r&eacute;approvisionne &agrave; l'aveugle, a des ruptures ou des surstocks.</p>
+<p><strong>Notre solution :</strong> Inventaire en temps r&eacute;el, alertes de stock minimum, suggestions d'achat automatiques bas&eacute;es sur l'historique.</p>
+</div>
+<div class="card orange">
+<h4>&#x1F4B5; 3. Cr&eacute;dit client non suivi / tr&eacute;sorerie tendue</h4>
+<p><strong>Douleur :</strong> Le commer&ccedil;ant vend &agrave; cr&eacute;dit mais ne suit pas les impay&eacute;s. Sa tr&eacute;sorerie est un myst&egrave;re, il ne sait pas combien on lui doit.</p>
+<p><strong>Notre solution :</strong> Comptes courants clients, plafonds de cr&eacute;dit, relances automatiques, &eacute;tat de tr&eacute;sorerie consolid&eacute; (caisse + banque + mobile money).</p>
+</div>
+<div class="card orange">
+<h4>&#x1F4C4; 4. Comptabilit&eacute; manuelle / non conforme</h4>
+<p><strong>Douleur :</strong> Le commer&ccedil;ant doit pr&eacute;senter une comptabilit&eacute; conforme SYSCOHADA mais tout est fait &agrave; la main ou par un comptable externe qui facture cher. Les &eacute;critures sont en retard, le bilan de fin d&rsquo;exercice est une gal&egrave;re.</p>
+<p><strong>Notre solution :</strong> GestiCom Pro g&eacute;n&egrave;re automatiquement toutes les &eacute;critures comptables depuis les ventes, achats, caisse et banque. Le bilan de fin d&rsquo;exercice est pr&ecirc;t en un clic, conforme SYSCOHADA, sans double saisie.</p>
+</div>
+</div>
+
+<!-- Section 3 -->
+<h2 id="section3">3. Argumentaire par secteur</h2>
+
+<div class="card blue">
+<h4>&#x1F3ED; N&eacute;goce &amp; Distribution (grossistes, importateurs)</h4>
+<ul style="padding-left:20px;">
+<li><strong>Angle d'attaque :</strong> "Vous importez des conteneurs, vous revendez en gros et au d&eacute;tail. Comment suivez-vous vos stocks aujourd'hui ?"</li>
+<li>Gestion des achats en lots, frais d'approche int&eacute;gr&eacute;s au prix de revient (PAMP)</li>
+<li>Ventes en gros et au d&eacute;tail, prix multiples par quantit&eacute;</li>
+<li>Suivi des fournisseurs, commandes, &eacute;ch&eacute;ances</li>
+</ul>
+</div>
+
+<div class="card blue">
+<h4>&#x1F3E2; Quincaillerie &amp; Mat&eacute;riaux BTP</h4>
+<ul style="padding-left:20px;">
+<li><strong>Angle d'attaque :</strong> "Vous avez des milliers de r&eacute;f&eacute;rences. Est-ce que vous perdez du temps &agrave; chercher les prix chaque fois ?"</li>
+<li>Catalogue produit avec recherche par code-barres, cat&eacute;gorie, fournisseur</li>
+<li>Tarifs clients professionnels vs particuliers</li>
+<li>Gestion des clients BTP avec cr&eacute;dit et suivi des chantiers</li>
+</ul>
+</div>
+
+<div class="card blue">
+<h4>&#x1F4E6; Alimentaire &amp; &Eacute;picerie (supermarch&eacute;s, sup&eacute;rettes)</h4>
+<ul style="padding-left:20px;">
+<li><strong>Angle d'attaque :</strong> "Avec des produits p&eacute;rissables, comment &eacute;vitez-vous les pertes et les ruptures ?"</li>
+<li>Alertes de stock minimum et suggestions de r&eacute;approvisionnement</li>
+<li>Suivi des dates de p&eacute;remption (via notes/observations)</li>
+<li>Inventaire tournant possible, multi-d&eacute;p&ocirc;ts</li>
+</ul>
+</div>
+
+<div class="card blue">
+<h4>&#x1F527; Mat&eacute;riel &eacute;lectrique &amp; Pi&egrave;ces d&eacute;tach&eacute;es</h4>
+<ul style="padding-left:20px;">
+<li><strong>Angle d'attaque :</strong> "Avec toutes ces r&eacute;f&eacute;rences techniques, comment retrouvez-vous un produit rapidement ?"</li>
+<li>Recherche multi-crit&egrave;res, code-barres, scan int&eacute;gr&eacute;</li>
+<li>Liens fournisseur pour chaque produit, r&eacute;approvisionnement rapide</li>
+</ul>
+</div>
+
+<div class="card blue">
+<h4>&#x1F3E5; Services avec stock (pharmacies, m&eacute;dical, fournitures bureau)</h4>
+<ul style="padding-left:20px;">
+<li><strong>Angle d'attaque :</strong> "Vous devez suivre vos entr&eacute;es et sorties pr&eacute;cis&eacute;ment. Comment g&eacute;rez-vous vos inventaires ?"</li>
+<li>Tra&ccedil;abilit&eacute; compl&egrave;te des mouvements de stock</li>
+<li>Multi-d&eacute;p&ocirc;ts pour mat&eacute;riel m&eacute;dical / fournitures</li>
+<li>Export PDF pour les rapports et inventaires</li>
+</ul>
+</div>
+
+<!-- Section 4 -->
+<h2 id="section4">4. Script d'appel t&eacute;l&eacute;phonique</h2>
+
+<div class="card green">
+<h4>&#x1F4DE; Accroche (15 secondes)</h4>
+<div class="script">
+<p><strong>Commercial :</strong> "Bonjour [Nom du g&eacute;rant], je m'appelle [Pr&eacute;nom] de GSN EXPERTISES. Je contacte les commerces &agrave; [Ville] pour leur pr&eacute;senter notre logiciel de gestion GestiCom Pro. Je ne vous retiens pas longtemps : est-ce que vous utilisez d&eacute;j&agrave; un logiciel pour g&eacute;rer vos ventes et vos stocks ?"</p>
+</div>
+</div>
+
+<div class="card green">
+<h4>&#x1F4AD; D&eacute;couverte (2-3 minutes)</h4>
+<div class="script">
+<p><strong>Commercial :</strong> "D'accord. Et comment faites-vous pour suivre [ce qui le concerne le plus] : vos stocks, vos ventes, vos clients &agrave; cr&eacute;dit ?"</p>
+<p>Poser des questions ouvertes :</p>
+<ul style="padding-left:20px;margin-top:4px;">
+<li>"Est-ce que vous arrivez &agrave; savoir en temps r&eacute;el ce qu'il vous reste en stock ?"</li>
+<li>"Comment g&eacute;rez-vous le cr&eacute;dit client ?"</li>
+<li>"Est-ce que votre comptable vous demande des documents r&eacute;guli&egrave;rement ?"</li>
+<li>"Combien de temps passez-vous sur Excel chaque jour ?"</li>
+</ul>
+</div>
+</div>
+
+<div class="card green">
+<h4>&#x1F4BC; Proposition de valeur (1 minute)</h4>
+<div class="script">
+<p><strong>Commercial :</strong> "Justement, GestiCom Pro a &eacute;t&eacute; con&ccedil;u pour r&eacute;soudre ces probl&egrave;mes. C'est un logiciel complet qui g&egrave;re :</p>
+<ul style="padding-left:20px;margin-top:4px;">
+<li>Vos ventes et achats avec un simple clic</li>
+<li>Vos stocks en temps r&eacute;el, avec alerte quand un produit est bas</li>
+<li>Vos clients &agrave; cr&eacute;dit avec relev&eacute;s automatiques</li>
+<li>Votre comptabilit&eacute; conforme SYSCOHADA sans double saisie</li>
+<li>Votre caisse, banque et mobile money</li>
+</ul>
+<p style="margin-top:8px;">Et tout cela dans un seul logiciel, sans abonnement co&ucirc;teux, install&eacute; directement sur votre ordinateur."</p>
+</div>
+</div>
+
+<div class="card green">
+<h4>&#x1F4C5; Prise de rendez-vous</h4>
+<div class="script">
+<p><strong>Commercial :</strong> "Je vous propose qu'on se voie [jour/heure] pour que je vous fasse une d&eacute;monstration de 20 minutes. Vous pourrez voir exactement comment le logiciel fonctionne pour votre commerce. &Ccedil;a vous dit ?"</p>
+</div>
+</div>
+
+<!-- Section 5 -->
+<h2 id="section5">5. Gestion des objections</h2>
+
+<table>
+<thead><tr><th>Objection</th><th>R&eacute;ponse</th></tr></thead>
+<tbody>
+<tr><td>"Je n'ai pas besoin, Excel me suffit"</td><td>"Excel est tr&egrave;s bien, mais &agrave; partir de quelques centaines de produits, les erreurs et le temps perdu deviennent &eacute;normes. Avec GestiCom Pro, vous faites une vente et la stock baisse automatiquement, le client est suivi, et votre comptable re&ccedil;oit les donn&eacute;es sans que vous ayez &agrave; tout ressaisir."</td></tr>
+<tr><td>"C'est trop cher"</td><td>"GestiCom Pro remplace plusieurs logiciels (vente + stock + comptabilit&eacute;). C'est un investissement unique, pas un abonnement mensuel. Comparez au temps que vous passez sur Excel et aux erreurs de stock qui vous co&ucirc;tent de l'argent."</td></tr>
+<tr><td>"J'ai d&eacute;j&agrave; un logiciel"</td><td>"Tant mieux, vous connaissez l'int&eacute;r&ecirc;t d'&ecirc;tre &eacute;quip&eacute; ! Qu'est-ce qui vous manque dans votre solution actuelle ? La plupart de nos clients viennent d'autres logiciels qui ne g&egrave;rent pas bien la comptabilit&eacute; SYSCOHADA ou les stocks multi-d&eacute;p&ocirc;ts."</td></tr>
+<tr><td>"Je ne suis pas &agrave; l'aise avec l'informatique"</td><td>"GestiCom Pro a &eacute;t&eacute; pens&eacute; pour &ecirc;tre simple. Nous vous formons sur place et notre interface est intuitive. En une journ&eacute;e vous serez autonome."</td></tr>
+<tr><td>"Je vais r&eacute;fl&eacute;chir"</td><td>"Bien sûr ! Qu'est-ce qui vous freine exactement ? Je peux vous donner des informations suppl&eacute;mentaires ou vous montrer un cas concret d'un commerce comme le v&ocirc;tre."</td></tr>
+<tr><td>"La connexion Internet est mauvaise chez moi"</td><td>"Pas de souci ! GestiCom Pro fonctionne sans connexion. Vous travaillez normalement et quand Internet revient, tout se synchronise automatiquement."</td></tr>
+</tbody>
+</table>
+
+<!-- Section 6 -->
+<h2 id="section6">6. Processus de vente en 5 &eacute;tapes</h2>
+
+<div class="two-col">
+<div class="card"><h4 style="color:#e94560;">&#x2460; Prospection</h4><p>Identifier les prospects via la liste fournie (165 d&eacute;j&agrave; identifi&eacute;s). Filtrer par score (4+ en priorit&eacute;). Pr&eacute;parer 5 appels par jour.</p></div>
+<div class="card"><h4 style="color:#3498db;">&#x2461; D&eacute;couverte</h4><p>Premier contact (appel). Identifier les douleurs. Poser des questions ouvertes. Qualifier le prospect : taille, besoin, budget.</p></div>
+<div class="card"><h4 style="color:#2ecc71;">&#x2462; D&eacute;monstration</h4><p>RDV physique ou visio (20-30 min). Montrer les fonctionnalit&eacute;s qui r&eacute;pondent &agrave; ses douleurs. Pas tout montrer, montrer ce qui le concerne.</p></div>
+<div class="card"><h4 style="color:#f39c12;">&#x2463; Proposition</h4><p>Devis avec options : licence, installation, formation. Expliquer le retour sur investissement (temps gagn&eacute;, erreurs &eacute;vit&eacute;es).</p></div>
+<div class="card"><h4 style="color:#e94560;">&#x2464; Suivi / Closing</h4><p>Relance &agrave; J+2, J+7. Lever les objections restantes. Proposer une p&eacute;riode d'essai si n&eacute;cessaire. Demander la d&eacute;cision.</p></div>
+</div>
+
+<!-- Section 7 -->
+<h2 id="section7">7. R&eacute;partition des prospects</h2>
+
+<div class="card">
+<p><strong>Notre base actuelle : 165 prospects r&eacute;partis comme suit :</strong></p>
+<table style="margin-top:12px;">
+<thead><tr><th>Ville</th><th>Prospects</th><th>Dont prioritaires (score 4+)</th><th>Secteurs couverts</th></tr></thead>
+<tbody>
+<tr><td><strong>Abidjan</strong></td><td>124</td><td>15+</td><td>Tous les secteurs</td></tr>
+<tr><td><strong>Guiglo</strong></td><td>11</td><td>2</td><td>Pharmacie, n&eacute;goce, pi&egrave;ces auto</td></tr>
+<tr><td><strong>Du&eacute;kou&eacute;</strong></td><td>7</td><td>2</td><td>Industrie bois, n&eacute;goce, pharmacie</td></tr>
+<tr><td><strong>Man</strong></td><td>6</td><td>2</td><td>Supermarch&eacute;, pharmacie, imprimerie</td></tr>
+<tr><td><strong>Danan&eacute;</strong></td><td>5</td><td>2</td><td>Supermarch&eacute;, industrie bois</td></tr>
+<tr><td><strong>Blol&eacute;quin</strong></td><td>3</td><td>1</td><td>Pharmacie, quincaillerie</td></tr>
+<tr><td><strong>Plus (5 villes)</strong></td><td>9</td><td>1</td><td>Quincaillerie, n&eacute;goce</td></tr>
+</tbody>
+</table>
+<p style="margin-top:8px;"><strong>Conseil :</strong> Commencez par les prospects score 4+ (grosses entreprises structur&eacute;es). Puis descendez vers les score 3. Les score 2 sont &agrave; contacter en compl&eacute;ment.</p>
+</div>
+
+<!-- Section 8 -->
+<h2 id="section8">8. Questions fr&eacute;quentes</h2>
+
+<div class="card">
+<h4>Quel est le prix de GestiCom Pro ?</h4>
+<p>&Agrave; d&eacute;finir avec la direction selon le module, le nombre d'utilisateurs et les options (formation, installation). Pr&eacute;parer un devis personnalis&eacute; pour chaque prospect.</p>
+</div>
+
+<div class="card">
+<h4>Combien de temps pour installer et former ?</h4>
+<p>Installation : 30 minutes. Formation : 1 &agrave; 2 jours selon la taille du commerce. Migration des donn&eacute;es : 1 jour suppl&eacute;mentaire si le client a des donn&eacute;es &agrave; importer.</p>
+</div>
+
+<div class="card">
+<h4>Le logiciel fonctionne-t-il sur Mac ?</h4>
+<p>GestiCom Pro fonctionne dans un navigateur web. Il peut &ecirc;tre utilis&eacute; depuis n'importe quel appareil (PC, Mac, tablette, t&eacute;l&eacute;phone). Pour l'installation serveur, un PC Windows est recommand&eacute;.</p>
+</div>
+
+<div class="card">
+<h4>Y a-t-il un abonnement mensuel ?</h4>
+<p>Non, GestiCom Pro est une licence perp&eacute;tuelle. Pas d'abonnement mensuel. La licence inclut les mises &agrave; jour. Options payantes : installation, formation, h&eacute;bergement si souhait&eacute;.</p>
+</div>
+
+<div class="card">
+<h4>Peut-on importer les donn&eacute;es existantes ?</h4>
+<p>Oui. Nous importons les produits (depuis Excel/CSV), les clients, les fournisseurs et les stocks. L'import des historiques de ventes et achats est possible selon le volume.</p>
+</div>
+
+<div class="card">
+<h4>Le logiciel respecte-t-il le RGPD / la r&eacute;glementation locale ?</h4>
+<p>Les donn&eacute;es sont stock&eacute;es localement (sur le PC du client ou son serveur r&eacute;seau). Aucune donn&eacute;e n'est envoy&eacute;e &agrave; l'ext&eacute;rieur sans autorisation. Conforme aux r&egrave;gles de la CNPDCI.</p>
+</div>
+
+<div class="card">
+<h4>Peut-on payer la licence en plusieurs fois ?</h4>
+<p>Oui, la licence peut &ecirc;tre &eacute;tal&eacute;e sur 10 mois sans frais suppl&eacute;mentaires. Vous b&eacute;n&eacute;ficiez de l&rsquo;int&eacute;gralit&eacute; du logiciel d&egrave;s la premi&egrave;re &eacute;ch&eacute;ance. Contactez-nous pour &eacute;tablir un &eacute;ch&eacute;ancier adapt&eacute; &agrave; votre tr&eacute;sorerie.</p>
+</div>
+
+<div class="footer">
+  <p>GestiCom Pro v3.46.5 &mdash; GSN EXPERTISES GROUP &mdash; <a href="mailto:pacous2000@gmail.com">pacous2000@gmail.com</a> &mdash; 05 44 81 49 24</p>
+  <p style="margin-top:4px;">Documents associ&eacute;s : <a href="fiche-produit-gesticom-pro.html">Fiche Produit</a></p>
+</div>
+
+</div>
+</body>
+</html>

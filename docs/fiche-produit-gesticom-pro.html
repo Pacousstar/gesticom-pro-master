@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fiche Produit - GestiCom Pro ERP</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', Arial, sans-serif; color: #1a1a2e; background: #f8f9fc; padding: 0; }
+.header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: #fff; padding: 60px 40px; text-align: center; }
+.header h1 { font-size: 42px; font-weight: 800; margin-bottom: 8px; letter-spacing: -1px; }
+.header .version { background: rgba(255,255,255,0.15); display: inline-block; padding: 4px 16px; border-radius: 20px; font-size: 14px; margin-bottom: 16px; }
+.header p { font-size: 18px; opacity: 0.85; max-width: 700px; margin: 0 auto; line-height: 1.6; }
+.container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+.section { margin-bottom: 48px; }
+.section h2 { font-size: 28px; font-weight: 700; color: #0f3460; border-left: 5px solid #e94560; padding-left: 16px; margin-bottom: 24px; }
+.section h3 { font-size: 20px; font-weight: 600; color: #16213e; margin: 20px 0 12px; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.card { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #eef0f4; }
+.card .icon { font-size: 32px; margin-bottom: 12px; }
+.card h4 { font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #0f3460; }
+.card p { font-size: 13px; color: #555; line-height: 1.5; }
+.badge { display: inline-block; background: #e94560; color: #fff; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+.badge.green { background: #2ecc71; }
+.badge.blue { background: #3498db; }
+.badge.orange { background: #f39c12; }
+table.features { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+table.features th { background: #16213e; color: #fff; padding: 12px 16px; text-align: left; font-weight: 600; }
+table.features td { padding: 10px 16px; border-bottom: 1px solid #eef0f4; }
+table.features tr:hover td { background: #f8f9fc; }
+table.features td:first-child { font-weight: 600; width: 200px; color: #0f3460; }
+.usp-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.usp-list li { background: #fff; border-radius: 10px; padding: 20px; border: 1px solid #eef0f4; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
+.usp-list li strong { display: block; color: #0f3460; margin-bottom: 4px; }
+.usp-list li p { font-size: 13px; color: #666; }
+.footer { background: #1a1a2e; color: #fff; padding: 40px; text-align: center; }
+.footer h3 { font-size: 20px; margin-bottom: 8px; }
+.footer p { opacity: 0.7; font-size: 14px; }
+.cta { display: inline-block; background: #e94560; color: #fff; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; margin-top: 16px; }
+.cta:hover { background: #d63851; }
+@media print { body { background: #fff; } .header { background: #1a1a2e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } table.features th { background: #16213e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="version">Version 3.46.5</div>
+  <h1>GestiCom Pro</h1>
+  <p>ERP de gestion commerciale complet pour PME/PMI <br>Conforme SYSCOHADA &bull; Multi-d&eacute;p&ocirc;ts &bull; Multi-entit&eacute;s</p>
+</div>
+
+<div class="container">
+
+  <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;">
+    <a href="index.html" style="text-decoration:none;background:#e94560;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;">&larr; Accueil</a>
+    <a href="formation-commerciale-gesticom-pro.html" style="text-decoration:none;background:#16213e;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;">&#x1F3AD; Guide Formation &rarr;</a>
+  </div>
+
+  <!-- Présentation -->
+  <div class="section">
+    <h2>Pr&eacute;sentation</h2>
+    <p style="font-size:15px;line-height:1.7;color:#444;max-width:800px;">
+      <strong>GestiCom Pro</strong> est un logiciel ERP (Enterprise Resource Planning) con&ccedil;u pour les PME/PMI
+      de <strong>C&ocirc;te d'Ivoire</strong> et de la zone francophone ouest-africaine. Il couvre
+      l'int&eacute;gralit&eacute; du cycle commercial : <strong>ventes, achats, stocks, comptabilit&eacute;
+      SYSCOHADA, caisse, banque, tr&eacute;sorerie</strong> et <strong>gestion des clients/fournisseurs</strong>.
+      Pens&eacute; pour les commerces de n&eacute;goce, quincaillerie, distribution, alimentaire et
+      services avec stock.
+    </p>
+  </div>
+
+  <!-- Fonctionnalités clés -->
+  <div class="section">
+    <h2>Modules &amp; Fonctionnalit&eacute;s</h2>
+    <table class="features">
+      <thead><tr><th>Module</th><th>Fonctionnalit&eacute;s</th></tr></thead>
+      <tbody>
+        <tr><td>Ventes</td><td>Cr&eacute;ation/&eacute;dition/consultation, paiements (esp&egrave;ces, mobile money, ch&egrave;que, virement, cr&eacute;dit), vente rapide, livraison diff&eacute;r&eacute;e, retraits partiels, avoirs/retours, historique archiv&eacute;</td></tr>
+        <tr><td>Achats</td><td>Cr&eacute;ation/&eacute;dition/consultation, frais d'approche int&eacute;gr&eacute;s au PAMP, commandes fournisseurs (brouillon &rarr; valid&eacute; &rarr; r&eacute;ception)</td></tr>
+        <tr><td>Produits / Catalogues</td><td>Gestion compl&egrave;te du catalogue : code-barres, cat&eacute;gories, unit&eacute;s, prix d'achat/vente, PAMP, seuil d'alerte, lien fournisseur</td></tr>
+        <tr><td>Stocks / Inventaire</td><td>Multi-d&eacute;p&ocirc;ts, entr&eacute;es/sorties, transferts entre magasins, inventaire, alertes de stock, historique des mouvements, valeur du stock</td></tr>
+        <tr><td>Clients</td><td>Fiche client (comptant/cr&eacute;dit), plafond de cr&eacute;dit, NCC, points de fid&eacute;lit&eacute;, relev&eacute; de compte, soldes, encaissements, relances automatiques</td></tr>
+        <tr><td>Fournisseurs</td><td>Fiche fournisseur, NCC, relev&eacute; de compte, soldes, r&egrave;glements</td></tr>
+        <tr><td>Comptes Courants</td><td>Comptes courants clients &amp; fournisseurs, lettrage, compensation, d&eacute;tection de solde</td></tr>
+        <tr><td>Caisse</td><td>Entr&eacute;es/sorties par magasin, motifs, rapport consolid&eacute;, export PDF/Excel</td></tr>
+        <tr><td>Banque</td><td>Multi-comptes bancaires, d&eacute;p&ocirc;ts/retraits/virements, rapprochement bancaire, encaissements Mobile Money</td></tr>
+        <tr><td>Charges &amp; D&eacute;penses</td><td>Charges fixes et variables (loyer, salaires, &eacute;lectricit&eacute;&hellip;), d&eacute;penses courantes par cat&eacute;gorie avec suivi des paiements</td></tr>
+        <tr><td>Comptabilit&eacute; SYSCOHADA</td><td>Plan de comptes, journaux (AC, VE, OD), &eacute;critures automatiques depuis les op&eacute;rations, grand livre, balance, bilan comptable</td></tr>
+        <tr><td>Tr&eacute;sorerie</td><td>Vue consolid&eacute;e caisse + banque, flux de tr&eacute;sorerie</td></tr>
+        <tr><td>Tableau de Bord</td><td>Indicateurs cl&eacute;s (CA du jour, top produits, alertes), heatmap, donuts, activit&eacute; r&eacute;cente, suggestions d'achat</td></tr>
+        <tr><td>Rapports</td><td>Rapports ventes (par vendeur, produit, client), achats, inventaire, finances, rentabilit&eacute; par produit</td></tr>
+        <tr><td>Administration</td><td>Utilisateurs (6 r&ocirc;les, permissions fines), magasins, entit&eacute;s juridiques, param&egrave;tres, licence, sauvegardes automatiques</td></tr>
+        <tr><td>Audit &amp; S&eacute;curit&eacute;</td><td>Journal d'audit complet (actions &amp; utilisateurs), licence RSA, JWT, logs</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Points forts -->
+  <div class="section">
+    <h2>Avantages Cl&eacute;s</h2>
+    <ul class="usp-list">
+      <li><strong>&#x2713; Conforme SYSCOHADA</strong><p>&Eacute;critures comptables automatiques g&eacute;n&eacute;r&eacute;es depuis toutes les op&eacute;rations (ventes, achats, caisse, banque). Bilan et balance pr&ecirc;ts.</p></li>
+      <li><strong>&#x2713; Multi-entit&eacute;s &amp; Multi-d&eacute;p&ocirc;ts</strong><p>Plusieurs soci&eacute;t&eacute;s (maison m&egrave;re + succursales), chacune avec plusieurs magasins. Donn&eacute;es isol&eacute;es par entit&eacute;.</p></li>
+      <li><strong>&#x2713; PAMP avec Frais d'Approche</strong><p>Calcul du Prix d'Achat Moyen Pond&eacute;r&eacute; int&eacute;grant transport, douane et autres frais selon les normes SYSCOHADA.</p></li>
+      <li><strong>&#x2713; Mobile Money natif</strong><p>Encaissements MTN Mobile Money, Orange Money, etc. Mode de paiement dominant en Afrique de l'Ouest.</p></li>
+      <li><strong>&#x2713; Application hors-ligne (PWA)</strong><p>Fonctionne m&ecirc;me sans connexion Internet. Synchronisation automatique quand la connexion revient.</p></li>
+      <li><strong>&#x2713; Installation Windows simplifi&eacute;e</strong><p>Executable autonome avec Node.js et SQLite embarqu&eacute;s. Aucun serveur &agrave; configurer. Aussi disponible en Docker.</p></li>
+      <li><strong>&#x2713; Code-barres &amp; Scanner</strong><p>G&eacute;n&eacute;ration d'&eacute;tiquettes code-barres et scan int&eacute;gr&eacute; pour la recherche produit et l'inventaire.</p></li>
+      <li><strong>&#x2713; Fid&eacute;lit&eacute; Clients</strong><p>Programme de fid&eacute;lit&eacute; avec points cumulables, seuil et taux configurables.</p></li>
+      <li><strong>&#x2713; Alertes Intelligentes</strong><p>Seuils de stock minimum avec alerte automatique, suggestions de r&eacute;approvisionnement bas&eacute;es sur l'historique des ventes.</p></li>
+      <li><strong>&#x2713; Export PDF &amp; Excel</strong><p>Tous les rapports, factures, relev&eacute;s exportables en PDF et Excel. Mod&egrave;les d'impression personnalisables.</p></li>
+      <li><strong>&#x2713; Bon de Commande</strong><p>G&eacute;n&eacute;ration des bons de commande fournisseurs avec suivi des statuts (brouillon, valid&eacute;, r&eacute;ceptionn&eacute;). Transformez vos suggestions d'achat en commandes en un clic.</p></li>
+      <li><strong>&#x2713; Bilan de Fin d'Exercice Automatique</strong><p>Le bilan comptable SYSCOHADA est g&eacute;n&eacute;r&eacute; automatiquement en un clic, sans ressaisie, &agrave; partir de toutes les op&eacute;rations de l'ann&eacute;e. Fini les heures pass&eacute;es chez le comptable : votre bilan est pr&ecirc;t le 31 janvier.</p></li>
+    </ul>
+  </div>
+
+  <!-- Pour qui -->
+  <div class="section">
+    <h2>Pour quels commerces ?</h2>
+    <div class="grid-3">
+      <div class="card"><h4>&#x1F3ED; N&eacute;goce &amp; Distribution</h4><p>Grossistes, importateurs, distributeurs multi-produits. Gestion des achats en gros, revente au d&eacute;tail, suivi des stocks.</p></div>
+      <div class="card"><h4>&#x1F3E2; Quincaillerie &amp; BTP</h4><p>Mat&eacute;riaux de construction, outillage. Gestion des stocks par SKU, prix multiples, clients pro/particuliers.</p></div>
+      <div class="card"><h4>&#x1F4E6; Alimentaire &amp; &Eacute;picerie</h4><p>Supermarch&eacute;s, sup&eacute;rettes, distribution alimentaire. Gestion des lots, dates de p&eacute;remption, inventaire tournant.</p></div>
+      <div class="card"><h4>&#x1F527; Mat&eacute;riel &eacute;lectrique</h4><p>Fournisseurs de mat&eacute;riel &eacute;lectrique. Catalogue technique, prix par quantit&eacute;, devis.</p></div>
+      <div class="card"><h4>&#x1F697; Pi&egrave;ces d&eacute;tach&eacute;es Auto/Moto</h4><p>Stock de pi&egrave;ces, recherche rapide, lien avec fournisseurs, rotation des stocks.</p></div>
+      <div class="card"><h4>&#x1F3E5; Pharmacies &amp; M&eacute;dical</h4><p>Distribution de fournitures m&eacute;dicales et pharmaceutiques. Lots, p&eacute;remption, tra&ccedil;abilit&eacute;.</p></div>
+      <div class="card"><h4>&#x1F4F1; Vente de t&eacute;l&eacute;phones portables</h4><p>Gestion des mod&egrave;les, IMEI, accessoires, reconditionn&eacute;s. Stock par variante (couleur, capacit&eacute;).</p></div>
+      <div class="card"><h4>&#x1F455; Vente de v&ecirc;tements</h4><p>Catalogue mode avec tailles, couleurs, collections. Gestion des saisons, soldes, d&eacute;stockage.</p></div>
+      <div class="card"><h4>&#x1F484; Vente de cosm&eacute;tiques</h4><p>Parfumerie, soins, maquillage. Suivi des lots, dates de p&eacute;remption, rotation rapide.</p></div>
+    </div>
+  </div>
+
+  <!-- Technologies -->
+  <div class="section">
+    <h2>Technologies</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
+      <span class="badge">Next.js 16</span>
+      <span class="badge">React 19</span>
+      <span class="badge">TypeScript</span>
+      <span class="badge">Prisma ORM</span>
+      <span class="badge green">SQLite</span>
+      <span class="badge blue">PostgreSQL</span>
+      <span class="badge">Tailwind CSS</span>
+      <span class="badge orange">PWA</span>
+      <span class="badge">JWT Auth</span>
+      <span class="badge">RSA Licence</span>
+      <span class="badge">Docker</span>
+      <span class="badge">Windows Installer</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <h3>GestiCom Pro</h3>
+  <p>Version 3.46.5 &mdash; &Eacute;dit&eacute; par GSN EXPERTISES GROUP</p>
+  <p style="margin-top:4px;">Contact : <a href="mailto:pacous2000@gmail.com" style="color:#e94560;">pacous2000@gmail.com</a> &mdash; 05 44 81 49 24</p>
+</div>
+
+</body>
+</html>
