@@ -1,0 +1,49 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Compile installer
+        run: iscc GestiCom-Install.iss
+
+      - name: Get version
+        id: vars
+        run: |
+          $version = (Get-Content version.json | ConvertFrom-Json).version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "exe=GestiCom-Pro-v$version-Setup.exe" >> $env:GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: GestiCom Pro v${{ steps.vars.outputs.version }}
+          body: |
+            ## GestiCom Pro v${{ steps.vars.outputs.version }}
+
+            **Installation** : Téléchargez l'exécutable et lancez-le en tant qu'administrateur.
+
+            **Nouveautés** :
+            - Consultez les releases précédentes pour le détail des changements.
+
+            **Configuration requise** : Windows 10/11, 4 Go RAM, 500 Mo disque.
+          files: ${{ steps.vars.outputs.exe }}
+          generate_release_notes: true

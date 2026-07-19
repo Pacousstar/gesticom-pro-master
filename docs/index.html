@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GestiCom Pro — Logiciel de Gestion de Commerce</title>
+<meta name="description" content="GestiCom Pro : gérez vos ventes, achats, stocks et comptabilité en toute simplicité. Téléchargez la dernière version.">
+<link rel="icon" href="https://raw.githubusercontent.com/Pacousstar/gesticom-pro-master/main/public/gesticom.ico">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f2937;line-height:1.6;overflow-x:hidden}
+
+/* Header */
+.header{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-bottom:1px solid #e5e7eb;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between}
+.header .logo{display:flex;align-items:center;gap:8px;text-decoration:none;color:#1f2937;font-weight:700;font-size:18px}
+.header .logo img{height:32px}
+.header .logo span{color:#FF6B35}
+.header nav{display:flex;gap:24px;align-items:center}
+.header nav a{text-decoration:none;color:#6b7280;font-weight:500;font-size:14px;transition:color .2s}
+.header nav a:hover{color:#FF6B35}
+.header .btn-download{background:#FF6B35;color:#fff!important;padding:8px 20px;border-radius:8px;font-weight:600;transition:background .2s}
+.header .btn-download:hover{background:#E5561E!important}
+
+/* Hero */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:80px 24px 40px;background:linear-gradient(135deg,#fff8f5 0%,#fff 50%,#f0fdf4 100%);position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-50%;right:-20%;width:600px;height:600px;background:radial-gradient(circle,rgba(255,107,53,.08) 0%,transparent 70%);pointer-events:none}
+.hero::after{content:'';position:absolute;bottom:-30%;left:-10%;width:400px;height:400px;background:radial-gradient(circle,rgba(76,175,80,.06) 0%,transparent 70%);pointer-events:none}
+.hero-content{max-width:1100px;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;position:relative;z-index:1}
+.hero-text h1{font-size:48px;font-weight:800;line-height:1.15;margin-bottom:20px}
+.hero-text h1 span{color:#FF6B35}
+.hero-text p{font-size:18px;color:#6b7280;margin-bottom:32px;max-width:480px}
+.hero-buttons{display:flex;gap:16px;flex-wrap:wrap}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;background:#FF6B35;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:600;font-size:16px;transition:all .2s;box-shadow:0 4px 14px rgba(255,107,53,.35)}
+.btn-primary:hover{background:#E5561E;transform:translateY(-2px);box-shadow:0 6px 20px rgba(255,107,53,.4)}
+.btn-secondary{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1f2937;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:600;font-size:16px;border:2px solid #e5e7eb;transition:all .2s}
+.btn-secondary:hover{border-color:#FF6B35;color:#FF6B35}
+.hero-visual{display:flex;justify-content:center;align-items:center}
+.hero-logo{width:100%;max-width:380px;height:auto}
+.hero-stats{display:flex;gap:40px;margin-top:40px}
+.hero-stats div{text-align:center}
+.hero-stats div strong{display:block;font-size:28px;font-weight:800;color:#1f2937}
+.hero-stats div span{font-size:13px;color:#9ca3af;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+
+/* Sections */
+.section{padding:80px 24px}
+.section-title{text-align:center;margin-bottom:16px}
+.section-title h2{font-size:36px;font-weight:800;margin-bottom:12px}
+.section-title h2 span{color:#FF6B35}
+.section-title p{color:#6b7280;font-size:17px;max-width:600px;margin:0 auto}
+.section-inner{max-width:1100px;margin:0 auto}
+
+/* Features */
+.features{background:#fff}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:48px}
+.feature-card{background:#fff;border:1px solid #f3f4f6;border-radius:16px;padding:32px 24px;text-align:center;transition:all .3s;position:relative;overflow:hidden}
+.feature-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.08);border-color:#FF6B35}
+.feature-card .icon{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:26px}
+.feature-card:nth-child(1) .icon{background:#fff5f0;color:#FF6B35}
+.feature-card:nth-child(2) .icon{background:#f0fdf4;color:#4CAF50}
+.feature-card:nth-child(3) .icon{background:#eff6ff;color:#2196F3}
+.feature-card:nth-child(4) .icon{background:#fefce8;color:#FFC107}
+.feature-card:nth-child(5) .icon{background:#fdf2f8;color:#ec4899}
+.feature-card:nth-child(6) .icon{background:#f5f3ff;color:#8b5cf6}
+.feature-card h3{font-size:17px;font-weight:700;margin-bottom:8px}
+.feature-card p{font-size:14px;color:#6b7280;line-height:1.6}
+
+/* Screenshots */
+.screenshots{background:#f9fafb}
+.screenshot-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;margin-top:48px}
+.screenshot-card{border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.06);transition:transform .3s}
+.screenshot-card:hover{transform:scale(1.02)}
+.screenshot-card .placeholder{height:240px;background:linear-gradient(135deg,#fff5f0 0%,#f0fdf4 100%);display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:14px;flex-direction:column;gap:8px;font-weight:500}
+.screenshot-card .placeholder svg{width:48px;height:48px;opacity:.3}
+.screenshot-card .caption{padding:16px 20px;font-weight:600;font-size:15px;color:#1f2937;border-top:1px solid #f3f4f6}
+
+/* Download CTA */
+.download{background:linear-gradient(135deg,#FF6B35 0%,#E5561E 100%);color:#fff;text-align:center;padding:100px 24px;position:relative;overflow:hidden}
+.download::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");pointer-events:none}
+.download h2{font-size:40px;font-weight:800;margin-bottom:16px;position:relative}
+.download p{font-size:18px;opacity:.9;margin-bottom:36px;max-width:500px;margin-left:auto;margin-right:auto;position:relative}
+.download .btn-download-lg{display:inline-flex;align-items:center;gap:12px;background:#fff;color:#FF6B35;padding:18px 44px;border-radius:12px;text-decoration:none;font-weight:700;font-size:18px;transition:all .2s;position:relative;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+.download .btn-download-lg:hover{transform:translateY(-3px);box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.download .version-info{font-size:14px;opacity:.7;margin-top:20px;position:relative}
+
+/* Footer */
+.footer{background:#1f2937;color:#9ca3af;padding:40px 24px;text-align:center;font-size:14px;line-height:1.8}
+.footer a{color:#FF6B35;text-decoration:none}
+.footer a:hover{text-decoration:underline}
+.footer strong{color:#e5e7eb}
+
+/* Mobile */
+@media(max-width:768px){
+  .header nav a:not(.btn-download){display:none}
+  .hero-content{grid-template-columns:1fr;text-align:center;gap:40px}
+  .hero-text h1{font-size:32px}
+  .hero-text p{margin-left:auto;margin-right:auto}
+  .hero-buttons{justify-content:center}
+  .hero-stats{justify-content:center}
+  .features-grid{grid-template-columns:1fr}
+  .screenshot-grid{grid-template-columns:1fr}
+  .section{padding:60px 16px}
+  .section-title h2{font-size:28px}
+  .download h2{font-size:28px}
+  .download .btn-download-lg{padding:16px 28px;font-size:16px}
+}
+@media(max-width:480px){
+  .hero-text h1{font-size:26px}
+  .hero-stats{gap:20px}
+  .hero-stats div strong{font-size:22px}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a href="#" class="logo">
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 280 72' fill='none'%3E%3Cg transform='translate(0,8)'%3E%3Ccircle cx='14' cy='42' r='6' fill='%23E5B227' stroke='%23c49a1e' stroke-width='1'/%3E%3Ccircle cx='10' cy='38' r='5' fill='%23E5B227' stroke='%23c49a1e' stroke-width='.8'/%3E%3Ccircle cx='18' cy='38' r='4' fill='%23E5B227' stroke='%23c49a1e' stroke-width='.8'/%3E%3Cpath d='M28 24h28l-6 20H34l-6-20z' fill='%2322c55e' stroke='%2316a34a' stroke-width='1.2'/%3E%3Cpath d='M38 44a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm20 0a6 6 0 1 1 0 12 6 6 0 0 1 0-12z' fill='%23f97316' stroke='%23ea580c' stroke-width='.8'/%3E%3Crect x='32' y='32' width='6' height='8' rx='1' fill='%23f97316'/%3E%3Crect x='40' y='28' width='6' height='12' rx='1' fill='%23f97316'/%3E%3Crect x='48' y='24' width='6' height='16' rx='1' fill='url(%23barGrad)'/%3E%3Cpath d='M52 18l4 6 4-6' stroke='%2322c55e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Ctext x='54' y='16' font-family='system-ui,sans-serif' font-size='10' font-weight='bold' fill='%23f97316'%3E%24%3C/text%3E%3C/g%3E%3Cdefs%3E%3ClinearGradient id='barGrad' x1='0%25' y1='100%25' x2='0%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%23f97316'/%3E%3Cstop offset='100%25' stop-color='%23fbbf24'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ctext y='38' font-family='system-ui,Segoe UI,sans-serif' font-size='26' font-weight='bold'%3E%3Ctspan x='72' fill='%231f2937'%3EGesti%3C/tspan%3E%3Ctspan x='128' fill='%23f97316'%3ECom%3C/tspan%3E%3C/text%3E%3Ctext x='72' y='54' font-family='system-ui,sans-serif' font-size='10' font-weight='600' fill='%23ea580c' letter-spacing='.05em'%3EGESTION DE COMMERCE%3C/text%3E%3C/svg%3E" alt="GestiCom Pro">
+    <span>Pro</span>
+  </a>
+  <nav>
+    <a href="#features">Fonctionnalités</a>
+    <a href="#screenshots">Aperçu</a>
+    <a href="#download" class="btn-download">Télécharger</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-text">
+      <h1>Gérez votre commerce avec <span>GestiCom Pro</span></h1>
+      <p>Ventes, achats, stocks, comptabilité et gestion multi-postes — tout-en-un, simple et puissant.</p>
+      <div class="hero-buttons">
+        <a href="#download" class="btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Télécharger
+        </a>
+        <a href="#features" class="btn-secondary">En savoir plus</a>
+      </div>
+      <div class="hero-stats">
+        <div><strong>99+</strong><span>Prospects</span></div>
+        <div><strong>3.46.9</strong><span>Version</span></div>
+        <div><strong>1</strong><span>Solution</span></div>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <svg class="hero-logo" viewBox="0 0 280 72" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="GestiCom Pro Logo">
+        <g transform="translate(0, 8)">
+          <circle cx="14" cy="42" r="6" fill="#E5B227" stroke="#c49a1e" stroke-width="1"/>
+          <circle cx="10" cy="38" r="5" fill="#E5B227" stroke="#c49a1e" stroke-width=".8"/>
+          <circle cx="18" cy="38" r="4" fill="#E5B227" stroke="#c49a1e" stroke-width=".8"/>
+          <path d="M28 24h28l-6 20H34l-6-20z" fill="#22c55e" stroke="#16a34a" stroke-width="1.2"/>
+          <path d="M38 44a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm20 0a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" fill="#f97316" stroke="#ea580c" stroke-width=".8"/>
+          <rect x="32" y="32" width="6" height="8" rx="1" fill="#f97316"/>
+          <rect x="40" y="28" width="6" height="12" rx="1" fill="#f97316"/>
+          <rect x="48" y="24" width="6" height="16" rx="1" fill="url(#heroBarGrad)"/>
+          <path d="M52 18l4 6 4-6" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <text x="54" y="16" font-family="system-ui,sans-serif" font-size="10" font-weight="bold" fill="#f97316">$</text>
+        </g>
+        <defs>
+          <linearGradient id="heroBarGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+            <stop offset="0%" stop-color="#f97316"/>
+            <stop offset="100%" stop-color="#fbbf24"/>
+          </linearGradient>
+        </defs>
+        <text y="38" font-family="system-ui,Segoe UI,sans-serif" font-size="26" font-weight="bold">
+          <tspan x="72" fill="#1f2937">Gesti</tspan><tspan x="128" fill="#f97316">Com</tspan>
+        </text>
+        <text x="72" y="54" font-family="system-ui,sans-serif" font-size="10" font-weight="600" fill="#ea580c" letter-spacing=".05em">GESTION DE COMMERCE</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section class="section features" id="features">
+  <div class="section-inner">
+    <div class="section-title">
+      <h2> Tout ce qu'il faut pour <span>gérer votre commerce</span></h2>
+      <p>Une solution complète conçue pour les commerces de proximité, grossistes et entreprises.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        </div>
+        <h3>Ventes & Achats</h3>
+        <p>Facturation, bons de commande, devis, gestion des retours et des règlements.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <h3>Stocks & Inventaire</h3>
+        <p>Suivi des stocks multi-magasins, alertes de rupture, inventaire et valorisation.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <h3>Comptabilité</h3>
+        <p>Compte de résultat, bilan, journal comptable, suivi des créances et dettes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <h3>Caisse & Banque</h3>
+        <p>Gestion de caisse, opérations bancaires, rapprochement, suivi des comptes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3>Clients & Fournisseurs</h3>
+        <p>Fiches clients/fournisseurs, historiques, comptes courants, échéanciers.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </div>
+        <h3>Multi-postes</h3>
+        <p>Mode serveur PostgreSQL : plusieurs postes de travail, même base de données.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section screenshots" id="screenshots">
+  <div class="section-inner">
+    <div class="section-title">
+      <h2>Un aperçu de <span>GestiCom Pro</span></h2>
+      <p>Une interface moderne, claire et conçue pour être efficace au quotidien.</p>
+    </div>
+    <div class="screenshot-grid">
+      <div class="screenshot-card">
+        <div class="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/><line x1="15" y1="21" x2="15" y2="9"/></svg>
+          Dashboard — Vue d'ensemble
+        </div>
+        <div class="caption">Tableau de bord avec indicateurs clés</div>
+      </div>
+      <div class="screenshot-card">
+        <div class="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Facture — Édition
+        </div>
+        <div class="caption">Édition de factures et bons de commande</div>
+      </div>
+      <div class="screenshot-card">
+        <div class="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Stock — Gestion
+        </div>
+        <div class="caption">Suivi des stocks en temps réel</div>
+      </div>
+      <div class="screenshot-card">
+        <div class="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Compta — Bilan
+        </div>
+        <div class="caption">Comptabilité et états financiers</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="download" id="download">
+  <h2>Prêt à simplifier votre gestion ?</h2>
+  <p>Téléchargez la dernière version de GestiCom Pro et commencez dès maintenant.</p>
+  <a href="https://github.com/Pacousstar/gesticom-pro-master/releases/latest" class="btn-download-lg" target="_blank" rel="noopener">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Télécharger GestiCom Pro
+  </a>
+  <div class="version-info">Dernière version : v3.46.9 — Windows 10/11</div>
+</section>
+
+<footer class="footer">
+  <div class="section-inner">
+    <strong>GestiCom Pro</strong> — Gestion de Commerce<br>
+    Édité par <a href="https://www.gsnexpertises.com" target="_blank" rel="noopener">GSN EXPERTISES GROUP</a><br>
+    <a href="https://github.com/Pacousstar/gesticom-pro-master" target="_blank" rel="noopener">GitHub</a>
+    &nbsp;·&nbsp; <a href="https://github.com/Pacousstar/gesticom-pro-master/releases" target="_blank" rel="noopener">Toutes les versions</a>
+    <br><br>
+    &copy; 2026 GSN EXPERTISES GROUP. Tous droits réservés.
+  </div>
+</footer>
+
+</body>
+</html>
