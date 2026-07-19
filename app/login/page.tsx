@@ -158,25 +158,18 @@ function LoginForm() {
         }}></div>
       </div>
 
-      <div className="relative z-10 w-full max-w-5xl bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl flex overflow-hidden border border-white/20">
+      <div className="relative z-10 w-full max-w-4xl bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 flex items-start">
         {/* Left: Image */}
-        <div className="hidden md:block w-1/2 relative min-h-[500px] bg-gradient-to-br from-orange-600 to-orange-800">
-          <Image
+        <div className="hidden md:block bg-gradient-to-br from-orange-600 to-orange-800 rounded-l-3xl overflow-hidden self-stretch flex items-center">
+          <img
             src="/images/login-hero.png"
             alt="GestiCom Pro"
-            fill
-            className="object-cover"
-            priority
+            style={{ width: 'auto', height: '100%', maxHeight: '600px', display: 'block' }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
-          <div className="absolute bottom-8 left-8 right-8">
-            <h2 className="text-white text-3xl font-bold leading-tight">GestiCom Pro</h2>
-            <p className="text-orange-200 text-sm mt-2 font-medium">La solution complète pour la gestion de votre commerce</p>
-          </div>
         </div>
 
         {/* Right: Form */}
-        <div className="w-full md:w-1/2 p-8 md:p-10 overflow-y-auto max-h-[90vh]">
+        <div className="flex-1 p-8 md:p-10">
           <div className="text-center mb-6">
             <div className="flex items-center justify-center mb-3">
               <div className="relative">
