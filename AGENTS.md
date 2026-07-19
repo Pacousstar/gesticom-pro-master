@@ -1,27 +1,17 @@
-# Résumé de session — 30/06/2026
+# Résumé de session — 09/07/2026
 
-## Problème racine
-Bug Modif Vente : rollback conditionnel + reapply désynchronisé → double déduction stock.
-434 Modif Vente, 55 produits, 2933 unités d'écart total absolu.
+## Ce qui a été fait
 
-## Corrections appliquées
+### Session en cours
+- **Prospection nouveaux secteurs** : 66 nouveaux prospects ajoutés (passage de 99 à 165)
+  - 46 Abidjan (nouveaux : négoce, électrique, pièces auto, industrie légère, services, alimentaire, spécialisé)
+  - 20 villes Ouest (Man, Duékoué, Guiglo, Danané, Kouibly, Bloléquin)
+- **CSV mis à jour** : `prospection_abidjan.csv` (165 lignes, 11 villes)
+- **HTML régénéré** : `prospection_abidjan.html` (194 Ko, 2482 lignes)
+  - Bug **JavaScript `\r\n` interprété** → chaînes monolignes cassées (rien ne cliquait). Corrigé en passant de template literal à concaténation par `+` en Node.js + échappement correct des guillemets pour `escCSV`
+  - Accordion, filtres score, recherche, export CSV, localStorage (statut/obs) fonctionnels
 
-### Code (5 fichiers modifiés)
-- `app/api/ventes/[id]/route.ts` : approche delta au lieu de rollback+reapply ; retraitDiffere préservé si non fourni
-- `app/api/ventes-historiques/route.ts` : wrap dans `$transaction` + entiteId sur stock.updateMany
-- `app/api/stock/[id]/route.ts` (PATCH) : wrap dans `$transaction`
-- `app/api/stock/[id]/route.ts` (DELETE) : mouvement SORTIE avant delete dans `$transaction`
-- `app/api/produits/import/route.ts` : `$transaction` + mouvement pour ajustement stock
-- `app/api/stock/coherence/route.ts` : mouvement créé pour chaque correction
-
-### Données (C:)
-- VERNIS A EAU 1L : −6 → +2
-- GLOBE ETANCHE : −4 → +16
-- Zéro stock négatif sur C:
-
-## Non-bug confirmé
-- Modif Achat (155 entrées) : rollback inconditionnel = mathématiquement correct. Pas de bug.
-
-## Reste à faire
-1. Appliquer VERNIS/GLOBE sur la base F: (client USB) le jour de la MAJ
-2. Compiler le `.exe` avec Inno Setup
+### Prochaine étape
+- Valider avec le client la synthèse des 7 nouveaux secteurs couverts
+- Approfondir les prospects Ouest si nécessaire (recherche terrain)
+- Mettre à jour la base GestiCom avec les prospects chauds (score 4+)

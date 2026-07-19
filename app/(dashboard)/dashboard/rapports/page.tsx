@@ -152,6 +152,9 @@ export default function RapportsPage() {
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null)
   const [selectedFournisseurId, setSelectedFournisseurId] = useState<number | null>(null)
   const [produitsParFournisseur, setProduitsParFournisseur] = useState<any[]>([])
+  const [pageClientPanier, setPageClientPanier] = useState(1)
+  const [pageFournisseurPanier, setPageFournisseurPanier] = useState(1)
+  const ITEMS_PANIER = 10
 
   // Stock & Logistique State
   const [valeurStock, setValeurStock] = useState<{ totalValeur: number; data: any[] } | null>(null)
@@ -321,6 +324,7 @@ export default function RapportsPage() {
 
   const fetchProduitsClient = async (clientId: number) => {
     setSelectedClientId(clientId)
+    setPageClientPanier(1)
     try {
       const res = await fetch(`/api/rapports/ventes/clients/produits?clientId=${clientId}&dateDebut=${dateDebut}&dateFin=${dateFin}`)
       const data = await res.json()
@@ -332,6 +336,7 @@ export default function RapportsPage() {
 
   const fetchProduitsFournisseur = async (fournisseurId: number) => {
     setSelectedFournisseurId(fournisseurId)
+    setPageFournisseurPanier(1)
     try {
       const res = await fetch(`/api/rapports/achats/fournisseurs/produits?fournisseurId=${fournisseurId}&dateDebut=${dateDebut}&dateFin=${dateFin}`)
       const data = await res.json()
@@ -774,7 +779,7 @@ export default function RapportsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {produitsParClient.map((p, i) => (
+                        {produitsParClient.slice((pageClientPanier - 1) * ITEMS_PANIER, pageClientPanier * ITEMS_PANIER).map((p, i) => (
                           <tr key={i} className="hover:bg-orange-50/50 transition-all duration-300 group">
                             <td className="px-8 py-7 text-sm font-black text-slate-900 uppercase tracking-tighter italic group-hover:text-orange-600 transition-colors">{p.produit || 'Article inconnu'}</td>
                             <td className="px-8 py-7 text-sm text-right font-black text-slate-400 tabular-nums">
@@ -795,6 +800,17 @@ export default function RapportsPage() {
                         )}
                       </tbody>
                     </table>
+                    {produitsParClient.length > ITEMS_PANIER && (
+                      <div className="border-t border-gray-100">
+                        <Pagination
+                          currentPage={pageClientPanier}
+                          totalPages={Math.ceil(produitsParClient.length / ITEMS_PANIER)}
+                          onPageChange={setPageClientPanier}
+                          totalItems={produitsParClient.length}
+                          itemsPerPage={ITEMS_PANIER}
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-40 text-slate-300">
@@ -855,7 +871,7 @@ export default function RapportsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {produitsParFournisseur.map((p, i) => (
+                      {produitsParFournisseur.slice((pageFournisseurPanier - 1) * ITEMS_PANIER, pageFournisseurPanier * ITEMS_PANIER).map((p, i) => (
                         <tr key={i} className="hover:bg-blue-50/50 transition-all duration-300">
                           <td className="px-8 py-7 text-sm font-black text-slate-900 uppercase tracking-tighter italic">{p.produit}</td>
                           <td className="px-8 py-7 text-sm text-right font-black text-slate-400 tabular-nums">
@@ -876,6 +892,17 @@ export default function RapportsPage() {
                       )}
                     </tbody>
                   </table>
+                  {produitsParFournisseur.length > ITEMS_PANIER && (
+                    <div className="border-t border-gray-100">
+                      <Pagination
+                        currentPage={pageFournisseurPanier}
+                        totalPages={Math.ceil(produitsParFournisseur.length / ITEMS_PANIER)}
+                        onPageChange={setPageFournisseurPanier}
+                        totalItems={produitsParFournisseur.length}
+                        itemsPerPage={ITEMS_PANIER}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                   <div className="flex flex-col items-center justify-center py-40 text-slate-400">

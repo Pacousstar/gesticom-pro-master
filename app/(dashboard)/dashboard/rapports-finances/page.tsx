@@ -105,11 +105,11 @@ export default function RapportFinancesPage() {
         }
     }
 
-    const totalMontant = data.reduce((acc, curr) => acc + curr.montantTotal, 0)
-    const totalPaye = data.reduce((acc, curr) => acc + curr.montantPaye, 0)
-    const totalSolde = data.reduce((acc, curr) => acc + curr.solde, 0)
-
     const filteredData = data.filter(d => (d.tier || '').toLowerCase().includes(searchName.toLowerCase()))
+
+    const totalMontant = filteredData.reduce((acc, curr) => acc + curr.montantTotal, 0)
+    const totalPaye = filteredData.reduce((acc, curr) => acc + curr.montantPaye, 0)
+    const totalSolde = filteredData.reduce((acc, curr) => acc + curr.solde, 0)
 
     const itemsPerPage = 20
     const totalPages = Math.ceil(filteredData.length / itemsPerPage)

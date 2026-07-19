@@ -90,6 +90,18 @@ if (isPostgres()) {
   // ── SQLite : migration legacy avec backup + ALTER TABLE + db push ──
   l('Provider: SQLite → migration legacy');
 
+  // 0. SUPPRESSION DE LA TABLE _prisma_migrations POUR ÉVITER P3005
+  l('Nettoyage de la table _prisma_migrations...');
+  try {
+    fs.writeFileSync(tmpFile, 'DROP TABLE IF EXISTS "_prisma_migrations"', 'utf-8');
+    execSync(`node "${prismaCli}" db execute --url="file:${dbPath}" --file="${tmpFile}"`, {
+      cwd: projectRoot, stdio: 'pipe', timeout: 15000, windowsHide: true,
+    });
+    l('  _prisma_migrations supprimée');
+  } catch (err) {
+    l('  _prisma_migrations non présente ou déjà supprimée');
+  }
+
   // 0. SAUVEGARDE SYSTÉMATIQUE
   function backupDb() {
     try {
@@ -142,83 +154,7 @@ if (isPostgres()) {
 
   l('Migration automatique de la base de donnees...');
 
-  // 1. PRÉPARATION : ajout des colonnes manquantes AVANT le sync schéma
-  const addColumnStmts = [
-    'ALTER TABLE "Achat" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "AchatLigne" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "Caisse" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "Charge" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "Client" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "Depense" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "EcritureComptable" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "Fournisseur" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "Mouvement" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "PrintTemplate" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "ReglementAchat" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "ReglementVente" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "Vente" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "VenteLigne" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "Produit" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Client" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Fournisseur" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Stock" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Utilisateur" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Magasin" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Caisse" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Vente" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Achat" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Mouvement" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Banque" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Charge" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Depense" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "OperationBancaire" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "EcritureComptable" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "VenteLigne" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "AchatLigne" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "ReglementVente" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "ReglementAchat" ADD COLUMN "entiteId" INTEGER NOT NULL DEFAULT 1;',
-    'ALTER TABLE "Magasin" ADD COLUMN "soldeCaisse" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "Utilisateur" ADD COLUMN "rolesSupplementaires" TEXT;',
-    'ALTER TABLE "Vente" ADD COLUMN "typeVente" TEXT NOT NULL DEFAULT \'LIVRAISON_IMMEDIATE\';',
-    'ALTER TABLE "Vente" ADD COLUMN "dateLivraison" DATETIME;',
-    'ALTER TABLE "Vente" ADD COLUMN "retraitDiffere" INTEGER NOT NULL DEFAULT 0;',
-    'ALTER TABLE "VenteLigne" ADD COLUMN "quantiteLivree" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "VenteLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "VenteLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "Retour" ADD COLUMN "estRembourse" INTEGER NOT NULL DEFAULT 0;',
-    'ALTER TABLE "RetourLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "RetourLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "AchatLigne" ADD COLUMN "tva" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "AchatLigne" ADD COLUMN "remise" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "Vente" ADD COLUMN "dateOperation" DATETIME;',
-    'ALTER TABLE "Achat" ADD COLUMN "dateOperation" DATETIME;',
-    'ALTER TABLE "Caisse" ADD COLUMN "dateOperation" DATETIME;',
-    'ALTER TABLE "AchatLigne" ADD COLUMN "coutUnitaire" REAL;',
-    'ALTER TABLE "VenteLigne" ADD COLUMN "coutUnitaire" REAL;',
-    'ALTER TABLE "Achat" ADD COLUMN "numeroCamion" TEXT;',
-    'ALTER TABLE "Achat" ADD COLUMN "fraisApproche" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "Achat" ADD COLUMN "pamp" REAL NOT NULL DEFAULT 0;',
-    'ALTER TABLE "Utilisateur" ADD COLUMN "motDePasse" TEXT;',
-    'ALTER TABLE "VenteLigne" ADD COLUMN "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "AchatLigne" ADD COLUMN "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "ReglementVente" ADD COLUMN "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-    'ALTER TABLE "ReglementAchat" ADD COLUMN "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;',
-  ];
-  let addColOk = 0;
-  for (const stmt of addColumnStmts) {
-    try {
-      fs.writeFileSync(tmpFile, stmt, 'utf-8');
-      execSync(`node "${prismaCli}" db execute --url="file:${dbPath}" --file="${tmpFile}"`, {
-        cwd: projectRoot, stdio: 'pipe', timeout: 15000, windowsHide: true,
-      });
-      addColOk++;
-    } catch (err) {
-      // "duplicate column" = déjà existant → normal
-    }
-  }
-  l(`  ${addColOk} colonnes ajoutées sur ${addColumnStmts.length} tentatives`);
-
-  // 2. FIX NULLS
+  // 1. FIX NULLS (data integrity)
   const fixEntiteId = '(SELECT id FROM "Entite" ORDER BY id ASC LIMIT 1)';
   const fixNullStmts = [
     'UPDATE "Vente" SET "dateOperation" = "date" WHERE "dateOperation" IS NULL;',
@@ -265,9 +201,9 @@ if (isPostgres()) {
     'UPDATE "ReglementVente" SET "entiteId" = ' + fixEntiteId + ' WHERE "entiteId" IS NULL OR "entiteId" = 0;',
     'UPDATE "ReglementAchat" SET "entiteId" = ' + fixEntiteId + ' WHERE "entiteId" IS NULL OR "entiteId" = 0;',
   ];
-  l('Correction des valeurs NULL (pré-sync)...');
+  l('Correction des valeurs NULL...');
   if (!execSql(fixNullStmts.join('\n'))) {
-    e('  Erreur batch pré-sync, tentative individuelle...');
+    e('  Erreur batch NULL, tentative individuelle...');
     let fixed = 0;
     for (const stmt of fixNullStmts) { if (execOne(stmt)) fixed++; }
     l(`  ${fixed} corrections appliquées`);
@@ -275,55 +211,17 @@ if (isPostgres()) {
     l(`  ${fixNullStmts.length} corrections appliquées`);
   }
 
-  // 3. SCHÉMA : synchro via db push
-  function hasMigrationTable() {
-    try {
-      const out = execSync(
-        `node "${prismaCli}" db execute --url="file:${dbPath}" --stdin`,
-        {
-          input: "SELECT name FROM sqlite_master WHERE type='table' AND name='_prisma_migrations'",
-          cwd: projectRoot, stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000, windowsHide: true,
-        }
-      );
-      return out.toString().trim().length > 0;
-    } catch {
-      return false;
-    }
-  }
+  // 2. SYNC SCHÉMA via prisma db push direct
+  l('Synchro schéma Prisma → prisma db push');
   let schemaSyncOk = false;
-  if (hasMigrationTable()) {
-    l('Base suivie par Prisma → prisma migrate deploy');
-    try {
-      execSync(`node "${prismaCli}" migrate deploy --schema="${schemaPath}"`, {
-        cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
-      });
-      l('  prisma migrate deploy réussi');
-      schemaSyncOk = true;
-    } catch (err) {
-      const msg = (err.stderr || err.message || '');
-      e('  prisma migrate deploy échoué: ' + msg);
-      l('  Repli: prisma db push...');
-      try {
-        execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
-          cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
-        });
-        l('  prisma db push réussi (repli)');
-        schemaSyncOk = true;
-      } catch (err2) {
-        e('  prisma db push échoué: ' + (err2.stderr || err2.message));
-      }
-    }
-  } else {
-    l('Base sans historique Prisma → prisma db push');
-    try {
-      execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
-        cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
-      });
-      l('  prisma db push réussi');
-      schemaSyncOk = true;
-    } catch (err) {
-      e('  prisma db push échoué: ' + (err.stderr || err.message));
-    }
+  try {
+    execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
+      cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
+    });
+    l('  prisma db push réussi');
+    schemaSyncOk = true;
+  } catch (err) {
+    e('  prisma db push échoué: ' + (err.stderr || err.message));
   }
   if (!schemaSyncOk) {
     l('ÉCHEC de la synchro schéma → restauration du backup');
@@ -363,7 +261,25 @@ try {
   l('Correction annulations non applicable: ' + (err.message || ''));
 }
 
-// 7. PLANIFICATEUR DE SAUVEGARDE (tâche de fond)
+// 7. VÉRIFICATION DES FICHIERS CSS (évite page sans style)
+(function checkCss() {
+  const cssPaths = [
+    path.join(projectRoot, '.next', 'static', 'css'),
+    path.join(path.dirname(serverPath), '.next', 'static', 'css'),
+  ];
+  let found = false;
+  for (const p of cssPaths) {
+    if (fs.existsSync(p) && fs.readdirSync(p).some(f => f.endsWith('.css'))) { found = true; break; }
+  }
+  if (!found) {
+    e('Aucun fichier CSS trouvé dans .next/static/css/ — la page sera affichée sans style');
+    e('Chemins vérifiés: ' + cssPaths.join(', '));
+  } else {
+    l('Fichiers CSS présents');
+  }
+})();
+
+// 8. PLANIFICATEUR DE SAUVEGARDE (tâche de fond)
 let backupScheduler = null;
 try {
   const scheduler = require('./scheduled-backup');
