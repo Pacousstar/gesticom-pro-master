@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Search, Download, MessageSquare, Phone, Mail, Filter, CheckCircle, Clock } from 'lucide-react'
+import { Loader2, Search, Download, MessageSquare, Phone, Mail, Filter, CheckCircle, Clock, Upload, AlertCircle } from 'lucide-react'
 
 interface Lead {
   id: number
@@ -26,6 +26,8 @@ export default function LeadsPage() {
   const router = useRouter()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
   const [search, setSearch] = useState('')
   const [filtreStatut, setFiltreStatut] = useState('')
   const [filtreSource, setFiltreSource] = useState('')
@@ -105,12 +107,42 @@ export default function LeadsPage() {
             <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Prospects et inscriptions</p>
           </div>
           <div className="flex gap-2">
+            <button onClick={async () => {
+              setImporting(true); setImportMsg(null)
+              try {
+                const res = await fetch('/api/leads/import-formspree', { method: 'POST' })
+                const d = await res.json()
+                if (res.ok) {
+                  setImportMsg({ type: 'ok', text: `${d.imported} importé(s), ${d.skipped} ignoré(s) sur ${d.total}` })
+                  fetchLeads()
+                } else {
+                  setImportMsg({ type: 'error', text: d.error || 'Erreur' })
+                }
+              } catch { setImportMsg({ type: 'error', text: 'Erreur réseau' }) }
+              finally { setImporting(false) }
+            }} disabled={importing}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 px-4 py-2 text-sm font-medium text-white border border-indigo-500/30 transition-all disabled:opacity-50">
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              Importer Formspree
+            </button>
             <button onClick={exportCSV}
               className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 transition-all">
               <Download className="h-4 w-4" /> Export CSV
             </button>
           </div>
         </div>
+
+        {importMsg && (
+          <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+            importMsg.type === 'ok'
+              ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+              : 'bg-red-500/10 border border-red-500/20 text-red-300'
+          }`}>
+            {importMsg.type === 'ok' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+            <span>{importMsg.text}</span>
+            <button onClick={() => setImportMsg(null)} className="ml-auto text-current opacity-60 hover:opacity-100">&times;</button>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
