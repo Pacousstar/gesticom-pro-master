@@ -158,18 +158,22 @@ function LoginForm() {
         }}></div>
       </div>
 
-      <div className="relative z-10 w-full max-w-4xl bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 flex items-start">
+      <div className="relative z-10 w-full max-w-5xl rounded-3xl shadow-2xl flex items-start">
         {/* Left: Image */}
-        <div className="hidden md:block bg-gradient-to-br from-orange-600 to-orange-800 rounded-l-3xl overflow-hidden self-stretch flex items-center">
+        <div className="hidden md:block bg-gradient-to-br from-orange-600 to-orange-800 rounded-l-3xl overflow-hidden relative flex-shrink-0">
           <img
             src="/images/login-hero.png"
             alt="GestiCom Pro"
-            style={{ width: 'auto', height: '100%', maxHeight: '600px', display: 'block' }}
+            style={{ width: 'auto', height: '100%', maxHeight: '580px', display: 'block' }}
           />
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-5">
+            <h2 className="text-white text-xl font-bold">GestiCom Pro</h2>
+            <p className="text-orange-200 text-xs mt-1 font-medium">La solution complète pour la gestion de votre commerce</p>
+          </div>
         </div>
 
         {/* Right: Form */}
-        <div className="flex-1 p-8 md:p-10">
+        <div className="w-[420px] min-w-[360px] bg-white rounded-r-3xl p-8 md:p-10">
           <div className="text-center mb-6">
             <div className="flex items-center justify-center mb-3">
               <div className="relative">
