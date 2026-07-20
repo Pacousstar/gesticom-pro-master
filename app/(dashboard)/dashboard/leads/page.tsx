@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Search, Download, MessageSquare, Phone, Mail, Filter, CheckCircle, Clock, Upload, AlertCircle } from 'lucide-react'
+import { Loader2, Search, Download, MessageSquare, Phone, Mail, Filter, CheckCircle, Clock, Upload, FileUp, AlertCircle } from 'lucide-react'
 
 interface Lead {
   id: number
@@ -31,6 +31,7 @@ export default function LeadsPage() {
   const [search, setSearch] = useState('')
   const [filtreStatut, setFiltreStatut] = useState('')
   const [filtreSource, setFiltreSource] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -107,23 +108,31 @@ export default function LeadsPage() {
             <p className="mt-1 text-white/80 font-bold uppercase text-[10px] tracking-widest">Prospects et inscriptions</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={async () => {
+            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={async e => {
+              const file = e.target.files?.[0]
+              if (!file) return
               setImporting(true); setImportMsg(null)
               try {
-                const res = await fetch('/api/leads/import-formspree', { method: 'POST' })
+                const text = await file.text()
+                const res = await fetch('/api/leads/import-csv', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'text/plain' },
+                  body: text,
+                })
                 const d = await res.json()
                 if (res.ok) {
-                  setImportMsg({ type: 'ok', text: `${d.imported} importé(s), ${d.skipped} ignoré(s) sur ${d.total}` })
+                  setImportMsg({ type: 'ok', text: `${d.imported} importé(s), ${d.skipped} ignoré(s)` })
                   fetchLeads()
                 } else {
                   setImportMsg({ type: 'error', text: d.error || 'Erreur' })
                 }
-              } catch { setImportMsg({ type: 'error', text: 'Erreur réseau' }) }
-              finally { setImporting(false) }
-            }} disabled={importing}
+              } catch { setImportMsg({ type: 'error', text: 'Erreur lors de la lecture du fichier' }) }
+              finally { setImporting(false); if (fileInputRef.current) fileInputRef.current.value = '' }
+            }} />
+            <button onClick={() => fileInputRef.current?.click()} disabled={importing}
               className="inline-flex items-center gap-2 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 px-4 py-2 text-sm font-medium text-white border border-indigo-500/30 transition-all disabled:opacity-50">
-              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Importer Formspree
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+              Importer CSV
             </button>
             <button onClick={exportCSV}
               className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 transition-all">
