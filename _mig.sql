@@ -1,1 +1,0 @@
-UPDATE "Client" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;

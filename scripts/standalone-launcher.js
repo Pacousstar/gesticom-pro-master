@@ -246,6 +246,17 @@ if (isPostgres()) {
   l('Corrections post-seed...');
   execSql(fixPostStmts.join('\n'));
 
+  // 2b. SEED (création admin/entité/magasin si base vierge)
+  l('Vérification des données initiales (seed)...');
+  try {
+    execSync(`node "${path.join(__dirname, 'seed.js')}"`, {
+      cwd: projectRoot, stdio: 'pipe', timeout: 30000, windowsHide: true,
+    });
+    l('  Seed exécuté avec succès');
+  } catch (err) {
+    e('  Seed échoué: ' + (err.stderr || err.message));
+  }
+
   // Cleanup temp file
   try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch {}
 }
