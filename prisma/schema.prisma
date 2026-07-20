@@ -1001,3 +1001,25 @@ model Licence {
   updatedAt DateTime @default(now()) @updatedAt
 }
 
+model Lead {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  email       String?
+  contact     String?
+  domaine     String?
+  message     String?
+  source      String   @default("preinscription")
+  statut      String   @default("NOUVEAU")
+  notes       String?
+  relance     Boolean  @default(false)
+  relanceAt   DateTime?
+  entiteId    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@index([source])
+  @@index([statut])
+  @@index([domaine])
+  @@index([createdAt])
+}
+
