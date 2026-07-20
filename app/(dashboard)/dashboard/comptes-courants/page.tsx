@@ -27,6 +27,7 @@ interface Match {
 
 export default function ComptesCourantsPage() {
   const router = useRouter()
+  const { error: showError } = useToast()
   const [comptes, setComptes] = useState<CompteCourant[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -58,6 +59,9 @@ export default function ComptesCourantsPage() {
     if (res.ok) {
       setMatches(matches.filter(x => x.clientId !== m.clientId || x.fournisseurId !== m.fournisseurId))
       fetchComptes()
+    } else {
+      const err = await res.json()
+      showError(err.error || 'Erreur lors de la liaison.')
     }
   }
 

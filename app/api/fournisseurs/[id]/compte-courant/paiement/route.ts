@@ -9,7 +9,7 @@ import { estModeEspeces } from '@/lib/enums-commerce'
 import { enregistrerOperationBancaire, estModeBanque } from '@/lib/banque'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
-import { reglementCompteCourantSchema } from '@/lib/validations'
+import { reglementFournisseurSchema } from '@/lib/validations'
 
 export async function POST(
   request: NextRequest,
@@ -30,11 +30,10 @@ export async function POST(
     }
 
     const body = await request.json()
-    const validation = validateApiRequest(reglementCompteCourantSchema, body)
+    const validation = validateApiRequest(reglementFournisseurSchema, body)
     if (!validation.success) return validation.response
     const v = validation.data
-    const { montant, modePaiement, magasinId, banqueId } = v
-    const { date } = body
+    const { montant, modePaiement, magasinId, banqueId, date } = v
 
     // CREDIT = dette à terme, ne peut pas être un règlement
     if (String(modePaiement).toUpperCase() === 'CREDIT') {

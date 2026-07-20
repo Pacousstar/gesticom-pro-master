@@ -44,6 +44,18 @@ export async function POST(request: NextRequest) {
 
   const entiteId = await getEntiteId(session)
 
+  if (data.clientId && data.fournisseurId) {
+    const existant = await prisma.compteCourant.findFirst({
+      where: { clientId: data.clientId, fournisseurId: data.fournisseurId, entiteId, actif: true },
+      select: { id: true, nom: true, code: true },
+    })
+    if (existant) {
+      return NextResponse.json({
+        error: `Ce client est déjà lié à ce fournisseur dans le compte courant "${existant.nom}" (${existant.code}).`
+      }, { status: 409 })
+    }
+  }
+
   const count = await prisma.compteCourant.count()
   const code = `CC-${String(count + 1).padStart(3, '0')}`
 

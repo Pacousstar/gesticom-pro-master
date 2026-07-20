@@ -476,9 +476,9 @@ describe('compteCourantSchema', () => {
     const r = compteCourantSchema.safeParse({ nom: 'Compte Test', clientId: 1 })
     expect(r.success).toBe(true)
   })
-  it('rejette sans client ni fournisseur', () => {
+  it('accepte sans client ni fournisseur', () => {
     const r = compteCourantSchema.safeParse({ nom: 'Compte Test' })
-    expect(r.success).toBe(false)
+    expect(r.success).toBe(true)
   })
 })
 

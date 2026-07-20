@@ -115,7 +115,10 @@ export const clientSchema = z.object({
   soldeInitial: z.coerce.number().min(0).optional(),
   avoirInitial: z.coerce.number().min(0).optional(),
   email: z.string().email('Email invalide.').max(100).trim().nullable().optional().or(z.literal('')),
-})
+}).refine(
+  (data) => data.type !== 'CREDIT' || (data.plafondCredit != null && data.plafondCredit >= 0),
+  { message: 'Le plafond de crédit est requis pour un client CREDIT.', path: ['plafondCredit'] }
+)
 
 /** Fournisseur : nom, téléphone, email, NCC */
 export const fournisseurSchema = z.object({
@@ -316,6 +319,16 @@ export const reglementCompteCourantSchema = z.object({
   payeDepuisBanque: z.boolean().optional(),
   magasinId: z.coerce.number().int().positive().nullable().optional(),
   banqueId: z.coerce.number().int().positive().nullable().optional(),
+  date: z.string().optional(),
+})
+
+/** Règlement fournisseur direct (sans compteCourantId, le fournisseur est dans l'URL) */
+export const reglementFournisseurSchema = z.object({
+  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
+  modePaiement: z.string().max(50),
+  magasinId: z.coerce.number().int().positive().nullable().optional(),
+  banqueId: z.coerce.number().int().positive().nullable().optional(),
+  date: z.string().optional(),
 })
 
 /** Banque */
@@ -396,10 +409,7 @@ export const compteCourantSchema = z.object({
   ncc: z.string().max(50).trim().nullable().optional(),
   clientId: z.coerce.number().int().positive().nullable().optional(),
   fournisseurId: z.coerce.number().int().positive().nullable().optional(),
-}).refine(
-  (data) => data.clientId || data.fournisseurId,
-  { message: 'Client ou Fournisseur requis.', path: ['clientId'] }
-)
+})
 
 /** Règlement achat */
 export const reglementAchatSchema = z.object({
