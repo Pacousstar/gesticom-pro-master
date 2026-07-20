@@ -158,9 +158,9 @@ function LoginForm() {
         }}></div>
       </div>
 
-      <div className="relative z-10 w-full max-w-5xl rounded-3xl shadow-2xl flex items-start">
+      <div className="relative z-10 w-full max-w-5xl rounded-3xl shadow-2xl flex items-stretch">
         {/* Left: Image */}
-        <div className="hidden md:block bg-gradient-to-br from-orange-600 to-orange-800 rounded-l-3xl overflow-hidden relative flex-shrink-0">
+        <div className="hidden md:block bg-gradient-to-br from-orange-600 to-orange-800 rounded-l-3xl overflow-hidden relative self-stretch">
           <img
             src="/images/login-hero.png"
             alt="GestiCom Pro"
@@ -173,7 +173,7 @@ function LoginForm() {
         </div>
 
         {/* Right: Form */}
-        <div className="w-[420px] min-w-[360px] bg-white rounded-r-3xl p-8 md:p-10">
+        <div className="w-[420px] min-w-[360px] bg-white rounded-r-3xl p-8 md:p-10 self-stretch flex flex-col">
           <div className="text-center mb-6">
             <div className="flex items-center justify-center mb-3">
               <div className="relative">
@@ -194,7 +194,7 @@ function LoginForm() {
             <p className="text-xs mt-1 font-semibold text-[#0D6B0D]">Accédez à votre espace de travail</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col justify-center space-y-4">
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm whitespace-pre-line flex items-start gap-2">
                 <div className="flex-shrink-0 mt-0.5">
