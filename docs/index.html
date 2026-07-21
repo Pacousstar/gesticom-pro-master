@@ -44,6 +44,9 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
 .hero-carousel .dots{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:8px}
 .hero-carousel .dots span{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.4);cursor:pointer;transition:all .3s}
 .hero-carousel .dots span.active{background:#FF6B35;width:24px;border-radius:4px}
+.hero-media-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.hero-video{width:100%;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);position:relative;aspect-ratio:500/320;background:#000}
+.hero-video video{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer}
 .hero-stats{display:flex;gap:40px;margin-top:40px}
 .hero-stats div{text-align:center}
 .hero-stats div strong{display:block;font-size:28px;font-weight:800;background:linear-gradient(135deg,#FF6B35,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
@@ -151,6 +154,8 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
   .screenshots-grid,.features-grid{grid-template-columns:1fr}
   .section{padding:60px 16px}
   .hero-carousel{height:220px}
+  .hero-media-row{grid-template-columns:1fr}
+  .hero-video{aspect-ratio:16/9}
   .section-title h2{font-size:28px}
   .download-inner{flex-direction:column;gap:32px}
   .download-cta h2{font-size:26px}
@@ -166,6 +171,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
   .hero-stats{gap:16px}
   .hero-stats div strong{font-size:22px}
   .hero-carousel{height:180px}
+  .hero-video{aspect-ratio:4/3}
 }
 
 .modal-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px}
@@ -221,18 +227,23 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
       </div>
     </div>
     <div class="hero-right-col">
-      <div class="hero-carousel" id="heroCarousel">
-        <div class="slides">
-          <img src="images/hero/GestiCom%20Pro.png" alt="GestiCom Pro" loading="lazy">
-          <img src="images/hero/OIG1.jpg" alt="GestiCom Pro" loading="lazy">
-          <img src="images/hero/OIG1%20(1).jpg" alt="GestiCom Pro" loading="lazy">
-          <img src="images/hero/OIG1%20(2).jpg" alt="GestiCom Pro" loading="lazy">
-          <img src="images/hero/OIG1%20(3).jpg" alt="GestiCom Pro" loading="lazy">
-          <img src="images/hero/OIG1%20(4).jpg" alt="GestiCom Pro" loading="lazy">
-          <img src="images/hero/OIG2.jpg" alt="GestiCom Pro" loading="lazy">
+      <div class="hero-media-row">
+        <div class="hero-carousel" id="heroCarousel">
+          <div class="slides">
+            <img src="images/hero/GestiCom%20Pro.png" alt="GestiCom Pro" loading="lazy">
+            <img src="images/hero/OIG1.jpg" alt="GestiCom Pro" loading="lazy">
+            <img src="images/hero/OIG1%20(1).jpg" alt="GestiCom Pro" loading="lazy">
+            <img src="images/hero/OIG1%20(2).jpg" alt="GestiCom Pro" loading="lazy">
+            <img src="images/hero/OIG1%20(3).jpg" alt="GestiCom Pro" loading="lazy">
+            <img src="images/hero/OIG1%20(4).jpg" alt="GestiCom Pro" loading="lazy">
+            <img src="images/hero/OIG2.jpg" alt="GestiCom Pro" loading="lazy">
+          </div>
+          <div class="dots">
+            <span class="active"></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
         </div>
-        <div class="dots">
-          <span class="active"></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <div class="hero-video">
+          <video src="images/GestiCom%20Pro.mp4" autoplay muted loop playsinline controls></video>
         </div>
       </div>
       <div class="hero-caption" id="heroCaption">GestiCom Pro — La solution complète pour la gestion de votre commerce. Ventes, stocks, comptabilité, tout-en-un.</div>
