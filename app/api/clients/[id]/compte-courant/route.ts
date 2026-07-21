@@ -159,12 +159,12 @@ export async function GET(
       })))
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    // Ajouter les soldes initiaux au début de l'historique si ils existent
+    // Ajouter les soldes initiaux au début de l'historique (date epoch pour tri chronologique correct)
     const initialOperations: any[] = []
     if (client.soldeInitial && client.soldeInitial > 0) {
       initialOperations.push({
         id: 'init-dette',
-        date: new Date().toISOString(),
+        date: new Date(0).toISOString(),
         type: 'INIT',
         libelle: 'Dette initiale (Solde de départ)',
         debit: client.soldeInitial,
@@ -175,7 +175,7 @@ export async function GET(
     if (client.avoirInitial && client.avoirInitial > 0) {
       initialOperations.push({
         id: 'init-avoir',
-        date: new Date().toISOString(),
+        date: new Date(0).toISOString(),
         type: 'INIT',
         libelle: 'Avoir initial (Acompte de départ)',
         debit: 0,
