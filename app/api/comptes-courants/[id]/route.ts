@@ -103,6 +103,7 @@ type TransactionRow = {
   type: string
   referenceType: string
   montantSigne: number
+  referenceId?: number
 }
 
 async function getTransactions(
@@ -127,6 +128,7 @@ async function getTransactions(
         type: 'ACHAT',
         referenceType: 'ACHAT',
         montantSigne: -a.montantTotal,
+        referenceId: a.id,
       })
     }
 
@@ -163,6 +165,7 @@ async function getTransactions(
         type: 'VENTE',
         referenceType: 'VENTE',
         montantSigne: v.montantTotal,
+        referenceId: v.id,
       })
     }
 

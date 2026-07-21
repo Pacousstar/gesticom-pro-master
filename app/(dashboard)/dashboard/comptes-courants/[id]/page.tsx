@@ -12,6 +12,7 @@ interface Transaction {
   type: string
   referenceType: string
   montantSigne: number
+  referenceId?: number
 }
 
 interface Detail {
@@ -213,21 +214,35 @@ export default function CompteCourantDetailPage() {
     setFacturesLoading(true)
     setFactures([])
     try {
+      if (!data) return
+
+      // Collecter les IDs des ventes et achats qui apparaissent dans le CC
+      const achatIds = new Set<number>()
+      const venteIds = new Set<number>()
+      for (const t of data.transactions) {
+        if (t.type === 'ACHAT' && t.referenceId) achatIds.add(t.referenceId)
+        if (t.type === 'VENTE' && t.referenceId) venteIds.add(t.referenceId)
+      }
+
       const results: any[] = []
-      if (data?.client) {
+      if (data.client && venteIds.size > 0) {
         const r = await fetch(`/api/ventes?clientId=${data.client.id}&limit=500`)
         if (r.ok) {
           const json = await r.json()
           const items = Array.isArray(json) ? json : json.ventes || json.data || []
-          results.push(...items.map((v: any) => ({ ...v, _type: 'VENTE' })))
+          for (const v of items) {
+            if (venteIds.has(v.id)) results.push({ ...v, _type: 'VENTE' })
+          }
         }
       }
-      if (data?.fournisseur) {
+      if (data.fournisseur && achatIds.size > 0) {
         const r = await fetch(`/api/achats?fournisseurId=${data.fournisseur.id}&limit=500`)
         if (r.ok) {
           const json = await r.json()
           const items = Array.isArray(json) ? json : json.achats || json.data || []
-          results.push(...items.map((a: any) => ({ ...a, _type: 'ACHAT' })))
+          for (const a of items) {
+            if (achatIds.has(a.id)) results.push({ ...a, _type: 'ACHAT' })
+          }
         }
       }
       results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
