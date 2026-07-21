@@ -44,14 +44,26 @@ export async function POST(request: NextRequest) {
 
   const entiteId = await getEntiteId(session)
 
-  if (data.clientId && data.fournisseurId) {
+  if (data.clientId) {
     const existant = await prisma.compteCourant.findFirst({
-      where: { clientId: data.clientId, fournisseurId: data.fournisseurId, entiteId, actif: true },
+      where: { clientId: data.clientId, entiteId, actif: true },
       select: { id: true, nom: true, code: true },
     })
     if (existant) {
       return NextResponse.json({
-        error: `Ce client est déjà lié à ce fournisseur dans le compte courant "${existant.nom}" (${existant.code}).`
+        error: `Ce client est déjà lié au compte courant "${existant.nom}" (${existant.code}). Modifie-le pour changer le lien.`
+      }, { status: 409 })
+    }
+  }
+
+  if (data.fournisseurId) {
+    const existant = await prisma.compteCourant.findFirst({
+      where: { fournisseurId: data.fournisseurId, entiteId, actif: true },
+      select: { id: true, nom: true, code: true },
+    })
+    if (existant) {
+      return NextResponse.json({
+        error: `Ce fournisseur est déjà lié au compte courant "${existant.nom}" (${existant.code}). Modifie-le pour changer le lien.`
       }, { status: 409 })
     }
   }
