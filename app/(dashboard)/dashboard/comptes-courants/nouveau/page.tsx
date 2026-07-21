@@ -97,8 +97,8 @@ export default function NouveauCompteCourantPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const { data: clientsRaw } = useSWR('/api/clients', fetcher, { dedupingInterval: 2000 })
-  const { data: fournisseursRaw } = useSWR('/api/fournisseurs', fetcher, { dedupingInterval: 2000 })
+  const { data: clientsRaw } = useSWR('/api/clients?limit=10000', fetcher, { dedupingInterval: 2000 })
+  const { data: fournisseursRaw } = useSWR('/api/fournisseurs?limit=10000', fetcher, { dedupingInterval: 2000 })
   const clients: { id: number; nom: string; code: string | null; telephone: string | null }[] = clientsRaw?.data ?? []
   const fournisseurs: { id: number; nom: string; code: string | null; telephone: string | null }[] = fournisseursRaw?.data ?? []
 
