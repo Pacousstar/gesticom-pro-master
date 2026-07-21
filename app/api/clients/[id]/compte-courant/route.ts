@@ -159,32 +159,34 @@ export async function GET(
       })))
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    // Ajouter les soldes initiaux au début de l'historique (date epoch pour tri chronologique correct)
-    const initialOperations: any[] = []
-    if (client.soldeInitial && client.soldeInitial > 0) {
-      initialOperations.push({
-        id: 'init-dette',
-        date: new Date(0).toISOString(),
-        type: 'INIT',
-        libelle: 'Dette initiale (Solde de départ)',
-        debit: client.soldeInitial,
-        credit: 0,
-        isInitial: true
-      })
+    // Soldes initiaux : inclus seulement si aucun filtre date (vue globale)
+    let allOperations = operations
+    if (!dateDebut && !dateFin) {
+      const initialOperations: any[] = []
+      if (client.soldeInitial && client.soldeInitial > 0) {
+        initialOperations.push({
+          id: 'init-dette',
+          date: new Date(0).toISOString(),
+          type: 'INIT',
+          libelle: 'Dette initiale (Solde de départ)',
+          debit: client.soldeInitial,
+          credit: 0,
+          isInitial: true
+        })
+      }
+      if (client.avoirInitial && client.avoirInitial > 0) {
+        initialOperations.push({
+          id: 'init-avoir',
+          date: new Date(0).toISOString(),
+          type: 'INIT',
+          libelle: 'Avoir initial (Acompte de départ)',
+          debit: 0,
+          credit: client.avoirInitial,
+          isInitial: true
+        })
+      }
+      allOperations = [...initialOperations, ...operations]
     }
-    if (client.avoirInitial && client.avoirInitial > 0) {
-      initialOperations.push({
-        id: 'init-avoir',
-        date: new Date(0).toISOString(),
-        type: 'INIT',
-        libelle: 'Avoir initial (Acompte de départ)',
-        debit: 0,
-        credit: client.avoirInitial,
-        isInitial: true
-      })
-    }
-
-    const allOperations = [...initialOperations, ...operations]
 
     return NextResponse.json({ 
       client, 

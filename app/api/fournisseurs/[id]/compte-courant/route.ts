@@ -55,26 +55,27 @@ export async function GET(
         // 4. Fusionner et trier chronologiquement
         const operations: any[] = []
 
-        // Solde initial (Dette reportée envers le fournisseur)
-        if (fournisseur.soldeInitial > 0) {
-            operations.push({
-                type: 'SOLDE_INITIAL',
-                libelle: 'Solde initial (Dette reportée)',
-                date: new Date(0), 
-                debit: fournisseur.soldeInitial,
-                credit: 0
-            })
-        }
+        // Soldes initiaux : inclus seulement si aucun filtre date (vue globale)
+        if (!dateDebut && !dateFin) {
+            if (fournisseur.soldeInitial > 0) {
+                operations.push({
+                    type: 'SOLDE_INITIAL',
+                    libelle: 'Solde initial (Dette reportée)',
+                    date: new Date(0), 
+                    debit: fournisseur.soldeInitial,
+                    credit: 0
+                })
+            }
 
-        // Avoir initial (Acompte déjà versé)
-        if (fournisseur.avoirInitial > 0) {
-            operations.push({
-                type: 'AVOIR_INITIAL',
-                libelle: 'Avoir initial (Acompte reporté)',
-                date: new Date(0),
-                debit: 0,
-                credit: fournisseur.avoirInitial
-            })
+            if (fournisseur.avoirInitial > 0) {
+                operations.push({
+                    type: 'AVOIR_INITIAL',
+                    libelle: 'Avoir initial (Acompte reporté)',
+                    date: new Date(0),
+                    debit: 0,
+                    credit: fournisseur.avoirInitial
+                })
+            }
         }
 
         achats.forEach(a => {
