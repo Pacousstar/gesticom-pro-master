@@ -298,12 +298,38 @@ export default function CompteCourantDetailPage() {
           </div>
         </div>
 
+        {/* Print-only summary */}
+        <div className="hidden print:block mb-6">
+          <div className="border-b-2 border-black pb-2 mb-4">
+            <h2 className="text-lg font-black uppercase">Relevé de Compte Courant</h2>
+            <p className="text-xs">{data.nom} — {data.ncc ? `NCC: ${data.ncc}` : data.code}</p>
+            <p className="text-[10px]">Édité le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+          <div className="flex gap-4">
+            <div className="flex-1 border-2 border-gray-300 rounded p-3">
+              <p className="text-[10px] font-black uppercase">Total Débit</p>
+              <p className="text-lg font-black">{fmt(totalDebit)}</p>
+              <p className="text-[9px] text-gray-600">Ventes + Encaissements</p>
+            </div>
+            <div className="flex-1 border-2 border-gray-300 rounded p-3">
+              <p className="text-[10px] font-black uppercase">Total Crédit</p>
+              <p className="text-lg font-black">{fmt(totalCredit)}</p>
+              <p className="text-[9px] text-gray-600">Achats + Paiements</p>
+            </div>
+            <div className="flex-1 border-2 border-black bg-gray-100 rounded p-3">
+              <p className="text-[10px] font-black uppercase">Solde Net</p>
+              <p className="text-lg font-black">{fmt(Math.abs(data.solde))}</p>
+              <p className="text-[9px] font-bold">{data.solde >= 0 ? `Débiteur (${data.nom} doit au CC)` : `Créditeur (le CC doit à ${data.nom})`}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Summary Cards - Vente style */}
         <div className="grid gap-4 grid-cols-1 md:grid-cols-3 no-print">
           {[
             { label: "Total Débit", val: fmt(totalDebit), sub: "Ventes + Encaissements", color: "bg-indigo-600", icon: ArrowLeftRight, tooltip: "Somme des montants en Débit (ce qui est dû au CC). Ventes et encaissements clients augmentent le débit." },
             { label: "Total Crédit", val: fmt(totalCredit), sub: "Achats + Paiements", color: "bg-emerald-600", icon: ArrowLeftRight, tooltip: "Somme des montants en Crédit (ce qui est payé par le CC). Achats et paiements fournisseurs augmentent le crédit." },
-            { label: "Solde Net", val: fmt(Math.abs(data.solde)), sub: data.solde >= 0 ? 'Débiteur (la personne doit au CC)' : 'Créditeur (le CC doit à la personne)', color: data.solde >= 0 ? "bg-amber-600" : "bg-rose-600" },
+            { label: "Solde Net", val: fmt(Math.abs(data.solde)), sub: data.solde >= 0 ? `Débiteur (${data.nom} doit au CC)` : `Créditeur (le CC doit à ${data.nom})`, color: data.solde >= 0 ? "bg-amber-600" : "bg-rose-600" },
           ].map((c, i) => (
             <div key={i} className={`relative overflow-hidden rounded-[2rem] ${c.color} p-6 h-32 shadow-xl group`}>
               <div className="relative z-10 text-white flex flex-col justify-between h-full">
@@ -658,10 +684,23 @@ export default function CompteCourantDetailPage() {
         {/* Print Styles */}
         <style>{`
           @media print {
-            body { background: white !important; }
+            body { background: white !important; font-size: 11px; }
             .min-h-screen { background: white !important; }
             button { display: none !important; }
             table { color: black !important; }
+            .no-print { display: none !important; }
+            .rounded-xl { border-radius: 0 !important; }
+            .shadow-sm, .shadow-md, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+            th { color: #000 !important; background: #f3f4f6 !important; }
+            td { color: #000 !important; }
+            .text-gray-300, .text-gray-400, .text-gray-500 { color: #6b7280 !important; }
+            .text-gray-700, .text-gray-800, .text-gray-900 { color: #000 !important; }
+            .text-white { color: #000 !important; }
+            .bg-gray-50 { background: #f9fafb !important; }
+            .bg-white { background: #fff !important; }
+            .border-gray-100, .border-gray-200 { border-color: #d1d5db !important; }
+            .px-4 { padding-left: 8px !important; padding-right: 8px !important; }
+            .py-3 { padding-top: 6px !important; padding-bottom: 6px !important; }
           }
         `}</style>
       </div>
