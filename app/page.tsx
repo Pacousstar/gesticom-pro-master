@@ -7,42 +7,32 @@ import { Shield, ArrowRight } from 'lucide-react'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
-  const [particles, setParticles] = useState<Array<{ left: number; top: number; delay: number; duration: number }>>([])
 
   useEffect(() => {
     setMounted(true)
-    // Générer les positions des particules uniquement côté client
-    setParticles(
-      Array.from({ length: 20 }, () => ({
-        left: Math.random() * 100,
-        top: Math.random() * 100,
-        delay: Math.random() * 5,
-        duration: 5 + Math.random() * 5,
-      }))
-    )
   }, [])
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 flex items-center justify-center p-4">
-      {/* Animations de fond */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-400/40 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-green-400/40 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-blob animation-delay-2000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-blue-400/40 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-blob animation-delay-4000"></div>
-      </div>
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
+      <video
+        autoPlay muted loop playsinline
+        className="absolute inset-0 w-full h-full object-cover"
+      >
+        <source src="/images/GestiCom%20Pro.mp4" type="video/mp4" />
+      </video>
+      <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-orange-900/60 to-black/70" />
 
-      {/* Particules flottantes - générées uniquement côté client */}
       {mounted && (
         <div className="absolute inset-0">
-          {particles.map((particle, i) => (
+          {Array.from({ length: 20 }, (_, i) => (
             <div
               key={i}
               className="absolute w-2 h-2 bg-white/40 rounded-full animate-float"
               style={{
-                left: `${particle.left}%`,
-                top: `${particle.top}%`,
-                animationDelay: `${particle.delay}s`,
-                animationDuration: `${particle.duration}s`,
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 5}s`,
+                animationDuration: `${5 + Math.random() * 5}s`,
               }}
             />
           ))}
