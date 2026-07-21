@@ -55,8 +55,32 @@ export async function GET(
         // 4. Fusionner et trier chronologiquement
         const operations: any[] = []
 
-        // Soldes initiaux : inclus seulement si aucun filtre date (vue globale)
-        if (!dateDebut && !dateFin) {
+        if (dateDebut && dateFin) {
+            // Calculer le solde réel à la date début du filtre
+            const debut = new Date(dateDebut + 'T00:00:00')
+            const [achatsAvant, reglementsAvant] = await Promise.all([
+                prisma.achat.aggregate({
+                    where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] }, date: { lt: debut } },
+                    _sum: { montantTotal: true }
+                }),
+                prisma.reglementAchat.aggregate({
+                    where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] }, date: { lt: debut } },
+                    _sum: { montant: true }
+                })
+            ])
+            const soldeAvant = (achatsAvant._sum.montantTotal || 0) + (fournisseur.soldeInitial || 0)
+                - (reglementsAvant._sum.montant || 0) - (fournisseur.avoirInitial || 0)
+            if (Math.abs(soldeAvant) > 0.01) {
+                operations.push({
+                    type: 'SOLDE_OUVERTURE',
+                    libelle: soldeAvant > 0 ? 'Solde à l\'ouverture (Débiteur)' : 'Solde à l\'ouverture (Créditeur)',
+                    date: debut,
+                    debit: soldeAvant > 0 ? soldeAvant : 0,
+                    credit: soldeAvant < 0 ? Math.abs(soldeAvant) : 0,
+                    isInitial: true
+                })
+            }
+        } else {
             if (fournisseur.soldeInitial > 0) {
                 operations.push({
                     type: 'SOLDE_INITIAL',

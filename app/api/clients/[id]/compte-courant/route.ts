@@ -159,9 +159,42 @@ export async function GET(
       })))
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    // Soldes initiaux : inclus seulement si aucun filtre date (vue globale)
+    // Soldes initiaux (vue globale) ou solde à l'ouverture (filtre date)
     let allOperations = operations
-    if (!dateDebut && !dateFin) {
+    if (dateDebut && dateFin) {
+      // Calculer le solde réel à la date début du filtre
+      const debut = new Date(dateDebut + 'T00:00:00')
+      const [ventesAvant, reglementsAvant, retoursAvant] = await Promise.all([
+        prisma.vente.aggregate({
+          where: { clientId, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] }, date: { lt: debut } },
+          _sum: { montantTotal: true }
+        }),
+        prisma.reglementVente.aggregate({
+          where: { clientId, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] }, date: { lt: debut } },
+          _sum: { montant: true }
+        }),
+        prisma.retour.aggregate({
+          where: { clientId, entiteId, date: { lt: debut } },
+          _sum: { montantTotal: true }
+        })
+      ])
+      const soldeAvant = (ventesAvant._sum.montantTotal || 0) + (client.soldeInitial || 0)
+        - (reglementsAvant._sum.montant || 0) - (client.avoirInitial || 0) - (retoursAvant._sum.montantTotal || 0)
+      if (Math.abs(soldeAvant) > 0.01) {
+        allOperations = [
+          {
+            id: 'solde-ouverture',
+            date: debut.toISOString(),
+            type: 'SOLDE_OUVERTURE',
+            libelle: soldeAvant > 0 ? 'Solde à l\'ouverture (Débiteur)' : 'Solde à l\'ouverture (Créditeur)',
+            debit: soldeAvant > 0 ? soldeAvant : 0,
+            credit: soldeAvant < 0 ? Math.abs(soldeAvant) : 0,
+            isInitial: true
+          },
+          ...operations
+        ]
+      }
+    } else {
       const initialOperations: any[] = []
       if (client.soldeInitial && client.soldeInitial > 0) {
         initialOperations.push({
