@@ -98,7 +98,6 @@ const navigation = [
       { name: 'Paiements Fournisseurs', href: '/dashboard/fournisseurs/paiements', icon: Wallet, permission: 'fournisseurs:view', key: 'paiementsFournisseurs' },
       { name: 'Comptes Courants', href: '/dashboard/comptes-courants', icon: ArrowRightLeft, permission: 'achats:view', key: 'comptesCourants' },
       { name: 'Relances Clients', href: '/dashboard/relances', icon: Send, permission: 'clients:view', key: 'relances' },
-      { name: 'Leads', href: '/dashboard/leads', icon: MessageSquare, permission: 'clients:view', key: 'leads' },
     ]
   },
   {

@@ -115,7 +115,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
 .contact{background:linear-gradient(180deg,#fff,#f9fafb)}
 .contact-wrap{display:flex;gap:40px;align-items:stretch}
 .contact-image{flex:1;position:relative;border-radius:20px;overflow:hidden;min-height:500px;box-shadow:0 8px 40px rgba(0,0,0,.1);border:1px solid #f3f4f6}
-.contact-image img{width:100%;height:100%;object-fit:cover;display:block}
+.contact-image img{width:100%;height:100%;object-fit:contain;display:block;background:#f3f4f6}
 .contact-info-lines{display:flex;flex-direction:column;gap:10px}
 .contact-info-lines span{display:flex;align-items:center;gap:10px;font-size:14px;opacity:.9}
 .contact-form{width:420px;min-width:360px;padding:8px 0;display:flex;flex-direction:column;justify-content:center}
@@ -130,6 +130,22 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
 .btn-submit:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(255,107,53,.45)}
 .btn-submit:disabled{opacity:.6;cursor:not-allowed;transform:none}
 .form-success{display:flex;align-items:center;gap:10px;margin-top:16px;padding:14px 18px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;color:#166534;font-size:14px;font-weight:500}
+
+.modal-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px}
+.modal-overlay.active{display:flex}
+.modal-content{background:#fff;border-radius:20px;padding:40px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 25px 60px rgba(0,0,0,.3);animation:modalIn .3s ease}
+@keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.modal-close{position:absolute;top:12px;right:16px;background:none;border:none;font-size:32px;color:#9ca3af;cursor:pointer;transition:color .2s;line-height:1}
+.modal-close:hover{color:#1f2937}
+.modal-content h2{font-size:22px;font-weight:700;color:#1f2937;margin-bottom:4px}
+.modal-content h2 span{background:linear-gradient(135deg,#FF6B35,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.modal-content > p{color:#6b7280;font-size:14px;margin-bottom:24px}
+.modal-content .form-group{margin-bottom:14px}
+.modal-content .form-group label{color:#374151}
+.modal-content .btn-submit-full{width:100%;background:linear-gradient(135deg,#FF6B35,#E5561E);color:#fff;padding:14px;border-radius:10px;border:none;font-weight:700;font-size:16px;cursor:pointer;transition:all .2s;box-shadow:0 4px 20px rgba(255,107,53,.35);margin-top:8px}
+.modal-content .btn-submit-full:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(255,107,53,.45)}
+.modal-content .btn-submit-full:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.modal-content select option{background:#fff;color:#1f2937}
 
 .footer{background:#0f172a;color:#64748b;padding:48px 24px;text-align:center;font-size:14px;line-height:2}
 .footer a{color:#f97316;text-decoration:none;transition:color .2s}
@@ -156,7 +172,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
   .contact-form{width:100%;min-width:auto}
   .contact-image{min-height:300px}
   .form-row{grid-template-columns:1fr}
-
+  .modal-content{margin:20px;padding:28px}
 }
 @media(max-width:480px){
   .hero-text h1{font-size:26px}
@@ -176,7 +192,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
   <nav>
     <a href="#features">Fonctionnalités</a>
     <a href="#screenshots">Aperçu</a>
-    <a href="#preinscription" class="btn-download">Télécharger</a>
+    <a href="#" onclick="openModal();return false" class="btn-download">Télécharger</a>
     <a href="#contact">Contact</a>
   </nav>
 </header>
@@ -187,7 +203,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
       <h1>Gérez votre commerce avec <span>GestiCom Pro</span></h1>
       <p>Ventes, achats, stocks, comptabilité et gestion multi-postes — tout-en-un, simple et puissant.</p>
       <div class="hero-buttons">
-        <a href="#download" class="btn-primary">
+        <a href="#" onclick="openModal();return false" class="btn-primary">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Télécharger
         </a>
@@ -295,30 +311,32 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
   </div>
 </section>
 
-<section class="preinscription" id="preinscription">
-  <div class="preinscription-inner">
+<!-- Modal overlay for pre-inscription -->
+<div id="downloadModal" class="modal-overlay">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
     <h2>Prêt à passer à <span>GestiCom Pro ?</span></h2>
     <p>Laissez-nous vos coordonnées pour recevoir votre lien de téléchargement et un accompagnement personnalisé.</p>
-    <form id="preinscriptionForm">
+    <form id="modalForm">
       <input type="hidden" name="source" value="preinscription">
       <div class="form-row">
         <div class="form-group">
-          <label for="preinsNom">Nom complet *</label>
-          <input type="text" id="preinsNom" name="nom" required placeholder="Votre nom">
+          <label for="modalNom">Nom complet *</label>
+          <input type="text" id="modalNom" name="nom" required placeholder="Votre nom">
         </div>
         <div class="form-group">
-          <label for="preinsEmail">Email *</label>
-          <input type="email" id="preinsEmail" name="email" required placeholder="vous@exemple.com">
+          <label for="modalEmail">Email *</label>
+          <input type="email" id="modalEmail" name="email" required placeholder="vous@exemple.com">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label for="preinsTel">Contact</label>
-          <input type="tel" id="preinsTel" name="contact" placeholder="+225 XX XX XX XX">
+          <label for="modalTel">Contact</label>
+          <input type="tel" id="modalTel" name="contact" placeholder="+225 XX XX XX XX">
         </div>
         <div class="form-group">
-          <label for="preinsDomaine">Domaine d'activité *</label>
-          <select id="preinsDomaine" name="domaine" required>
+          <label for="modalDomaine">Domaine d'activité *</label>
+          <select id="modalDomaine" name="domaine" required>
             <option value="">Sélectionnez votre domaine...</option>
             <option value="Boutique de vêtements">🛍️ Boutique de vêtements et prêt-à-porter</option>
             <option value="Supermarché">🛒 Supermarché / Supérette / Alimentation générale</option>
@@ -337,19 +355,13 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
             <option value="Papeterie">🏪 Papeterie, librairie et fournitures de bureau</option>
             <option value="Autre">Autre (à préciser)</option>
           </select>
-          <input type="text" id="preinsDomaineAutre" name="domaine_autre" placeholder="Précisez votre domaine..." style="display:none;margin-top:8px">
+          <input type="text" id="modalDomaineAutre" name="domaine_autre" placeholder="Précisez votre domaine..." style="display:none;margin-top:8px">
         </div>
       </div>
-      <button type="submit" class="btn-submit-full" id="preinsBtn">
-        Obtenir mon lien de téléchargement
-      </button>
-      <div id="preinsSuccess" class="form-success" style="display:none">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Inscription réussie ! Rendez-vous dans la section téléchargement ci-dessous.
-      </div>
+      <button type="submit" class="btn-submit-full" id="modalBtn">Obtenir mon lien de téléchargement</button>
     </form>
   </div>
-</section>
+</div>
 
 <section class="download" id="download">
   <div class="download-inner">
@@ -399,35 +411,6 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
             <input type="email" id="contactEmail" name="email" required>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="contactTel">Contact</label>
-            <input type="tel" id="contactTel" name="contact" placeholder="+225 XX XX XX XX">
-          </div>
-          <div class="form-group">
-            <label for="contactDomaine">Domaine d'activité</label>
-            <select id="contactDomaine" name="domaine">
-              <option value="">Sélectionnez...</option>
-              <option value="Boutique de vêtements">🛍️ Boutique de vêtements et prêt-à-porter</option>
-              <option value="Supermarché">🛒 Supermarché / Supérette / Alimentation générale</option>
-              <option value="Quincaillerie">🧱 Quincaillerie et matériaux de construction</option>
-              <option value="Pharmacie">💊 Pharmacie et parapharmacie</option>
-              <option value="Téléphonie">📱 Téléphonie mobile et accessoires</option>
-              <option value="Cosmétiques">💄 Cosmétiques, parfumerie et produits de beauté</option>
-              <option value="Chaussures">👟 Magasin de chaussures et maroquinerie</option>
-              <option value="Restauration">🍽️ Restaurant, maquis, fast-food et cafétéria</option>
-              <option value="Boissons">🥤 Cave, boissons et distribution de boissons</option>
-              <option value="Informatique">🖥️ Informatique, électronique et électroménager</option>
-              <option value="Pièces auto">🚗 Pièces détachées automobiles et motos</option>
-              <option value="Agroalimentaire">🌾 Agroalimentaire et produits agricoles</option>
-              <option value="Élevage">🐓 Élevage, alimentation animale et produits vétérinaires</option>
-              <option value="Bijouterie">💎 Bijouterie, horlogerie et accessoires de mode</option>
-              <option value="Papeterie">🏪 Papeterie, librairie et fournitures de bureau</option>
-              <option value="Autre">Autre (à préciser)</option>
-            </select>
-            <input type="text" id="contactDomaineAutre" name="domaine_autre" placeholder="Précisez votre domaine..." style="display:none;margin-top:8px">
-          </div>
-        </div>
         <div class="form-group">
           <label for="contactSujet">Sujet</label>
           <input type="text" id="contactSujet" name="sujet">
@@ -465,11 +448,16 @@ Une question, un besoin, un partenariat ? Notre équipe est à votre écoute."><
 <script>
 (function(){var c=document.getElementById('heroCarousel'),s=c.querySelector('.slides'),d=c.querySelectorAll('.dots span'),a=document.getElementById('heroCaption'),i=0,t,p=['La solution complète pour la gestion de votre commerce. Ventes, stocks, comptabilité, tout-en-un.','Simplifiez la gestion de votre boutique : stocks par taille/couleur, ventes au comptoir et fidélité client.','Gérez rayons, fournisseurs et caisses en un clin d\'œil. Une solution taillée pour la distribution.','Tous les commerces méritent une gestion professionnelle. GestiCom Pro s\'adapte à votre activité.','Quel que soit votre secteur, pilotez votre entreprise avec des outils performants et simples.','De la production à la vente, suivez matières premières, commandes et recettes en temps réel.','Une solution flexible pour tous types d\'entreprises. GestiCom Pro grandit avec vous.'];function go(n){i=(n+d.length)%d.length;s.style.transform='translateX('+(-i*100)+'%)';a.style.opacity='0';setTimeout(function(){a.textContent=p[i];a.style.opacity='1'},200);for(var j=0;j<d.length;j++)d[j].classList.toggle('active',j===i)}function next(){go(i+1)}for(var j=0;j<d.length;j++)(function(j){d[j].onclick=function(){go(j);clearInterval(t);t=setInterval(next,4000)}})(j);t=setInterval(next,4000)})();
 
+function openModal(){document.getElementById('downloadModal').classList.add('active');document.body.style.overflow='hidden'}
+function closeModal(){document.getElementById('downloadModal').classList.remove('active');document.body.style.overflow=''}
+document.getElementById('downloadModal').addEventListener('click',function(e){if(e.target===this)closeModal()});
+
 (function(){function setupAutre(selId,autreId){var s=document.getElementById(selId),a=document.getElementById(autreId);if(!s||!a)return;s.addEventListener('change',function(){a.style.display=s.value==='Autre'?'block':'none';if(s.value!=='Autre')a.value=''});a.addEventListener('input',function(){var o=Array.from(s.options).find(function(x){return x.value==='Autre'});if(o)o.value=a.value})}
-setupAutre('contactDomaine','contactDomaineAutre');setupAutre('preinsDomaine','preinsDomaineAutre');
-function handleForm(fid,btnSel,succId,btnHtml){var f=document.getElementById(fid),s=document.getElementById(succId),b=f.querySelector(btnSel);if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();b.disabled=true;b.innerHTML='<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="80" stroke-dashoffset="60"/></svg> Envoi...';fetch(f.action||'https://formspree.io/f/mjgnrgby',{method:'POST',headers:{'Accept':'application/json'},body:new FormData(f)}).then(function(r){return r.json().catch(function(){return{}})}).then(function(d){if(d.error||d.errors)throw new Error(d.error||(d.errors&&d.errors[0]&&d.errors[0].message)||'Erreur inconnue');f.reset();s.style.display='flex';setTimeout(function(){s.style.display='none'},6000)}).catch(function(err){alert('Erreur : '+err.message)}).finally(function(){b.disabled=false;b.innerHTML=btnHtml})})}
+setupAutre('modalDomaine','modalDomaineAutre');
+
+function handleForm(fid,btnSel,succId,btnHtml,onSuccess){var f=document.getElementById(fid),s=document.getElementById(succId),b=f.querySelector(btnSel);if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();b.disabled=true;b.innerHTML='<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="80" stroke-dashoffset="60"/></svg> Envoi...';fetch(f.action||'https://formspree.io/f/mjgnrgby',{method:'POST',headers:{'Accept':'application/json'},body:new FormData(f)}).then(function(r){return r.json().catch(function(){return{}})}).then(function(d){if(d.error||d.errors)throw new Error(d.error||(d.errors&&d.errors[0]&&d.errors[0].message)||'Erreur inconnue');f.reset();if(onSuccess)onSuccess();else{s.style.display='flex';setTimeout(function(){s.style.display='none'},6000)}}).catch(function(err){alert('Erreur : '+err.message)}).finally(function(){b.disabled=false;b.innerHTML=btnHtml})})}
 handleForm('contactForm','.btn-submit','contactSuccess','<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Envoyer le message');
-handleForm('preinscriptionForm','.btn-submit-full','preinsSuccess','Obtenir mon lien de téléchargement');
+handleForm('modalForm','.btn-submit-full','', 'Obtenir mon lien de téléchargement', function(){window.location.href='https://drive.google.com/uc?export=download&id=1tSLJggXSBVYAa7ZB2_-ie7-aVXiGbR1S'});
 })();
 </script>
 
