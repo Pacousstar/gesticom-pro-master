@@ -103,8 +103,8 @@ export const produitSchema = z.object({
   codeBarres: z.string().max(14).optional().nullable().transform(val => validateEan13(val)),
 })
 
-/** Client : nom, téléphone, type, plafond crédit */
-export const clientSchema = z.object({
+/** Client : nom, téléphone, type, plafond crédit (base sans refine pour compatibilité partial()) */
+const clientSchemaBase = z.object({
   code: z.string().max(50, 'Le code ne peut pas dépasser 50 caractères.').trim().nullable().optional(),
   nom: z.string().min(1, 'Le nom est requis.').max(MAX_STRING, 'Le nom ne peut pas dépasser 500 caractères.').trim(),
   telephone: z.string().max(20, 'Le téléphone ne peut pas dépasser 20 caractères.').trim().nullable().optional(),
@@ -115,10 +115,14 @@ export const clientSchema = z.object({
   soldeInitial: z.coerce.number().min(0).optional(),
   avoirInitial: z.coerce.number().min(0).optional(),
   email: z.string().email('Email invalide.').max(100).trim().nullable().optional().or(z.literal('')),
-}).refine(
+})
+
+export const clientSchema = clientSchemaBase.refine(
   (data) => data.type !== 'CREDIT' || (data.plafondCredit != null && data.plafondCredit >= 0),
   { message: 'Le plafond de crédit est requis pour un client CREDIT.', path: ['plafondCredit'] }
 )
+
+export const clientSchemaPartial = clientSchemaBase.partial()
 
 /** Fournisseur : nom, téléphone, email, NCC */
 export const fournisseurSchema = z.object({
