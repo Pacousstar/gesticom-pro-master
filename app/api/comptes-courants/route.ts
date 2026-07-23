@@ -49,7 +49,12 @@ export async function POST(request: NextRequest) {
 
     const entiteId = await getEntiteId(session)
 
+    // Nettoyer les références des anciens CC inactifs pour éviter les conflits @unique
     if (data.clientId) {
+      await prisma.compteCourant.updateMany({
+        where: { clientId: data.clientId, actif: false },
+        data: { clientId: null },
+      })
       const existant = await prisma.compteCourant.findFirst({
         where: { clientId: data.clientId, actif: true },
         select: { id: true, nom: true, code: true },
@@ -62,6 +67,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (data.fournisseurId) {
+      await prisma.compteCourant.updateMany({
+        where: { fournisseurId: data.fournisseurId, actif: false },
+        data: { fournisseurId: null },
+      })
       const existant = await prisma.compteCourant.findFirst({
         where: { fournisseurId: data.fournisseurId, actif: true },
         select: { id: true, nom: true, code: true },
