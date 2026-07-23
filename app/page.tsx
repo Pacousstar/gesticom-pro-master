@@ -9,6 +9,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [volume, setVolume] = useState(0.3)
+  const [playing, setPlaying] = useState(true)
   const [showVolume, setShowVolume] = useState(false)
 
   useEffect(() => {
@@ -19,38 +20,59 @@ export default function Home() {
     if (videoRef.current) videoRef.current.volume = volume
   }, [volume])
 
+  const togglePlay = () => {
+    if (!videoRef.current) return
+    if (videoRef.current.paused) {
+      videoRef.current.play()
+      setPlaying(true)
+    } else {
+      videoRef.current.pause()
+      setPlaying(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
-      <div className="relative w-full md:w-1/2 h-[50vh] md:min-h-screen overflow-hidden bg-black">
+      <div className="relative w-full md:w-1/2 h-[40vh] md:min-h-screen overflow-hidden bg-black">
         <video
           ref={videoRef}
           autoPlay loop playsInline preload="auto" onEnded={(e) => (e.target as HTMLVideoElement).play()}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-contain md:object-cover scale-[0.85]"
+          onClick={togglePlay}
         >
           <source src="/images/gestiCom%20pro.mp4" type="video/mp4" />
         </video>
-        <button
-          onClick={() => setShowVolume(!showVolume)}
-          className="absolute bottom-4 left-4 z-10 w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/30 transition-all"
-          title="Volume"
-        >
-          {volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
-        </button>
-        {showVolume && (
-          <div className="absolute bottom-16 left-4 z-10 bg-black/60 backdrop-blur-md rounded-xl p-3 flex flex-col items-center gap-2">
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={volume}
-              onChange={e => setVolume(Number(e.target.value))}
-              className="w-24 h-1.5 appearance-none bg-white/30 rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:cursor-pointer"
-            />
-            <span className="text-white text-xs">{Math.round(volume * 100)}%</span>
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
+        <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2">
+          <button
+            onClick={togglePlay}
+            className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/30 transition-all text-lg"
+            title={playing ? 'Pause' : 'Lecture'}
+          >
+            {playing ? '⏸' : '▶️'}
+          </button>
+          <button
+            onClick={() => setShowVolume(!showVolume)}
+            className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/30 transition-all"
+            title="Volume"
+          >
+            {volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+          </button>
+          {showVolume && (
+            <div className="absolute bottom-14 left-0 z-10 bg-black/60 backdrop-blur-md rounded-xl p-3 flex flex-col items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={volume}
+                onChange={e => setVolume(Number(e.target.value))}
+                className="w-24 h-1.5 appearance-none bg-white/30 rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:cursor-pointer"
+              />
+              <span className="text-white text-xs">{Math.round(volume * 100)}%</span>
+            </div>
+          )}
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent pointer-events-none" />
       </div>
 
       <div className="relative w-full md:w-1/2 min-h-screen flex items-center justify-center p-6 md:p-12 bg-gradient-to-br from-orange-50 via-white to-orange-100">
