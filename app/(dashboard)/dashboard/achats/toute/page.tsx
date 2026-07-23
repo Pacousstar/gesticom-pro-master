@@ -13,7 +13,8 @@ import {
   Pencil,
   Trash2,
   Printer,
-  FileSpreadsheet
+  FileSpreadsheet,
+  X
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
@@ -216,6 +217,109 @@ export default function TousLesAchatsPage() {
         </ListPrintWrapper>
       </div>
     ))
+  }
+
+  const printInNewWindow = async (data: AchatListe[], type: 'GLOBAL' | 'DETAIL') => {
+    if (!data.length) return
+
+    const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+
+    const chunks = paginateForPrint(data, { firstPageSize: 18, otherPagesSize: 20 })
+    const periode = startDate || endDate
+      ? `Période: ${startDate ? new Date(startDate).toLocaleDateString('fr-FR') : '...'} au ${endDate ? new Date(endDate).toLocaleDateString('fr-FR') : '...'}`
+      : 'Toutes périodes'
+    const totalMontant = data.reduce((s, v) => s + v.montantTotal, 0)
+    const totalPaye = data.reduce((s, v) => s + v.montantPaye, 0)
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+    const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+      if (showFull) {
+        return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+            <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+            <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${type === 'GLOBAL' ? 'Journal Global des Achats' : 'Journal Détaillé des Achats'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">${periode}</div>
+            <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Date d'édition: ${today}</div>
+            <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+          </div>
+        </div>`
+      }
+      return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+      </div>`
+    }
+
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${type === 'GLOBAL' ? 'Journal Global' : 'Journal Détaillé'} des Achats</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  .kpis { display: flex; gap: 8px; margin-bottom: 8px; }
+  .kpi { flex: 1; border: 2px solid #000; background: #f5f5f5; padding: 6px 10px; font-size: 13px; font-weight: 900; text-align: center; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 6px 4px; font-size: 13px; font-weight: 900; text-align: left; }
+  th.right { text-align: right; }
+  th.center { text-align: center; }
+  td { border: 1px solid #000; padding: 4px; font-size: 13px; }
+  td.right { text-align: right; font-weight: 700; }
+  td.center { text-align: center; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 14px; }
+  .total-label { text-align: right; padding-right: 8px; }
+</style></head><body>`
+
+    chunks.forEach((chunk, index, allChunks) => {
+      html += `<div class="page">`
+      html += headerHtml(index === 0, index + 1, allChunks.length)
+      html += `<div class="kpis">
+        <div class="kpi">VOLUME: ${totalMontant.toLocaleString('fr-FR')} F</div>
+        <div class="kpi">PAYE: ${totalPaye.toLocaleString('fr-FR')} F</div>
+        <div class="kpi">RESTE: ${(totalMontant - totalPaye).toLocaleString('fr-FR')} F</div>
+        <div class="kpi">NB: ${data.length}</div>
+      </div>`
+      html += `<table>
+        <thead><tr>
+          <th style="width:14%">REF / DATE</th>
+          <th style="width:22%">FOURNISSEUR / MAGASIN</th>
+          <th style="width:22%" class="center">RÈGLEMENT</th>
+          <th style="width:21%" class="right">MONTANT TOTAL</th>
+          <th style="width:21%" class="right">DÉCAISSÉ</th>
+        </tr></thead><tbody>`
+      chunk.forEach((v) => {
+        html += `<tr>
+          <td><b>${v.numero}</b><br/><span style="font-size:11px;color:#888;">${new Date(v.date).toLocaleDateString('fr-FR')}</span></td>
+          <td><b>${v.fournisseur}</b><br/><span style="font-size:11px;color:#888;">${v.magasin}</span></td>
+          <td class="center">${v.modePaiement}<br/><span style="font-size:11px;font-weight:700;color:#555;">${getStatutPaiementLabel(v.statutPaiement)}</span></td>
+          <td class="right">${v.montantTotal.toLocaleString('fr-FR')} F</td>
+          <td class="right" style="color:#059669;">${v.montantPaye.toLocaleString('fr-FR')} F</td>
+        </tr>`
+      })
+      if (index === allChunks.length - 1) {
+        html += `<tfoot><tr>
+          <td colspan="3" class="total-label">TOTAUX</td>
+          <td class="right">${totalMontant.toLocaleString('fr-FR')} F</td>
+          <td class="right" style="color:#059669;">${totalPaye.toLocaleString('fr-FR')} F</td>
+        </tr></tfoot>`
+      }
+      html += `</tbody></table></div>`
+    })
+
+    html += `</body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      setTimeout(() => w.print(), 500)
+    } else {
+      alert('Autorisez les popups pour imprimer, ou utilisez Ctrl+P')
+    }
   }
 
   return (
@@ -443,48 +547,33 @@ export default function TousLesAchatsPage() {
       </div>
 
       {isPreviewOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
-          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-white no-print">
+          <div className="flex items-center justify-between border-b px-6 py-4 bg-gray-100">
             <div className="flex items-center gap-6">
-               <div>
-                 <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu du Rapport des Achats</h2>
-                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                   Mode : {printType === 'GLOBAL' ? 'Journal Simplifié' : 'Journal Détaillé'}
-                 </p>
-               </div>
-               <div className="h-10 w-px bg-gray-200" />
-               <span className="rounded-full bg-indigo-100 px-4 py-2 text-xs font-black text-indigo-600 uppercase">
-                 {allAchatsForPrint.length} OPÉRATIONS
-               </span>
+              <h2 className="text-lg font-black uppercase tracking-tight">Journal des Achats</h2>
+              <span className="rounded-full bg-indigo-100 px-4 py-1.5 text-xs font-black text-indigo-700 uppercase">
+                {printType === 'GLOBAL' ? 'Journal Simplifié' : 'Journal Détaillé'} — {allAchatsForPrint.length} Opérations
+              </span>
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <button
-                onClick={() => setIsPreviewOpen(false)}
-                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+                onClick={async () => { setIsPreviewOpen(false); await printInNewWindow(allAchatsForPrint, printType || 'GLOBAL') }}
+                className="rounded-lg bg-orange-500 px-6 py-2.5 text-sm font-bold text-white hover:bg-orange-600 flex items-center gap-2"
               >
-                Fermer
+                <Printer className="h-4 w-4" /> LANCER L'IMPRESSION
               </button>
-              <button
-                onClick={() => { setIsPreviewOpen(false); setTimeout(() => window.print(), 0); }}
-                className="flex items-center gap-2 rounded-xl bg-indigo-600 px-10 py-2 text-sm font-black text-white hover:bg-indigo-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
-              >
-                <Printer className="h-4 w-4" />
-                Lancer l'impression
+              <button onClick={() => setIsPreviewOpen(false)} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-200 flex items-center gap-2">
+                <X className="h-4 w-4" /> Fermer
               </button>
             </div>
           </div>
-
-          <div className="flex-1 overflow-auto p-12 bg-gray-100/30">
-            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen">
-               {renderPrintChunks('page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8', '')}
+          <div className="flex-1 overflow-auto p-6">
+            <div className="mx-auto max-w-[210mm] bg-white">
+              {renderPrintChunks('page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8', '')}
             </div>
           </div>
         </div>
       )}
-
-      <div className="hidden print:block absolute inset-0 bg-white p-4">
-        {renderPrintChunks('page-break mb-8', 'mb-8')}
-      </div>
 
       <ModificationAchatModal
         isOpen={editingAchatId !== null}

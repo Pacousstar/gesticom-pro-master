@@ -62,15 +62,14 @@ export default function ClientsPage() {
   const [tempDebt, setTempDebt] = useState('')
   const [editingDebt, setEditingDebt] = useState<number | null>(null)
   const [paymentModal, setPaymentModal] = useState<{ client: Client; invoices: any[] } | null>(null)
-  const [isPrinting, setIsPrinting] = useState(false)
-  const [allClientsForPrint, setAllClientsForPrint] = useState<Client[]>([])
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
-  const [printType, setPrintType] = useState<'PORTEFEUILLE' | 'REPERTOIRE'>('PORTEFEUILLE')
   const [entreprise, setEntreprise] = useState<any>(null)
   const [historyForPrint, setHistoryForPrint] = useState<any[]>([])
   const [printDateDebut, setPrintDateDebut] = useState('')
   const [printDateFin, setPrintDateFin] = useState('')
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [printData, setPrintData] = useState<Client[]>([])
 
   useEffect(() => {
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => {})
@@ -99,29 +98,106 @@ export default function ClientsPage() {
     setQ(qFromUrl)
   }, [qFromUrl])
 
-  const handlePrintAll = async (type: 'PORTEFEUILLE' | 'REPERTOIRE') => {
-    setHistoryForPrint([])
-    setPrintType(type)
-    setIsPrinting(true)
+  const openPrintPreview = async () => {
     try {
       const params = new URLSearchParams()
       if (q) params.set('q', q)
       if (dateDebut) params.set('dateDebut', dateDebut)
       if (dateFin) params.set('dateFin', dateFin)
-      params.set('limit', '10000') 
-      
+      params.set('limit', '10000')
       const res = await fetch('/api/clients?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        setAllClientsForPrint(extractList(response))
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 0)
+        setPrintData(extractList(response))
+        setIsPreviewOpen(true)
       }
     } catch (e) {
       console.error(e)
-      setIsPrinting(false)
+    }
+  }
+
+  const printInNewWindow = async (data: Client[]) => {
+    if (!data.length) return
+    const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+    const chunks = paginateForPrint(data, { firstPageSize: 8, otherPagesSize: 14 })
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const totalDu = data.reduce((s, c) => s + (c.dette ?? 0), 0)
+    const nbCredit = data.filter(c => (c.dette ?? 0) > 0).length
+
+    const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+      if (showFull) {
+        return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+            <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+            <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">Portefeuille des Clients</div>
+            ${q ? `<div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">Filtre: "${q}"</div>` : ''}
+            <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Édition: ${today}</div>
+            <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+          </div>
+        </div>`
+      }
+      return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+      </div>`
+    }
+
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Clients</title>
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 6px 4px; font-size: 12px; font-weight: 900; text-align: center; }
+  td { border: 1px solid #000; padding: 4px; font-size: 12px; text-align: center; }
+  td.left { text-align: left; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 13px; }
+</style></head><body>`
+
+    chunks.forEach((chunk, index, allChunks) => {
+      html += `<div class="page">`
+      html += headerHtml(index === 0, index + 1, allChunks.length)
+      html += `<table>
+        <thead><tr>
+          <th style="width:10%">N° /<br/>CODE</th>
+          <th style="width:24%">NOM /<br/>TÉL.</th>
+          <th style="width:24%">LOCALISATION /<br/>NCC</th>
+          <th style="width:16%">TYPE /<br/>PLAFOND</th>
+          <th style="width:16%">SOLDE GLOBAL</th>
+        </tr></thead><tbody>`
+      chunk.forEach((c, idx) => {
+        const globalNum = allChunks.slice(0, index).reduce((s, a) => s + a.length, 0) + idx + 1
+        html += `<tr>
+          <td><span style="font-weight:900;font-size:11px;">${globalNum}</span><br/><span style="font-size:11px;color:#555;font-family:monospace;">${c.code || '—'}</span></td>
+          <td class="left"><b>${c.nom}</b><br/><span style="font-size:11px;color:#888;">${(c.telephone === 'null' ? null : c.telephone) || '—'}</span></td>
+          <td class="left">${(c.localisation === 'null' ? null : c.localisation) || '—'}<br/><span style="font-size:11px;color:#888;">NCC: ${c.ncc || '—'}</span></td>
+          <td><span style="font-weight:700;">${c.type}</span><br/><span style="font-size:11px;color:#555;">${c.type === 'CREDIT' && c.plafondCredit != null ? Number(c.plafondCredit).toLocaleString('fr-FR') + ' F' : '—'}</span></td>
+          <td style="font-weight:900;${Number(c.dette ?? 0) > 0 ? 'color:#dc2626;' : Number(c.dette ?? 0) < 0 ? 'color:#059669;' : ''}">${Number(c.dette ?? 0) > 0 ? '+' : ''}${Number(c.dette ?? 0).toLocaleString('fr-FR')} F</td>
+        </tr>`
+      })
+      if (index === allChunks.length - 1) {
+        html += `<tfoot><tr>
+          <td colspan="4" style="text-align:right;padding-right:8px;">TOTAL GÉNÉRAL DU PORTEFEUILLE — <span style="font-size:11px;color:#555;">${nbCredit} client(s) débiteur(s)</span></td>
+          <td style="font-weight:900;">${totalDu.toLocaleString('fr-FR')} F</td>
+        </tr></tfoot>`
+      }
+      html += `</tbody></table></div>`
+    })
+
+    html += `</body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      setTimeout(() => { w.print(); w.close() }, 500)
+    } else {
+      alert('Veuillez autoriser les popups pour imprimer.')
     }
   }
 
@@ -346,13 +422,12 @@ export default function ClientsPage() {
           </button>
           <button
             type="button"
-            onClick={() => handlePrintAll('PORTEFEUILLE')}
-            disabled={isPrinting}
-            className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20 disabled:opacity-50"
+            onClick={openPrintPreview}
+            className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20"
             title="Imprimer la liste des clients (selon filtres)"
           >
-            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            {isPrinting ? 'Préparation...' : 'Imprimer'}
+            <Printer className="h-4 w-4" />
+            Imprimer
           </button>
           <button
             onClick={() => openForm()}
@@ -859,113 +934,7 @@ export default function ClientsPage() {
           invoices={paymentModal.invoices}
         />
       )}
-      {historyForPrint.length === 0 && (<div className="hidden print:block">
-        {(() => {
-          const dataToPrint = allClientsForPrint.length > 0 ? allClientsForPrint : list
-          const chunks = paginateForPrint(dataToPrint, { firstPageSize: 18, otherPagesSize: 23 })
-          const offsetBefore = (pageIndex: number) =>
-            chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
 
-          return chunks.map((chunk, index, allChunks) => (
-            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-            <ListPrintWrapper
-              title={printType === 'PORTEFEUILLE' ? "Portefeuille des Clients" : "Répertoire des Clients"}
-              subtitle={q ? `Filtre: "${q}"` : "Portefeuille Global"}
-              pageNumber={index + 1}
-              totalPages={allChunks.length}
-            >
-              <table className="w-full text-[14px] border-collapse border border-gray-300">
-                <thead>
-                  <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                    <th className="border border-gray-300 px-2 py-3 text-center w-10">N°</th>
-                    {printType === 'PORTEFEUILLE' ? (
-                      <>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Code</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Nom</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Type</th>
-                        {dateDebut && dateFin && (
-                          <th className="border border-gray-300 px-3 py-3 text-right">Dette Période</th>
-                        )}
-                        <th className="border border-gray-300 px-3 py-3 text-right">Solde Global</th>
-                      </>
-                    ) : (
-                      <>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Nom</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Téléphone</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Email</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">Localisation</th>
-                        <th className="border border-gray-300 px-3 py-3 text-left">NCC</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {chunk.map((c, idx) => (
-                    <tr key={idx} className="border-b border-gray-200">
-                      <td className="border border-gray-300 px-2 py-2 text-center font-bold">
-                        {offsetBefore(index) + idx + 1}
-                      </td>
-                      {printType === 'PORTEFEUILLE' ? (
-                        <>
-                          <td className="border border-gray-300 px-3 py-2 font-mono">{c.code || '-'}</td>
-                          <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{c.nom}</td>
-                          <td className="border border-gray-300 px-3 py-2 font-medium">{c.type}</td>
-                          {dateDebut && dateFin && (
-                            <td className="border border-gray-300 px-3 py-2 text-right font-black bg-orange-50 italic text-[11px]">
-                        {((c.dettePeriode ?? 0)).toLocaleString('fr-FR')} F
-                            </td>
-                          )}
-                          <td className={`border border-gray-300 px-3 py-2 text-right font-black ${Number(c.dette ?? 0) > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                            {Number(c.dette ?? 0) > 0 ? '+' : ''}{Number(c.dette ?? 0).toLocaleString('fr-FR')} F
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{c.nom}</td>
-                          <td className="border border-gray-300 px-3 py-2">{(c.telephone === 'null' ? null : c.telephone) || '-'}</td>
-                          <td className="border border-gray-300 px-3 py-2 text-xs truncate max-w-[150px]">{(c.email === 'null' ? null : c.email) || '-'}</td>
-                          <td className="border border-gray-300 px-3 py-2 italic text-xs">{(c.localisation === 'null' ? null : c.localisation) || '-'}</td>
-                          <td className="border border-gray-300 px-3 py-2 text-xs">{c.ncc || '-'}</td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-                {index === allChunks.length - 1 && (
-                  <tfoot>
-                    <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black uppercase italic">
-                      {printType === 'PORTEFEUILLE' ? (
-                        <>
-                          <td colSpan={dateDebut && dateFin ? 4 : 4} className="border border-gray-300 px-3 py-4 text-right bg-white tracking-widest text-xs italic">TOTAL GÉNÉRAL DU PORTEFEUILLE</td>
-                          {dateDebut && dateFin && (
-                            <td className="border border-gray-300 px-3 py-4 text-right bg-orange-100 text-orange-900 font-black text-[12px]">
-                              DETTE PÉRIODE: {(allClientsForPrint.length > 0 ? allClientsForPrint : list).reduce((acc, c) => acc + ((c as any).dettePeriode ?? 0), 0).toLocaleString()} F
-                            </td>
-                          )}
-                          <td className="border border-gray-300 px-3 py-4 text-right bg-white text-sm">
-                            <div className="flex flex-col gap-1 items-end">
-                              <span className="text-red-700 text-xs">CRÉANCES: {(allClientsForPrint.length > 0 ? allClientsForPrint : list).filter(c => (c.dette ?? 0) > 0).reduce((acc, c) => acc + (c.dette ?? 0), 0).toLocaleString()} F</span>
-                              <span className="text-emerald-700 text-xs">AVOIRS: {Math.abs((allClientsForPrint.length > 0 ? allClientsForPrint : list).filter(c => (c.dette ?? 0) < 0).reduce((acc, c) => acc + (c.dette ?? 0), 0)).toLocaleString()} F</span>
-                              <div className="border-t border-black mt-1 pt-1 font-black underline decoration-double text-slate-900">
-                                NET: {((allClientsForPrint.length > 0 ? allClientsForPrint : list).reduce((acc, c) => acc + (c.dette ?? 0), 0)).toLocaleString()} F
-                              </div>
-                            </div>
-                          </td>
-                        </>
-                      ) : (
-                        <td colSpan={6} className="border border-gray-300 px-3 py-6 text-center bg-white tracking-[0.2em] font-black text-gray-500 italic">
-                          TOTAL RÉPERTOIRE : {(allClientsForPrint.length > 0 ? allClientsForPrint : list).length} CLIENTS ENREGISTRÉS
-                        </td>
-                      )}
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </ListPrintWrapper>
-            </div>
-          ))
-        })()}
-      </div>)}
 
       {/* Impression Historique (hors modal) */}
       {historyForPrint.length > 0 && (
@@ -1080,6 +1049,90 @@ export default function ClientsPage() {
               </div>
             ))
           })()}
+        </div>
+      )}
+
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu — Portefeuille des Clients</h2>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                  {printData.length} client(s)
+                </p>
+              </div>
+              <div className="h-10 w-px bg-gray-200" />
+              <span className="rounded-full bg-violet-100 px-4 py-2 text-xs font-black text-violet-600 uppercase">
+                {(q ? `Filtre: "${q}"` : 'Portefeuille Global')}
+              </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={async () => { setIsPreviewOpen(false); await printInNewWindow(printData) }}
+                className="flex items-center gap-2 rounded-xl bg-violet-600 px-10 py-2 text-sm font-black text-white hover:bg-violet-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-8">
+            <div className="mx-auto bg-white shadow-2xl rounded-xl overflow-hidden" style={{ maxWidth: '1100px' }}>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-[11px] font-black text-gray-600 uppercase tracking-wider">
+                    <th className="p-4 text-center w-24">N° /<br/>CODE</th>
+                    <th className="p-4 text-center">NOM /<br/>TÉL.</th>
+                    <th className="p-4 text-center">LOCALISATION /<br/>NCC</th>
+                    <th className="p-4 text-center">TYPE /<br/>PLAFOND</th>
+                    <th className="p-4 text-center">SOLDE<br/>GLOBAL</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {printData.map((c, i) => (
+                    <tr key={c.id} className="hover:bg-violet-50/30 transition-colors">
+                      <td className="p-4 text-center">
+                        <span className="font-black text-gray-700">{i + 1}</span>
+                        <br/><span className="text-[11px] font-mono text-gray-500">{c.code || '—'}</span>
+                      </td>
+                      <td className="p-4 text-left">
+                        <span className="font-bold text-gray-900">{c.nom}</span>
+                        <br/><span className="text-[11px] text-gray-500">{(c.telephone === 'null' ? null : c.telephone) || '—'}</span>
+                      </td>
+                      <td className="p-4 text-left">
+                        <span>{(c.localisation === 'null' ? null : c.localisation) || '—'}</span>
+                        <br/><span className="text-[11px] text-gray-500">NCC: {c.ncc || '—'}</span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className="font-semibold">{c.type}</span>
+                        <br/><span className="text-[11px] text-gray-500">{c.type === 'CREDIT' && c.plafondCredit != null ? Number(c.plafondCredit).toLocaleString('fr-FR') + ' F' : '—'}</span>
+                      </td>
+                      <td className={`p-4 text-center font-black text-sm ${Number(c.dette ?? 0) > 0 ? 'text-red-600' : Number(c.dette ?? 0) < 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                        {Number(c.dette ?? 0) > 0 ? '+' : ''}{Number(c.dette ?? 0).toLocaleString('fr-FR')} F
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 font-black text-sm border-t-2 border-gray-300">
+                    <td colSpan={4} className="p-4 text-right uppercase italic tracking-wider">
+                      Total général — {printData.filter(c => (c.dette ?? 0) > 0).length} client(s) débiteur(s)
+                    </td>
+                    <td className="p-4 text-center">
+                      {printData.reduce((s, c) => s + (c.dette ?? 0), 0).toLocaleString('fr-FR')} F
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

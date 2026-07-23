@@ -54,7 +54,7 @@ export default function ListPrintWrapper({
   }, [providedEnterprise])
 
   return (
-    <div className="print:flex flex-col font-sans text-black bg-white p-4 relative list-print-container">
+    <div className="font-sans text-black bg-white p-4 relative list-print-container">
       {/* HEADER PROFESSIONNEL */}
       {!hideHeader && (
         <div className="flex justify-between items-start mb-8 border-b-4 border-gray-900 pb-6">
@@ -123,7 +123,7 @@ export default function ListPrintWrapper({
       )}
 
       {/* CONTENU DE LA LISTE (TABLEAU) */}
-      <div className="print-content flex-1">
+      <div className="print-content">
         {kpis && kpis.length > 0 && (
           <div className="bg-gray-50 border-2 border-black px-3 py-2 mb-3 flex justify-between text-[13px] font-black">
             {kpis.map((kpi, idx) => (
@@ -173,7 +173,7 @@ export default function ListPrintWrapper({
           }
 
           .print-content {
-            flex: 1 1 auto !important;
+            flex: 0 1 auto !important;
             min-height: 0 !important;
           }
           .print-content table {

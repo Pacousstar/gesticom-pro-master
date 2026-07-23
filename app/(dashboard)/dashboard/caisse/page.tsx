@@ -7,7 +7,6 @@ import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import Pagination from '@/components/ui/Pagination'
 import { extractList } from '@/lib/api-client'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 
 type Magasin = { id: number; code: string; nom: string }
@@ -60,7 +59,6 @@ export default function CaissePage() {
   const [totalPages, setTotalPages] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
-  const [isPrinting, setIsPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [caissePhysique, setCaissePhysique] = useState('')
   const [allOperationsForPrint, setAllOperationsForPrint] = useState<OperationCaisse[]>([])
@@ -233,7 +231,6 @@ export default function CaissePage() {
           <button
             type="button"
             onClick={async () => {
-              setIsPrinting(true)
               try {
                 const params = new URLSearchParams({ limit: '10000' })
                 if (dateDebut) params.set('dateDebut', dateDebut)
@@ -251,14 +248,11 @@ export default function CaissePage() {
               } catch (e) {
                 console.error(e)
                 showError("Erreur lors de la préparation de l'aperçu.")
-              } finally {
-                setIsPrinting(false)
               }
             }}
-            disabled={isPrinting}
-            className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-4 py-2 text-sm font-black text-orange-800 hover:bg-orange-100 shadow-md transition-all active:scale-95"
           >
-            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+            <Printer className="h-4 w-4" />
             Imprimer
           </button>
           <button
@@ -744,14 +738,15 @@ export default function CaissePage() {
 
       {/* MODALE D'APERÇU IMPRESSION CAISSE */}
       {isPreviewOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm print:bg-white print:static print:z-0">
-          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl print:hidden">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
             <div className="flex items-center gap-6">
                <div>
-                 <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu Journal de Caisse</h2>
-                 <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
-                   {filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
-                 </p>
+                  <h2 className="text-2xl font-black text-gray-900 uppercase italic leading-none">Aperçu — Journal de Caisse</h2>
+                  <p className="mt-1 text-[10px] font-bold text-gray-500 uppercase tracking-widest italic leading-none">
+                    {filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
+                    &nbsp;— {new Date(dateDebut).toLocaleDateString('fr-FR')} au {new Date(dateFin).toLocaleDateString('fr-FR')}
+                  </p>
                </div>
                <div className="h-10 w-px bg-gray-200" />
                <span className="rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-600 uppercase">
@@ -761,13 +756,101 @@ export default function CaissePage() {
             <div className="flex gap-4">
               <button
                 onClick={() => setIsPreviewOpen(false)}
-                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase"
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
               >
                 Fermer
               </button>
               <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase"
+                onClick={async () => {
+                  setIsPreviewOpen(false)
+                  const data = allOperationsForPrint.length > 0 ? allOperationsForPrint : operations
+                  const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+                  const chunks = paginateForPrint(data, { firstPageSize: 12, otherPagesSize: 18 })
+                  const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+                  const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+                    if (showFull) {
+                      return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div>
+                          <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+                          <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+                          <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+                          <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+                        </div>
+                        <div style="text-align:right;">
+                          <div style="font-size:16px;font-weight:900;text-transform:uppercase;">Journal de Caisse</div>
+                          <div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">${new Date(dateDebut).toLocaleDateString('fr-FR')} au ${new Date(dateFin).toLocaleDateString('fr-FR')}</div>
+                          <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Édition: ${today}</div>
+                          <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+                        </div>
+                      </div>`
+                    }
+                    return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+                      <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+                    </div>`
+                  }
+
+                  let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Caisse</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 6px 4px; font-size: 12px; font-weight: 900; text-align: center; }
+  td { border: 1px solid #000; padding: 4px; font-size: 12px; text-align: center; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 13px; }
+  .compteurs { display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px; background: #f0f0f0; border: 2px solid #000; font-size: 12px; font-weight: 900; }
+</style></head><body>`
+
+                  chunks.forEach((chunk, index, allChunks) => {
+                    html += `<div class="page">`
+                    html += headerHtml(index === 0, index + 1, allChunks.length)
+                    if (index === 0) {
+                      html += `<div class="compteurs">
+                        <span>ENTRÉES: +${totalEntrees.toLocaleString('fr-FR')} F</span>
+                        <span>SORTIES: −${totalSorties.toLocaleString('fr-FR')} F</span>
+                        <span style="${soldeMouvements >= 0 ? 'color:#059669;' : 'color:#dc2626;'}">SOLDE: ${soldeMouvements.toLocaleString('fr-FR')} F</span>
+                        <span>${allChunks.reduce((s, a) => s + a.length, 0)} OPÉRATIONS</span>
+                      </div>`
+                    }
+                    html += `<table>
+                      <thead><tr>
+                        <th style="width:14%">N° /<br/>DATE</th>
+                        <th style="width:18%">MAGASIN</th>
+                        <th style="width:40%">MOTIF /<br/>TYPE</th>
+                        <th style="width:18%">MONTANT</th>
+                      </tr></thead><tbody>`
+                    chunk.forEach((o: any, idx: number) => {
+                      const globalNum = allChunks.slice(0, index).reduce((s, a) => s + a.length, 0) + idx + 1
+                      html += `<tr>
+                        <td><span style="font-weight:900;font-size:11px;">${globalNum}</span><br/><span style="font-size:11px;color:#555;">${new Date(o.date).toLocaleDateString('fr-FR')}</span></td>
+                        <td>${o.magasin?.code || o.magasin || '—'}</td>
+                        <td>${o.motif || '—'}<br/><span style="font-size:11px;font-weight:900;${o.type === 'SORTIE' ? 'color:#dc2626;' : 'color:#059669;'}">${o.type}</span></td>
+                        <td style="font-weight:900;${o.type === 'SORTIE' ? 'color:#dc2626;' : 'color:#059669;'}">${o.type === 'SORTIE' ? '−' : '+'}${(o.montant || 0).toLocaleString('fr-FR')} F</td>
+                      </tr>`
+                    })
+                    if (index === allChunks.length - 1) {
+                      html += `<tfoot><tr>
+                        <td colspan="3" style="text-align:right;padding-right:8px;text-transform:uppercase;">RÉCAPITULATIF PÉRIODE</td>
+                        <td style="font-weight:900;">E: +${totalEntrees.toLocaleString('fr-FR')}<br/>S: −${totalSorties.toLocaleString('fr-FR')}<br/>∆: ${soldeMouvements.toLocaleString('fr-FR')} F</td>
+                      </tr></tfoot>`
+                    }
+                    html += `</tbody></table></div>`
+                  })
+
+                  html += `</body></html>`
+                  const w = window.open('', '_blank')
+                  if (w) {
+                    w.document.write(html)
+                    w.document.close()
+                    setTimeout(() => { w.print(); w.close() }, 500)
+                  } else {
+                    alert('Veuillez autoriser les popups pour imprimer.')
+                  }
+                }}
+                className="flex items-center gap-2 rounded-xl bg-violet-600 px-10 py-2 text-sm font-black text-white hover:bg-violet-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
               >
                 <Printer className="h-4 w-4" />
                 Lancer l'impression
@@ -775,73 +858,66 @@ export default function CaissePage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto p-12 bg-gray-100/30 print:overflow-visible print:p-0 print:bg-white">
-            <div className="mx-auto max-w-[210mm] bg-white shadow-2xl min-h-screen print:shadow-none print:max-w-none print:min-h-0">
-               {(() => {
-                  const dataToPrint = allOperationsForPrint.length > 0 ? allOperationsForPrint : operations;
-                  const chunks = paginateForPrint(dataToPrint);
-                  
-                  return chunks.map((chunk, index, allChunks) => (
-                    <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8 print:border-0 print:mb-0 print:pb-0' : ''}>
-                       <ListPrintWrapper
-                        title="JOURNAL DE CAISSE"
-                        subtitle={filtreMagasin ? `Magasin: ${magasins.find(m => String(m.id) === filtreMagasin)?.nom}` : "Toutes les caisses"}
-                        dateRange={{ start: dateDebut, end: dateFin }}
-                        pageNumber={index + 1}
-                        totalPages={allChunks.length}
-                        hideHeader={index > 0}
-                        hideVisa={index < allChunks.length - 1}
-                      >
-                         <table className="w-full text-[14px] border-collapse border-2 border-black">
-                          <thead>
-                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Magasin / Utilisateur</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Motif</th>
-                              <th className="px-3 py-3 text-right">Montant</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {chunk.map((o, idx) => (
-                              <tr key={idx} className="border-b border-black">
-                                <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">
-                                  {new Date(o.date).toLocaleDateString('fr-FR')}
-                                </td>
-                                <td className="border-r-2 border-black px-3 py-2 font-bold uppercase italic text-[11px]">
-                                   {o.type}
-                                </td>
-                                <td className="border-r-2 border-black px-3 py-2 uppercase leading-snug">
-                                   <div className="font-bold text-[11px]">{o.magasin.code}</div>
-                                   <div className="text-[10px] italic text-gray-500">{o.utilisateur.nom}</div>
-                                </td>
-                                <td className="border-r-2 border-black px-3 py-2 text-[12px]">{o.motif}</td>
-                                <td className={`px-3 py-2 text-right font-black ${o.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
-                                  {o.type === 'SORTIE' ? '-' : '+'}{o.montant.toLocaleString('fr-FR')} F
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          {index === allChunks.length - 1 && (
-                            <tfoot>
-                              <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
-                                  <td colSpan={3} className="border-r-2 border-black px-3 py-5 text-right bg-white tracking-widest">RÉCAPITULATIF PÉRIODE</td>
-                                  <td className="border-r-2 border-black px-3 py-5 text-right bg-white leading-relaxed text-[12px]">
-                                    TOTAL ENTRÉES: +{totalEntrees.toLocaleString('fr-FR')} F<br/>
-                                    TOTAL SORTIES: -{totalSorties.toLocaleString('fr-FR')} F
-                                  </td>
-                                  <td className={`px-3 py-5 text-right bg-slate-50 underline decoration-double shadow-inner ${soldeMouvements >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                                    SOLDE:<br/>
-                                    {soldeMouvements.toLocaleString('fr-FR')} F
-                                  </td>
-                              </tr>
-                            </tfoot>
-                          )}
-                        </table>
-                      </ListPrintWrapper>
-                    </div>
-                  ));
-               })()}
+          <div className="flex-1 overflow-auto p-8">
+            <div className="mx-auto bg-white shadow-2xl rounded-xl overflow-hidden" style={{ maxWidth: '900px' }}>
+              {/* Compteurs */}
+              <div className="grid grid-cols-4 gap-3 p-4 bg-gray-50 border-b border-gray-200">
+                <div className="rounded-lg bg-emerald-50 p-3 text-center border border-emerald-200">
+                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Entrées</p>
+                  <p className="text-lg font-black text-emerald-700">+{totalEntrees.toLocaleString('fr-FR')} F</p>
+                </div>
+                <div className="rounded-lg bg-rose-50 p-3 text-center border border-rose-200">
+                  <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Sorties</p>
+                  <p className="text-lg font-black text-rose-700">−{totalSorties.toLocaleString('fr-FR')} F</p>
+                </div>
+                <div className={`rounded-lg p-3 text-center border ${soldeMouvements >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-rose-50 border-rose-200'}`}>
+                  <p className={`text-[10px] font-black uppercase tracking-widest ${soldeMouvements >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>Solde</p>
+                  <p className={`text-lg font-black ${soldeMouvements >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>{soldeMouvements.toLocaleString('fr-FR')} F</p>
+                </div>
+                <div className="rounded-lg bg-orange-50 p-3 text-center border border-orange-200">
+                  <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Opérations</p>
+                  <p className="text-lg font-black text-orange-700">{allOperationsForPrint.length}</p>
+                </div>
+              </div>
+
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-[11px] font-black text-gray-600 uppercase tracking-wider">
+                    <th className="p-4 text-center w-24">N° /<br/>DATE</th>
+                    <th className="p-4 text-center">MAGASIN</th>
+                    <th className="p-4 text-center">MOTIF /<br/>TYPE</th>
+                    <th className="p-4 text-center">MONTANT</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {(allOperationsForPrint.length > 0 ? allOperationsForPrint : operations).map((o, i) => (
+                    <tr key={o.id} className="hover:bg-violet-50/30 transition-colors">
+                      <td className="p-4 text-center">
+                        <span className="font-black text-gray-700">{i + 1}</span>
+                        <br/><span className="text-[11px] text-gray-500">{new Date(o.date).toLocaleDateString('fr-FR')}</span>
+                      </td>
+                      <td className="p-4 text-center font-bold text-gray-800">{o.magasin?.code || '—'}</td>
+                      <td className="p-4 text-center">
+                        <span>{o.motif || '—'}</span>
+                        <br/><span className={`text-[11px] font-black ${o.type === 'SORTIE' ? 'text-rose-600' : 'text-emerald-600'}`}>{o.type}</span>
+                      </td>
+                      <td className={`p-4 text-center font-black text-sm ${o.type === 'SORTIE' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {o.type === 'SORTIE' ? '−' : '+'}{(o.montant || 0).toLocaleString('fr-FR')} F
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 font-black text-sm border-t-2 border-gray-300">
+                    <td colSpan={3} className="p-4 text-right uppercase tracking-wider italic">Récapitulatif période</td>
+                    <td className="p-4 text-center leading-relaxed">
+                      E: +{totalEntrees.toLocaleString('fr-FR')} F<br/>
+                      S: −{totalSorties.toLocaleString('fr-FR')} F<br/>
+                      <span className={`${soldeMouvements >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>∆: {soldeMouvements.toLocaleString('fr-FR')} F</span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>

@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { Building2, Plus, Loader2, ArrowDownCircle, ArrowUpCircle, Filter, X, Edit2, Trash2, Search, FileSpreadsheet, Download, Printer } from 'lucide-react'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
+
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import { extractList } from '@/lib/api-client'
 import Pagination from '@/components/ui/Pagination'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
+import { paginateForPrint } from '@/lib/print-helpers'
 
 type Banque = {
   id: number
@@ -94,8 +95,7 @@ export default function BanquePage() {
   const [statsConsolidation, setStatsConsolidation] = useState<any>(null)
   const [statsConsolidationLoading, setStatsConsolidationLoading] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
-  const [allOperationsForPrint, setAllOperationsForPrint] = useState<OperationBancaire[]>([])
+  const [printFluxData, setPrintFluxData] = useState<any[]>([])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -576,33 +576,24 @@ export default function BanquePage() {
           <button
             type="button"
             onClick={async () => {
-               setIsPrinting(true)
-               try {
-                  const params = new URLSearchParams()
-                  if (selectedBanque) params.set('banqueId', String(selectedBanque))
-                  if (dateDebut) params.set('dateDebut', dateDebut)
-                  if (dateFin) params.set('dateFin', dateFin)
-                  if (filtreType) params.set('type', filtreType)
-                  params.set('limit', '10000') // Récupérer tout pour l'impression
-
-                  const res = await fetch(`/api/banques/operations?${params.toString()}`)
-                  if (res.ok) {
-                    const data = await res.json()
-                    setAllOperationsForPrint(data.data || [])
-                    setIsPreviewOpen(true)
-                    setTimeout(() => window.print(), 0)
-                  }
-               } catch (e) {
-                  console.error(e)
-                  showError("Erreur lors de la préparation de l'aperçu.")
-               } finally {
-                  setIsPrinting(false)
-               }
+                try {
+                   const consParams = new URLSearchParams()
+                   if (dateDebut) consParams.set('dateDebut', dateDebut)
+                   if (dateFin) consParams.set('dateFin', dateFin)
+                   const res = await fetch('/api/banques/flux-digitaux?' + consParams.toString())
+                   if (res.ok) {
+                     const data = await res.json()
+                     setPrintFluxData(Array.isArray(data) ? data : [])
+                     setIsPreviewOpen(true)
+                   }
+                } catch (e) {
+                   console.error(e)
+                   showError("Erreur lors de la préparation de l'aperçu.")
+                }
             }}
-            disabled={isPrinting}
-            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 h-[42px] disabled:opacity-50 transition-all"
+            className="flex items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 h-[42px] transition-all"
           >
-            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+            <Printer className="h-4 w-4" />
             Imprimer
           </button>
         </div>
@@ -1233,159 +1224,212 @@ export default function BanquePage() {
       )}
       {/* Modale d'Aperçu Impression Bancaire */}
       {isPreviewOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/90 backdrop-blur-sm no-print">
-          <div className="flex items-center justify-between bg-white px-6 py-4 shadow-lg">
-            <div className="flex items-center gap-4">
-               <h2 className="text-xl font-black text-gray-900 uppercase italic">Aperçu du Relevé Bancaire</h2>
-               <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-600 uppercase tracking-widest">
-                 {selectedBanque ? (banques.find(b => b.id === selectedBanque)?.nomBanque + ' - ' + banques.find(b => b.id === selectedBanque)?.numero) : 'Tous les comptes'}
-               </span>
-               <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-600 uppercase tracking-widest">
-                 {allOperationsForPrint.length} OPÉRATIONS
-               </span>
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu — Flux Virtuels</h2>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                  Historique des encaissements et décaissements hors-espèces
+                  &nbsp;— {printFluxData.length} opérations
+                </p>
+              </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-4">
               <button
                 onClick={() => setIsPreviewOpen(false)}
-                className="rounded-xl border border-gray-300 px-6 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all"
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
               >
                 Fermer
               </button>
               <button
-                onClick={() => {
-                  window.print()
+                onClick={async () => {
+                  setIsPreviewOpen(false)
+                  const data = printFluxData
+                  const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+                  const chunks = paginateForPrint(data, { firstPageSize: 12, otherPagesSize: 18 })
+                  const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  const totalEntrees = data.filter((f: any) => f.type === 'ENTREE').reduce((s: number, f: any) => s + (f.montant || 0), 0)
+                  const totalSorties = data.filter((f: any) => f.type === 'SORTIE').reduce((s: number, f: any) => s + (f.montant || 0), 0)
+
+                  const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+                    if (showFull) {
+                      return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div>
+                          <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+                          <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+                          <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+                          <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+                        </div>
+                        <div style="text-align:right;">
+                          <div style="font-size:16px;font-weight:900;text-transform:uppercase;">Flux Virtuels (MoMo, Virement, Chèque)</div>
+                          <div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">${dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString('fr-FR')} au ${new Date(dateFin).toLocaleDateString('fr-FR')}` : 'Toutes les opérations'}</div>
+                          <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Édition: ${today}</div>
+                          <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+                        </div>
+                      </div>`
+                    }
+                    return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+                      <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+                    </div>`
+                  }
+
+                  let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Flux Virtuels</title>
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 6px 4px; font-size: 12px; font-weight: 900; text-align: center; }
+  td { border: 1px solid #000; padding: 4px; font-size: 12px; text-align: center; }
+  td.left { text-align: left; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 13px; }
+</style></head><body>`
+
+                  const totalSolde = totalEntrees - totalSorties
+
+                  chunks.forEach((chunk, index, allChunks) => {
+                    html += `<div class="page">`
+                    html += headerHtml(index === 0, index + 1, allChunks.length)
+                    if (index === 0) {
+                      html += `<div style="display:flex;justify-content:space-between;margin-bottom:10px;padding:8px;background:#f0f0f0;border:2px solid #000;font-size:12px;font-weight:900;">
+                        <span style="color:#059669;">ENTRÉES: +${totalEntrees.toLocaleString('fr-FR')} F</span>
+                        <span style="color:#dc2626;">SORTIES: −${totalSorties.toLocaleString('fr-FR')} F</span>
+                        <span style="${totalSolde >= 0 ? 'color:#059669;' : 'color:#dc2626;'}">SOLDE: ${totalSolde.toLocaleString('fr-FR')} F</span>
+                        <span>OPÉRATIONS: ${allChunks.reduce((s, a) => s + a.length, 0)}</span>
+                      </div>`
+                    }
+                    html += `<table>
+                      <thead><tr>
+                        <th style="width:14%">DATE</th>
+                        <th style="width:10%">TYPE</th>
+                        <th style="width:14%">MODE</th>
+                        <th style="width:12%">SOURCE</th>
+                        <th style="width:16%">BÉNÉFICIAIRE</th>
+                        <th style="width:22%" class="left">LIBELLÉ /<br/>RÉFÉRENCE</th>
+                        <th style="width:12%">MONTANT</th>
+                      </tr></thead><tbody>`
+                    chunk.forEach((f: any, idx: number) => {
+                      const globalNum = allChunks.slice(0, index).reduce((s, a) => s + a.length, 0) + idx + 1
+                      html += `<tr>
+                        <td><span style="font-weight:900;font-size:11px;">${globalNum}</span><br/><span style="font-size:10px;color:#555;">${new Date(f.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></td>
+                        <td><span style="font-weight:900;${f.type === 'ENTREE' ? 'color:#059669;' : 'color:#dc2626;'}">${f.type === 'ENTREE' ? 'ENTRÉE' : 'SORTIE'}</span></td>
+                        <td style="font-weight:700;">${(f.mode || '').replace('_', ' ')}</td>
+                        <td>${f.source || '—'}</td>
+                        <td>${f.beneficiaire || '—'}</td>
+                        <td class="left"><b>${f.libelle || '—'}</b><br/><span style="font-size:11px;color:#888;font-family:monospace;">Réf: ${f.reference || '—'}</span></td>
+                        <td style="font-weight:900;${f.type === 'ENTREE' ? 'color:#059669;' : 'color:#dc2626;'}">${f.type === 'ENTREE' ? '+' : '−'} ${(f.montant || 0).toLocaleString('fr-FR')} F</td>
+                      </tr>`
+                    })
+                    if (index === allChunks.length - 1) {
+                      html += `<tfoot><tr>
+                        <td colspan="6" style="text-align:right;padding-right:8px;text-transform:uppercase;font-weight:900;">TOTAL GÉNÉRAL</td>
+                        <td style="font-weight:900;">E: +${totalEntrees.toLocaleString('fr-FR')}<br/>S: −${totalSorties.toLocaleString('fr-FR')}<br/>∆: ${totalSolde.toLocaleString('fr-FR')} F</td>
+                      </tr></tfoot>`
+                    }
+                    html += `</tbody></table></div>`
+                  })
+
+                  html += `</body></html>`
+                  const w = window.open('', '_blank')
+                  if (w) {
+                    w.document.write(html)
+                    w.document.close()
+                    setTimeout(() => { w.print(); w.close() }, 500)
+                  } else {
+                    alert('Veuillez autoriser les popups pour imprimer.')
+                  }
                 }}
-                className="flex items-center gap-2 rounded-xl bg-orange-600 px-8 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95"
+                className="flex items-center gap-2 rounded-xl bg-violet-600 px-10 py-2 text-sm font-black text-white hover:bg-violet-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
               >
                 <Printer className="h-4 w-4" />
-                LANCER L'IMPRESSION
+                Lancer l'impression
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-auto p-8 bg-gray-100/50">
-            <div className="mx-auto max-w-[210mm] bg-white p-2 shadow-2xl">
-               {(() => {
-                 const ITEMS_PER_PRINT = 18;
-                 const chunks = [];
-                 for (let i = 0; i < allOperationsForPrint.length; i += ITEMS_PER_PRINT) {
-                   chunks.push(allOperationsForPrint.slice(i, i + ITEMS_PER_PRINT));
-                 }
-                 
-                 const totalSolde = allOperationsForPrint.reduce((acc, op) => acc + (op.montant || 0), 0);
 
-                 return chunks.map((chunk, index, allChunks) => (
-                    <div key={index} className={index < allChunks.length - 1 ? 'page-break mb-8 border-b-2 border-dashed border-gray-200 pb-8' : ''}>
-                      <ListPrintWrapper
-                        title={selectedBanque ? `Relevé de Compte : ${banques.find(b => b.id === selectedBanque)?.nomBanque} - ${banques.find(b => b.id === selectedBanque)?.numero}` : "Relevé des Opérations Bancaires Globales"}
-                        subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les opérations"}
-                        pageNumber={index + 1}
-                        totalPages={allChunks.length}
-                      >
-                         <table className="w-full text-[14px] border-collapse border-2 border-black">
-                          <thead>
-                            <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Libellé / Bénéficiaire</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Référence</th>
-                              <th className="px-3 py-3 text-right">Montant (F)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {chunk.map((op, idx) => (
-                              <tr key={idx} className="border-b border-black">
-                                <td className="border-r-2 border-black px-3 py-2 whitespace-nowrap">{new Date(op.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                                <td className="border-r-2 border-black px-3 py-2 font-bold text-[11px] uppercase">{op.type.replace(/_/g, ' ')}</td>
-                                <td className="border-r-2 border-black px-3 py-2">
-                                   <div className="font-bold">{op.libelle}</div>
-                                   {op.beneficiaire && <div className="text-[10px] italic text-gray-500">Bénéf: {op.beneficiaire}</div>}
-                                </td>
-                                <td className="border-r-2 border-black px-3 py-2 font-mono text-[11px] uppercase">{op.reference || '-'}</td>
-                                <td className="px-3 py-2 text-right font-black">
-                                  {op.montant.toLocaleString('fr-FR')} F
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          {index === allChunks.length - 1 && (
-                            <tfoot>
-                              <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic shadow-inner">
-                                <td colSpan={4} className="border-r-2 border-black px-3 py-5 text-right uppercase tracking-widest bg-white">Cumul des mouvements sur la période</td>
-                                <td className="px-3 py-5 text-right bg-slate-50 underline decoration-double">
-                                  {totalSolde.toLocaleString('fr-FR')} F
-                                </td>
-                              </tr>
-                            </tfoot>
-                          )}
-                        </table>
-                      </ListPrintWrapper>
+          <div className="flex-1 overflow-auto p-8">
+            <div className="mx-auto bg-white shadow-2xl rounded-xl overflow-hidden" style={{ maxWidth: '1050px' }}>
+              {(() => {
+                const pEntrees = printFluxData.filter((f: any) => f.type === 'ENTREE').reduce((s: number, f: any) => s + (f.montant || 0), 0)
+                const pSorties = printFluxData.filter((f: any) => f.type === 'SORTIE').reduce((s: number, f: any) => s + (f.montant || 0), 0)
+                const pSolde = pEntrees - pSorties
+                return (
+                  <div className="grid grid-cols-4 gap-3 p-4 bg-gray-50 border-b border-gray-200">
+                    <div className="rounded-lg bg-emerald-50 p-3 text-center border border-emerald-200">
+                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Entrées</p>
+                      <p className="text-lg font-black text-emerald-700">+{pEntrees.toLocaleString('fr-FR')} F</p>
                     </div>
-                  ));
-               })()}
+                    <div className="rounded-lg bg-rose-50 p-3 text-center border border-rose-200">
+                      <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Sorties</p>
+                      <p className="text-lg font-black text-rose-700">−{pSorties.toLocaleString('fr-FR')} F</p>
+                    </div>
+                    <div className={`rounded-lg p-3 text-center border ${pSolde >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-rose-50 border-rose-200'}`}>
+                      <p className={`text-[10px] font-black uppercase tracking-widest ${pSolde >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>Solde</p>
+                      <p className={`text-lg font-black ${pSolde >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>{pSolde.toLocaleString('fr-FR')} F</p>
+                    </div>
+                    <div className="rounded-lg bg-orange-50 p-3 text-center border border-orange-200">
+                      <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Opérations</p>
+                      <p className="text-lg font-black text-orange-700">{printFluxData.length}</p>
+                    </div>
+                  </div>
+                )
+              })()}
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-[11px] font-black text-gray-600 uppercase tracking-wider">
+                    <th className="p-4 text-center">DATE</th>
+                    <th className="p-4 text-center">TYPE</th>
+                    <th className="p-4 text-center">MODE</th>
+                    <th className="p-4 text-center">SOURCE</th>
+                    <th className="p-4 text-center">BÉNÉFICIAIRE</th>
+                    <th className="p-4 text-left">LIBELLÉ /<br/>RÉFÉRENCE</th>
+                    <th className="p-4 text-center">MONTANT</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {printFluxData.map((f: any, i: number) => (
+                    <tr key={f.id} className="hover:bg-violet-50/30 transition-colors">
+                      <td className="p-4 text-center whitespace-nowrap text-xs text-gray-600">
+                        {new Date(f.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${f.type === 'ENTREE' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {f.type === 'ENTREE' ? 'ENTRÉE' : 'SORTIE'}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center text-xs font-bold text-gray-700">{(f.mode || '').replace('_', ' ')}</td>
+                      <td className="p-4 text-center text-xs text-gray-500 uppercase">{f.source || '—'}</td>
+                      <td className="p-4 text-center text-sm text-gray-700">{f.beneficiaire || '—'}</td>
+                      <td className="p-4 text-left">
+                        <span className="font-bold text-gray-900">{f.libelle || '—'}</span>
+                        <br/><span className="text-[11px] font-mono text-gray-500">Réf: {f.reference || '—'}</span>
+                      </td>
+                      <td className={`p-4 text-center font-black text-sm ${f.type === 'ENTREE' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {f.type === 'ENTREE' ? '+' : '−'} {(f.montant || 0).toLocaleString('fr-FR')} F
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 font-black text-sm border-t-2 border-gray-300">
+                    <td colSpan={6} className="p-4 text-right uppercase tracking-wider italic">Total général</td>
+                    <td className="p-4 text-center leading-relaxed">
+                      E: +{printFluxData.filter((f: any) => f.type === 'ENTREE').reduce((s: number, f: any) => s + (f.montant || 0), 0).toLocaleString('fr-FR')} F<br/>
+                      S: −{printFluxData.filter((f: any) => f.type === 'SORTIE').reduce((s: number, f: any) => s + (f.montant || 0), 0).toLocaleString('fr-FR')} F<br/>
+                      <span className={`${printFluxData.reduce((s: number, f: any) => s + (f.type === 'ENTREE' ? (f.montant || 0) : -(f.montant || 0)), 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        ∆: {printFluxData.reduce((s: number, f: any) => s + (f.type === 'ENTREE' ? (f.montant || 0) : -(f.montant || 0)), 0).toLocaleString('fr-FR')} F
+                      </span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>
       )}
-
-      {/* Rendu masqué pour l'impression système direct */}
-      <div className="hidden print:block absolute inset-0 bg-white">
-          {(() => {
-                 const ITEMS_PER_PRINT = 18;
-                 const chunks = [];
-                 for (let i = 0; i < allOperationsForPrint.length; i += ITEMS_PER_PRINT) {
-                   chunks.push(allOperationsForPrint.slice(i, i + ITEMS_PER_PRINT));
-                 }
-                 const totalSolde = allOperationsForPrint.reduce((acc, op) => acc + (op.montant || 0), 0);
-
-                 return chunks.map((chunk, index, allChunks) => (
-                    <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-                      <ListPrintWrapper
-                        title={selectedBanque ? `Relevé de Compte : ${banques.find(b => b.id === selectedBanque)?.nomBanque} - ${banques.find(b => b.id === selectedBanque)?.numero}` : "Relevé des Opérations Bancaires Globales"}
-                        subtitle={dateDebut && dateFin ? `Période du ${new Date(dateDebut).toLocaleDateString()} au ${new Date(dateFin).toLocaleDateString()}` : "Toutes les opérations"}
-                        pageNumber={index + 1}
-                        totalPages={allChunks.length}
-                        hideHeader={index > 0}
-                        hideVisa={index < allChunks.length - 1}
-                      >
-                         <table className="w-full text-[14px] border-collapse border-2 border-black">
-                          <thead>
-                            <tr className="bg-gray-100 uppercase font-black text-gray-700 border-b-2 border-black">
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Date</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Type</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Libellé</th>
-                              <th className="border-r-2 border-black px-3 py-3 text-left">Référence</th>
-                              <th className="px-3 py-3 text-right">Montant (F)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {chunk.map((op, idx) => (
-                              <tr key={idx} className="border-b border-black">
-                                <td className="border-r-2 border-black px-3 py-2">{new Date(op.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                                <td className="border-r-2 border-black px-3 py-2 font-bold text-[11px] uppercase">{op.type}</td>
-                                <td className="border-r-2 border-black px-3 py-2">{op.libelle}</td>
-                                <td className="border-r-2 border-black px-3 py-2">{op.reference || '-'}</td>
-                                <td className="px-3 py-2 text-right font-black">
-                                  {op.montant.toLocaleString('fr-FR')} F
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          {index === allChunks.length - 1 && (
-                            <tfoot>
-                              <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black uppercase italic">
-                                <td colSpan={4} className="border-r-2 border-black px-3 py-5 text-right uppercase bg-white">Total</td>
-                                <td className="px-3 py-5 text-right bg-white">
-                                  {totalSolde.toLocaleString('fr-FR')} F
-                                </td>
-                              </tr>
-                            </tfoot>
-                          )}
-                        </table>
-                      </ListPrintWrapper>
-                    </div>
-                 ));
-          })()}
-      </div>
 
     </div>
   )

@@ -43,7 +43,8 @@ export const ITEMS_PER_PRINT_PAGE = 31;
 export const FIRST_PAGE_ITEMS_PER_PRINT_PAGE = 22
 
 /**
- * Pagination "impression" : première page plus courte, suivantes à 23 lignes.
+ * Pagination "impression" : distribue les lignes équitablement
+ * pour éviter une dernière page trop peu remplie.
  */
 export function paginateForPrint<T>(
   array: T[],
@@ -51,5 +52,30 @@ export function paginateForPrint<T>(
 ): T[][] {
   const first = Math.max(1, opts?.firstPageSize ?? FIRST_PAGE_ITEMS_PER_PRINT_PAGE)
   const other = Math.max(1, opts?.otherPagesSize ?? ITEMS_PER_PRINT_PAGE)
-  return paginateArray(array, first, other)
+
+  if (array.length === 0) return []
+  if (array.length <= first) return [array]
+
+  // Découpage standard
+  const standard = paginateArray(array, first, other)
+
+  // Si une seule page ou dernière page bien remplie (≥ 60%), on garde
+  if (standard.length <= 1) return standard
+  const lastSize = standard[standard.length - 1].length
+  if (lastSize >= other * 0.6) return standard
+
+  // Répartition équitable sur toutes les pages
+  const totalPages = standard.length
+  const chunks: T[][] = []
+  let pos = 0
+
+  for (let i = 0; i < totalPages; i++) {
+    const remaining = array.length - pos
+    const pagesLeft = totalPages - i
+    const size = Math.ceil(remaining / pagesLeft)
+    chunks.push(array.slice(pos, pos + size))
+    pos += size
+  }
+
+  return chunks
 }

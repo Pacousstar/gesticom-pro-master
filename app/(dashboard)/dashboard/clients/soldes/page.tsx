@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Search, Loader2, Filter, Wallet, FileText, Landmark, Printer } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 
 interface SoldeClient {
@@ -35,8 +34,8 @@ export default function SoldesClientsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
   const { error: showError } = useToast()
-  const [isPrinting, setIsPrinting] = useState(false)
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [printData, setPrintData] = useState<SoldeClient[]>([])
 
   useEffect(() => {
     const now = new Date()
@@ -47,7 +46,7 @@ export default function SoldesClientsPage() {
     setStartDate(start)
     setEndDate(end)
     fetchData(start, end)
-    fetch('/api/parametres').then(r => r.ok && r.json()).then(d => { if (d) setEntreprise(d) }).catch(() => {})
+
   }, [])
 
   const fetchData = async (start: string, end: string) => {
@@ -79,12 +78,94 @@ export default function SoldesClientsPage() {
     fetchData(startDate, endDate)
   }
 
-  const handleDirectPrint = () => {
-    setIsPrinting(true)
-    setTimeout(() => {
-      window.print()
-      setIsPrinting(false)
-    }, 0)
+  const openPrintPreview = () => {
+    setPrintData(filteredData)
+    setIsPreviewOpen(true)
+  }
+
+  const printInNewWindow = async (data: SoldeClient[]) => {
+    if (!data.length) return
+    const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+    const chunks = paginateForPrint(data, { firstPageSize: 8, otherPagesSize: 14 })
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const totalFactures = data.reduce((s, c) => s + c.factures, 0)
+    const totalPaiements = data.reduce((s, c) => s + c.paiements, 0)
+    const totalSolde = data.reduce((s, c) => s + c.soldeClient, 0)
+
+    const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+      if (showFull) {
+        return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+            <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+            <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">État Synthétique des Soldes Clients</div>
+            <div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">${new Date(startDate).toLocaleDateString('fr-FR')} au ${new Date(endDate).toLocaleDateString('fr-FR')}</div>
+            <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Édition: ${today}</div>
+            <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+          </div>
+        </div>`
+      }
+      return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+      </div>`
+    }
+
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Soldes Clients</title>
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 6px 4px; font-size: 12px; font-weight: 900; text-align: center; }
+  td { border: 1px solid #000; padding: 4px; font-size: 12px; text-align: center; }
+  td.left { text-align: left; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 13px; }
+</style></head><body>`
+
+    chunks.forEach((chunk, index, allChunks) => {
+      html += `<div class="page">`
+      html += headerHtml(index === 0, index + 1, allChunks.length)
+      html += `<table>
+        <thead><tr>
+          <th style="width:24%" class="left">PARTENAIRE /<br/>IDENTIFIANT</th>
+          <th style="width:16%">LOCALISATION</th>
+          <th style="width:22%">FACTURATION /<br/>RÈGLEMENTS</th>
+          <th style="width:20%">SOLDE GLOBAL NET /<br/>ÉTAT</th>
+        </tr></thead><tbody>`
+      chunk.forEach((c, idx) => {
+        html += `<tr>
+          <td class="left"><b>${c.nom}</b><br/><span style="font-size:11px;color:#555;font-family:monospace;">${c.code || '—'}</span></td>
+          <td>${(c.localisation && c.localisation !== 'null') ? c.localisation : '—'}</td>
+          <td><span style="font-weight:900;">${c.factures.toLocaleString('fr-FR')} F</span><br/><span style="font-size:11px;color:#059669;">${c.paiements.toLocaleString('fr-FR')} F</span></td>
+          <td style="font-weight:900;${c.statut === 'DOIT' ? 'color:#dc2626;' : c.statut === 'CREDIT' ? 'color:#2563eb;' : 'color:#059669;'}">${c.soldeClient.toLocaleString('fr-FR')} F<br/><span style="font-size:10px;font-weight:900;text-transform:uppercase;">${c.statut === 'DOIT' ? 'DOIT' : c.statut === 'CREDIT' ? 'AVOIR' : 'SOLDÉ'}</span></td>
+        </tr>`
+      })
+      if (index === allChunks.length - 1) {
+        html += `<tfoot><tr>
+          <td style="text-align:right;padding-right:8px;font-weight:900;text-transform:uppercase;">TOTAUX DES ENCOURS CLIENTS</td>
+          <td></td>
+          <td style="font-weight:900;">F: ${totalFactures.toLocaleString('fr-FR')}<br/><span style="color:#059669;">R: ${totalPaiements.toLocaleString('fr-FR')} F</span></td>
+          <td style="font-weight:900;font-size:15px;">${totalSolde.toLocaleString('fr-FR')} F</td>
+        </tr></tfoot>`
+      }
+      html += `</tbody></table></div>`
+    })
+
+    html += `</body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      setTimeout(() => { w.print(); w.close() }, 500)
+    } else {
+      alert('Veuillez autoriser les popups pour imprimer.')
+    }
   }
 
   const filteredData = Array.isArray(data) ? data.filter(c => 
@@ -105,84 +186,7 @@ export default function SoldesClientsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Rendu Système (Impression Native) */}
-      {/* ZONE D'IMPRESSION (Masquée à l'écran, optimisée pour éviter la page blanche) */}
-      <div className="hidden print:block bg-white w-full">
-        {filteredData.length > 0 ? (
-          (() => {
-            const chunks = paginateForPrint(filteredData, { firstPageSize: 15, otherPagesSize: 23 })
-            const offsetBefore = (pageIndex: number) => chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
-            return chunks.map((chunk, index, allChunks) => (
-              <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-              <ListPrintWrapper
-                title="ÉTAT SYNTHÉTIQUE DES SOLDES CLIENTS"
-                subtitle={`Point Financier Global au ${new Date().toLocaleDateString('fr-FR')}`}
-                pageNumber={index + 1}
-                totalPages={allChunks.length}
-                enterprise={entreprise}
-                layout="landscape"
-                hideVisa={index < allChunks.length - 1}
-              >
-                <table className="w-full text-[14px] border-collapse border-2 border-black font-sans">
-                  <thead>
-                    <tr className="bg-gray-100 uppercase font-black text-gray-900 border-b-2 border-black">
-                      <th className="border border-black px-2 py-3 text-center w-10">N°</th>
-                      <th className="border border-black px-3 py-3 text-left">Nom du Client</th>
-                      <th className="border border-black px-3 py-3 text-right">Engagements</th>
-                      <th className="border border-black px-3 py-3 text-right">Variations</th>
-                      <th className="border border-black px-3 py-3 text-right font-black bg-gray-50 underline decoration-double">SOLDE GLOBAL NET</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {chunk.map((c, idx) => (
-                      <tr key={idx} className="border-b border-black">
-                        <td className="border border-black px-2 py-2 text-center font-bold">
-                          {offsetBefore(index) + idx + 1}
-                        </td>
-                        <td className="border border-black px-3 py-2">
-                          <div className="font-black uppercase text-[13px]">{c.nom}</div>
-                          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.code || 'SANS CODE'}</div>
-                        </td>
-                        <td className="border border-black px-3 py-2 text-right font-medium">{c.factures.toLocaleString()} F</td>
-                        <td className={`border border-black px-3 py-2 text-right font-bold ${c.variationPeriode >= 0 ? 'text-gray-600' : 'text-blue-800'}`}>
-                          {c.variationPeriode.toLocaleString()} F
-                        </td>
-                        <td className={`border border-black px-3 py-2 text-right font-black text-lg ${c.statut === 'DOIT' ? 'text-red-900 bg-red-50/30' : 'text-emerald-800 bg-emerald-50/30'}`}>
-                          {c.soldeClient.toLocaleString()} F
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {index === allChunks.length - 1 && (
-                    <tfoot>
-                      <tr className="bg-gray-200 font-black text-[15px] border-t-2 border-black uppercase italic shadow-inner">
-                        <td className="border border-black px-2 py-6 text-center bg-white">{filteredData.length}</td>
-                        <td className="border border-black px-3 py-6 text-right tracking-widest bg-white">TOTAUX DES ENCOURS CLIENTS :</td>
-                        <td className="border border-black px-3 py-6 text-right tabular-nums bg-white shadow-inner">
-                          {totals.factures.toLocaleString()} F
-                        </td>
-                        <td className="border border-black px-3 py-6 text-right tabular-nums bg-white shadow-inner">
-                          {totals.variationPeriode.toLocaleString()} F
-                        </td>
-                        <td className="border border-black px-3 py-6 text-right text-2xl tabular-nums bg-slate-900 text-white shadow-2xl">
-                          {totals.soldeClient.toLocaleString()} F
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </ListPrintWrapper>
-              </div>
-            ))
-          })()
-        ) : (
-          <div className="p-20 text-center font-black uppercase italic text-gray-400">
-            Aucune donnée de solde disponible pour l'impression.
-          </div>
-        )}
-      </div>
 
-      {/* La modale d'aperçu a été supprimée au profit de l'impression directe */}
 
 
       <div className="flex flex-wrap items-center justify-between gap-4 no-print">
@@ -195,27 +199,15 @@ export default function SoldesClientsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button 
-            onClick={handleDirectPrint}
-            disabled={loading || filteredData.length === 0 || isPrinting}
+            onClick={openPrintPreview}
+            disabled={loading || filteredData.length === 0}
             className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-white hover:bg-orange-700 shadow-lg shadow-orange-900/20 transition-all active:scale-95 disabled:opacity-50"
           >
-            {isPrinting ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : <Printer className="h-5 w-5" />} 
+            <Printer className="h-5 w-5" /> 
             Imprimer
           </button>
         </div>
       </div>
-
-      {isPrinting && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md no-print">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm border-4 border-orange-500 transform scale-110">
-            <Loader2 className="h-16 w-16 animate-spin mx-auto text-orange-500 mb-6" />
-            <h3 className="text-2xl font-black text-gray-900 uppercase italic">Préparation Financière</h3>
-            <p className="mt-2 text-gray-600 font-bold uppercase text-[11px] tracking-widest">
-              Génération du rapport des soldes en cours...
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Cartes de Totaux (Analyse de Compteur) */}
       <div className="space-y-2 no-print">
@@ -371,6 +363,88 @@ export default function SoldesClientsPage() {
           />
         )}
       </div>
+
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu — Soldes Clients</h2>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                  {printData.length} client(s) — {new Date(startDate).toLocaleDateString('fr-FR')} au {new Date(endDate).toLocaleDateString('fr-FR')}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={async () => { setIsPreviewOpen(false); await printInNewWindow(printData) }}
+                className="flex items-center gap-2 rounded-xl bg-violet-600 px-10 py-2 text-sm font-black text-white hover:bg-violet-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-8">
+            <div className="mx-auto bg-white shadow-2xl rounded-xl overflow-hidden" style={{ maxWidth: '1100px' }}>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-[11px] font-black text-gray-600 uppercase tracking-wider">
+                    <th className="p-4 text-left w-[300px]">PARTENAIRE /<br/>IDENTIFIANT</th>
+                    <th className="p-4 text-center">LOCALISATION</th>
+                    <th className="p-4 text-center">FACTURATION /<br/>RÈGLEMENTS</th>
+                    <th className="p-4 text-center">SOLDE GLOBAL NET /<br/>ÉTAT</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {printData.map((c, i) => (
+                    <tr key={c.id} className="hover:bg-violet-50/30 transition-colors">
+                      <td className="p-4 text-left">
+                        <span className="font-bold text-gray-900">{c.nom}</span>
+                        <br/><span className="text-[11px] font-mono text-gray-500">{c.code || '—'}</span>
+                      </td>
+                      <td className="p-4 text-center text-gray-700">
+                        {(c.localisation && c.localisation !== 'null') ? c.localisation : '—'}
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className="font-black text-gray-800">{c.factures.toLocaleString('fr-FR')} F</span>
+                        <br/><span className="text-[11px] font-bold text-emerald-600">{c.paiements.toLocaleString('fr-FR')} F</span>
+                      </td>
+                      <td className={`p-4 text-center font-black text-sm ${c.statut === 'DOIT' ? 'text-rose-600' : c.statut === 'CREDIT' ? 'text-blue-600' : 'text-emerald-600'}`}>
+                        {c.soldeClient.toLocaleString('fr-FR')} F
+                        <br/><span className={`inline-block mt-1 rounded-full px-2 py-0.5 text-[9px] font-black tracking-widest uppercase ${c.statut === 'DOIT' ? 'bg-rose-100 text-rose-700' : c.statut === 'CREDIT' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {c.statut === 'DOIT' ? 'DOIT' : c.statut === 'CREDIT' ? 'AVOIR' : 'SOLDÉ'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 font-black text-sm border-t-2 border-gray-300">
+                    <td className="p-4 text-right uppercase tracking-wider italic">
+                      Totaux des encours clients
+                    </td>
+                    <td></td>
+                    <td className="p-4 text-center">
+                      <span className="text-gray-800">{printData.reduce((s, c) => s + c.factures, 0).toLocaleString('fr-FR')} F</span>
+                      <br/><span className="text-[11px] text-emerald-600">{printData.reduce((s, c) => s + c.paiements, 0).toLocaleString('fr-FR')} F</span>
+                    </td>
+                    <td className="p-4 text-center text-base">
+                      {printData.reduce((s, c) => s + c.soldeClient, 0).toLocaleString('fr-FR')} F
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

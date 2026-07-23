@@ -476,6 +476,131 @@ export default function AchatsPage() {
 
   const ITEMS_PER_PAGE_REPORT = 22
 
+  const printInNewWindow = async (data: any[]) => {
+    if (!data.length) return
+
+    const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+
+    const chunks = paginateForPrint(data, { firstPageSize: 18, otherPagesSize: ITEMS_PER_PAGE_REPORT })
+    const periode = dateDebut || dateFin
+      ? `Période: ${dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...'} au ${dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...'}`
+      : 'Toutes périodes'
+    const totalMontant = data.reduce((acc, a) => acc + a.montantTotal, 0)
+    const totalPaye = data.reduce((acc, a) => acc + (a.montantPaye || 0), 0)
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+    const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+      if (showFull) {
+        return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+            <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+            <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">Journal des Achats</div>
+            <div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">${periode}</div>
+            <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Date d'édition: ${today}</div>
+            <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+          </div>
+        </div>`
+      }
+      return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+      </div>`
+    }
+
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Journal des Achats</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  .kpis { display: flex; gap: 8px; margin-bottom: 8px; }
+  .kpi { flex: 1; border: 2px solid #000; background: #f5f5f5; padding: 6px 10px; font-size: 13px; font-weight: 900; text-align: center; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 6px 4px; font-size: 13px; font-weight: 900; text-align: left; }
+  th.right { text-align: right; }
+  th.center { text-align: center; }
+  td { border: 1px solid #000; padding: 4px; font-size: 13px; }
+  td.right { text-align: right; font-weight: 700; }
+  td.center { text-align: center; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 14px; }
+  .total-label { text-align: right; padding-right: 8px; }
+</style></head><body>`
+
+    chunks.forEach((chunk, index, allChunks) => {
+      html += `<div class="page">`
+      html += headerHtml(index === 0, index + 1, allChunks.length)
+      html += `<div class="kpis">
+        <div class="kpi">VOLUME ACHATS: ${totalMontant.toLocaleString('fr-FR')} F</div>
+        <div class="kpi">TOTAL PAYE: ${totalPaye.toLocaleString('fr-FR')} F</div>
+        <div class="kpi">RESTE A PAYER: ${(totalMontant - totalPaye).toLocaleString('fr-FR')} F</div>
+        <div class="kpi">NB OPERATIONS: ${data.length}</div>
+      </div>`
+      html += `<table>
+        <thead><tr>
+          <th style="width:18%">REF / DATE</th>
+          <th style="width:28%">FOURNISSEUR / MAGASIN</th>
+          <th style="width:27%" class="right">MONTANT / STATUT</th>
+          <th style="width:27%" class="right">PAYE / RESTE A PAYER</th>
+        </tr></thead><tbody>`
+      chunk.forEach((a: any) => {
+        const reste = a.montantTotal - (a.montantPaye || 0)
+        html += `<tr>
+          <td><b>${a.numero}</b><br/><span style="font-size:11px;color:#888;">${new Date(a.date).toLocaleDateString('fr-FR')}</span></td>
+          <td><b>${a.fournisseur?.nom || a.fournisseurLibre || '—'}</b><br/><span style="font-size:11px;color:#888;">${a.magasin.code}</span></td>
+          <td class="right">${Number(a.montantTotal).toLocaleString('fr-FR')} F<br/><span style="font-size:11px;color:#555;font-weight:700;">${(a.montantPaye || 0) >= a.montantTotal ? 'Payé' : 'Crédit'}</span></td>
+          <td class="right" style="color:#059669;">${Number(a.montantPaye || 0).toLocaleString('fr-FR')} F<br/><span style="font-size:11px;color:#dc2626;">${reste > 0 ? 'Reste: ' + reste.toLocaleString('fr-FR') + ' F' : 'Soldé'}</span></td>
+        </tr>`
+      })
+      if (index === allChunks.length - 1) {
+        html += `<tfoot><tr>
+          <td colspan="2" class="total-label">TOTAUX</td>
+          <td class="right">${totalMontant.toLocaleString('fr-FR')} F</td>
+          <td class="right" style="color:#059669;">${totalPaye.toLocaleString('fr-FR')} F<br/><span style="font-size:11px;color:#dc2626;">Reste: ${(totalMontant - totalPaye).toLocaleString('fr-FR')} F</span></td>
+        </tr></tfoot>`
+      }
+      html += `</tbody></table></div>`
+    })
+
+    html += `</body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      setTimeout(() => w.print(), 500)
+    } else {
+      alert('Autorisez les popups pour imprimer, ou utilisez Ctrl+P')
+    }
+  }
+
+  const handlePrintAll = async () => {
+    setIsPrintingData(true)
+    try {
+      const params = new URLSearchParams({ limit: '10000', page: '1' })
+      if (dateDebut) params.set('dateDebut', dateDebut)
+      if (dateFin) params.set('dateFin', dateFin)
+      if (searchQuery) params.set('q', searchQuery)
+      if (searchNumero) params.set('numero', searchNumero)
+      if (searchNumeroCamion) params.set('numeroCamion', searchNumeroCamion)
+      if (searchFournisseur) params.set('fournisseurSearch', searchFournisseur)
+      const res = await fetch('/api/achats?' + params.toString())
+      if (res.ok) {
+        const response = await res.json()
+        const data = extractList(response)
+        printInNewWindow(data)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsPrintingData(false)
+    }
+  }
+
   const handleOpenPreview = async () => {
     setIsPrintingData(true)
     try {
@@ -772,7 +897,8 @@ export default function AchatsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6 no-print">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white uppercase tracking-tight flex items-center gap-3">
@@ -2086,6 +2212,7 @@ export default function AchatsPage() {
           </div>
         </div>
       )}
+      </div>
 
       {isPreviewOpen && (
         <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm no-print">
@@ -2110,7 +2237,7 @@ export default function AchatsPage() {
                 Fermer
               </button>
               <button
-                onClick={() => { setIsPreviewOpen(false); setTimeout(() => window.print(), 0); }}
+                onClick={async () => { setIsPreviewOpen(false); await printInNewWindow(allAchatsForPrint); }}
                 className="flex items-center gap-2 rounded-xl bg-orange-600 px-10 py-2 text-sm font-black text-white hover:bg-orange-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
               >
                 <Printer className="h-4 w-4" />
@@ -2219,6 +2346,6 @@ export default function AchatsPage() {
           { label: 'Mouvements de stock', description: 'entrées en stock annulées, PAMP recalculé' },
         ]}
       />
-    </div>
+    </>
   )
 }

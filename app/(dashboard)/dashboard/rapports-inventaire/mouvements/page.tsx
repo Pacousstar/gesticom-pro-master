@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Search, Loader2, Download, Filter, Package, Warehouse, User, ArrowUpRight, ArrowDownLeft, RefreshCcw, AlertTriangle, Printer, TrendingUp, X, FileText, HelpCircle } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 
 interface Mouvement {
@@ -59,6 +58,7 @@ export default function MouvementsStockPage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [allDataForPrint, setAllDataForPrint] = useState<any[]>([])
   const [entreprise, setEntreprise] = useState<any>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
 useEffect(() => {
     const now = new Date()
@@ -182,6 +182,93 @@ useEffect(() => {
     }
   }
 
+  const printInNewWindow = async (data: any[]) => {
+    if (!data.length) return
+
+    const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+
+    const chunks = paginateForPrint(data, { firstPageSize: 14, otherPagesSize: 18 })
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const totalEntrees = data.reduce((s, m) => s + ((m.typeRaw === 'ENTREE' || m.type === 'ENTREE') ? (Number(m.quantite) || 0) : 0), 0)
+    const totalSorties = data.reduce((s, m) => s + ((m.typeRaw === 'SORTIE' || m.type === 'SORTIE') ? (Number(m.quantite) || 0) : 0), 0)
+
+    const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+      if (showFull) {
+        return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+            <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+            <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">Journal des Mouvements de Stock</div>
+            <div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">${new Date(startDate).toLocaleDateString('fr-FR')} au ${new Date(endDate).toLocaleDateString('fr-FR')}</div>
+            <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Date d'édition: ${today}</div>
+            <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+          </div>
+        </div>`
+      }
+      return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+      </div>`
+    }
+
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mouvements de Stock</title>
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 5px 3px; font-size: 12px; font-weight: 900; text-align: center; }
+  th.left { text-align: left; }
+  td { border: 1px solid #000; padding: 3px; font-size: 12px; }
+  td.center { text-align: center; }
+  td.left { text-align: left; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 13px; }
+</style></head><body>`
+
+    chunks.forEach((chunk, index, allChunks) => {
+      html += `<div class="page">`
+      html += headerHtml(index === 0, index + 1, allChunks.length)
+      html += `<table>
+        <thead><tr>
+          <th style="width:22%">DATE ENREGISTREMENT /<br/>DATE OPERATION</th>
+          <th style="width:32%" class="left">DESIGNATION /<br/>MAGASIN</th>
+          <th style="width:12%">TYPE</th>
+          <th style="width:10%">QUANTITE</th>
+        </tr></thead><tbody>`
+      chunk.forEach((m: any) => {
+        html += `<tr>
+          <td class="center"><span style="font-size:10px;">${m.date ? new Date(m.date).toLocaleString('fr-FR') : '—'}</span><br/><span style="font-size:10px;color:#888;">${m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR') : '—'}</span></td>
+          <td class="left"><b>${m.produit || '—'}</b><br/><span style="font-size:11px;color:#888;">${m.magasin || '—'}</span></td>
+          <td class="center" style="font-weight:900;">${m.type || '—'}</td>
+          <td class="center" style="font-weight:900;${m.type === 'SORTIE' ? 'color:#dc2626;' : 'color:#059669;'}">${m.type === 'SORTIE' ? '-' : '+'}${(m.quantite || 0).toLocaleString('fr-FR')}</td>
+        </tr>`
+      })
+      if (index === allChunks.length - 1) {
+        html += `<tfoot><tr>
+          <td colspan="3" class="right" style="padding-right:8px;">BILAN DES FLUX</td>
+          <td class="center" style="font-weight:900;color:#d97706;">E: ${totalEntrees.toLocaleString('fr-FR')} / S: ${totalSorties.toLocaleString('fr-FR')}</td>
+        </tr></tfoot>`
+      }
+      html += `</tbody></table></div>`
+    })
+
+    html += `</body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      setTimeout(() => w.print(), 500)
+    } else {
+      alert('Autorisez les popups pour imprimer, ou utilisez Ctrl+P')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between print:hidden">
@@ -203,10 +290,11 @@ useEffect(() => {
               if (res.ok) {
                 const d = await res.json()
                 setAllDataForPrint(Array.isArray(d.data) ? d.data : [])
+                setIsPreviewOpen(true)
               }
-              setTimeout(() => { window.print(); setIsPrinting(false) }, 0)
             } catch (e) {
               console.error(e)
+            } finally {
               setIsPrinting(false)
             }
           }}
@@ -302,76 +390,71 @@ useEffect(() => {
         </div>
       </div>
 
-      <div className="hidden print:block">
-        {(() => {
-          const dataForPrint = allDataForPrint.length > 0 ? allDataForPrint : filteredData
-          const pages = paginateForPrint(dataForPrint, { otherPagesSize: 22 })
-          const printEntrees = dataForPrint.reduce((s, m) => s + ((m.typeRaw === 'ENTREE' || m.type === 'ENTREE') ? (Number(m.quantite) || 0) : 0), 0)
-          const printSorties = dataForPrint.reduce((s, m) => s + ((m.typeRaw === 'SORTIE' || m.type === 'SORTIE') ? (Number(m.quantite) || 0) : 0), 0)
-          const printNet = printEntrees - printSorties
-          return pages.map((pageData, pageIdx) => (
-            <div key={pageIdx} className="print-page">
-              <ListPrintWrapper
-                title="Journal des Mouvements de Stock"
-                subtitle="Rapport technique des flux"
-                dateRange={{ start: startDate, end: endDate }}
-                pageNumber={pageIdx + 1}
-                totalPages={pages.length}
-                hideHeader={pageIdx > 0}
-              >
-                <table className="w-full text-[10px] border-collapse border border-gray-300">
-                  <thead>
-                    <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                      <th className="border border-gray-300 px-3 py-3 text-left">Date (Enreg. / Opération)</th>
-                      <th className="border border-gray-300 px-3 py-3 text-left">Produit / Magasin / Code</th>
-                      <th className="border border-gray-300 px-3 py-3 text-center">Type</th>
-                      <th className="border border-gray-300 px-3 py-3 text-right">Quantité</th>
-                      <th className="border border-gray-300 px-3 py-3 text-left">Obs / Utilisateur</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageData.map((m: any, idx: number) => (
-                      <tr key={idx} className="border-b border-gray-200">
-                        <td className="border border-gray-300 px-3 py-2 text-[9px]">
-                          <p className="font-bold">{m.date ? new Date(m.date).toLocaleString('fr-FR') : '—'}</p>
-                          <p className="text-gray-500 italic">{m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR') : '—'}</p>
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2 font-bold uppercase">
-                          {m.produit}<br/>
-                          <small className="font-normal italic text-gray-500">{m.magasin} • {m.code || '—'}</small>
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2 text-center font-black uppercase italic text-[9px]">
-                          {m.type}
-                        </td>
-                        <td className={`border border-gray-300 px-3 py-2 text-right font-black ${m.type === 'SORTIE' ? 'text-rose-700' : 'text-emerald-700'}`}>
-                          {m.type === 'SORTIE' ? '-' : '+'}{m.quantite.toLocaleString()} {m.unite}
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2 text-[8px]">
-                          <p className="font-bold uppercase tracking-tighter">{m.utilisateur}</p>
-                          <p className="italic text-gray-500">{m.observation || '-'}</p>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {pageIdx === pages.length - 1 && (
-                    <tfoot>
-                      <tr className="bg-gray-50 font-black text-sm">
-                        <td colSpan={3} className="border border-gray-300 px-3 py-4 text-right uppercase italic">Bilan des Flux (Période)</td>
-                        <td className="border border-gray-300 px-3 py-4 text-right text-orange-700">
-                          {printNet > 0 ? '+' : ''}{printNet.toLocaleString()} UNITÉS
-                        </td>
-                        <td className="border border-gray-300 px-3 py-4 text-[9px] text-gray-500 font-normal">
-                          E: {printEntrees.toLocaleString()} / S: {printSorties.toLocaleString()}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </ListPrintWrapper>
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-white no-print">
+          <div className="flex items-center justify-between border-b px-6 py-4 bg-gray-100">
+            <div className="flex items-center gap-6">
+              <h2 className="text-lg font-black uppercase tracking-tight">Mouvements de Stock</h2>
+              <span className="rounded-full bg-orange-100 px-4 py-1.5 text-xs font-black text-orange-700 uppercase">
+                {(allDataForPrint.length > 0 ? allDataForPrint : filteredData).length} Lignes
+              </span>
             </div>
-          ))
-        })()}
-      </div>
+            <div className="flex gap-3">
+              <button
+                onClick={async () => { setIsPreviewOpen(false); await printInNewWindow(allDataForPrint.length > 0 ? allDataForPrint : filteredData) }}
+                className="rounded-lg bg-orange-500 px-6 py-2.5 text-sm font-bold text-white hover:bg-orange-600 flex items-center gap-2"
+              >
+                <Printer className="h-4 w-4" /> LANCER L'IMPRESSION
+              </button>
+              <button onClick={() => setIsPreviewOpen(false)} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-200 flex items-center gap-2">
+                <X className="h-4 w-4" /> Fermer
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-6">
+            <div className="mx-auto" style={{maxWidth:'297mm'}}>
+              {(() => {
+                const dataForPrint = allDataForPrint.length > 0 ? allDataForPrint : filteredData
+                const chunks = paginateForPrint(dataForPrint, { firstPageSize: 14, otherPagesSize: 18 })
+                const printEntrees = dataForPrint.reduce((s, m) => s + ((m.typeRaw === 'ENTREE' || m.type === 'ENTREE') ? (Number(m.quantite) || 0) : 0), 0)
+                const printSorties = dataForPrint.reduce((s, m) => s + ((m.typeRaw === 'SORTIE' || m.type === 'SORTIE') ? (Number(m.quantite) || 0) : 0), 0)
+                return chunks.map((pageData: any[], pageIdx: number, allChunks: any[][]) => (
+                  <div key={pageIdx} className={pageIdx < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-gray-200 uppercase font-black">
+                          <th style={{width:'22%'}} className="border-2 border-black p-2 text-center">DATE ENREGISTREMENT /<br/>DATE OPERATION</th>
+                          <th style={{width:'32%'}} className="border-2 border-black p-2 text-left">DESIGNATION /<br/>MAGASIN</th>
+                          <th style={{width:'12%'}} className="border-2 border-black p-2 text-center">TYPE</th>
+                          <th style={{width:'10%'}} className="border-2 border-black p-2 text-center">QUANTITE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pageData.map((m: any, idx: number) => (
+                          <tr key={idx} className="border-b">
+                            <td className="border p-2 text-center text-xs">{m.date ? new Date(m.date).toLocaleString('fr-FR') : '—'}<br/><span className="text-gray-500">{m.dateOperation ? new Date(m.dateOperation).toLocaleString('fr-FR') : '—'}</span></td>
+                            <td className="border p-2 text-left"><b>{m.produit || '—'}</b><br/><span className="text-xs text-gray-500">{m.magasin || '—'}</span></td>
+                            <td className="border p-2 text-center font-bold">{m.type || '—'}</td>
+                            <td className={`border p-2 text-center font-bold ${m.type === 'SORTIE' ? 'text-red-600' : 'text-emerald-600'}`}>{m.type === 'SORTIE' ? '-' : '+'}{(m.quantite || 0).toLocaleString('fr-FR')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      {pageIdx === allChunks.length - 1 && (
+                        <tfoot>
+                          <tr className="bg-gray-100 font-bold">
+                            <td colSpan={3} className="border-2 border-black p-2 text-right">BILAN DES FLUX</td>
+                            <td className="border-2 border-black p-2 text-center font-bold text-amber-600">E: {printEntrees.toLocaleString('fr-FR')} / S: {printSorties.toLocaleString('fr-FR')}</td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                ))
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm print:hidden">
         <form onSubmit={handleFilter} className="flex flex-wrap gap-4 items-end">

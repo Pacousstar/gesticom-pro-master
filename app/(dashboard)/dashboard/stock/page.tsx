@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, AlertTriangle, Plus, Pencil, Trash2, X, Search, Minus, ClipboardList, FileSpreadsheet, Download, Printer, ArrowRightLeft, CheckCircle2 } from 'lucide-react'
+import { Loader2, AlertTriangle, Plus, Pencil, Trash2, Search, Minus, ClipboardList, FileSpreadsheet, Download, Printer, ArrowRightLeft, CheckCircle2, X } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { formatDate } from '@/lib/format-date'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import Pagination from '@/components/ui/Pagination'
 import { paginateForPrint } from '@/lib/print-helpers'
 import { extractList } from '@/lib/api-client'
@@ -114,6 +113,7 @@ export default function StockPage() {
   const [loadingIntelligence, setLoadingIntelligence] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
   const [allStocksForPrint, setAllStocksForPrint] = useState<StockRow[]>([])
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [entreprise, setEntreprise] = useState<any>(null)
   const ITEMS_PER_PAGE_REPORT = 25
   const [showTransferAssistant, setShowTransferAssistant] = useState(false)
@@ -321,13 +321,11 @@ export default function StockPage() {
       if (res.ok) {
         const response = await res.json()
         setAllStocksForPrint(extractList(response))
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 0)
+        setIsPreviewOpen(true)
       }
     } catch (e) {
       console.error(e)
+    } finally {
       setIsPrinting(false)
     }
   }
@@ -717,6 +715,95 @@ export default function StockPage() {
     }
   }
 
+  const printInNewWindow = async (data: StockRow[]) => {
+    if (!data.length) return
+
+    const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+
+    const chunks = paginateForPrint(data, { firstPageSize: 16, otherPagesSize: 21 })
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    let totalQte = 0
+
+    const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+      if (showFull) {
+        return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+            <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+            <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">État Physique des Stocks</div>
+            <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Date d'édition: ${today}</div>
+            <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+          </div>
+        </div>`
+      }
+      return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+      </div>`
+    }
+
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>État des Stocks</title>
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 5px 3px; font-size: 12px; font-weight: 900; text-align: center; }
+  th.left { text-align: left; }
+  td { border: 1px solid #000; padding: 3px; font-size: 12px; }
+  td.center { text-align: center; }
+  td.left { text-align: left; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 13px; }
+</style></head><body>`
+
+    let numOffset = 0
+    chunks.forEach((chunk, index, allChunks) => {
+      const pageStart = numOffset + 1
+      numOffset += chunk.length
+      html += `<div class="page">`
+      html += headerHtml(index === 0, index + 1, allChunks.length)
+      html += `<table>
+        <thead><tr>
+          <th style="width:10%">N° /<br/>MAGASIN</th>
+          <th style="width:38%" class="left">DESIGNATION /<br/>CODE</th>
+          <th style="width:18%">PRIX ACHAT /<br/>PAMP</th>
+          <th style="width:10%">QUANTITE</th>
+        </tr></thead><tbody>`
+      chunk.forEach((s) => {
+        totalQte += s.quantite
+        html += `<tr>
+          <td class="center"><b>${pageStart + chunk.indexOf(s)}</b><br/><span style="font-size:11px;color:#555;">${s.magasin.code}</span></td>
+          <td class="left"><b>${s.produit.designation || '—'}</b><br/><span style="font-size:11px;color:#888;">${s.produit.code || '—'}</span></td>
+          <td class="center">${s.produit.prixAchat != null ? Number(s.produit.prixAchat).toLocaleString('fr-FR') + ' F' : '—'}<br/><span style="font-size:11px;color:#555;">${s.produit.pamp != null ? Number(s.produit.pamp).toLocaleString('fr-FR') + ' F' : '—'}</span></td>
+          <td class="center" style="font-weight:900;">${s.quantite.toLocaleString('fr-FR')}</td>
+        </tr>`
+      })
+      if (index === allChunks.length - 1) {
+        html += `<tfoot><tr>
+          <td colspan="3" class="right" style="padding-right:8px;">TOTAUX</td>
+          <td class="center">${totalQte.toLocaleString('fr-FR')}</td>
+        </tr></tfoot>`
+      }
+      html += `</tbody></table></div>`
+    })
+
+    html += `</body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      setTimeout(() => w.print(), 500)
+    } else {
+      alert('Autorisez les popups pour imprimer, ou utilisez Ctrl+P')
+    }
+  }
+
   return (
     <div className="pb-12">
       {/* VUE ÉCRAN (Masquée à l'impression) */}
@@ -868,17 +955,7 @@ export default function StockPage() {
           Imprimer
         </button>
 
-        {isPrinting && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md no-print">
-            <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm border-4 border-orange-500 transform scale-110">
-              <Loader2 className="h-16 w-16 animate-spin mx-auto text-orange-500 mb-6" />
-              <h3 className="text-2xl font-black text-gray-900 uppercase italic">Génération du Rapport Stock</h3>
-              <p className="mt-2 text-gray-600 font-bold uppercase text-[11px] tracking-widest">
-                Veuillez patienter pendant la préparation du document...
-              </p>
-            </div>
-          </div>
-        )}
+
         {alertes.length > 0 && (
           <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             <AlertTriangle className="h-5 w-5" />
@@ -1832,79 +1909,78 @@ export default function StockPage() {
 
       </div>
 
-      {/* Rendu Système (Impression Native) */}
-      <div className="hidden print:block absolute inset-0 bg-white">
-        {(() => {
-          const dataToPrint = allStocksForPrint.length > 0 ? allStocksForPrint : list;
-          const firstSize = 16;
-          const otherSize = 21;
-          const firstRowH = Math.floor((718 - 200 - 28) / firstSize);
-          const otherRowH = Math.floor((718 - 28) / otherSize);
-          const chunks = paginateForPrint(dataToPrint, { firstPageSize: firstSize, otherPagesSize: otherSize });
-          let totalQte = 0;
-          let numOffset = 0;
-          return chunks.map((chunk, index, allChunks) => {
-            const pageStart = numOffset + 1;
-            numOffset += chunk.length;
-            return (
-              <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-                <ListPrintWrapper
-                  title="ÉTAT PHYSIQUE DES STOCKS"
-                  subtitle={magasinId ? `Dépôt : ${magasins.find(m => String(m.id) === magasinId)?.nom || magasinId}` : "Inventaire Multisites Global"}
-                  pageNumber={index + 1}
-                  totalPages={allChunks.length}
-                  layout="landscape"
-                  hideHeader={index > 0}
-                >
-                  <table className="w-full text-[14px] border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                        <th style={{width:'4%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">N°</th>
-                        <th style={{width:'10%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Code</th>
-                        <th style={{width:'38%'}} className="border border-gray-300 px-1 py-1 text-left whitespace-nowrap">Désignation</th>
-                        <th style={{width:'14%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">P.A (Init)</th>
-                        <th style={{width:'10%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">Qté</th>
-                        <th style={{width:'24%'}} className="border border-gray-300 px-1 py-1 text-center whitespace-nowrap">STATUT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {chunk.map((s, idx) => {
-                        const rowH = index === 0 ? firstRowH : otherRowH;
-                        const isAlerte = s.quantite < s.produit.seuilMin;
-                        totalQte += s.quantite;
-                        return (
-                          <tr key={idx} className="border-b border-gray-200" style={{height: rowH + 'px'}}>
-                            <td className="border border-gray-300 px-1 py-0.5 text-center font-bold whitespace-nowrap align-middle overflow-hidden">{pageStart + idx}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 font-mono text-center whitespace-nowrap align-middle overflow-hidden">{s.produit.code || '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 font-bold text-left whitespace-nowrap align-middle overflow-hidden">{s.produit.designation || '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">{s.produit.prixAchat != null ? Number(s.produit.prixAchat).toLocaleString('fr-FR') + ' F' : '—'}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-center font-bold whitespace-nowrap align-middle overflow-hidden">{s.quantite.toLocaleString()}</td>
-                            <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap align-middle overflow-hidden">
-                              <span className={`text-[11px] font-black uppercase px-3 py-1 rounded-full ${isAlerte ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}`}>
-                                {isAlerte ? 'RUPTURE' : 'OK'}
-                              </span>
-                            </td>
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-white no-print">
+          <div className="flex items-center justify-between border-b px-6 py-4 bg-gray-100">
+            <div className="flex items-center gap-6">
+              <h2 className="text-lg font-black uppercase tracking-tight">État Physique des Stocks</h2>
+              <span className="rounded-full bg-orange-100 px-4 py-1.5 text-xs font-black text-orange-700 uppercase">
+                {(allStocksForPrint.length > 0 ? allStocksForPrint : list).length} Lignes
+              </span>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={async () => { setIsPreviewOpen(false); await printInNewWindow(allStocksForPrint.length > 0 ? allStocksForPrint : list) }}
+                className="rounded-lg bg-orange-500 px-6 py-2.5 text-sm font-bold text-white hover:bg-orange-600 flex items-center gap-2"
+              >
+                <Printer className="h-4 w-4" /> LANCER L'IMPRESSION
+              </button>
+              <button onClick={() => setIsPreviewOpen(false)} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-200 flex items-center gap-2">
+                <X className="h-4 w-4" /> Fermer
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-6">
+            <div className="mx-auto" style={{maxWidth:'297mm'}}>
+              {(() => {
+                const dataToPrint = allStocksForPrint.length > 0 ? allStocksForPrint : list;
+                const chunks = paginateForPrint(dataToPrint, { firstPageSize: 16, otherPagesSize: 21 });
+                let totalQte = 0;
+                let numOffset = 0;
+                return chunks.map((chunk, index, allChunks) => {
+                  const pageStart = numOffset + 1;
+                  numOffset += chunk.length;
+                  return (
+                    <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-gray-200 uppercase font-black">
+                            <th style={{width:'10%'}} className="border-2 border-black p-2 text-center">N° /<br/>MAGASIN</th>
+                            <th style={{width:'38%'}} className="border-2 border-black p-2 text-left">DESIGNATION /<br/>CODE</th>
+                            <th style={{width:'18%'}} className="border-2 border-black p-2 text-center">PRIX ACHAT /<br/>PAMP</th>
+                            <th style={{width:'10%'}} className="border-2 border-black p-2 text-center">QUANTITE</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                    {index === allChunks.length - 1 && (
-                      <tfoot>
-                        <tr className="bg-gray-100 font-black text-[15px] border-t-2 border-black">
-                          <td colSpan={3} className="border border-gray-300 px-1 py-1 text-right uppercase italic whitespace-nowrap">TOTAUX</td>
-                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">—</td>
-                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">{totalQte.toLocaleString('fr-FR')}</td>
-                          <td className="border border-gray-300 px-1 py-1 text-center font-black text-[15px] whitespace-nowrap">—</td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </ListPrintWrapper>
-              </div>
-            );
-          });
-        })()}
-      </div>
+                        </thead>
+                        <tbody>
+                          {chunk.map((s) => {
+                            totalQte += s.quantite;
+                            return (
+                              <tr key={s.id ?? chunk.indexOf(s)} className="border-b">
+                                <td className="border p-2 text-center font-bold">{pageStart + chunk.indexOf(s)}<br/><span className="text-xs text-gray-500">{s.magasin.code}</span></td>
+                                <td className="border p-2 text-left"><b>{s.produit.designation || '—'}</b><br/><span className="text-xs text-gray-500">{s.produit.code || '—'}</span></td>
+                                <td className="border p-2 text-center font-bold">{s.produit.prixAchat != null ? Number(s.produit.prixAchat).toLocaleString('fr-FR') + ' F' : '—'}<br/><span className="text-xs text-gray-500">{s.produit.pamp != null ? Number(s.produit.pamp).toLocaleString('fr-FR') + ' F' : '—'}</span></td>
+                                <td className="border p-2 text-center font-bold">{s.quantite.toLocaleString('fr-FR')}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                        {index === allChunks.length - 1 && (
+                          <tfoot>
+                            <tr className="bg-gray-100 font-bold">
+                              <td colSpan={3} className="border-2 border-black p-2 text-right">TOTAUX</td>
+                              <td className="border-2 border-black p-2 text-center font-bold">{totalQte.toLocaleString('fr-FR')}</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

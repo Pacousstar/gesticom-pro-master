@@ -160,7 +160,7 @@ export async function GET(
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     // Soldes initiaux (vue globale) ou solde à l'ouverture (filtre date)
-    let allOperations = operations
+    let allOperations: any[] = operations
     if (dateDebut && dateFin) {
       // Calculer le solde réel à la date début du filtre
       const debut = new Date(dateDebut + 'T00:00:00')

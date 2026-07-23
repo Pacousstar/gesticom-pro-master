@@ -11,7 +11,9 @@ import {
     ChevronDown,
     ChevronUp,
     Calculator,
-    BarChart3
+    BarChart3,
+    FileSpreadsheet,
+    FileText
 } from 'lucide-react'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ComptabiliteNav from '../ComptabiliteNav'
@@ -267,6 +269,50 @@ export default function BilanPage() {
                     >
                         <Printer className="h-4 w-4" />
                         Aperçu Impression
+                    </button>
+                    <button
+                        onClick={async () => {
+                            try {
+                                const p = new URLSearchParams({ annee: String(annee) })
+                                if (dateDebut) p.set('dateDebut', dateDebut)
+                                if (dateFin) p.set('dateFin', dateFin)
+                                const res = await fetch('/api/comptabilite/bilan/export-excel?' + p.toString())
+                                if (!res.ok) { alert("Erreur d'export Excel"); return }
+                                const blob = await res.blob()
+                                const url = URL.createObjectURL(blob)
+                                const a = document.createElement('a')
+                                a.href = url
+                                a.download = `bilan_${annee}.xlsx`
+                                document.body.appendChild(a); a.click()
+                                URL.revokeObjectURL(url); document.body.removeChild(a)
+                            } catch { alert("Erreur d'export Excel") }
+                        }}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-emerald-700 transition-all"
+                    >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Excel
+                    </button>
+                    <button
+                        onClick={async () => {
+                            try {
+                                const p = new URLSearchParams({ annee: String(annee) })
+                                if (dateDebut) p.set('dateDebut', dateDebut)
+                                if (dateFin) p.set('dateFin', dateFin)
+                                const res = await fetch('/api/comptabilite/bilan/export-pdf?' + p.toString())
+                                if (!res.ok) { alert("Erreur d'export PDF"); return }
+                                const blob = await res.blob()
+                                const url = URL.createObjectURL(blob)
+                                const a = document.createElement('a')
+                                a.href = url
+                                a.download = `bilan_${annee}.pdf`
+                                document.body.appendChild(a); a.click()
+                                URL.revokeObjectURL(url); document.body.removeChild(a)
+                            } catch { alert("Erreur d'export PDF") }
+                        }}
+                        className="flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-rose-700 transition-all"
+                    >
+                        <FileText className="h-4 w-4" />
+                        PDF
                     </button>
                 </div>
             </div>

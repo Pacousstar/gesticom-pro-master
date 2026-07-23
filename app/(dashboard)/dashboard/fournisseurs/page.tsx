@@ -45,12 +45,12 @@ export default function FournisseursPage() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [paymentModal, setPaymentModal] = useState<{ fournisseur: Fournisseur; invoices: any[] } | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
-  const [allFournisseursForPrint, setAllFournisseursForPrint] = useState<Fournisseur[]>([])
   const [entreprise, setEntreprise] = useState<any>(null)
   const [historyForPrint, setHistoryForPrint] = useState<any[]>([])
   const [printDateDebut, setPrintDateDebut] = useState('')
   const [printDateFin, setPrintDateFin] = useState('')
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [printData, setPrintData] = useState<Fournisseur[]>([])
 
   useEffect(() => {
     fetch('/api/auth/check').then((r) => r.ok && r.json()).then((d) => d && setUserRole(d.role)).catch(() => {})
@@ -75,26 +75,101 @@ export default function FournisseursPage() {
     setCurrentPage(1)
   }, [q])
 
-  const handlePrintAll = async () => {
-    setHistoryForPrint([])
-    setIsPrinting(true)
+  const openPrintPreview = async () => {
     try {
       const params = new URLSearchParams()
       if (q) params.set('q', q)
-      params.set('limit', '10000') 
-      
+      params.set('limit', '10000')
       const res = await fetch('/api/fournisseurs?' + params.toString())
       if (res.ok) {
         const response = await res.json()
-        setAllFournisseursForPrint(extractList(response))
-        setTimeout(() => {
-          window.print()
-          setIsPrinting(false)
-        }, 0)
+        setPrintData(extractList(response))
+        setIsPreviewOpen(true)
       }
     } catch (e) {
       console.error(e)
-      setIsPrinting(false)
+    }
+  }
+
+  const printInNewWindow = async (data: Fournisseur[]) => {
+    if (!data.length) return
+    const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+    const chunks = paginateForPrint(data, { firstPageSize: 8, otherPagesSize: 14 })
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const totalNet = data.reduce((s, f) => s + (f.dette ?? 0), 0)
+
+    const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+      if (showFull) {
+        return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+            <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+            <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">Portefeuille des Fournisseurs</div>
+            ${q ? `<div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">Filtre: "${q}"</div>` : ''}
+            <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Édition: ${today}</div>
+            <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+          </div>
+        </div>`
+      }
+      return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+      </div>`
+    }
+
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fournisseurs</title>
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 6px 4px; font-size: 12px; font-weight: 900; text-align: center; }
+  td { border: 1px solid #000; padding: 4px; font-size: 12px; text-align: center; }
+  td.left { text-align: left; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 13px; }
+</style></head><body>`
+
+    chunks.forEach((chunk, index, allChunks) => {
+      html += `<div class="page">`
+      html += headerHtml(index === 0, index + 1, allChunks.length)
+      html += `<table>
+        <thead><tr>
+          <th style="width:10%">N° /<br/>IDENTIFIANT</th>
+          <th style="width:30%" class="left">PARTENAIRE /<br/>CONTACT</th>
+          <th style="width:24%">LOCALISATION</th>
+          <th style="width:16%">NET À PAYER</th>
+        </tr></thead><tbody>`
+      chunk.forEach((f, idx) => {
+        const globalNum = allChunks.slice(0, index).reduce((s, a) => s + a.length, 0) + idx + 1
+        html += `<tr>
+          <td><span style="font-weight:900;font-size:11px;">${globalNum}</span><br/><span style="font-size:11px;color:#555;font-family:monospace;">${f.code || '—'}</span></td>
+          <td class="left"><b>${f.nom}</b><br/><span style="font-size:11px;color:#888;">${(f.telephone === 'null' ? null : f.telephone) || '—'}</span></td>
+          <td>${(f.localisation === 'null' ? null : f.localisation) || '—'}</td>
+          <td style="font-weight:900;${Number(f.dette ?? 0) > 0 ? 'color:#dc2626;' : Number(f.dette ?? 0) < 0 ? 'color:#059669;' : ''}">${Number(f.dette ?? 0).toLocaleString('fr-FR')} F</td>
+        </tr>`
+      })
+      if (index === allChunks.length - 1) {
+        html += `<tfoot><tr>
+          <td colspan="3" style="text-align:right;padding-right:8px;text-transform:uppercase;font-weight:900;">TOTAL GÉNÉRAL DU PORTEFEUILLE</td>
+          <td style="font-weight:900;">${totalNet.toLocaleString('fr-FR')} F</td>
+        </tr></tfoot>`
+      }
+      html += `</tbody></table></div>`
+    })
+
+    html += `</body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      setTimeout(() => { w.print(); w.close() }, 500)
+    } else {
+      alert('Veuillez autoriser les popups pour imprimer.')
     }
   }
 
@@ -279,13 +354,12 @@ export default function FournisseursPage() {
           </button>
           <button
             type="button"
-            onClick={handlePrintAll}
-            disabled={isPrinting}
-            className="no-print flex items-center gap-2 rounded-xl bg-white/10 px-6 py-3 text-sm font-black text-white hover:bg-white/20 border border-white/20 uppercase tracking-widest disabled:opacity-50"
-            title="Imprimer la liste des fournisseurs (selon filtres)"
+            onClick={openPrintPreview}
+            className="no-print flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 border border-white/20"
+            title="Imprimer la liste des fournisseurs"
           >
-            {isPrinting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-            {isPrinting ? 'Préparation...' : 'Imprimer'}
+            <Printer className="h-5 w-5" />
+            Imprimer
           </button>
           <button
             onClick={() => openForm()}
@@ -357,68 +431,7 @@ export default function FournisseursPage() {
         <div className="flex gap-2" />
       </div>
 
-      {historyForPrint.length === 0 && (<div className="hidden print:block">
-        {(() => {
-          const dataToPrint = allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list
-          const chunks = paginateForPrint(dataToPrint)
-          const offsetBefore = (pageIndex: number) =>
-            chunks.slice(0, pageIndex).reduce((acc, c) => acc + c.length, 0)
 
-          return chunks.map((chunk, index, allChunks) => (
-            <div key={index} className={index < allChunks.length - 1 ? 'page-break' : ''}>
-            <ListPrintWrapper
-              title="Répertoire des Fournisseurs"
-              subtitle={q ? `Filtre: "${q}"` : "Liste Globale"}
-              pageNumber={index + 1}
-              totalPages={allChunks.length}
-            >
-              <table className="w-full text-[14px] border-collapse border border-gray-300">
-                <thead>
-                  <tr className="bg-gray-100 uppercase font-black text-gray-700">
-                    <th className="border border-gray-300 px-3 py-3 text-left">Code</th>
-                    <th className="border border-gray-300 px-3 py-3 text-left">Nom du Fournisseur</th>
-                    <th className="border border-gray-300 px-3 py-3 text-left">Contact / Tél.</th>
-                    <th className="border border-gray-300 px-3 py-3 text-left">Localisation</th>
-                    <th className="border border-gray-300 px-3 py-3 text-left">Camion</th>
-                    <th className="border border-gray-300 px-3 py-3 text-right">Dette Init.</th>
-                    <th className="border border-gray-300 px-3 py-3 text-right">Dette Actuelle</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {chunk.map((f, idx) => (
-                    <tr key={idx} className="border-b border-gray-200">
-                      <td className="border border-gray-300 px-3 py-2 font-mono">{f.code || '-'}</td>
-                      <td className="border border-gray-300 px-3 py-2 font-bold uppercase">{f.nom}</td>
-                      <td className="border border-gray-300 px-3 py-2 italic">{(f.telephone === 'null' ? null : f.telephone) || '-'}</td>
-                      <td className="border border-gray-300 px-3 py-2">{(f.localisation === 'null' ? null : f.localisation) || '-'}</td>
-                      <td className="border border-gray-300 px-3 py-2 font-medium">{f.numeroCamion || '-'}</td>
-                      <td className="border border-gray-300 px-3 py-2 text-right text-[12px]">{(f.soldeInitial || 0).toLocaleString()} F</td>
-                      <td className={`border border-gray-300 px-3 py-2 text-right font-black ${(f.dette ?? 0) > 0 ? 'text-red-700 bg-red-50' : 'text-emerald-700'}`}>
-                        {(f.dette ?? 0).toLocaleString()} F
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {index === allChunks.length - 1 && (
-                  <tfoot>
-                    <tr className="bg-gray-100 font-black text-[14px] border-t-2 border-black uppercase italic">
-                        <td colSpan={5} className="border border-gray-300 px-3 py-4 text-right bg-white tracking-widest text-xs">SOLDE TOTAL FOURNISSEURS</td>
-                        <td colSpan={2} className="border border-gray-300 px-3 py-4 text-right bg-white text-sm">
-                          <div className="flex flex-col gap-1">
-                              <div className="font-black underline decoration-double">
-                                ENCOURS TOTAL: {((allFournisseursForPrint.length > 0 ? allFournisseursForPrint : list).reduce((acc, f) => acc + (f.dette ?? 0), 0)).toLocaleString()} F
-                              </div>
-                          </div>
-                        </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </ListPrintWrapper>
-            </div>
-          ))
-        })()}
-      </div>)}
 
       {/* Impression Historique (hors modal) */}
       {historyForPrint.length > 0 && (
@@ -942,6 +955,80 @@ export default function FournisseursPage() {
           totalDu={paymentModal.fournisseur.dette || 0}
           invoices={paymentModal.invoices}
         />
+      )}
+
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-gray-900/95 backdrop-blur-sm">
+          <div className="flex items-center justify-between bg-white px-8 py-4 shadow-2xl">
+            <div className="flex items-center gap-6">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900 uppercase italic">Aperçu — Portefeuille des Fournisseurs</h2>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                  {printData.length} fournisseur(s) {q ? `— Filtre: "${q}"` : ''}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="rounded-xl border-2 border-gray-200 px-6 py-2 text-sm font-black text-gray-700 hover:bg-gray-50 transition-all uppercase tracking-widest"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={async () => { setIsPreviewOpen(false); await printInNewWindow(printData) }}
+                className="flex items-center gap-2 rounded-xl bg-violet-600 px-10 py-2 text-sm font-black text-white hover:bg-violet-700 shadow-xl transition-all active:scale-95 uppercase tracking-widest"
+              >
+                <Printer className="h-4 w-4" />
+                Lancer l'impression
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-8">
+            <div className="mx-auto bg-white shadow-2xl rounded-xl overflow-hidden" style={{ maxWidth: '900px' }}>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-[11px] font-black text-gray-600 uppercase tracking-wider">
+                    <th className="p-4 text-center w-24">N° /<br/>IDENTIFIANT</th>
+                    <th className="p-4 text-left">PARTENAIRE /<br/>CONTACT</th>
+                    <th className="p-4 text-center">LOCALISATION</th>
+                    <th className="p-4 text-center">NET À PAYER</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {printData.map((f, i) => (
+                    <tr key={f.id} className="hover:bg-violet-50/30 transition-colors">
+                      <td className="p-4 text-center">
+                        <span className="font-black text-gray-700">{i + 1}</span>
+                        <br/><span className="text-[11px] font-mono text-gray-500">{f.code || '—'}</span>
+                      </td>
+                      <td className="p-4 text-left">
+                        <span className="font-bold text-gray-900">{f.nom}</span>
+                        <br/><span className="text-[11px] text-gray-500">{(f.telephone === 'null' ? null : f.telephone) || '—'}</span>
+                      </td>
+                      <td className="p-4 text-center text-gray-700">
+                        {(f.localisation === 'null' ? null : f.localisation) || '—'}
+                      </td>
+                      <td className={`p-4 text-center font-black text-sm ${Number(f.dette ?? 0) > 0 ? 'text-red-600' : Number(f.dette ?? 0) < 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                        {Number(f.dette ?? 0).toLocaleString('fr-FR')} F
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 font-black text-sm border-t-2 border-gray-300">
+                    <td colSpan={3} className="p-4 text-right uppercase tracking-wider italic">
+                      Total général du portefeuille
+                    </td>
+                    <td className="p-4 text-center">
+                      {printData.reduce((s, f) => s + (f.dette ?? 0), 0).toLocaleString('fr-FR')} F
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

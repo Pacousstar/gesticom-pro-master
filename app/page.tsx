@@ -15,10 +15,10 @@ export default function Home() {
   return (
     <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
       <video
-        autoPlay muted loop playsinline
+        autoPlay muted loop playsInline
         className="absolute inset-0 w-full h-full object-cover"
       >
-        <source src="/images/GestiCom%20Pro.mp4" type="video/mp4" />
+        <source src="/images/gestiCom%20pro1.mp4" type="video/mp4" />
       </video>
       <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-orange-900/60 to-black/70" />
 

@@ -110,6 +110,7 @@ export default function VentesPage() {
   const [entreprise, setEntreprise] = useState<any>(null)
   const [allVentesForPrint, setAllVentesForPrint] = useState<any[]>([])
   const [isPrinting, setIsPrinting] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [banques, setBanques] = useState<any[]>([])
 
   const { success: showSuccess, error: showError } = useToast()
@@ -331,13 +332,124 @@ export default function VentesPage() {
       if (res.ok) {
         const response = await res.json()
         setAllVentesForPrint(extractList(response))
-        setTimeout(() => { window.print(); setIsPrinting(false) }, 0)
-      } else {
-        setIsPrinting(false)
+        setIsPreviewOpen(true)
       }
     } catch (e) {
       console.error(e)
+    } finally {
       setIsPrinting(false)
+    }
+  }
+
+  const printInNewWindow = async (data: any[]) => {
+    if (!data.length) return
+
+    const entite = await fetch('/api/parametres').then(r => r.ok ? r.json() : null).catch(() => null) || {}
+
+    const chunks = paginateForPrint(data, { firstPageSize: 15, otherPagesSize: 20 })
+    const periode = dateDebut || dateFin
+      ? `Période: ${dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...'} au ${dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...'}`
+      : 'Toutes périodes'
+    const totalMontant = data.reduce((s, v) => s + Number(v.montantTotal), 0)
+    const totalPaye = data.reduce((s, v) => s + (Number(v.montantPaye) || 0), 0)
+    const totalRetourne = data.reduce((s, v) => s + (Number(v.montantRetourne) || 0), 0)
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+    const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
+      if (showFull) {
+        return `<div style="border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">${entite.nomEntreprise || 'GESTICOM PRO'}</div>
+            <div style="font-size:12px;font-weight:700;color:#555;">${entite.localisation || ''}</div>
+            <div style="font-size:11px;color:#888;">Contact: ${entite.contact || ''}${entite.email ? ' | Email: ' + entite.email : ''}</div>
+            <div style="font-size:11px;color:#888;">${entite.numNCC ? 'NCC: ' + entite.numNCC : ''}${entite.registreCommerce ? ' | RC: ' + entite.registreCommerce : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;text-transform:uppercase;">Journal des Ventes</div>
+            <div style="font-size:12px;font-weight:700;color:#555;margin-top:2px;">${periode}</div>
+            <div style="font-size:11px;font-weight:900;color:#888;margin-top:8px;">Date d'édition: ${today}</div>
+            <div style="font-size:14px;font-weight:900;color:#d46c0a;margin-top:4px;">PAGE ${pageNum} / ${totalPages}</div>
+          </div>
+        </div>`
+      }
+      return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:900;color:#d46c0a;">PAGE ${pageNum} / ${totalPages}</div>
+      </div>`
+    }
+
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Journal des Ventes</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
+  .page { page-break-after: always; padding: 0; }
+  .page:last-child { page-break-after: auto; }
+  .kpis { display: flex; gap: 8px; margin-bottom: 8px; }
+  .kpi { flex: 1; border: 2px solid #000; background: #f5f5f5; padding: 6px 10px; font-size: 13px; font-weight: 900; text-align: center; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #eee; border: 2px solid #000; padding: 6px 4px; font-size: 13px; font-weight: 900; text-align: left; }
+  th.right { text-align: right; }
+  th.center { text-align: center; }
+  td { border: 1px solid #000; padding: 4px; font-size: 13px; }
+  td.right { text-align: right; font-weight: 700; }
+  td.center { text-align: center; }
+  tfoot td { background: #e0e0e0; font-weight: 900; font-size: 14px; }
+  .total-label { text-align: right; padding-right: 8px; }
+</style></head><body>`
+
+    chunks.forEach((chunk, index, allChunks) => {
+      html += `<div class="page">`
+      html += headerHtml(index === 0, index + 1, allChunks.length)
+      html += `<div class="kpis">
+        <div class="kpi">CA: ${totalMontant.toLocaleString('fr-FR')} F</div>
+        <div class="kpi">ENCAISSE: ${totalPaye.toLocaleString('fr-FR')} F</div>
+        <div class="kpi">RESTE: ${(totalMontant - totalPaye).toLocaleString('fr-FR')} F</div>
+        <div class="kpi">RETOURNE: ${totalRetourne.toLocaleString('fr-FR')} F</div>
+        <div class="kpi">NB VENTES: ${data.length}</div>
+      </div>`
+      html += `<table>
+        <thead><tr>
+          <th style="width:14%">REF / DATE</th>
+          <th style="width:22%">CLIENT /<br/>CODE CLIENT</th>
+          <th style="width:22%" class="right">MONTANT /<br/>STATUT PAIEMENT</th>
+          <th style="width:22%" class="center">MAGASIN / RETOURNER</th>
+          <th style="width:20%" class="right">PAYER /<br/>RESTE A PAYER</th>
+        </tr></thead><tbody>`
+      chunk.forEach((v: any) => {
+        const client = v.client || {}
+        const nomClient = client.nom || v.clientLibre || '—'
+        const codeClient = client.code || '—'
+        const retourne = Number(v.montantRetourne) || 0
+        const reste = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
+        const statut = (v.montantPaye || 0) >= v.montantTotal ? 'Payé' : 'Crédit'
+        html += `<tr>
+          <td><b>${v.numero}</b><br/><span style="font-size:11px;color:#888;">${new Date(v.date).toLocaleDateString('fr-FR')}</span></td>
+          <td><b>${nomClient}</b><br/><span style="font-size:11px;color:#888;">Code: ${codeClient}</span></td>
+          <td class="right">${Number(v.montantTotal).toLocaleString('fr-FR')} F<br/><span style="font-size:11px;color:#555;font-weight:700;">${statut}</span></td>
+          <td class="center">${v.magasin.code}<br/><span style="font-size:11px;${retourne > 0 ? 'color:#d97706;font-weight:700;' : 'color:#888;'}">Retour: ${retourne.toLocaleString('fr-FR')} F</span></td>
+          <td class="right" style="color:#059669;">${Number(v.montantPaye || 0).toLocaleString('fr-FR')} F<br/><span style="font-size:11px;color:#dc2626;">${reste > 0 ? 'Reste: ' + reste.toLocaleString('fr-FR') + ' F' : 'Soldé'}</span></td>
+        </tr>`
+      })
+      if (index === allChunks.length - 1) {
+        html += `<tfoot><tr>
+          <td colspan="2" class="total-label">TOTAUX</td>
+          <td class="right">${totalMontant.toLocaleString('fr-FR')} F</td>
+          <td class="center" style="color:#d97706;">Retour: ${totalRetourne.toLocaleString('fr-FR')} F</td>
+          <td class="right" style="color:#059669;">${totalPaye.toLocaleString('fr-FR')} F<br/><span style="font-size:11px;color:#dc2626;">Reste: ${(totalMontant - totalPaye).toLocaleString('fr-FR')} F</span></td>
+        </tr></tfoot>`
+      }
+      html += `</tbody></table></div>`
+    })
+
+    html += `</body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      setTimeout(() => w.print(), 500)
+    } else {
+      alert('Autorisez les popups pour imprimer, ou utilisez Ctrl+P')
     }
   }
 
@@ -1681,97 +1793,81 @@ export default function VentesPage() {
         </div>
       )}
 
-      <div className="hidden print:block">
-        {(() => {
-          if (!allVentesForPrint.length) return null
-          const entite = entreprise
-            ? (entreprise.nom || entreprise.raisonSociale || 'GestiCom')
-            : 'GestiCom'
-          const today = new Date().toLocaleDateString('fr-FR', {
-            day: '2-digit', month: 'long', year: 'numeric'
-          })
-          const periode = (dateDebut || dateFin)
-            ? 'Période: ' + (dateDebut ? new Date(dateDebut).toLocaleDateString('fr-FR') : '...') + ' au ' + (dateFin ? new Date(dateFin).toLocaleDateString('fr-FR') : '...')
-            : 'Toutes périodes'
-          const pages = paginateForPrint(allVentesForPrint, { otherPagesSize: 20 })
-          return pages.map((pageData, pageIdx) => (
-            <div key={pageIdx} className="print-page">
-              <ListPrintWrapper
-                title="Flux de ventes et encaissements clients"
-                subtitle={`${entite} • ${today} • ${periode}`}
-                pageNumber={pageIdx + 1}
-                totalPages={pages.length}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-white no-print">
+          <div className="flex items-center justify-between border-b px-6 py-4 bg-gray-100">
+            <h2 className="text-lg font-black uppercase tracking-tight">Aperçu impression — Ventes</h2>
+            <div className="flex gap-3">
+              <button
+                onClick={async () => { setIsPreviewOpen(false); await printInNewWindow(allVentesForPrint) }}
+                className="rounded-lg bg-orange-500 px-6 py-2.5 text-sm font-bold text-white hover:bg-orange-600 flex items-center gap-2"
               >
-                <div className="flex gap-4 mb-4">
-                  <div className="flex-1 border rounded p-2 text-center bg-gray-50">
-                    <div className="text-xs font-bold uppercase text-gray-500">Chiffre d'Affaires</div>
-                    <div className="text-lg font-bold">{(allVentesForPrint.reduce((s, v) => s + Number(v.montantTotal), 0)).toLocaleString('fr-FR')} F</div>
-                    <div className="text-xs text-gray-400">Volume de ventes période</div>
+                <Printer className="h-4 w-4" /> LANCER L'IMPRESSION
+              </button>
+              <button onClick={() => setIsPreviewOpen(false)} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-200 flex items-center gap-2">
+                <X className="h-4 w-4" /> Fermer
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-6">
+            {(() => {
+              if (!allVentesForPrint.length) return <p className="text-gray-500">Aucune vente à afficher.</p>
+              const totalMontant = allVentesForPrint.reduce((s, v) => s + Number(v.montantTotal), 0)
+              const totalPaye = allVentesForPrint.reduce((s, v) => s + (Number(v.montantPaye) || 0), 0)
+              const totalRetourne = allVentesForPrint.reduce((s, v) => s + (Number(v.montantRetourne) || 0), 0)
+              return (
+                <>
+                  <div className="flex gap-4 mb-6">
+                    <div className="flex-1 border-2 border-black bg-gray-50 p-3 text-center font-black text-sm">CA: {totalMontant.toLocaleString('fr-FR')} F</div>
+                    <div className="flex-1 border-2 border-black bg-gray-50 p-3 text-center font-black text-sm">ENCAISSE: {totalPaye.toLocaleString('fr-FR')} F</div>
+                    <div className="flex-1 border-2 border-black bg-gray-50 p-3 text-center font-black text-sm">RESTE: {(totalMontant - totalPaye).toLocaleString('fr-FR')} F</div>
+                    <div className="flex-1 border-2 border-black bg-gray-50 p-3 text-center font-black text-sm">RETOURNE: {totalRetourne.toLocaleString('fr-FR')} F</div>
+                    <div className="flex-1 border-2 border-black bg-gray-50 p-3 text-center font-black text-sm">NB: {allVentesForPrint.length}</div>
                   </div>
-                  <div className="flex-1 border rounded p-2 text-center bg-gray-50">
-                    <div className="text-xs font-bold uppercase text-gray-500">Total Encaissé</div>
-                    <div className="text-lg font-bold">{(allVentesForPrint.reduce((s, v) => s + (Number(v.montantPaye) || 0), 0)).toLocaleString('fr-FR')} F</div>
-                    <div className="text-xs text-gray-400">Encaissements réels</div>
-                  </div>
-                  <div className="flex-1 border rounded p-2 text-center bg-gray-50">
-                    <div className="text-xs font-bold uppercase text-gray-500">Reste à Recouvrer</div>
-                    <div className="text-lg font-bold">{(allVentesForPrint.reduce((s, v) => s + Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0)), 0)).toLocaleString('fr-FR')} F</div>
-                    <div className="text-xs text-gray-400">Créances clients en cours</div>
-                  </div>
-                </div>
-                <table className="min-w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="border p-1 text-left">N°</th>
-                      <th className="border p-1 text-left">Bon N°</th>
-                      <th className="border p-1 text-left">Date</th>
-                      <th className="border p-1 text-left">Code Client</th>
-                      <th className="border p-1 text-left">Client</th>
-                      <th className="border p-1 text-left">Magasin</th>
-                      <th className="border p-1 text-right">Montant</th>
-                      <th className="border p-1 text-left">Paiement</th>
-                      <th className="border p-1 text-left">Statut</th>
-                      <th className="border p-1 text-right">Reste</th>
-                      <th className="border p-1 text-left">Statut</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageData.map((v: { id: number; numero: string; numeroBon?: string; date: string; montantTotal: number; montantPaye?: number; modePaiement: string; statutPaiement?: string; statut: string; magasin: { code: string }; client?: { code?: string; nom?: string }; clientLibre?: string }) => {
-                      const rp = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
-                      return (
-                        <tr key={v.id}>
-                          <td className="border p-1">{v.numero}</td>
-                          <td className="border p-1">{(v as any).numeroBon || '—'}</td>
-                          <td className="border p-1">{formatDate(v.date, { includeTime: false })}</td>
-                          <td className="border p-1">{(v as any).client?.code || '—'}</td>
-                          <td className="border p-1">{(v as any).client?.nom || (v as any).clientLibre || '—'}</td>
-                          <td className="border p-1">{v.magasin.code}</td>
-                          <td className="border p-1 text-right">{Number(v.montantTotal).toLocaleString('fr-FR')} F</td>
-                          <td className="border p-1">{v.modePaiement.replace('_', ' ')}</td>
-                           <td className="border p-1">{getStatutPaiementLabel(v.statutPaiement || '')}</td>
-                           <td className="border p-1 text-right">{rp > 0 ? rp.toLocaleString('fr-FR') + ' F' : '-'}</td>
-                          <td className="border p-1">{v.statut === 'ANNULEE' ? 'Annulée' : 'Validée'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  {pageIdx === pages.length - 1 && (
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-gray-200">
+                        <th className="border-2 border-black p-2 text-left">REF / DATE</th>
+                        <th className="border-2 border-black p-2 text-left">CLIENT<br/><span className="text-[10px]">CODE CLIENT</span></th>
+                        <th className="border-2 border-black p-2 text-right">MONTANT<br/><span className="text-[10px]">STATUT PAIEMENT</span></th>
+                        <th className="border-2 border-black p-2 text-center">MAGASIN / RETOURNER</th>
+                        <th className="border-2 border-black p-2 text-right">PAYER<br/><span className="text-[10px]">RESTE A PAYER</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allVentesForPrint.map((v: any) => {
+                        const client = v.client || {}
+                        const nomClient = client.nom || v.clientLibre || '—'
+                        const codeClient = client.code || '—'
+                        const retourne = Number(v.montantRetourne) || 0
+                        const reste = Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0))
+                        const statut = (v.montantPaye || 0) >= v.montantTotal ? 'Payé' : 'Crédit'
+                        return (
+                          <tr key={v.id} className="border-b">
+                            <td className="border p-2"><b>{v.numero}</b><br/><span className="text-xs text-gray-500">{new Date(v.date).toLocaleDateString('fr-FR')}</span></td>
+                            <td className="border p-2"><b>{nomClient}</b><br/><span className="text-xs text-gray-500">Code: {codeClient}</span></td>
+                            <td className="border p-2 text-right font-bold">{Number(v.montantTotal).toLocaleString('fr-FR')} F<br/><span className="text-xs">{statut}</span></td>
+                            <td className="border p-2 text-center">{v.magasin.code}<br/><span className={`text-xs ${retourne > 0 ? 'text-amber-600 font-bold' : 'text-gray-500'}`}>Retour: {retourne.toLocaleString('fr-FR')} F</span></td>
+                            <td className="border p-2 text-right font-bold text-emerald-600">{Number(v.montantPaye || 0).toLocaleString('fr-FR')} F<br/><span className={`text-xs ${reste > 0 ? 'text-red-600' : 'text-gray-500'}`}>{reste > 0 ? 'Reste: ' + reste.toLocaleString('fr-FR') + ' F' : 'Soldé'}</span></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
                     <tfoot>
                       <tr className="bg-gray-100 font-bold">
-                        <td colSpan={6} className="border p-1 text-right">TOTAUX</td>
-                        <td className="border p-1 text-right">{(allVentesForPrint.reduce((s, v) => s + Number(v.montantTotal), 0)).toLocaleString('fr-FR')} F</td>
-                        <td colSpan={2} className="border p-1"></td>
-                        <td className="border p-1 text-right">{(allVentesForPrint.reduce((s, v) => s + Math.max(0, Number(v.montantTotal) - (Number(v.montantPaye) || 0)), 0)).toLocaleString('fr-FR')} F</td>
-                        <td className="border p-1"></td>
+                        <td colSpan={2} className="border-2 border-black p-2 text-right">TOTAUX</td>
+                        <td className="border-2 border-black p-2 text-right">{totalMontant.toLocaleString('fr-FR')} F</td>
+                        <td className="border-2 border-black p-2 text-center text-amber-600">Retour: {totalRetourne.toLocaleString('fr-FR')} F</td>
+                        <td className="border-2 border-black p-2 text-right text-emerald-600">{totalPaye.toLocaleString('fr-FR')} F<br/><span className="text-xs text-red-600">Reste: {(totalMontant - totalPaye).toLocaleString('fr-FR')} F</span></td>
                       </tr>
                     </tfoot>
-                  )}
-                </table>
-              </ListPrintWrapper>
-            </div>
-          ))
-        })()}
-      </div>
+                  </table>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
