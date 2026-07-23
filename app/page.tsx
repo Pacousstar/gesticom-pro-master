@@ -33,11 +33,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
-      <div className="relative w-full md:w-1/2 h-[40vh] md:min-h-screen overflow-hidden bg-black">
+      <div className="relative w-full md:w-1/2 flex items-center justify-center bg-black" style={{ minHeight: '50vh' }}>
         <video
           ref={videoRef}
           autoPlay loop playsInline preload="auto" onEnded={(e) => (e.target as HTMLVideoElement).play()}
-          className="absolute inset-0 w-full h-full object-contain md:object-cover scale-[0.85]"
+          className="w-full h-auto max-h-screen object-contain"
+          style={{ maxHeight: '100vh' }}
           onClick={togglePlay}
         >
           <source src="/images/gestiCom%20pro.mp4" type="video/mp4" />
@@ -76,25 +77,7 @@ export default function Home() {
       </div>
 
       <div className="relative w-full md:w-1/2 min-h-screen flex items-center justify-center p-6 md:p-12 bg-gradient-to-br from-orange-50 via-white to-orange-100">
-        {mounted && (
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {Array.from({ length: 15 }, (_, i) => (
-              <div
-                key={i}
-                className="absolute w-1.5 h-1.5 rounded-full animate-float"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  top: `${Math.random() * 100}%`,
-                  animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${5 + Math.random() * 5}s`,
-                  backgroundColor: `rgba(234,88,12,${0.1 + Math.random() * 0.2})`,
-                }}
-              />
-            ))}
-          </div>
-        )}
-
-        <div className={`relative w-full max-w-lg transform transition-all duration-1000 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+        <div className={`relative w-full max-w-lg bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-8 md:p-12 transform transition-all duration-1000 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
           <div className="mb-8 text-center md:text-left">
             <div className="flex items-center justify-center md:justify-start mb-6">
               <div className="relative">
@@ -111,10 +94,11 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <p className="text-xl md:text-3xl font-bold text-gray-800">
+            <p className="text-xl md:text-2xl font-bold text-gray-900">GestiCom - Gestion de Commerce</p>
+            <p className="text-lg md:text-xl font-semibold text-orange-700 mt-2">
               Gestion Professionnelle de Commerce
             </p>
-            <p className="mt-2 text-sm md:text-base font-semibold text-green-700">
+            <p className="mt-1 text-sm md:text-base font-semibold text-green-700">
               Solution complète pour la gestion de vos magasins
             </p>
           </div>
