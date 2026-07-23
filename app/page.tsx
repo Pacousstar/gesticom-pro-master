@@ -24,7 +24,7 @@ export default function Home() {
       <div className="relative w-full md:w-1/2 h-[50vh] md:min-h-screen overflow-hidden bg-black">
         <video
           ref={videoRef}
-          autoPlay loop playsInline
+          autoPlay loop playsInline preload="auto" onEnded={(e) => (e.target as HTMLVideoElement).play()}
           className="absolute inset-0 w-full h-full object-cover"
         >
           <source src="/images/gestiCom%20pro.mp4" type="video/mp4" />
