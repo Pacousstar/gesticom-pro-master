@@ -27,7 +27,7 @@ export default function Home() {
           autoPlay loop playsInline
           className="absolute inset-0 w-full h-full object-cover"
         >
-          <source src="/images/gesticom-pro.mp4" type="video/mp4" />
+          <source src="/images/gestiCom%20pro.mp4" type="video/mp4" />
         </video>
         <button
           onClick={() => setShowVolume(!showVolume)}
