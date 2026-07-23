@@ -78,8 +78,8 @@ export default function Home() {
 
       <div className="relative w-full md:w-1/2 min-h-screen flex items-center justify-center p-6 md:p-12 bg-gradient-to-br from-orange-50 via-white to-orange-100">
         <div className={`relative w-full max-w-lg bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-8 md:p-12 transform transition-all duration-1000 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-          <div className="mb-8 text-center md:text-left">
-            <div className="flex items-center justify-center md:justify-start mb-6">
+          <div className="mb-8 text-center">
+            <div className="flex items-center justify-center mb-6">
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full blur-lg opacity-50 animate-pulse"></div>
                 <div className="relative bg-gradient-to-br from-orange-500 to-orange-700 p-6 rounded-full shadow-2xl">
@@ -94,7 +94,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">GestiCom - Gestion de Commerce</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900">GestiCom Pro</p>
             <p className="text-lg md:text-xl font-semibold text-orange-700 mt-2">
               Gestion Professionnelle de Commerce
             </p>
@@ -104,34 +104,36 @@ export default function Home() {
           </div>
 
           <div className="space-y-4 mb-10">
-            <div className="flex items-center gap-3 text-gray-800 group hover:scale-105 transition-transform duration-300">
+            <div className="flex items-center justify-center gap-3 text-gray-800 group hover:scale-105 transition-transform duration-300">
               <div className="w-4 h-4 rounded-full bg-orange-600 shadow-lg animate-pulse flex-shrink-0"></div>
               <span className="font-semibold text-lg">Multi-Magasins</span>
             </div>
-            <div className="flex items-center gap-3 text-gray-800 group hover:scale-105 transition-transform duration-300">
+            <div className="flex items-center justify-center gap-3 text-gray-800 group hover:scale-105 transition-transform duration-300">
               <div className="w-4 h-4 rounded-full bg-green-600 shadow-lg animate-pulse animation-delay-1000 flex-shrink-0"></div>
               <span className="font-semibold text-lg">Stocks en Temps Réel</span>
             </div>
-            <div className="flex items-center gap-3 text-gray-800 group hover:scale-105 transition-transform duration-300">
+            <div className="flex items-center justify-center gap-3 text-gray-800 group hover:scale-105 transition-transform duration-300">
               <div className="w-4 h-4 rounded-full bg-blue-600 shadow-lg animate-pulse animation-delay-2000 flex-shrink-0"></div>
               <span className="font-semibold text-lg">Comptabilité Complète</span>
             </div>
           </div>
 
-          <Link 
-            href="/login"
-            className="group inline-flex items-center justify-center gap-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all duration-300 shadow-2xl hover:shadow-orange-500/50 hover:scale-105 transform"
-          >
-            <span>Accéder à l'application</span>
-            <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-          </Link>
+          <div className="text-center">
+            <Link 
+              href="/login"
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all duration-300 shadow-2xl hover:shadow-orange-500/50 hover:scale-105 transform"
+            >
+              <span>Accéder à l'application</span>
+              <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
 
           <div className="mt-10 pt-6 border-t border-gray-200 space-y-2">
-            <div className="flex items-center justify-center md:justify-start gap-2 text-sm text-gray-500">
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
               <Shield className="h-4 w-4 text-orange-500" />
               <span>Version {process.env.NEXT_PUBLIC_APP_VERSION || '—'} - Offline Ready - Sécurisé</span>
             </div>
-            <div className="flex items-center justify-center md:justify-start gap-2 text-sm text-gray-500">
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
               <span>GestiCom — Solution de Gestion Professionnelle</span>
             </div>
           </div>
