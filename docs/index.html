@@ -141,12 +141,11 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
 .footer a:hover{color:#FF6B35;text-decoration:underline}
 .footer strong{color:#e2e8f0}
 .footer .footer-logo{height:28px;opacity:.7}
-.footer-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:40px;text-align:left}
+.footer-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:40px}
 .footer-video-wrap{flex:0 0 280px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.1);box-shadow:0 8px 32px rgba(0,0,0,.3)}
 .footer-video-wrap video{width:100%;display:block;aspect-ratio:16/9;object-fit:cover;background:#1a1a2e}
-.footer-content{flex:1}
-
-@media(max-width:768px){.footer-inner{flex-direction:column;text-align:center}.footer-video-wrap{flex:0 0 auto;width:100%;max-width:400px}.footer-content{text-align:center}}
+.footer-content{text-align:center}
+@media(max-width:768px){.footer-inner{flex-direction:column;text-align:center}.footer-video-wrap{flex:0 0 auto;width:100%;max-width:400px}}
 
 @media(max-width:768px){
   .header nav a:not(.btn-download):not([href*="contact"]){display:none}
