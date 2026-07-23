@@ -27,7 +27,7 @@ export default function Home() {
           autoPlay loop playsInline
           className="w-[85%] h-[85%] object-cover rounded-3xl opacity-60"
         >
-          <source src="/images/gesticom-pro1.mp4" type="video/mp4" />
+          <source src="/images/gesticom-pro.mp4" type="video/mp4" />
         </video>
       </div>
       <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-orange-900/60 to-black/70" />
