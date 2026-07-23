@@ -68,6 +68,7 @@ export default function CompteCourantDetailPage() {
     try {
       const res = await fetch(`/api/comptes-courants/${params.id}`)
       if (res.ok) setData(await res.json())
+      else if (res.status === 404) router.replace('/dashboard/comptes-courants')
     } finally {
       setLoading(false)
     }

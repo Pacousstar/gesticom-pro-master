@@ -1,26 +1,57 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Shield, ArrowRight } from 'lucide-react'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [volume, setVolume] = useState(0.3)
+  const [showVolume, setShowVolume] = useState(false)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.volume = volume
+  }, [volume])
+
   return (
     <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
-      <video
-        autoPlay muted loop playsInline
-        className="absolute inset-0 w-full h-full object-cover"
-      >
-        <source src="/images/gestiCom%20pro1.mp4" type="video/mp4" />
-      </video>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <video
+          ref={videoRef}
+          autoPlay loop playsInline
+          className="w-[85%] h-[85%] object-cover rounded-3xl opacity-60"
+        >
+          <source src="/images/gestiCom%20pro1.mp4" type="video/mp4" />
+        </video>
+      </div>
       <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-orange-900/60 to-black/70" />
+      <button
+        onClick={() => setShowVolume(!showVolume)}
+        className="absolute bottom-6 right-6 z-20 w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/30 transition-all"
+        title="Volume"
+      >
+        {volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+      </button>
+      {showVolume && (
+        <div className="absolute bottom-20 right-6 z-20 bg-black/60 backdrop-blur-md rounded-xl p-3 flex flex-col items-center gap-2">
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={volume}
+            onChange={e => setVolume(Number(e.target.value))}
+            className="w-24 h-1.5 appearance-none bg-white/30 rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:cursor-pointer"
+          />
+          <span className="text-white text-xs">{Math.round(volume * 100)}%</span>
+        </div>
+      )}
 
       {mounted && (
         <div className="absolute inset-0">

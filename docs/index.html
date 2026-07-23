@@ -140,6 +140,8 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
 .footer a:hover{color:#FF6B35;text-decoration:underline}
 .footer strong{color:#e2e8f0}
 .footer .footer-logo{height:28px;margin-bottom:16px;opacity:.7}
+.footer-video-wrap{max-width:500px;margin:0 auto 32px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.1);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.footer-video-wrap video{width:100%;display:block;aspect-ratio:16/9;object-fit:cover;background:#1a1a2e}
 
 @media(max-width:768px){
   .header nav a:not(.btn-download):not([href*="contact"]){display:none}
@@ -442,6 +444,9 @@ Une question, un besoin, un partenariat ? Notre équipe est à votre écoute."><
 </section>
 
 <footer class="footer">
+  <div class="footer-video-wrap">
+    <video src="images/gestiCom%20pro1.mp4" autoplay loop playsinline controls></video>
+  </div>
   <img src="images/logo.png" alt="GestiCom Pro" class="footer-logo"><br>
   <strong>GestiCom Pro</strong> — Gestion de Commerce<br>
   Développé avec <span style="color:#ef4444">&#10084;</span> par <strong style="color:#e2e8f0">Pacousstar</strong>
