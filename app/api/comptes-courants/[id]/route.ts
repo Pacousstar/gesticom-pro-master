@@ -60,14 +60,47 @@ export async function PATCH(
   const vres = validateApiRequest(compteCourantSchema.partial(), body)
   if (!vres.success) return vres.response
   const ccData = vres.data
-  const data: any = {}
-  if (ccData.nom !== undefined) data.nom = ccData.nom
-  if (ccData.ncc !== undefined) data.ncc = ccData.ncc
-  if (ccData.clientId !== undefined) data.clientId = ccData.clientId
-  if (ccData.fournisseurId !== undefined) data.fournisseurId = ccData.fournisseurId
+  try {
+    const data: any = {}
+    if (ccData.nom !== undefined) data.nom = ccData.nom
+    if (ccData.ncc !== undefined) data.ncc = ccData.ncc
+    if (ccData.clientId !== undefined) {
+      if (ccData.clientId !== null) {
+        const existant = await prisma.compteCourant.findFirst({
+          where: { clientId: ccData.clientId, actif: true, id: { not: id } },
+          select: { nom: true, code: true },
+        })
+        if (existant) {
+          return NextResponse.json({
+            error: `Ce client est déjà lié au compte courant "${existant.nom}" (${existant.code}). Modifie-le pour changer le lien.`
+          }, { status: 409 })
+        }
+      }
+      data.clientId = ccData.clientId
+    }
+    if (ccData.fournisseurId !== undefined) {
+      if (ccData.fournisseurId !== null) {
+        const existant = await prisma.compteCourant.findFirst({
+          where: { fournisseurId: ccData.fournisseurId, actif: true, id: { not: id } },
+          select: { nom: true, code: true },
+        })
+        if (existant) {
+          return NextResponse.json({
+            error: `Ce fournisseur est déjà lié au compte courant "${existant.nom}" (${existant.code}). Modifie-le pour changer le lien.`
+          }, { status: 409 })
+        }
+      }
+      data.fournisseurId = ccData.fournisseurId
+    }
 
-  const updated = await prisma.compteCourant.update({ where: { id }, data })
-  return NextResponse.json(updated)
+    const updated = await prisma.compteCourant.update({ where: { id }, data })
+    return NextResponse.json(updated)
+  } catch (e: any) {
+    if (e?.code === 'P2002') {
+      return NextResponse.json({ error: 'Ce code ou partenaire est déjà utilisé.' }, { status: 409 })
+    }
+    return NextResponse.json({ error: 'Erreur lors de la modification du compte courant.' }, { status: 500 })
+  }
 }
 
 export async function DELETE(
@@ -87,12 +120,12 @@ export async function DELETE(
     return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 })
   }
 
-  await prisma.compteCourant.update({
-    where: { id },
-    data: { actif: false },
-  })
-
-  return NextResponse.json({ success: true })
+  try {
+    await prisma.compteCourant.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  } catch (e: any) {
+    return NextResponse.json({ error: 'Erreur lors de la suppression.' }, { status: 500 })
+  }
 }
 
 type TransactionRow = {

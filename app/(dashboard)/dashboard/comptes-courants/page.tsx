@@ -60,8 +60,12 @@ export default function ComptesCourantsPage() {
       setMatches(matches.filter(x => x.clientId !== m.clientId || x.fournisseurId !== m.fournisseurId))
       fetchComptes()
     } else {
-      const err = await res.json()
-      showError(err.error || 'Erreur lors de la liaison.')
+      try {
+        const err = await res.json()
+        showError(err.error || 'Erreur lors de la liaison.')
+      } catch {
+        showError('Erreur lors de la liaison (veuillez réessayer).')
+      }
     }
   }
 

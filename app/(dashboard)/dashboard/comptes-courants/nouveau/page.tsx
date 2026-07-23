@@ -116,8 +116,12 @@ export default function NouveauCompteCourantPage() {
       if (res.ok) {
         router.push('/dashboard/comptes-courants')
       } else {
-        const err = await res.json()
-        setError(err.error || "Erreur lors de l'enregistrement.")
+        try {
+          const err = await res.json()
+          setError(err.error || "Erreur lors de l'enregistrement.")
+        } catch {
+          setError("Erreur lors de l'enregistrement (veuillez réessayer).")
+        }
       }
     } finally {
       setSaving(false)

@@ -7,79 +7,91 @@ import { validateApiRequest } from '@/lib/validation-helpers'
 import { compteCourantSchema } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'achats:view')
-  if (forbidden) return forbidden
+  try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const forbidden = requirePermission(session, 'achats:view')
+    if (forbidden) return forbidden
 
-  const entiteId = await getEntiteId(session)
+    const entiteId = await getEntiteId(session)
 
-  const comptes = await prisma.compteCourant.findMany({
-    where: { entiteId, actif: true },
-    include: {
-      client: { select: { id: true, nom: true, telephone: true, ncc: true } },
-      fournisseur: { select: { id: true, nom: true, telephone: true, ncc: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  })
+    const comptes = await prisma.compteCourant.findMany({
+      where: { entiteId, actif: true },
+      include: {
+        client: { select: { id: true, nom: true, telephone: true, ncc: true } },
+        fournisseur: { select: { id: true, nom: true, telephone: true, ncc: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
 
-  const result = await Promise.all(comptes.map(async (cc) => {
-    const solde = await calculerSolde(cc.clientId, cc.fournisseurId)
-    return { ...cc, solde }
-  }))
+    const result = await Promise.all(comptes.map(async (cc) => {
+      const solde = await calculerSolde(cc.clientId, cc.fournisseurId)
+      return { ...cc, solde }
+    }))
 
-  return NextResponse.json(result)
+    return NextResponse.json(result)
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Erreur lors du chargement des comptes courants.' }, { status: 500 })
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const forbidden = requirePermission(session, 'achats:create')
-  if (forbidden) return forbidden
+  try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    const forbidden = requirePermission(session, 'achats:create')
+    if (forbidden) return forbidden
 
-  const body = await request.json()
-  const result = validateApiRequest(compteCourantSchema, body)
-  if (!result.success) return result.response
-  const data = result.data
+    const body = await request.json()
+    const result = validateApiRequest(compteCourantSchema, body)
+    if (!result.success) return result.response
+    const data = result.data
 
-  const entiteId = await getEntiteId(session)
+    const entiteId = await getEntiteId(session)
 
-  if (data.clientId) {
-    const existant = await prisma.compteCourant.findFirst({
-      where: { clientId: data.clientId, entiteId, actif: true },
-      select: { id: true, nom: true, code: true },
-    })
-    if (existant) {
-      return NextResponse.json({
-        error: `Ce client est déjà lié au compte courant "${existant.nom}" (${existant.code}). Modifie-le pour changer le lien.`
-      }, { status: 409 })
+    if (data.clientId) {
+      const existant = await prisma.compteCourant.findFirst({
+        where: { clientId: data.clientId, actif: true },
+        select: { id: true, nom: true, code: true },
+      })
+      if (existant) {
+        return NextResponse.json({
+          error: `Ce client est déjà lié au compte courant "${existant.nom}" (${existant.code}). Modifie-le pour changer le lien.`
+        }, { status: 409 })
+      }
     }
-  }
 
-  if (data.fournisseurId) {
-    const existant = await prisma.compteCourant.findFirst({
-      where: { fournisseurId: data.fournisseurId, entiteId, actif: true },
-      select: { id: true, nom: true, code: true },
-    })
-    if (existant) {
-      return NextResponse.json({
-        error: `Ce fournisseur est déjà lié au compte courant "${existant.nom}" (${existant.code}). Modifie-le pour changer le lien.`
-      }, { status: 409 })
+    if (data.fournisseurId) {
+      const existant = await prisma.compteCourant.findFirst({
+        where: { fournisseurId: data.fournisseurId, actif: true },
+        select: { id: true, nom: true, code: true },
+      })
+      if (existant) {
+        return NextResponse.json({
+          error: `Ce fournisseur est déjà lié au compte courant "${existant.nom}" (${existant.code}). Modifie-le pour changer le lien.`
+        }, { status: 409 })
+      }
     }
+
+    const last = await prisma.compteCourant.findFirst({ orderBy: { id: 'desc' }, select: { code: true } })
+    const lastNum = last ? parseInt(last.code.replace('CC-', ''), 10) || 0 : 0
+    const code = `CC-${String(lastNum + 1).padStart(3, '0')}`
+
+    const compte = await prisma.compteCourant.create({
+      data: { code, nom: data.nom, ncc: data.ncc ?? null, entiteId, clientId: data.clientId ?? null, fournisseurId: data.fournisseurId ?? null },
+      include: {
+        client: { select: { id: true, nom: true, telephone: true } },
+        fournisseur: { select: { id: true, nom: true, telephone: true } },
+      },
+    })
+
+    return NextResponse.json(compte)
+  } catch (e: any) {
+    if (e?.code === 'P2002') {
+      return NextResponse.json({ error: 'Ce code ou partenaire est déjà utilisé.' }, { status: 409 })
+    }
+    return NextResponse.json({ error: 'Erreur lors de la création du compte courant.' }, { status: 500 })
   }
-
-  const count = await prisma.compteCourant.count()
-  const code = `CC-${String(count + 1).padStart(3, '0')}`
-
-  const compte = await prisma.compteCourant.create({
-    data: { code, nom: data.nom, ncc: data.ncc ?? null, entiteId, clientId: data.clientId ?? null, fournisseurId: data.fournisseurId ?? null },
-    include: {
-      client: { select: { id: true, nom: true, telephone: true } },
-      fournisseur: { select: { id: true, nom: true, telephone: true } },
-    },
-  })
-
-  return NextResponse.json(compte)
 }
 
 async function calculerSolde(clientId: number | null, fournisseurId: number | null): Promise<number> {
