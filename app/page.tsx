@@ -76,7 +76,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent pointer-events-none" />
       </div>
 
-      <div className="relative w-full md:w-1/2 min-h-screen flex items-center justify-center p-6 md:p-12 bg-gradient-to-br from-orange-50 via-white to-orange-100">
+      <div className="relative w-full md:w-1/2 min-h-screen flex items-center justify-center p-6 md:p-12 bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700">
         <div className={`relative w-full max-w-lg bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-8 md:p-12 transform transition-all duration-1000 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
           <div className="mb-8 text-center">
             <div className="flex items-center justify-center mb-6">
