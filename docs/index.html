@@ -380,7 +380,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
   <div class="download-inner">
     <div class="download-preview">
       <img src="images/logo.png" alt="GestiCom Pro" class="download-logo">
-      <h3>GestiCom Pro <span>v3.46.9</span></h3>
+      <h3>GestiCom Pro <span>v3.47.17</span></h3>
       <div class="download-preview-list">
         <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Ventes & Achats</span>
         <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Stocks & Inventaire</span>
@@ -475,7 +475,7 @@ document.getElementById('downloadModal').addEventListener('click',function(e){if
 setupAutre('modalDomaine','modalDomaineAutre');
 function handleForm(fid,btnSel,succId,btnHtml,onSuccess){var f=document.getElementById(fid),s=document.getElementById(succId),b=f.querySelector(btnSel);if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();b.disabled=true;b.innerHTML='<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="80" stroke-dashoffset="60"/></svg> Envoi...';fetch(f.action||'https://formspree.io/f/mjgnrgby',{method:'POST',headers:{'Accept':'application/json'},body:new FormData(f)}).then(function(r){return r.json().catch(function(){return{}})}).then(function(d){if(d.error||d.errors)throw new Error(d.error||(d.errors&&d.errors[0]&&d.errors[0].message)||'Erreur inconnue');f.reset();if(onSuccess)onSuccess();else{s.style.display='flex';setTimeout(function(){s.style.display='none'},6000)}}).catch(function(err){alert('Erreur : '+err.message)}).finally(function(){b.disabled=false;b.innerHTML=btnHtml})})}
 handleForm('contactForm','.btn-submit','contactSuccess','<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Envoyer le message');
-handleForm('modalForm','.btn-submit-full','', 'Obtenir mon lien de téléchargement', function(){window.location.href='https://drive.google.com/uc?export=download&id=1tSLJggXSBVYAa7ZB2_-ie7-aVXiGbR1S'});
+handleForm('modalForm','.btn-submit-full','', 'Obtenir mon lien de téléchargement', function(){window.location.href='https://drive.google.com/uc?export=download&id=1BvtgS8l9AyEBItZHcFBWIRnGnFZswISx'});
 })();
 </script>
 
