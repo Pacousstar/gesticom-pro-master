@@ -5,7 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GestiCom Pro — Logiciel de Gestion de Commerce</title>
 <meta name="description" content="GestiCom Pro : gérez vos ventes, achats, stocks et comptabilité en toute simplicité. Téléchargez la dernière version.">
+<meta property="og:title" content="GestiCom Pro — Logiciel de Gestion de Commerce">
+<meta property="og:description" content="Ventes, achats, stocks, comptabilité et gestion multi-postes — tout-en-un, simple et puissant. Téléchargez gratuitement.">
+<meta property="og:image" content="https://pacousstar.github.io/GestiCom-Pro/images/logo.png">
+<meta property="og:url" content="https://pacousstar.github.io/GestiCom-Pro/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="GestiCom Pro — Logiciel de Gestion de Commerce">
+<meta name="twitter:description" content="Ventes, achats, stocks, comptabilité et gestion multi-postes — tout-en-un.">
+<meta name="twitter:image" content="https://pacousstar.github.io/GestiCom-Pro/images/logo.png">
 <link rel="icon" href="images/icon.png">
+<link rel="sitemap" type="application/xml" href="sitemap.xml">
+<meta name="robots" content="index, follow">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -460,7 +472,8 @@ Une question, un besoin, un partenariat ? Notre équipe est à votre écoute."><
       <br>
       <a href="tel:+2250544814924">+225 05 44 81 49 24</a> / <a href="tel:+2250707801817">07 07 80 18 17</a>
       <br>
-      &copy; 2026 GSN EXPERTISES GROUP. Tous droits réservés.
+      &copy; 2026 GSN EXPERTISES GROUP. Tous droits r&eacute;serv&eacute;s.<br>
+      <a href="mentions-legales.html" style="color:#f97316;font-size:12px">Mentions l&eacute;gales</a>
     </div>
   </div>
 </footer>
@@ -473,8 +486,7 @@ document.getElementById('downloadModal').addEventListener('click',function(e){if
 
 (function(){function setupAutre(selId,autreId){var s=document.getElementById(selId),a=document.getElementById(autreId);if(!s||!a)return;s.addEventListener('change',function(){a.style.display=s.value==='Autre'?'block':'none';if(s.value!=='Autre')a.value=''});a.addEventListener('input',function(){var o=Array.from(s.options).find(function(x){return x.value==='Autre'});if(o)o.value=a.value})}
 setupAutre('modalDomaine','modalDomaineAutre');
-function handleForm(fid,btnSel,succId,btnHtml,onSuccess){var f=document.getElementById(fid),s=document.getElementById(succId),b=f.querySelector(btnSel);if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();b.disabled=true;b.innerHTML='<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="80" stroke-dashoffset="60"/></svg> Envoi...';fetch(f.action||'https://formspree.io/f/mjgnrgby',{method:'POST',headers:{'Accept':'application/json'},body:new FormData(f)}).then(function(r){return r.json().catch(function(){return{}})}).then(function(d){if(d.error||d.errors)throw new Error(d.error||(d.errors&&d.errors[0]&&d.errors[0].message)||'Erreur inconnue');f.reset();if(onSuccess)onSuccess();else{s.style.display='flex';setTimeout(function(){s.style.display='none'},6000)}}).catch(function(err){alert('Erreur : '+err.message)}).finally(function(){b.disabled=false;b.innerHTML=btnHtml})})}
-handleForm('contactForm','.btn-submit','contactSuccess','<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Envoyer le message');
+(function(){var f=document.getElementById('contactForm'),s=document.getElementById('contactSuccess'),b=f.querySelector('.btn-submit'),h=b.innerHTML;f.addEventListener('submit',function(e){e.preventDefault();b.disabled=true;b.innerHTML='<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="80" stroke-dashoffset="60"/></svg> Envoi...';if(!navigator.sendBeacon(f.action,new FormData(f))){b.disabled=false;b.innerHTML=h;alert('Erreur d\'envoi. Veuillez reessayer ou nous contacter par telephone.');return};f.reset();s.style.display='flex';setTimeout(function(){s.style.display='none'},6000);b.disabled=false;b.innerHTML=h})})();
 (function(){var f=document.getElementById('modalForm'),b=f.querySelector('.btn-submit-full');if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();var nom=document.getElementById('modalNom').value;var email=document.getElementById('modalEmail').value;var tel=document.getElementById('modalTel').value;var domaine=document.getElementById('modalDomaine').value;if(!nom||!email||!domaine){alert('Veuillez remplir tous les champs obligatoires.');return};var p=new URLSearchParams();p.set('nom',nom);p.set('email',email);if(tel)p.set('tel',tel);p.set('domaine',domaine);b.disabled=true;b.textContent='Redirection...';try{sessionStorage.setItem('gesticom_nom',nom);sessionStorage.setItem('gesticom_email',email);if(tel)sessionStorage.setItem('gesticom_tel',tel);sessionStorage.setItem('gesticom_domaine',domaine)}catch(e){};navigator.sendBeacon('https://formspree.io/f/mjgnrgby',new FormData(f));window.location.href='merci.html?'+p.toString()})})();
 fetch('https://api.github.com/repos/Pacousstar/GestiCom-Pro/releases/latest').then(function(r){return r.json()}).then(function(d){var t=(d.assets||[]).reduce(function(a,as){return a+as.download_count},0);document.getElementById('dl-count').textContent=t.toLocaleString('fr-FR')}).catch(function(){document.getElementById('dl-count').textContent='—'});
 })();
