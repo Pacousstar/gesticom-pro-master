@@ -330,7 +330,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
     <button class="modal-close" onclick="closeModal()">&times;</button>
     <h2>Prêt à passer à <span>GestiCom Pro ?</span></h2>
     <p>Laissez-nous vos coordonnées pour recevoir votre lien de téléchargement et un accompagnement personnalisé.</p>
-    <form id="modalForm" action="https://formspree.io/f/mjgnrgby" method="POST">
+    <form id="modalForm" onsubmit="return false">
       <input type="hidden" name="source" value="preinscription">
       <div class="form-row">
         <div class="form-group">
@@ -475,7 +475,7 @@ document.getElementById('downloadModal').addEventListener('click',function(e){if
 setupAutre('modalDomaine','modalDomaineAutre');
 function handleForm(fid,btnSel,succId,btnHtml,onSuccess){var f=document.getElementById(fid),s=document.getElementById(succId),b=f.querySelector(btnSel);if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();b.disabled=true;b.innerHTML='<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="80" stroke-dashoffset="60"/></svg> Envoi...';fetch(f.action||'https://formspree.io/f/mjgnrgby',{method:'POST',headers:{'Accept':'application/json'},body:new FormData(f)}).then(function(r){return r.json().catch(function(){return{}})}).then(function(d){if(d.error||d.errors)throw new Error(d.error||(d.errors&&d.errors[0]&&d.errors[0].message)||'Erreur inconnue');f.reset();if(onSuccess)onSuccess();else{s.style.display='flex';setTimeout(function(){s.style.display='none'},6000)}}).catch(function(err){alert('Erreur : '+err.message)}).finally(function(){b.disabled=false;b.innerHTML=btnHtml})})}
 handleForm('contactForm','.btn-submit','contactSuccess','<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Envoyer le message');
-handleForm('modalForm','.btn-submit-full','', 'Obtenir mon lien de téléchargement', function(){window.location.href='https://github.com/Pacousstar/GestiCom-Pro/releases/download/v3.47.17/GestiCom-Pro-v3.47.17-Setup.exe'});
+(function(){var f=document.getElementById('modalForm'),b=f.querySelector('.btn-submit-full');if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();var nom=document.getElementById('modalNom').value;var email=document.getElementById('modalEmail').value;var tel=document.getElementById('modalTel').value;var domaine=document.getElementById('modalDomaine').value;if(!nom||!email||!domaine){alert('Veuillez remplir tous les champs obligatoires.');return};var p=new URLSearchParams();p.set('nom',nom);p.set('email',email);if(tel)p.set('tel',tel);p.set('domaine',domaine);b.disabled=true;b.textContent='Redirection...';window.location.href='merci.html?'+p.toString()})})();
 fetch('https://api.github.com/repos/Pacousstar/GestiCom-Pro/releases/latest').then(function(r){return r.json()}).then(function(d){var t=(d.assets||[]).reduce(function(a,as){return a+as.download_count},0);document.getElementById('dl-count').textContent=t.toLocaleString('fr-FR')}).catch(function(){document.getElementById('dl-count').textContent='—'});
 })();
 </script>
