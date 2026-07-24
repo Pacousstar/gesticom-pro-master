@@ -396,7 +396,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f293
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Télécharger (700 Mo)
       </a>
-      <div class="version-info">Windows 10/11 · Installation simple · Essai gratuit</div>
+      <div class="version-info">Windows 10/11 · Installation simple · Essai gratuit · <span id="dl-count">—</span> téléchargements</div>
       <div class="download-notice">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         L'avertissement Google Drive est normal pour un fichier de 653 Mo. GestiCom Pro est un logiciel sécurisé édité par GSN EXPERTISES GROUP.
@@ -476,6 +476,7 @@ setupAutre('modalDomaine','modalDomaineAutre');
 function handleForm(fid,btnSel,succId,btnHtml,onSuccess){var f=document.getElementById(fid),s=document.getElementById(succId),b=f.querySelector(btnSel);if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();b.disabled=true;b.innerHTML='<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="80" stroke-dashoffset="60"/></svg> Envoi...';fetch(f.action||'https://formspree.io/f/mjgnrgby',{method:'POST',headers:{'Accept':'application/json'},body:new FormData(f)}).then(function(r){return r.json().catch(function(){return{}})}).then(function(d){if(d.error||d.errors)throw new Error(d.error||(d.errors&&d.errors[0]&&d.errors[0].message)||'Erreur inconnue');f.reset();if(onSuccess)onSuccess();else{s.style.display='flex';setTimeout(function(){s.style.display='none'},6000)}}).catch(function(err){alert('Erreur : '+err.message)}).finally(function(){b.disabled=false;b.innerHTML=btnHtml})})}
 handleForm('contactForm','.btn-submit','contactSuccess','<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Envoyer le message');
 handleForm('modalForm','.btn-submit-full','', 'Obtenir mon lien de téléchargement', function(){window.location.href='https://drive.google.com/uc?export=download&id=1BvtgS8l9AyEBItZHcFBWIRnGnFZswISx'});
+fetch('https://api.github.com/repos/Pacousstar/gesticom-pro-master/releases').then(function(r){return r.json()}).then(function(d){var t=d.reduce(function(s,rel){return s+(rel.assets||[]).reduce(function(a,as){return a+as.download_count},0)},0);document.getElementById('dl-count').textContent=t.toLocaleString('fr-FR')}).catch(function(){document.getElementById('dl-count').textContent='—'});
 })();
 </script>
 
