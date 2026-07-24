@@ -7,20 +7,26 @@
 <link rel="icon" href="images/icon.png">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#e65100;min-height:100vh;color:#fff;padding:24px}
-.wrap{max-width:720px;margin:0 auto;padding:40px 32px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:24px;backdrop-filter:blur(12px);box-shadow:0 24px 80px rgba(0,0,0,.5)}
-h1{font-size:28px;font-weight:800;margin-bottom:4px}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#e65100;min-height:100vh;padding:24px;display:flex;align-items:center;justify-content:center}
+.wrap{max-width:720px;width:100%;background:#fff;border-radius:24px;padding:40px 36px;box-shadow:0 24px 80px rgba(0,0,0,.3);animation:fadeIn .6s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+h1{font-size:26px;font-weight:800;margin-bottom:2px;color:#1f2937}
 h1 span{color:#FF6B35}
-.sub{color:#94a3b8;font-size:15px;margin-bottom:32px}
-h2{font-size:17px;font-weight:700;color:#fbbf24;margin:24px 0 12px;display:flex;align-items:center;gap:8px}
-h2 .num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#FF6B35;color:#fff;font-size:13px;font-weight:800;flex-shrink:0}
-p,li{font-size:14px;color:#cbd5e1;line-height:1.7}
-ul{list-style:none;padding-left:0;display:flex;flex-direction:column;gap:6px}
-ul li{padding-left:20px;position:relative}
+.sub{color:#6b7280;font-size:14px;margin-bottom:28px}
+h2{font-size:16px;font-weight:700;color:#d97706;margin:20px 0 10px;display:flex;align-items:center;gap:8px}
+h2 .num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#FF6B35,#E5561E);color:#fff;font-size:12px;font-weight:800;flex-shrink:0}
+p,li{font-size:14px;color:#4b5563;line-height:1.7}
+ul{list-style:none;padding-left:0;display:flex;flex-direction:column;gap:5px}
+ul li{padding-left:18px;position:relative}
 ul li::before{content:'\203A';position:absolute;left:0;color:#FF6B35;font-weight:700}
-.note{background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.2);border-radius:10px;padding:14px 16px;margin-top:16px;font-size:13px;color:#fbbf24}
-.back{display:inline-block;margin-top:24px;color:#64748b;font-size:13px;text-decoration:none}
-.back:hover{color:#94a3b8}
+code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:13px;color:#1f2937}
+.note{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 16px;margin-top:14px;font-size:13px;color:#9a3412;line-height:1.6}
+.actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:28px}
+.actions .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;transition:all .2s}
+.actions .btn-primary{background:linear-gradient(135deg,#FF6B35,#E5561E);color:#fff;box-shadow:0 4px 20px rgba(255,107,53,.35)}
+.actions .btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(255,107,53,.45)}
+.actions .btn-secondary{color:#4b5563;border:2px solid #e5e7eb}
+.actions .btn-secondary:hover{border-color:#FF6B35;color:#1f2937}
 </style>
 </head>
 <body>
@@ -58,9 +64,12 @@ ul li::before{content:'\203A';position:absolute;left:0;color:#FF6B35;font-weight
   <h2><span class="num">5</span> Commencez &agrave; utiliser</h2>
   <p>Configurez votre entreprise, vos produits et commencez &agrave; g&eacute;rer vos ventes, stocks et comptabilit&eacute;.</p>
 
-  <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
-    <a class="back" href="merci.html" style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#FF6B35,#E5561E);color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;transition:all .2s;box-shadow:0 4px 20px rgba(255,107,53,.35)">&larr; T&eacute;l&eacute;charger</a>
-    <a class="back" href="index.html#contact" style="display:inline-flex;align-items:center;gap:8px;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;border:2px solid rgba(255,255,255,.2);transition:all .2s">Nous contacter</a>
+  <div class="actions">
+    <a class="btn btn-primary" href="merci.html">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      T&eacute;l&eacute;charger
+    </a>
+    <a class="btn btn-secondary" href="index.html#contact">Nous contacter</a>
   </div>
 </div>
 </body>
