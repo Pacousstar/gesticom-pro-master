@@ -1117,9 +1117,7 @@ export default function DashboardLayoutClient({
         {pathname === '/dashboard' && (
           <footer className="h-10 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-center relative z-10 w-full shrink-0 no-print">
             <p className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1">
-              <span className="text-orange-500">GestiCom — tous droits réservés</span>
-              <span className="text-gray-300 dark:text-gray-600 mx-1">—</span>
-              <span className="text-emerald-600 dark:text-emerald-400">Pacousstar 05 44 81 49 24</span>
+              <span className="text-orange-500">GestiCom Pro — TOUS DROITS RESERVES.</span>
             </p>
           </footer>
         )}

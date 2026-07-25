@@ -54,12 +54,6 @@ function main() {
   pkg.version = newV
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
   
-  // GestiCom-Install.iss
-  const issPath = path.join(root, 'GestiCom-Install.iss')
-  let iss = fs.readFileSync(issPath, 'utf8')
-  iss = iss.replace(/#define MyAppVersion\s+"[^"]+"/, `#define MyAppVersion "${newV}"`)
-  fs.writeFileSync(issPath, iss, 'utf8')
-  
   // .env (dev + prod)
   for (const envFile of ['.env', '.env.production', '.env.local'].filter(f => fs.existsSync(path.join(root, f)))) {
     let env = fs.readFileSync(path.join(root, envFile), 'utf8')

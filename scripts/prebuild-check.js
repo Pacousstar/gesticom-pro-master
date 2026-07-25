@@ -13,18 +13,12 @@ function check(ok, msg) {
 
 console.log('--- Vérification pre-build ---')
 
-// 1. Syntaxe JS de tous les scripts racine
+// 1. Syntaxe JS des scripts de build
 console.log('\n[Scripts JS]')
 const jsFiles = [
-  'start.js',
   'scripts/standalone-launcher.js',
-  'scripts/install-service.js',
-  'scripts/maintenance-runner.js',
-  'scripts/seed.js',
-  'scripts/sauvegarde-bd.js',
   'scripts/bump-version.js',
   'scripts/download-postgres.js',
-  'scripts/migrate-sqlite-to-postgres.js',
   'next.config.js',
 ]
 for (const f of jsFiles) {
@@ -38,65 +32,13 @@ for (const f of jsFiles) {
   }
 }
 
-// 2. Fichiers essentiels présents
-console.log('\n[Fichiers essentiels]')
-const essentials = [
-  'LANCER-SILENCIEUX.vbs',        // launcher VBS
-]
-for (const f of essentials) {
-  check(fs.existsSync(path.join(root, f)), `${f} présent`)
-}
-
-// node.exe et nssm.exe sont requis par l'installateur mais pas pour le build CI
-const installerFiles = ['node.exe', 'nssm.exe']
-for (const f of installerFiles) {
-  if (fs.existsSync(path.join(root, f))) {
-    console.log(`  ✓ ${f} présent`)
-  } else {
-    console.log(`  ~ ${f} absent (normal en CI, requis seulement pour l'installateur)`)
-  }
-}
-
-// 2b. PostgreSQL zip (requis pour installateur)
-const pgZip = path.join(root, 'pgsql', 'postgresql-16.14-2-windows-x64-binaries.zip')
-if (fs.existsSync(pgZip)) {
-  const size = (fs.statSync(pgZip).size / 1024 / 1024).toFixed(1)
-  console.log(`  ✓ pgsql/postgresql-16.14-2-windows-x64-binaries.zip (${size} Mo)`)
-} else {
-  console.log('  ~ pgsql/postgresql-16.14-2-windows-x64-binaries.zip absent (lancera download-postgres.js)')
-}
-
-// 2c. Vérification optionnelle standalone (peut ne pas exister avant build)
+// 2. Vérification .next/standalone (peut ne pas exister avant build)
+console.log('\n[Build]')
 const standaloneServer = path.join(root, '.next', 'standalone', 'server.js')
 if (fs.existsSync(standaloneServer)) {
   console.log('  ✓ .next/standalone/server.js présent')
 } else {
   console.log('  ~ .next/standalone/server.js absent (normal si premier build)')
-}
-
-// 3. GestiCom-Install.iss cohérent
-console.log('\n[Inno Setup]')
-const issPath = path.join(root, 'GestiCom-Install.iss')
-if (fs.existsSync(issPath)) {
-  const iss = fs.readFileSync(issPath, 'utf8')
-  const versionMatch = iss.match(/#define MyAppVersion "(\d+\.\d+\.\d+)"/)
-  check(!!versionMatch, `Version ISS: ${versionMatch ? versionMatch[1] : 'non trouvée'}`)
-  check(iss.includes('Source: ".next\\standalone\\*"'), 'Source standalone présente')
-  check(iss.includes('Source: "nssm.exe"'), 'NSSM inclus')
-  check(iss.includes('Source: "scripts\\install-service.js"'), 'install-service.js inclus')
-  check(iss.includes('Filename: "{app}\\node.exe"'), 'Service installé')
-} else {
-  check(false, 'GestiCom-Install.iss introuvable')
-}
-
-// 4. Vérification rapide LANCER-SILENCIEUX.vbs
-console.log('\n[VBScript]')
-const vbsPath = path.join(root, 'LANCER-SILENCIEUX.vbs')
-if (fs.existsSync(vbsPath)) {
-  const vbs = fs.readFileSync(vbsPath, 'utf8')
-  check(vbs.includes('net start GestiComPro'), 'Contient net start')
-  check(vbs.includes('http://localhost:3001'), 'URL 3001 présente')
-  check(vbs.includes('ShellApp.ShellExecute'), 'Ouverture navigateur')
 }
 
 console.log(`\n${errors === 0 ? '✓ Toutes les vérifications passées' : `✘ ${errors} erreur(s) détectée(s)`}`)

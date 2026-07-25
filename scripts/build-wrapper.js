@@ -25,7 +25,12 @@ process.on('uncaughtException', (err) => {
 const nextBuild = spawn(
   'node',
   [path.join(projectRoot, 'node_modules', 'next', 'dist', 'bin', 'next'), 'build'],
-  { cwd: projectRoot, stdio: 'inherit', windowsHide: true, shell: true }
+  {
+    cwd: projectRoot,
+    stdio: 'inherit',
+    windowsHide: true,
+    shell: true,
+  }
 )
 
 nextBuild.on('exit', (code) => {

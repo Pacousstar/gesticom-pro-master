@@ -30,9 +30,11 @@
         "arch": ["x64"]
       }
     ],
-    "icon": "public/icon.png",
+    "icon": "public/gesticom.ico",
     "artifactName": "${productName}-v${version}-Setup.${ext}"
   },
+  "npmRebuild": false,
+  "nodeGypRebuild": false,
   "nsis": {
     "oneClick": false,
     "perMachine": false,
@@ -40,17 +42,19 @@
     "deleteAppDataOnUninstall": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "GestiCom Pro"
+    "shortcutName": "GestiCom Pro",
+    "installerIcon": "public/gesticom.ico",
+    "uninstallerIcon": "public/gesticom.ico"
   },
   "mac": {
     "target": ["dmg", "zip"],
-    "icon": "public/icon.png",
+    "icon": "public/images/icon.png",
     "artifactName": "${productName}-v${version}-${arch}.${ext}",
     "category": "public.app-category.business"
   },
   "linux": {
     "target": ["AppImage", "deb"],
-    "icon": "public/icon.png",
+    "icon": "public/images/icon.png",
     "artifactName": "${productName}-v${version}-${arch}.${ext}",
     "category": "Office"
   }

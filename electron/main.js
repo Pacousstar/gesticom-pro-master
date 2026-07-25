@@ -7,11 +7,15 @@ const isDev = !app.isPackaged
 
 function startServer() {
   return new Promise((resolve, reject) => {
-    const script = path.join(__dirname, '..', 'node_modules', 'next', 'dist', 'bin', 'next')
-    const args = isDev ? ['dev', '-H', '127.0.0.1', '-p', '3000'] : ['start', '-p', '3000']
-    const env = { ...process.env, NODE_ENV: isDev ? 'development' : 'production' }
+    if (isDev) {
+      waitForServer(resolve)
+      return
+    }
 
-    const server = spawn('node', [script, ...args], {
+    const script = path.join(__dirname, '..', 'node_modules', 'next', 'dist', 'bin', 'next')
+    const env = { ...process.env, NODE_ENV: 'production' }
+
+    const server = spawn('node', [script, 'start', '-p', '3000'], {
       cwd: path.join(__dirname, '..'),
       stdio: 'pipe',
       env,
@@ -58,7 +62,7 @@ function createWindow() {
     height: 800,
     minWidth: 1024,
     minHeight: 600,
-    icon: path.join(__dirname, '..', 'public', 'icon.png'),
+    icon: path.join(__dirname, '..', 'public', 'gesticom.ico'),
     title: 'GestiCom Pro',
     webPreferences: {
       nodeIntegration: false,
@@ -69,10 +73,6 @@ function createWindow() {
 
   win.setMenuBarVisibility(false)
   win.loadURL('http://127.0.0.1:3000')
-
-  if (isDev) {
-    win.webContents.openDevTools({ mode: 'detach' })
-  }
 
   return win
 }

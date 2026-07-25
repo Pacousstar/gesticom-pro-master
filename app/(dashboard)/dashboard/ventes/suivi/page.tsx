@@ -43,7 +43,7 @@ export default function SuiviVentesPage() {
   const [supprimant, setSupprimant] = useState<number | null>(null)
 
   useEffect(() => {
-    fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => {
+    fetch('/api/auth/check').then(r => r.ok ? r.json() : null).then(d => {
       if (d) setUserRole(d.role || '')
     })
   }, [])
