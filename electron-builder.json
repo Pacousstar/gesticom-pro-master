@@ -1,0 +1,57 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.gsn.gesticom-pro",
+  "productName": "GestiCom Pro",
+  "copyright": "Copyright © 2026 GSN EXPERTISES GROUP",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    ".next/**/*",
+    "electron/**/*",
+    "public/**/*",
+    "prisma/**/*",
+    "package.json",
+    "node_modules/**/*",
+    "!node_modules/.cache/**",
+    "scripts/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "prisma/",
+      "to": "prisma/",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "public/icon.png",
+    "artifactName": "${productName}-v${version}-Setup.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "GestiCom Pro"
+  },
+  "mac": {
+    "target": ["dmg", "zip"],
+    "icon": "public/icon.png",
+    "artifactName": "${productName}-v${version}-${arch}.${ext}",
+    "category": "public.app-category.business"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "icon": "public/icon.png",
+    "artifactName": "${productName}-v${version}-${arch}.${ext}",
+    "category": "Office"
+  }
+}

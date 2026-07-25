@@ -1,8 +1,14 @@
 {
-  "name": "gesticom",
+  "name": "gesticom-pro",
   "version": "3.47.17",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://127.0.0.1:3000 && electron .\"",
+    "electron:build": "npm run build && electron-builder --win --config electron-builder.json",
+    "electron:build:mac": "npm run build && electron-builder --mac --config electron-builder.json",
+    "electron:build:linux": "npm run build && electron-builder --linux --config electron-builder.json",
+    "electron:build:all": "npm run build && electron-builder --win --mac --linux --config electron-builder.json",
     "dev": "node node_modules/next/dist/bin/next dev -H 127.0.0.1",
     "dev:legacy": "next dev",
     "build": "node scripts/prebuild-check.js && node scripts/bump-version.js && node node_modules/prisma/build/index.js generate && node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && node scripts/build-wrapper.js",
@@ -83,6 +89,9 @@
     "@vitest/coverage-v8": "^3.2.6",
     "@vitest/ui": "^3.1.1",
     "babel-plugin-react-compiler": "1.0.0",
+    "concurrently": "^10.0.4",
+    "electron": "^41.7.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
     "eslint-plugin-unused-imports": "^4.4.1",
@@ -91,7 +100,8 @@
     "tailwindcss": "^4",
     "tsx": "^4.19.2",
     "typescript": "5.9.3",
-    "vitest": "^3.1.1"
+    "vitest": "^3.1.1",
+    "wait-on": "^9.1.0"
   },
   "overrides": {
     "serialize-javascript": "7.0.5",
