@@ -26,6 +26,13 @@ function LoginForm() {
     setHwid(null)
   }, [])
 
+  // Vérifier si une configuration existe (premier lancement)
+  useEffect(() => {
+    fetch('/api/setup/status').then(r => r.json()).then(data => {
+      if (!data.configured) router.replace('/setup')
+    }).catch(() => {})
+  }, [router])
+
   // Limiter les tentatives de connexion (mémoire seule — pas de sessionStorage)
   useEffect(() => {
     const storedLockTime = sessionStorage.getItem('lockTime')

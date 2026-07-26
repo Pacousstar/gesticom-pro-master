@@ -1,6 +1,6 @@
 {
   "name": "gesticom-pro",
-  "version": "3.47.20",
+  "version": "3.48.10",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -11,7 +11,7 @@
     "electron:build:all": "npm run build && electron-builder --win --mac --linux --config electron-builder.json",
     "dev": "node node_modules/next/dist/bin/next dev -H 127.0.0.1",
     "dev:legacy": "next dev",
-    "build": "node scripts/prebuild-check.js && node scripts/bump-version.js && node node_modules/prisma/build/index.js generate && node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && node scripts/build-wrapper.js",
+    "build": "node scripts/prebuild-check.js && node scripts/bump-version.js && node node_modules/prisma/build/index.js generate --schema=prisma/schema.postgres.prisma && node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && node scripts/build-wrapper.js",
     "bump:version": "node scripts/bump-version.js",
     "download:pg": "node scripts/download-postgres.js",
     "build:installer": "node scripts/download-postgres.js && npm run bump:version && npm run build",

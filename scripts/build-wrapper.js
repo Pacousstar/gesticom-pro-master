@@ -4,8 +4,12 @@ const fs = require('fs')
 
 const projectRoot = path.join(__dirname, '..')
 
-// Nettoyer les vieux installateurs et .exe de la racine avant build
-// (Next.js standalone copie toute la racine → évite de les embarquer)
+// Nettoyer release/ et vieux .exe avant build
+// (Next.js standalone copie toute la racine → éviter d'embarquer 5 Go)
+const releaseDir = path.join(projectRoot, 'release')
+if (fs.existsSync(releaseDir)) {
+  try { fs.rmSync(releaseDir, { recursive: true, force: true }); console.log('[clean] Supprimé: release/') } catch (e) { console.warn('[clean] Impossible supprimer release/:', e.message) }
+}
 for (const f of fs.readdirSync(projectRoot)) {
   const full = path.join(projectRoot, f)
   if (f.endsWith('-Setup.exe') || (f.endsWith('.exe') && f !== 'node.exe' && f !== 'nssm.exe' && !f.startsWith('GestiCom'))) {
@@ -57,7 +61,13 @@ nextBuild.on('exit', (code) => {
     }
   }
 
-  // 3. Coverage artifact (coverage-final.json)
+  // 3. Release artifact (copie de l'ancien build si présent)
+  const oldRelease = path.join(standalone, 'release')
+  if (fs.existsSync(oldRelease)) {
+    try { fs.rmSync(oldRelease, { recursive: true, force: true }); console.log('[clean] Supprimé: standalone/release/') } catch {}
+  }
+
+  // 4. Coverage artifact (coverage-final.json)
   const coverageDir = path.join(standalone, 'coverage')
   if (fs.existsSync(coverageDir)) {
     try { fs.rmSync(coverageDir, { recursive: true, force: true }); console.log('[clean] Supprimé: coverage/') } catch {}

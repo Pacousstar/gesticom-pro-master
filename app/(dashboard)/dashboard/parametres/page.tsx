@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, Loader2, Store, Trash2, Shield, Printer, Edit2, Building2, Database, ImagePlus, Zap } from 'lucide-react'
+import { Save, Loader2, Store, Trash2, Shield, Printer, Edit2, Building2, Database, ImagePlus, Zap, Server, CheckCircle2, XCircle, ArrowRight } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Link from 'next/link'
 
@@ -73,6 +73,15 @@ export default function ParametresPage() {
   const [sauvegardeErr, setSauvegardeErr] = useState('')
   const [restoreLoading, setRestoreLoading] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
+
+  const [pgHost, setPgHost] = useState('localhost')
+  const [pgPort, setPgPort] = useState('5432')
+  const [pgDb, setPgDb] = useState('gesticom')
+  const [pgUser, setPgUser] = useState('gesticom')
+  const [pgPassword, setPgPassword] = useState('')
+  const [migrating, setMigrating] = useState(false)
+  const [migrateResult, setMigrateResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [isCurrentPostgres, setIsCurrentPostgres] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -217,6 +226,42 @@ export default function ParametresPage() {
       setErr('Erreur réseau')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const buildPostgresUrl = () =>
+    `postgresql://${pgUser}:${pgPassword}@${pgHost}:${pgPort}/${pgDb}`
+
+  const handleMigrateToPostgres = async () => {
+    if (!pgPassword || pgPassword.length < 8) {
+      showError('Le mot de passe PostgreSQL doit contenir au moins 8 caractères')
+      return
+    }
+    setMigrating(true)
+    setMigrateResult(null)
+    try {
+      const res = await fetch('/api/admin/migrate-to-postgres', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postgresUrl: buildPostgresUrl(),
+          password: pgPassword,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setMigrateResult({ success: true, message: data.message || 'Migration réussie !' })
+        success('Migration PostgreSQL réussie ! Veuillez redémarrer l\'application.')
+        setIsCurrentPostgres(true)
+      } else {
+        setMigrateResult({ success: false, message: data.error || data.details || 'Erreur inconnue' })
+        showError(data.error || 'Échec de la migration')
+      }
+    } catch (e) {
+      setMigrateResult({ success: false, message: 'Erreur réseau' })
+      showError('Erreur réseau lors de la migration')
+    } finally {
+      setMigrating(false)
     }
   }
 
@@ -596,6 +641,75 @@ export default function ParametresPage() {
                </div>
             )}
           </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await fetch('/api/sauvegarde/manuelle', { method: 'POST' })
+                  success('Sauvegarde créée avec succès')
+                  fetchBackups()
+                } catch { showError('Erreur lors de la sauvegarde') }
+              }}
+              className="flex items-center gap-2 rounded-lg bg-orange-600/20 border border-orange-500/30 px-4 py-2 text-[10px] font-black text-orange-400 uppercase tracking-widest hover:bg-orange-600/30 transition-all"
+            >
+              <Database className="h-3 w-3" />
+              Sauvegarder maintenant
+            </button>
+          </div>
+
+          {backups.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-xs font-black text-orange-400 uppercase tracking-wider mb-3 ml-1">
+                Sauvegardes existantes ({backups.length})
+              </h3>
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-gray-900/20">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] font-black text-white/60 uppercase tracking-wider border-b border-white/10 bg-white/5">
+                      <th className="px-4 py-3">Fichier</th>
+                      <th className="px-4 py-3">Taille</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {backups.map((b: Backup) => (
+                      <tr key={b.name} className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3 font-mono text-[11px] text-white/80 truncate max-w-[200px]">{b.name}</td>
+                        <td className="px-4 py-3 text-[11px] text-white/60">{(b.size / 1024).toFixed(0)} Ko</td>
+                        <td className="px-4 py-3 text-[11px] text-white/60">{new Date(b.mtime).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <a
+                              href={`/api/sauvegarde/download?name=${encodeURIComponent(b.name)}`}
+                              className="text-cyan-400/60 hover:text-cyan-400 font-black uppercase text-[10px] tracking-widest transition-all"
+                            >
+                              Télécharger
+                            </a>
+                            <button
+                              onClick={() => handleRestore(b.name)}
+                              disabled={restoreLoading === b.name}
+                              className="text-orange-400/60 hover:text-orange-400 font-black uppercase text-[10px] tracking-widest transition-all disabled:opacity-30"
+                            >
+                              {restoreLoading === b.name ? '...' : 'Restaurer'}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(b.name)}
+                              disabled={deleteLoading === b.name}
+                              className="text-red-400/60 hover:text-red-400 font-black uppercase text-[10px] tracking-widest transition-all disabled:opacity-30"
+                            >
+                              {deleteLoading === b.name ? '...' : 'Supprimer'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-gray-900/40 p-8 shadow-2xl backdrop-blur-xl">
@@ -608,17 +722,131 @@ export default function ParametresPage() {
               <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-1.5 ml-1">Type d'installation</label>
               <select
                 value={form.modeInstallation}
-                onChange={(e) => setForm({ ...form, modeInstallation: e.target.value })}
+                onChange={(e) => {
+                  const mode = e.target.value
+                  setForm({ ...form, modeInstallation: mode })
+                  fetch('/api/parametres/mode-installation', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ modeInstallation: mode }),
+                  }).then((r) => {
+                    if (r.ok) success('Mode d\'installation mis à jour')
+                    else console.error('Erreur mise à jour mode installation')
+                  })
+                }}
                 className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all"
               >
                 <option value="MODE_1">Mode 1 — Poste unique (Local)</option>
-                <option value="MODE_2">Mode 2 — Réseau (Serveur interne)</option>
-                <option value="MODE_3">Mode 3 — Migration (MODE_1 → MODE_2)</option>
+                <option value="MODE_2">Mode 2 — Réseau (Serveur interne + PostgreSQL)</option>
+                <option value="MODE_3">Mode 3 — Migration (MODE_1 vers MODE_2)</option>
               </select>
               <p className="mt-2 text-[10px] text-white/40 italic">
-                Mode 1 : installation sur un seul poste. Mode 2 : installation réseau avec base partagée. Mode 3 : migration d'un Mode 1 vers le Mode 2.
+                Mode 1 : installation sur un seul poste (SQLite). Mode 2 : installation réseau multi-poste avec serveur PostgreSQL centralisé. Mode 3 : migration d'une base SQLite vers PostgreSQL.
               </p>
             </div>
+
+            {(form.modeInstallation === 'MODE_2' || form.modeInstallation === 'MODE_3') && (
+              <div className="mt-6 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6 space-y-4">
+                <h3 className="text-sm font-black text-cyan-300 uppercase tracking-wider flex items-center gap-2">
+                  <Server className="h-4 w-4" />
+                  Configuration PostgreSQL
+                </h3>
+
+                {migrateResult?.success && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-sm">{migrateResult.message}</p>
+                      <p className="mt-1">Redémarrez l'application pour utiliser PostgreSQL.</p>
+                    </div>
+                  </div>
+                )}
+
+                {migrateResult?.success === false && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+                    <XCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-sm">Échec de la migration</p>
+                      <p className="mt-1">{migrateResult.message}</p>
+                    </div>
+                  </div>
+                )}
+
+                {!migrateResult?.success && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-black text-white/60 uppercase tracking-wider mb-1 ml-1">Hôte</label>
+                        <input
+                          type="text"
+                          value={pgHost}
+                          onChange={(e) => setPgHost(e.target.value)}
+                          placeholder="localhost"
+                          className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-white/60 uppercase tracking-wider mb-1 ml-1">Port</label>
+                        <input
+                          type="text"
+                          value={pgPort}
+                          onChange={(e) => setPgPort(e.target.value)}
+                          placeholder="5432"
+                          className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-white/60 uppercase tracking-wider mb-1 ml-1">Nom de la base</label>
+                      <input
+                        type="text"
+                        value={pgDb}
+                        onChange={(e) => setPgDb(e.target.value)}
+                        placeholder="gesticom"
+                        className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-black text-white/60 uppercase tracking-wider mb-1 ml-1">Utilisateur</label>
+                        <input
+                          type="text"
+                          value={pgUser}
+                          onChange={(e) => setPgUser(e.target.value)}
+                          placeholder="gesticom"
+                          className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-white/60 uppercase tracking-wider mb-1 ml-1">Mot de passe</label>
+                        <input
+                          type="password"
+                          value={pgPassword}
+                          onChange={(e) => setPgPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleMigrateToPostgres}
+                      disabled={migrating}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-6 py-4 font-black text-white text-sm uppercase tracking-widest hover:bg-cyan-500 transition-all disabled:opacity-50 shadow-lg shadow-cyan-500/20"
+                    >
+                      {migrating ? (
+                        <><Loader2 className="h-5 w-5 animate-spin" /> Migration en cours...</>
+                      ) : (
+                        <><ArrowRight className="h-5 w-5" /> Migrer vers PostgreSQL</>
+                      )}
+                    </button>
+                    <p className="text-[10px] text-white/40 italic text-center">
+                      Cette opération transfère toutes les données vers PostgreSQL et met à jour le fichier .env.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

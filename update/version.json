@@ -1,0 +1,8 @@
+{
+  "version": "3.48.10",
+  "downloadUrl": "https://github.com/pacousstar/GestiCom-Pro/releases/download/production/GestiCom-Pro-Setup.exe",
+  "checksum": "",
+  "changelog": "Installation auto PostgreSQL + découverte DB legacy + correction build Turbopack",
+  "releaseDate": "2026-07-26",
+  "required": false
+}

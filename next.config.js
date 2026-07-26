@@ -18,6 +18,7 @@ const csp = [
 ].join('; ')
 
 const nextConfig = {
+  images: { unoptimized: true },
   output: 'standalone',
   allowedDevOrigins: ['10.100.239.92', '10.78.185.92', 'localhost'],
   env: {

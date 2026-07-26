@@ -66,10 +66,10 @@ h1 span{color:#FF6B35}
   <div class="download-section">
     <a class="btn-download" id="downloadBtn" href="#">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      T&eacute;l&eacute;charger GestiCom Pro v3.47.17
+      T&eacute;l&eacute;charger GestiCom Pro v3.48.10
     </a>
     <div class="info">
-      <span>Windows 10/11 &middot; <strong>687 Mo</strong></span>
+      <span>Windows 10/11 &middot; <strong>259 Mo</strong></span>
       <a class="guide-btn" href="guide.html">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
         Guide d'installation
@@ -112,7 +112,7 @@ h1 span{color:#FF6B35}
   var nom = params.get('nom') || (function(){try{return sessionStorage.getItem('gesticom_nom')}catch(e){return null}})() || '---';
   document.getElementById('userName').textContent = nom;
 
-  var dlUrl = 'https://github.com/Pacousstar/GestiCom-Pro/releases/download/v3.47.17/GestiCom-Pro-v3.47.17-Setup.exe';
+  var dlUrl = 'https://github.com/Pacousstar/GestiCom-Pro/releases/download/production/GestiCom-Pro-Setup.exe';
   document.getElementById('downloadBtn').href = dlUrl;
 
   fetch('https://api.github.com/repos/Pacousstar/GestiCom-Pro/releases/latest')

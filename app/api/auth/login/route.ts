@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       msg = String(e)
     }
     msg = String(msg).split('\n')[0].slice(0, 320).trim() || '(aucun détail — ouvrez gesticom-error.log dans le dossier)'
-    const dbUrl = process.env.DATABASE_URL || 'file:C:/gesticom/gesticom.db'
+    const dbUrl = process.env.DATABASE_URL || '(inconnu)'
     const hint = `Base: ${dbUrl}. Erreur: ${msg}`
     try {
       const logPath = path.join(process.cwd(), 'gesticom-error.log')

@@ -19,6 +19,37 @@ function sanitizeUrl(url: string): string {
   return url.replace(/\/\/.*@/, '//***:***@')
 }
 
+function parsePostgresUrl(url: string) {
+  try {
+    const u = new URL(url)
+    return {
+      host: u.hostname,
+      port: parseInt(u.port || '5432'),
+      database: u.pathname.replace(/^\//, ''),
+      user: decodeURIComponent(u.username),
+      password: decodeURIComponent(u.password),
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeConfigFile(data: Record<string, any>) {
+  try {
+    const dataDir = process.env.GESTICOM_USER_DATA || process.cwd()
+    const configPath = path.join(dataDir, 'config.json')
+    let config: Record<string, any> = { mode: 'MODE_1' }
+    if (fs.existsSync(configPath)) {
+      try { config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) } catch (_) {}
+    }
+    Object.assign(config, data)
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+    console.log('[migrate-to-postgres] config.json mis a jour')
+  } catch (e) {
+    console.error('[migrate-to-postgres] Erreur ecriture config.json:', e)
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   const authError = requireRole(session, ['SUPER_ADMIN'])
@@ -79,6 +110,11 @@ export async function POST(req: NextRequest) {
     }
 
     console.log(`[migrate-to-postgres] Succes`)
+
+    const pg = parsePostgresUrl(postgresUrl)
+    if (pg) {
+      writeConfigFile({ mode: 'MODE_2', postgres: pg })
+    }
 
     return NextResponse.json({
       success: true,

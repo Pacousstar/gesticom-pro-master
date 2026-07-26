@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/require-role'
 
 export const dynamic = 'force-dynamic'
 
-const UPDATE_URL = process.env.UPDATE_URL || 'https://www.gsnexpertises.com/gesticom-update'
+const UPDATE_URL = process.env.UPDATE_URL || 'https://pacousstar.github.io/GestiCom-Pro/update'
 const CURRENT_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '0.0.0'
 
 function parseVersion(v: string): number[] {

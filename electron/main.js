@@ -1,9 +1,138 @@
 const { app, BrowserWindow } = require('electron')
-const { spawn } = require('child_process')
+const { spawnSync } = require('child_process')
 const path = require('path')
 const http = require('http')
+const fs = require('fs')
+const crypto = require('crypto')
 
+const PORT = 3000
 const isDev = !app.isPackaged
+
+function log(msg) {
+  try {
+    const dataDir = app.getPath('userData')
+    const logPath = path.join(dataDir, 'startup.log')
+    fs.appendFileSync(logPath, new Date().toISOString() + ' ' + msg + '\n')
+  } catch (_) {}
+}
+
+const pgManager = (() => {
+  try { return require(path.join(__dirname, '..', 'scripts', 'postgres-manager')) }
+  catch { return null }
+})()
+
+const dbLegacy = (() => {
+  try { return require(path.join(__dirname, '..', 'scripts', 'db-legacy')) }
+  catch { return null }
+})()
+
+function loadEnvFile(envPath) {
+  if (!fs.existsSync(envPath)) return
+  const raw = fs.readFileSync(envPath, 'utf-8')
+  for (const line of raw.split('\n')) {
+    const t = line.trim()
+    if (!t || t.startsWith('#')) continue
+    const eq = t.indexOf('=')
+    if (eq === -1) continue
+    let k = t.substring(0, eq).trim()
+    let v = t.substring(eq + 1).trim()
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
+    if (!process.env[k]) process.env[k] = v
+  }
+}
+
+function loadConfig() {
+  const configPath = path.join(app.getPath('userData'), 'config.json')
+  try {
+    if (fs.existsSync(configPath)) return JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+  } catch (e) {
+    log('config.json invalide: ' + e.message)
+  }
+  return { mode: 'MODE_1' }
+}
+
+function ensureEnv() {
+  const dataDir = app.getPath('userData')
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
+  const envPath = path.join(dataDir, '.env')
+  if (!fs.existsSync(envPath)) {
+    const content = [
+      `SESSION_SECRET="${crypto.randomBytes(32).toString('hex')}"`,
+      `PORT=${PORT}`,
+    ].join('\n')
+    fs.writeFileSync(envPath, content, 'utf-8')
+  }
+  loadEnvFile(envPath)
+
+  process.env.GESTICOM_USER_DATA = dataDir
+
+  if (dbLegacy) {
+    const legacyResult = dbLegacy.copyLegacyToNew(dataDir)
+    if (legacyResult.copied) log('Base legacy copiee: ' + legacyResult.path + ' -> ' + path.join(dataDir, 'gesticom.db'))
+    if (legacyResult.found) log('Base legacy utilisee: ' + legacyResult.path)
+  }
+
+  const config = loadConfig()
+  if (config.mode === 'MODE_2') {
+    if (config.postgres?.password && pgManager) {
+      try {
+        const result = pgManager.ensurePostgres(dataDir)
+        if (result.installed) log('PostgreSQL installe automatiquement')
+        const pg = config.postgres
+        const url = `postgresql://${encodeURIComponent(pg.user)}:${encodeURIComponent(pg.password)}@${pg.host}:${pg.port}/${pg.database}`
+        process.env.DATABASE_URL = url
+        log('mode postgresql: ' + url.replace(/\/\/.*@/, '//***:***@'))
+      } catch (e) {
+        log('auto-postgres echoue: ' + e.message + ', fallback sqlite')
+        process.env.DATABASE_URL = `file:${dataDir}/gesticom.db`
+      }
+    } else if (config.postgres?.password) {
+      const pg = config.postgres
+      const url = `postgresql://${encodeURIComponent(pg.user)}:${encodeURIComponent(pg.password)}@${pg.host}:${pg.port}/${pg.database}`
+      process.env.DATABASE_URL = url
+      log('mode postgresql: ' + url.replace(/\/\/.*@/, '//***:***@'))
+    } else {
+      log('mode postgresql demande mais credentials manquants, fallback sqlite')
+      process.env.DATABASE_URL = `file:${dataDir}/gesticom.db`
+    }
+  } else {
+    process.env.DATABASE_URL = `file:${dataDir}/gesticom.db`
+    log('mode sqlite')
+  }
+
+  if (!process.env.PORT) process.env.PORT = String(PORT)
+  if (!process.env.SESSION_SECRET) process.env.SESSION_SECRET = crypto.randomBytes(32).toString('hex')
+  process.env.NODE_ENV = 'production'
+}
+
+function runDbPush(basePath) {
+  const prismaCli = path.join(basePath, 'node_modules', 'prisma', 'build', 'index.js')
+  if (!fs.existsSync(prismaCli)) { log('Prisma CLI introuvable: ' + prismaCli); return }
+
+  const config = loadConfig()
+  const schemaName = config.mode === 'MODE_2' ? 'schema.postgres.prisma' : 'schema.prisma'
+  const schemaPath = path.join(basePath, 'prisma', schemaName)
+  if (!fs.existsSync(schemaPath)) { log('Schema introuvable: ' + schemaPath); return }
+
+  try {
+      const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPath], {
+      cwd: basePath, stdio: 'pipe', timeout: 120000, windowsHide: true,
+    })
+    if (r.status === 0) log('db push reussi (' + schemaName + ')')
+    else log('db push echoue code ' + r.status + ': ' + (r.stderr?.toString() || '').slice(0, 200))
+  } catch (e) { log('db push exception: ' + e.message) }
+
+  const seedScript = path.join(basePath, 'scripts', 'seed.js')
+  if (fs.existsSync(seedScript)) {
+    try {
+      const r = spawnSync(process.execPath, [seedScript], {
+        cwd: basePath, stdio: 'pipe', timeout: 120000, windowsHide: true,
+      })
+      if (r.status === 0) log('seed reussi')
+      else log('seed echoue code ' + r.status + ': ' + (r.stderr?.toString() || '').slice(0, 200))
+    } catch (e) { log('seed exception: ' + e.message) }
+  }
+}
 
 function startServer() {
   return new Promise((resolve, reject) => {
@@ -12,44 +141,37 @@ function startServer() {
       return
     }
 
-    const script = path.join(__dirname, '..', 'node_modules', 'next', 'dist', 'bin', 'next')
-    const env = { ...process.env, NODE_ENV: 'production' }
+    const basePath = path.join(__dirname, '..')
+    log('basePath: ' + basePath)
+    ensureEnv()
+    log('env ok')
+    runDbPush(basePath)
+    log('db ok, demarrage serveur Next.js...')
 
-    const server = spawn('node', [script, 'start', '-p', '3000'], {
-      cwd: path.join(__dirname, '..'),
-      stdio: 'pipe',
-      env,
-    })
+    const next = require('next')
+    const { parse } = require('url')
 
-    server.stdout.on('data', (data) => {
-      const text = data.toString()
-      console.log('[next]', text)
-      if (text.includes('Ready') || text.includes('ready') || text.includes('localhost:3000')) {
-        waitForServer(resolve)
-      }
-    })
+    const nextApp = next({ dev: false, dir: basePath })
+    const handle = nextApp.getRequestHandler()
 
-    server.stderr.on('data', (data) => {
-      console.log('[next]', data.toString())
-    })
-
-    server.on('error', reject)
-    server.on('exit', (code) => {
-      if (code !== 0 && !app.isQuitting) {
-        console.error('Next.js server exited with code', code)
-      }
-    })
-
-    app.on('before-quit', () => {
-      app.isQuitting = true
-      server.kill()
+    nextApp.prepare().then(() => {
+      log('Next.js pret, creation serveur HTTP...')
+      http.createServer((req, res) => {
+        handle(req, res, parse(req.url, true))
+      }).listen(PORT, () => {
+        log('Serveur HTTP ecoute sur port ' + PORT)
+        resolve()
+      })
+    }).catch((err) => {
+      log('Erreur nextApp.prepare(): ' + (err.message || err))
+      reject(err)
     })
   })
 }
 
 function waitForServer(resolve, retries = 0) {
   if (retries > 60) return resolve()
-  http.get('http://127.0.0.1:3000', (res) => {
+  http.get('http://127.0.0.1:' + PORT, (res) => {
     resolve()
   }).on('error', () => {
     setTimeout(() => waitForServer(resolve, retries + 1), 1000)
@@ -70,19 +192,24 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   })
-
   win.setMenuBarVisibility(false)
-  win.loadURL('http://127.0.0.1:3000')
-
+  win.loadURL('http://127.0.0.1:' + PORT)
   return win
 }
 
 app.whenReady().then(async () => {
+  log('Electron pret')
   try {
     await startServer()
+    log('Serveur OK, creation fenetre')
     createWindow()
   } catch (err) {
-    console.error('Failed to start:', err)
+    log('ERREUR FATALE: ' + (err.message || err))
+    const msg = 'Erreur au demarrage: ' + (err.message || err)
+    try {
+      const { dialog } = require('electron')
+      dialog.showErrorBox('Erreur GestiCom Pro', msg)
+    } catch (_) {}
     app.quit()
   }
 })
