@@ -27,7 +27,7 @@ export async function PATCH(
       select: {
         id: true, code: true, designation: true, categorie: true,
         prixAchat: true, prixVente: true, prixMinimum: true, seuilMin: true,
-        fournisseurId: true, actif: true, pamp: true
+        fournisseurId: true, actif: true, pamp: true, codeBarres: true
       },
     })
     if (!existing) {
@@ -79,6 +79,13 @@ export async function PATCH(
       if (val !== existing.prixMinimum) {
         oldData.prixMinimum = existing.prixMinimum
         data.prixMinimum = val
+      }
+    }
+    if (body?.codeBarres !== undefined) {
+      const val = body.codeBarres ? String(body.codeBarres).trim().replace(/\s/g, '') : null
+      if (val !== existing.codeBarres) {
+        oldData.codeBarres = existing.codeBarres
+        data.codeBarres = val
       }
     }
     if (Object.keys(data).length === 0) {

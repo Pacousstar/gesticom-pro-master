@@ -121,7 +121,7 @@ export default function EtiquettesPage() {
               format: 'CODE128',
               width: 1.5,
               height: 18,
-              displayValue: false,
+              displayValue: true,
               margin: 0,
             })
           } catch (e) {

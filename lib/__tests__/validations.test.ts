@@ -141,8 +141,15 @@ describe('produitSchema', () => {
     const r = produitSchema.safeParse({ ...valid, codeBarres: '1234567890128' })
     expect(r.success).toBe(true)
   })
-  it('rejette codeBarres invalide', () => {
-    const r = produitSchema.safeParse({ ...valid, codeBarres: 'abc' })
+  it('accepte codeBarres alphanumerique (QR)', () => {
+    const r = produitSchema.safeParse({ ...valid, codeBarres: 'ABC-123-XYZ' })
+    expect(r.success).toBe(true)
+    if (r.success) {
+      expect(r.data.codeBarres).toBe('ABC-123-XYZ')
+    }
+  })
+  it('rejette codeBarres vide en null', () => {
+    const r = produitSchema.safeParse({ ...valid, codeBarres: '' })
     expect(r.success).toBe(true)
     if (r.success) {
       expect(r.data.codeBarres).toBeNull()

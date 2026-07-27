@@ -75,7 +75,14 @@ export default function SetupPage() {
               : 'GestiCom Pro est configuré pour PostgreSQL. Redémarrez l\'application pour appliquer la configuration.'}
           </p>
           <button
-            onClick={() => window.location.href = '/login'}
+            onClick={() => {
+              if (mode === 'MODE_1') {
+                window.location.href = '/login'
+              } else {
+                try { (window as any).electronAPI?.restartApp() } catch {}
+                window.location.href = '/login'
+              }
+            }}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-8 py-4 font-black text-white text-sm uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/30"
           >
             {mode === 'MODE_1' ? 'Aller à la connexion' : 'Redémarrer l\'application'}
@@ -259,7 +266,7 @@ export default function SetupPage() {
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-200/60 hover:text-orange-200 transition-colors"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-white hover:text-emerald-300 transition-colors"
                         >
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>

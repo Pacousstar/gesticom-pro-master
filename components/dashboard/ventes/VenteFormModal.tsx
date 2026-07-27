@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import {
   Loader2, Search, X, Plus, Trash2, Wallet, CreditCard, UserPlus,
-  AlertTriangle, XCircle, DollarSign, RotateCcw, Pencil,
+  AlertTriangle, XCircle, DollarSign, RotateCcw, Pencil, Camera,
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -390,10 +390,13 @@ export default function VenteFormModal({
   }
 
   const handleScannerResult = (code: string) => {
-    const p = produits.find((x: any) => x.code === code)
+    const val = code.trim().toLowerCase()
+    const p = produits.find((x: any) => x.code.toLowerCase() === val || (x.codeBarres || '').toLowerCase() === val)
     if (p) {
       const s = p.stocks?.find((st: any) => st.magasinId === Number(formData.magasinId))?.quantite || 0
       setAjoutProduit((a) => ({ ...a, produitId: String(p.id), recherche: p.designation, prixUnitaire: String(p.prixVente ?? 0) }))
+    } else {
+      showError(`Produit non trouvé : ${code}`)
     }
     setScannerOpen(false)
   }
@@ -564,9 +567,12 @@ export default function VenteFormModal({
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
             <h3 className="mb-3 text-sm font-semibold text-gray-700">Lignes</h3>
             <div className="mb-3 space-y-2">
-              <div className="relative group">
-                <div className="absolute left-3 top-3.5 h-4 w-4 text-gray-400 group-focus-within:text-orange-500 transition-colors"><Search className="h-4 w-4" /></div>
-                <input type="text" placeholder="Taper le nom ou le code du produit..." value={ajoutProduit.recherche || ''} onChange={(e) => setAjoutProduit((a) => ({ ...a, recherche: e.target.value }))} onFocus={refetchProduits} className="w-full rounded-xl border border-gray-200 bg-white py-4 pl-12 pr-4 text-sm font-bold text-slate-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all shadow-sm placeholder:text-gray-300" />
+              <div className="relative group flex gap-2">
+                <div className="relative flex-1">
+                  <div className="absolute left-3 top-3.5 h-4 w-4 text-gray-400 group-focus-within:text-orange-500 transition-colors"><Search className="h-4 w-4" /></div>
+                  <input type="text" placeholder="Taper le nom ou le code du produit..." value={ajoutProduit.recherche || ''} onChange={(e) => setAjoutProduit((a) => ({ ...a, recherche: e.target.value }))} onFocus={refetchProduits} className="w-full rounded-xl border border-gray-200 bg-white py-4 pl-12 pr-4 text-sm font-bold text-slate-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all shadow-sm placeholder:text-gray-300" />
+                </div>
+                <button type="button" onClick={() => setScannerOpen(true)} title="Scanner par caméra" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-500 hover:border-orange-500 hover:text-orange-600 transition-all"><Camera className="h-5 w-5" /></button>
                 {ajoutProduit.recherche.length > 0 && !ajoutProduit.produitId && (
                   <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg animate-in fade-in zoom-in duration-200">
                     {produits
@@ -817,6 +823,13 @@ export default function VenteFormModal({
             {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
           </div>
         </div>
+      )}
+
+      {scannerOpen && (
+        <BarcodeScanner
+          onScan={handleScannerResult}
+          onClose={() => setScannerOpen(false)}
+        />
       )}
     </>
   )

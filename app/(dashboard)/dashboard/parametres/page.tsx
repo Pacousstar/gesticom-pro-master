@@ -18,7 +18,7 @@ type Magasin = {
 type Backup = {
   name: string
   size: number
-  mtime: string
+  date: string
 }
 
 export default function ParametresPage() {
@@ -663,10 +663,10 @@ export default function ParametresPage() {
               <h3 className="text-xs font-black text-orange-400 uppercase tracking-wider mb-3 ml-1">
                 Sauvegardes existantes ({backups.length})
               </h3>
-              <div className="overflow-hidden rounded-xl border border-white/10 bg-gray-900/20">
+                  <div className="overflow-hidden rounded-xl border border-white/10 bg-gray-800/80">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="text-left text-[10px] font-black text-white/60 uppercase tracking-wider border-b border-white/10 bg-white/5">
+                    <tr className="text-left text-[10px] font-black text-gray-300 uppercase tracking-wider border-b border-white/10">
                       <th className="px-4 py-3">Fichier</th>
                       <th className="px-4 py-3">Taille</th>
                       <th className="px-4 py-3">Date</th>
@@ -676,28 +676,28 @@ export default function ParametresPage() {
                   <tbody className="divide-y divide-white/5">
                     {backups.map((b: Backup) => (
                       <tr key={b.name} className="hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3 font-mono text-[11px] text-white/80 truncate max-w-[200px]">{b.name}</td>
-                        <td className="px-4 py-3 text-[11px] text-white/60">{(b.size / 1024).toFixed(0)} Ko</td>
-                        <td className="px-4 py-3 text-[11px] text-white/60">{new Date(b.mtime).toLocaleString()}</td>
+                        <td className="px-4 py-3 font-mono text-[11px] text-white truncate max-w-[200px]">{b.name}</td>
+                        <td className="px-4 py-3 text-[11px] text-gray-300">{(b.size / 1024).toFixed(0)} Ko</td>
+                        <td className="px-4 py-3 text-[11px] text-gray-300">{new Date(b.date).toLocaleString('fr-FR')}</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <a
                               href={`/api/sauvegarde/download?name=${encodeURIComponent(b.name)}`}
-                              className="text-cyan-400/60 hover:text-cyan-400 font-black uppercase text-[10px] tracking-widest transition-all"
+                              className="text-cyan-400 hover:text-cyan-300 font-black uppercase text-[10px] tracking-widest transition-all"
                             >
                               Télécharger
                             </a>
                             <button
                               onClick={() => handleRestore(b.name)}
                               disabled={restoreLoading === b.name}
-                              className="text-orange-400/60 hover:text-orange-400 font-black uppercase text-[10px] tracking-widest transition-all disabled:opacity-30"
+                              className="text-orange-400 hover:text-orange-300 font-black uppercase text-[10px] tracking-widest transition-all disabled:opacity-30"
                             >
                               {restoreLoading === b.name ? '...' : 'Restaurer'}
                             </button>
                             <button
                               onClick={() => handleDelete(b.name)}
                               disabled={deleteLoading === b.name}
-                              className="text-red-400/60 hover:text-red-400 font-black uppercase text-[10px] tracking-widest transition-all disabled:opacity-30"
+                              className="text-red-400 hover:text-red-300 font-black uppercase text-[10px] tracking-widest transition-all disabled:opacity-30"
                             >
                               {deleteLoading === b.name ? '...' : 'Supprimer'}
                             </button>
@@ -891,10 +891,10 @@ export default function ParametresPage() {
           </button>
         </form>
 
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-gray-900/20">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-gray-800/80">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-xs font-black text-white uppercase tracking-wider border-b border-white/10 bg-white/5">
+              <tr className="text-left text-xs font-black text-gray-300 uppercase tracking-wider border-b border-white/10">
                 <th className="px-6 py-4">Code</th>
                 <th className="px-6 py-4">Désignation Magasin</th>
                 <th className="px-6 py-4">Statut</th>
@@ -933,7 +933,7 @@ export default function ParametresPage() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <button onClick={handleMagasinEditSave} className="text-emerald-400 hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest">Enregistrer</button>
-                          <button onClick={() => setMagasinEdit(null)} className="text-white/40 hover:text-white font-black uppercase text-[10px] tracking-widest">Annuler</button>
+                          <button onClick={() => setMagasinEdit(null)} className="text-gray-400 hover:text-white font-black uppercase text-[10px] tracking-widest">Annuler</button>
                         </div>
                       </td>
                     </>
@@ -950,13 +950,13 @@ export default function ParametresPage() {
                         <div className="flex items-center justify-end gap-4">
                           <button 
                               onClick={() => { setMagasinEdit(m.id); setMagasinEditForm({ code: m.code, nom: m.nom, localisation: m.localisation, actif: m.actif }); }} 
-                              className="text-white/40 hover:text-white font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5 transition-all"
+                              className="text-white hover:text-emerald-400 font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5 transition-all"
                           >
                             <Edit2 className="h-3 w-3" /> Modifier
                           </button>
                           <button 
                               onClick={() => handleMagasinDelete(m.id, m.nom)} 
-                              className="text-red-500/40 hover:text-red-500 font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5 transition-all"
+                              className="text-red-400 hover:text-red-300 font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5 transition-all"
                           >
                             <Trash2 className="h-3 w-3" /> Supprimer
                           </button>

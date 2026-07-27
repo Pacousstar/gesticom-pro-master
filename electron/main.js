@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, ipcMain } = require('electron')
 const { spawnSync } = require('child_process')
 const path = require('path')
 const http = require('http')
@@ -7,6 +7,9 @@ const crypto = require('crypto')
 
 const PORT = 3000
 const isDev = !app.isPackaged
+
+app.commandLine.appendSwitch('enable-usermedia-screen-capture')
+app.commandLine.appendSwitch('allow-file-access-from-files')
 
 function log(msg) {
   try {
@@ -48,7 +51,7 @@ function loadConfig() {
   } catch (e) {
     log('config.json invalide: ' + e.message)
   }
-  return { mode: 'MODE_1' }
+  return null
 }
 
 function ensureEnv() {
@@ -73,6 +76,12 @@ function ensureEnv() {
   }
 
   const config = loadConfig()
+  if (!config) {
+    log('aucune configuration - mode setup')
+    process.env.DATABASE_URL = `file:${dataDir}/gesticom.db`
+    return
+  }
+
   if (config.mode === 'MODE_2') {
     if (config.postgres?.password && pgManager) {
       try {
@@ -106,10 +115,11 @@ function ensureEnv() {
 }
 
 function runDbPush(basePath) {
+  const config = loadConfig()
+  if (!config) { log('skip db push : pas de configuration'); return }
+
   const prismaCli = path.join(basePath, 'node_modules', 'prisma', 'build', 'index.js')
   if (!fs.existsSync(prismaCli)) { log('Prisma CLI introuvable: ' + prismaCli); return }
-
-  const config = loadConfig()
   const schemaName = config.mode === 'MODE_2' ? 'schema.postgres.prisma' : 'schema.prisma'
   const schemaPath = path.join(basePath, 'prisma', schemaName)
   if (!fs.existsSync(schemaPath)) { log('Schema introuvable: ' + schemaPath); return }
@@ -192,10 +202,22 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   })
+  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(permission === 'media' || permission === 'mediaKeySystem')
+  })
+  win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
+    return permission === 'media' || permission === 'mediaKeySystem'
+  })
   win.setMenuBarVisibility(false)
   win.loadURL('http://127.0.0.1:' + PORT)
   return win
 }
+
+ipcMain.on('restart-app', () => {
+  log('redemarrage demande par l\'utilisateur')
+  app.relaunch()
+  app.quit()
+})
 
 app.whenReady().then(async () => {
   log('Electron pret')

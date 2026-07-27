@@ -1,8 +1,8 @@
 {
-  "version": "3.48.10",
-  "downloadUrl": "https://github.com/pacousstar/GestiCom-Pro/releases/download/production/GestiCom-Pro-Setup.exe",
+  "version": "3.48.12",
+  "downloadUrl": "https://github.com/Pacousstar/GestiCom-Pro/releases/download/production/GestiCom-Pro-Setup.exe",
   "checksum": "",
-  "changelog": "Installation auto PostgreSQL + découverte DB legacy + correction build Turbopack",
-  "releaseDate": "2026-07-26",
+  "changelog": "Corrections bugs setup/scan/code-barres/caméra + build v3.48.12",
+  "releaseDate": "2026-07-27",
   "required": false
 }

@@ -17,6 +17,12 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    fetch('/api/setup/status').then(r => r.json()).then(data => {
+      if (!data.configured) window.location.href = '/setup'
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (videoRef.current) videoRef.current.volume = volume
   }, [volume])
 
@@ -134,7 +140,7 @@ export default function Home() {
               <span>Version {process.env.NEXT_PUBLIC_APP_VERSION || '—'} - Offline Ready - Sécurisé</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-              <span>GestiCom — Solution de Gestion Professionnelle</span>
+              <span>GestiCom Pro — Solution de Gestion Professionnelle</span>
             </div>
           </div>
         </div>

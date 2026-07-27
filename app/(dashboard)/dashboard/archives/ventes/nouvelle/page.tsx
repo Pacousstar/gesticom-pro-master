@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { Plus, Loader2, Trash2, Eye, FileText, Printer, X, 
   Search, Pencil, CreditCard, Wallet, 
-  AlertTriangle, XCircle
+  AlertTriangle, XCircle, Camera
 } from 'lucide-react'
 import { generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import PrintPreview from '@/components/print/PrintPreview'
@@ -971,20 +971,30 @@ export default function ArchivesVentesNouvellePage() {
               <h3 className="mb-3 text-sm font-semibold text-gray-700">Lignes</h3>
               <div className="mb-3 space-y-2">
                 {/* Barre de recherche + bouton scanner */}
-                <div className="relative group">
-                  <div className="absolute left-3 top-3.5 h-4 w-4 text-gray-400 group-focus-within:text-orange-500 transition-colors">
-                    <Search className="h-4 w-4" />
+                <div className="relative group flex gap-2">
+                  <div className="relative flex-1">
+                    <div className="absolute left-3 top-3.5 h-4 w-4 text-gray-400 group-focus-within:text-orange-500 transition-colors">
+                      <Search className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Taper le nom ou le code du produit..."
+                      value={ajoutProduit.recherche || ''}
+                      onChange={(e) => {
+                        setAjoutProduit((a) => ({ ...a, recherche: e.target.value }))
+                      }}
+                      onFocus={refetchProduits}
+                      className="w-full rounded-lg border border-gray-200 py-3 pl-10 pr-4 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all shadow-sm"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Taper le nom ou le code du produit..."
-                    value={ajoutProduit.recherche || ''}
-                    onChange={(e) => {
-                      setAjoutProduit((a) => ({ ...a, recherche: e.target.value }))
-                    }}
-                    onFocus={refetchProduits}
-                    className="w-full rounded-lg border border-gray-200 py-3 pl-10 pr-4 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all shadow-sm"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    title="Scanner par caméra"
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-500 hover:border-orange-500 hover:text-orange-600 transition-all"
+                  >
+                    <Camera className="h-5 w-5" />
+                  </button>
                   {ajoutProduit.recherche.length > 0 && !ajoutProduit.produitId && (
                     <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg animate-in fade-in zoom-in duration-200">
                       {produits
@@ -1266,18 +1276,27 @@ export default function ArchivesVentesNouvellePage() {
             </div>
             <div className="p-4 space-y-4">
               <div className="space-y-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Rechercher un produit (code, désignation, catégorie)..."
-                    value={popupAjoutProduit.recherche || ''}
-                    onChange={(e) => {
-                      setPopupAjoutProduit((a) => ({ ...a, recherche: e.target.value }))
-                    }}
-                    onFocus={refetchProduits}
-                    className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm focus:border-orange-500 focus:outline-none"
-                  />
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher un produit (code, désignation, catégorie)..."
+                      value={popupAjoutProduit.recherche || ''}
+                      onChange={(e) => {
+                        setPopupAjoutProduit((a) => ({ ...a, recherche: e.target.value }))
+                      }}
+                      className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-4 text-sm focus:border-orange-500 focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setScannerContext('popup'); setScannerOpen(true) }}
+                    title="Scanner par caméra"
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-500 hover:border-orange-500 hover:text-orange-600 transition-all"
+                  >
+                    <Camera className="h-5 w-5" />
+                  </button>
                 </div>
                 <select
                   value={popupAjoutProduit.produitId}

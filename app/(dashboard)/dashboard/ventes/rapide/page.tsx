@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, Loader2, Building2 } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import { ShoppingCart, Trash2, Printer, X, Search, CreditCard, Plus, Minus, Loader2, Building2, Camera } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
 import { estModeBanque } from '@/lib/banque'
 import { pointsFideliteDepuisEncaissement } from '@/lib/calculs-commerciaux'
+
+const BarcodeScanner = dynamic(() => import('@/components/scanner/BarcodeScanner'), { ssr: false })
 
 type Produit = { 
   id: number; 
@@ -44,6 +47,7 @@ export default function VenteRapidePage() {
   const printFrameRef = useRef<HTMLIFrameElement>(null)
   
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   // Chargement initial
   useEffect(() => {
@@ -122,6 +126,17 @@ export default function VenteRapidePage() {
     if (ratio >= 0.9) return { niveau: 'warning', msg: `Attention : ${Math.round(ratio * 100)}% du plafond atteint (${plafond.toLocaleString()} F)` }
     return null
   })()
+
+  const handleBarcodeScan = (code: string) => {
+    const val = code.trim()
+    const p = produits.find(p => p.code.toLowerCase() === val.toLowerCase() || (p as any).codeBarres === val)
+    if (p) {
+      addToCart(p)
+    } else {
+      showError(`Produit non trouvé : ${val}`)
+    }
+    setScannerOpen(false)
+  }
 
   const handleSearch = (val: string) => {
     setSearch(val)
@@ -446,18 +461,34 @@ export default function VenteRapidePage() {
             </div>
 
            {/* Search bar (between grid and cart) */}
-           <div className="relative flex-shrink-0">
-               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-6 w-6" />
-               <input
-                   ref={searchInputRef}
-                   type="text"
-                   value={search}
-                   onChange={e => handleSearch(e.target.value)}
-                   onKeyDown={handleKeyDownInput}
-                   placeholder="Scanner ou saisir code... (ENTRÉE)"
-                   className="w-full rounded-2xl bg-slate-900 border-2 border-slate-700 py-4 pl-12 pr-4 text-xl font-bold placeholder:text-slate-600 focus:border-orange-500 outline-none transition-all shadow-inner"
-               />
+           <div className="relative flex-shrink-0 flex gap-2">
+               <div className="relative flex-1">
+                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-6 w-6" />
+                   <input
+                       ref={searchInputRef}
+                       type="text"
+                       value={search}
+                       onChange={e => handleSearch(e.target.value)}
+                       onKeyDown={handleKeyDownInput}
+                       placeholder="Scanner ou saisir code... (ENTRÉE)"
+                       className="w-full rounded-2xl bg-slate-900 border-2 border-slate-700 py-4 pl-12 pr-4 text-xl font-bold placeholder:text-slate-600 focus:border-orange-500 outline-none transition-all shadow-inner"
+                   />
+               </div>
+               <button
+                   onClick={() => setScannerOpen(true)}
+                   title="Scanner par caméra"
+                   className="rounded-2xl bg-slate-900 border-2 border-slate-700 px-4 text-white hover:border-orange-500 hover:bg-slate-800 transition-all"
+               >
+                   <Camera className="h-6 w-6" />
+               </button>
            </div>
+
+           {scannerOpen && (
+               <BarcodeScanner
+                   onScan={handleBarcodeScan}
+                   onClose={() => setScannerOpen(false)}
+               />
+           )}
 
            <div className="flex flex-1 flex-col rounded-3xl bg-slate-800 p-6 shadow-2xl border border-slate-700 overflow-hidden min-h-0">
             <div className="flex-1 overflow-y-auto pr-2 space-y-2">

@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const prismaCli = path.join(process.cwd(), 'node_modules', 'prisma', 'build', 'index.js')
+
     const config: Record<string, any> = { mode }
     if (mode === 'MODE_2') {
       config.postgres = {
@@ -58,7 +60,6 @@ export async function POST(req: NextRequest) {
       const url = `postgresql://${encodeURIComponent(pgCreds.user)}:${encodeURIComponent(pgCreds.password)}@${pgCreds.host}:${pgCreds.port || 5432}/${pgCreds.database}`
       console.log('[setup] Test connexion PostgreSQL: ' + sanitizeUrl(url))
 
-      const prismaCli = path.join(process.cwd(), 'node_modules', 'prisma', 'build', 'index.js')
       const schemaPath = path.join(process.cwd(), 'prisma', 'schema.postgres.prisma')
       if (fs.existsSync(prismaCli) && fs.existsSync(schemaPath)) {
         const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPath], {
@@ -92,6 +93,45 @@ export async function POST(req: NextRequest) {
           })
           if (seed.status === 0) console.log('[setup] Seed exécuté avec succès')
           else console.error('[setup] Seed échoué: ' + (seed.stderr?.toString() || '').slice(0, 200))
+        }
+      }
+    }
+
+    if (mode === 'MODE_1') {
+      const dbUrl = `file:${dataDir}/gesticom.db`
+      const schemaPathSqlite = path.join(process.cwd(), 'prisma', 'schema.prisma')
+      if (fs.existsSync(prismaCli) && fs.existsSync(schemaPathSqlite)) {
+        const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPathSqlite], {
+          cwd: process.cwd(),
+          stdio: 'pipe',
+          timeout: 60000,
+          windowsHide: true,
+          env: {
+            ...process.env,
+            DATABASE_URL: dbUrl,
+            PRISMA_HIDE_UPDATE_MESSAGE: '1',
+          },
+        })
+        if (r.status !== 0) {
+          const err = (r.stderr?.toString() || '').slice(0, 500)
+          return NextResponse.json({ error: 'Initialisation SQLite échouée: ' + err }, { status: 400 })
+        }
+        console.log('[setup] Schema SQLite créé avec succès')
+
+        const seedScript = path.join(process.cwd(), 'scripts', 'seed.js')
+        if (fs.existsSync(seedScript)) {
+          const seed = spawnSync(process.execPath, [seedScript], {
+            cwd: process.cwd(),
+            stdio: 'pipe',
+            timeout: 30000,
+            windowsHide: true,
+            env: {
+              ...process.env,
+              DATABASE_URL: dbUrl,
+            },
+          })
+          if (seed.status === 0) console.log('[setup] Seed SQLite exécuté avec succès')
+          else console.error('[setup] Seed SQLite échoué: ' + (seed.stderr?.toString() || '').slice(0, 200))
         }
       }
     }

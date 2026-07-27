@@ -83,13 +83,11 @@ export const parametresPatchSchema = z.object({
   modeInstallation: z.enum(['MODE_1', 'MODE_2', 'MODE_3']).optional(),
 })
 
-/** Valide et normalise un code-barres EAN-13 */
-function validateEan13(code: string | null | undefined): string | null {
+/** Normalise un code-barres (EAN-13, QR code, etc.) */
+function normalizeCodeBarres(code: string | null | undefined): string | null {
   if (!code) return null
   const cleaned = code.trim().replace(/\s/g, '')
-  if (cleaned.length === 0) return null
-  if (!/^\d{8,14}$/.test(cleaned)) return null
-  return cleaned
+  return cleaned || null
 }
 
 /** Produit : code, désignation, catégorie, prix, code-barres */
@@ -100,7 +98,7 @@ export const produitSchema = z.object({
   prixAchat: z.coerce.number().min(0, 'Le prix d\'achat doit être positif.').nullable().optional(),
   prixVente: z.coerce.number().min(0, 'Le prix de vente doit être positif.').nullable().optional(),
   seuilMin: z.coerce.number().int().min(0, 'Le seuil minimum doit être positif.').default(5),
-  codeBarres: z.string().max(14).optional().nullable().transform(val => validateEan13(val)),
+  codeBarres: z.string().max(50, 'Le code-barres ne peut pas dépasser 50 caractères.').optional().nullable().transform(val => normalizeCodeBarres(val)),
 })
 
 /** Client : nom, téléphone, type, plafond crédit (base sans refine pour compatibilité partial()) */
