@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const prismaCli = path.join(process.cwd(), 'node_modules', 'prisma', 'build', 'index.js')
+    const prismaCli = process.env.GESTICOM_PRISMA_PATH || path.join(process.cwd(), 'node_modules', 'prisma', 'build', 'index.js')
+
+    const baseDir = process.env.GESTICOM_UNPACKED_PATH || process.cwd()
 
     const config: Record<string, any> = { mode }
     if (mode === 'MODE_2') {
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
       const url = `postgresql://${encodeURIComponent(pgCreds.user)}:${encodeURIComponent(pgCreds.password)}@${pgCreds.host}:${pgCreds.port || 5432}/${pgCreds.database}`
       console.log('[setup] Test connexion PostgreSQL: ' + sanitizeUrl(url))
 
-      const schemaPath = path.join(process.cwd(), 'prisma', 'schema.postgres.prisma')
+      const schemaPath = path.join(baseDir, 'prisma', 'schema.postgres.prisma')
       if (fs.existsSync(prismaCli) && fs.existsSync(schemaPath)) {
         const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPath], {
           cwd: process.cwd(),
@@ -79,10 +81,10 @@ export async function POST(req: NextRequest) {
         }
         console.log('[setup] Schema PostgreSQL créé avec succès')
 
-        const seedScript = path.join(process.cwd(), 'scripts', 'seed.js')
+        const seedScript = path.join(baseDir, 'scripts', 'seed.js')
         if (fs.existsSync(seedScript)) {
           const seed = spawnSync(process.execPath, [seedScript], {
-            cwd: process.cwd(),
+            cwd: baseDir,
             stdio: 'pipe',
             timeout: 30000,
             windowsHide: true,
@@ -99,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     if (mode === 'MODE_1') {
       const dbUrl = `file:${dataDir}/gesticom.db`
-      const schemaPathSqlite = path.join(process.cwd(), 'prisma', 'schema.prisma')
+      const schemaPathSqlite = path.join(baseDir, 'prisma', 'schema.prisma')
       if (fs.existsSync(prismaCli) && fs.existsSync(schemaPathSqlite)) {
         const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPathSqlite], {
           cwd: process.cwd(),
@@ -118,10 +120,10 @@ export async function POST(req: NextRequest) {
         }
         console.log('[setup] Schema SQLite créé avec succès')
 
-        const seedScript = path.join(process.cwd(), 'scripts', 'seed.js')
+        const seedScript = path.join(baseDir, 'scripts', 'seed.js')
         if (fs.existsSync(seedScript)) {
           const seed = spawnSync(process.execPath, [seedScript], {
-            cwd: process.cwd(),
+            cwd: baseDir,
             stdio: 'pipe',
             timeout: 30000,
             windowsHide: true,

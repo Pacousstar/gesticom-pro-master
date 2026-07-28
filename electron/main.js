@@ -54,6 +54,21 @@ function loadConfig() {
   return null
 }
 
+function findPrismaCli(basePath) {
+  const candidates = [
+    path.join(basePath, 'node_modules', 'prisma', 'build', 'index.js'),
+  ]
+  if (app.isPackaged && process.resourcesPath) {
+    candidates.unshift(
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'prisma', 'build', 'index.js')
+    )
+  }
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p
+  }
+  return null
+}
+
 function ensureEnv() {
   const dataDir = app.getPath('userData')
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
@@ -67,7 +82,16 @@ function ensureEnv() {
   }
   loadEnvFile(envPath)
 
+  const basePath = path.join(__dirname, '..')
   process.env.GESTICOM_USER_DATA = dataDir
+  process.env.GESTICOM_BASE_PATH = basePath
+  if (app.isPackaged && process.resourcesPath) {
+    process.env.GESTICOM_UNPACKED_PATH = path.join(process.resourcesPath, 'app.asar.unpacked')
+  } else {
+    process.env.GESTICOM_UNPACKED_PATH = basePath
+  }
+  const prismaCliPath = findPrismaCli(basePath)
+  if (prismaCliPath) process.env.GESTICOM_PRISMA_PATH = prismaCliPath
 
   if (dbLegacy) {
     const legacyResult = dbLegacy.copyLegacyToNew(dataDir)
@@ -114,25 +138,26 @@ function runDbPush(basePath) {
   const config = loadConfig()
   if (!config) { log('skip db push : pas de configuration'); return }
 
-  const prismaCli = path.join(basePath, 'node_modules', 'prisma', 'build', 'index.js')
-  if (!fs.existsSync(prismaCli)) { log('Prisma CLI introuvable: ' + prismaCli); return }
+  const prismaCli = findPrismaCli(basePath)
+  if (!prismaCli) { log('Prisma CLI introuvable'); return }
+  const rootDir = process.env.GESTICOM_UNPACKED_PATH || basePath
   const schemaName = config.mode === 'MODE_2' ? 'schema.postgres.prisma' : 'schema.prisma'
-  const schemaPath = path.join(basePath, 'prisma', schemaName)
+  const schemaPath = path.join(rootDir, 'prisma', schemaName)
   if (!fs.existsSync(schemaPath)) { log('Schema introuvable: ' + schemaPath); return }
 
   try {
       const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPath], {
-      cwd: basePath, stdio: 'pipe', timeout: 120000, windowsHide: true,
+      cwd: rootDir, stdio: 'pipe', timeout: 120000, windowsHide: true,
     })
     if (r.status === 0) log('db push reussi (' + schemaName + ')')
     else log('db push echoue code ' + r.status + ': ' + (r.stderr?.toString() || '').slice(0, 200))
   } catch (e) { log('db push exception: ' + e.message) }
 
-  const seedScript = path.join(basePath, 'scripts', 'seed.js')
+  const seedScript = path.join(rootDir, 'scripts', 'seed.js')
   if (fs.existsSync(seedScript)) {
     try {
       const r = spawnSync(process.execPath, [seedScript], {
-        cwd: basePath, stdio: 'pipe', timeout: 120000, windowsHide: true,
+        cwd: rootDir, stdio: 'pipe', timeout: 120000, windowsHide: true,
       })
       if (r.status === 0) log('seed reussi')
       else log('seed echoue code ' + r.status + ': ' + (r.stderr?.toString() || '').slice(0, 200))

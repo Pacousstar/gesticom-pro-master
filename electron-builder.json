@@ -40,7 +40,12 @@
     "node_modules/@prisma/engines/**",
     "node_modules/prisma/**/*.exe",
     "node_modules/prisma/build/**",
-    "node_modules/.prisma/**"
+    "node_modules/.prisma/**",
+    "prisma/schema.prisma",
+    "prisma/schema.postgres.prisma",
+    "scripts/seed.js",
+    "scripts/db-legacy.js",
+    "scripts/postgres-manager.js"
   ],
   "win": {
     "target": [
