@@ -83,23 +83,19 @@ function ensureEnv() {
   }
 
   if (config.mode === 'MODE_2') {
-    if (config.postgres?.password && pgManager) {
-      try {
-        const result = pgManager.ensurePostgres(dataDir)
-        if (result.installed) log('PostgreSQL installe automatiquement')
-        const pg = config.postgres
-        const url = `postgresql://${encodeURIComponent(pg.user)}:${encodeURIComponent(pg.password)}@${pg.host}:${pg.port}/${pg.database}`
-        process.env.DATABASE_URL = url
-        log('mode postgresql: ' + url.replace(/\/\/.*@/, '//***:***@'))
-      } catch (e) {
-        log('auto-postgres echoue: ' + e.message + ', fallback sqlite')
-        process.env.DATABASE_URL = `file:${dataDir}/gesticom.db`
-      }
-    } else if (config.postgres?.password) {
-      const pg = config.postgres
+    const pg = config.postgres
+    if (pg?.password) {
       const url = `postgresql://${encodeURIComponent(pg.user)}:${encodeURIComponent(pg.password)}@${pg.host}:${pg.port}/${pg.database}`
       process.env.DATABASE_URL = url
       log('mode postgresql: ' + url.replace(/\/\/.*@/, '//***:***@'))
+      if (pgManager) {
+        try {
+          pgManager.ensurePostgres(dataDir)
+          log('PostgreSQL verifie')
+        } catch (e) {
+          log('pgManager.ensurePostgres: ' + e.message + ' (connexion directe conservee)')
+        }
+      }
     } else {
       log('mode postgresql demande mais credentials manquants, fallback sqlite')
       process.env.DATABASE_URL = `file:${dataDir}/gesticom.db`
