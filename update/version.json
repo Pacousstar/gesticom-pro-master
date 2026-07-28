@@ -1,8 +1,8 @@
 {
-  "version": "3.48.12",
+  "version": "3.48.13",
   "downloadUrl": "https://github.com/Pacousstar/GestiCom-Pro/releases/download/production/GestiCom-Pro-Setup.exe",
   "checksum": "",
   "changelog": "Corrections bugs setup/scan/code-barres/caméra + build v3.48.12",
-  "releaseDate": "2026-07-27",
+  "releaseDate": "2026-07-28",
   "required": false
 }

@@ -19,7 +19,9 @@ export default function Home() {
   useEffect(() => {
     fetch('/api/setup/status').then(r => r.json()).then(data => {
       if (!data.configured) window.location.href = '/setup'
-    }).catch(() => {})
+    }).catch(() => {
+      window.location.href = '/setup'
+    })
   }, [])
 
   useEffect(() => {
