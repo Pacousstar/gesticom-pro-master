@@ -1,12 +1,19 @@
-import cron from 'node-cron'
 import { prisma } from './db'
 import { createBackup } from './sauvegarde-db'
 import { purgeOldAuditLogs } from './purge-audit-logs'
 
-type ScheduledTask = ReturnType<typeof cron.schedule>
+let cronModule: any = null
+try {
+  cronModule = require('node-cron')
+} catch {
+  console.warn('[cron] node-cron non disponible, planification désactivée')
+}
+
+type ScheduledTask = ReturnType<NonNullable<typeof cronModule>['schedule']>
 let tasks: ScheduledTask[] = []
 
 export async function startCronJobs() {
+  if (!cronModule) return
   stopCronJobs()
   console.log('[cron] Démarrage du planificateur...')
   await planifierSauvegarde()
@@ -51,7 +58,7 @@ async function planifierSauvegarde() {
         return
     }
 
-    const task = cron.schedule(expression, async () => {
+    const task = cronModule.schedule(expression, async () => {
       console.log('[cron] Exécution sauvegarde automatique...')
       try {
         const resultat = await createBackup()
@@ -69,7 +76,7 @@ async function planifierSauvegarde() {
 }
 
 function planifierPurge() {
-  const task = cron.schedule('0 3 * * *', async () => {
+  const task = cronModule.schedule('0 3 * * *', async () => {
     console.log('[cron] Exécution purge des logs...')
     try {
       const resultat = await purgeOldAuditLogs()
@@ -83,7 +90,7 @@ function planifierPurge() {
 }
 
 function planifierArchivage() {
-  const task = cron.schedule('0 4 1 * *', async () => {
+  const task = cronModule.schedule('0 4 1 * *', async () => {
     console.log('[cron] Exécution archivage mensuel...')
     try {
       const resultat = await archiverAnciennesVentes()
@@ -144,7 +151,7 @@ async function archiverAnciennesVentes(): Promise<number> {
 }
 
 function planifierDetectionSeuils() {
-  const task = cron.schedule('0 5 * * *', async () => {
+  const task = cronModule.schedule('0 5 * * *', async () => {
     console.log('[cron] Détection des stocks sous seuil...')
     try {
       const entites = await prisma.entite.findMany({ select: { id: true } })
@@ -192,7 +199,7 @@ function planifierDetectionSeuils() {
 }
 
 function planifierRelances() {
-  const task = cron.schedule('0 6 * * 1', async () => {
+  const task = cronModule.schedule('0 6 * * 1', async () => {
     console.log('[cron] Détection des clients à relancer...')
     try {
       const entites = await prisma.entite.findMany({ select: { id: true } })

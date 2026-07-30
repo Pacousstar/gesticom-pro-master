@@ -4,9 +4,16 @@ import path from 'path'
 
 export const dynamic = 'force-dynamic'
 
+function resolveDataDir(): string {
+  if (process.env.GESTICOM_USER_DATA) return process.env.GESTICOM_USER_DATA
+  const appData = process.env.APPDATA ? path.join(process.env.APPDATA, 'gesticom-pro') : ''
+  if (appData && (fs.existsSync(appData) || !fs.existsSync(path.join(process.cwd(), 'config.json')))) return appData
+  return process.cwd()
+}
+
 export async function GET() {
   try {
-    const dataDir = process.env.GESTICOM_USER_DATA || process.cwd()
+    const dataDir = resolveDataDir()
 
     // 1. config.json présent → configuré
     const configPath = path.join(dataDir, 'config.json')

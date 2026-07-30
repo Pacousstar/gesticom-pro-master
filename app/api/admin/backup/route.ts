@@ -10,18 +10,24 @@ export const dynamic = 'force-dynamic'
 
 const BACKUP_DIR_NAME = 'backups'
 
+function resolveDataDir(): string {
+  if (process.env.GESTICOM_USER_DATA) return process.env.GESTICOM_USER_DATA
+  if (process.env.APPDATA) return path.join(process.env.APPDATA, 'gesticom-pro')
+  return process.cwd()
+}
+
 function resolveBackupDir(): string {
   const dbUrl = process.env.DATABASE_URL || ''
   if (dbUrl.startsWith('postgresql')) {
-    const backupDir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'database', 'backups')
+    const backupDir = path.resolve(resolveDataDir(), 'database', 'backups')
     fs.mkdirSync(backupDir, { recursive: true })
     return backupDir
   }
   let filePath = dbUrl
   if (filePath.startsWith('file:')) filePath = filePath.slice(5)
   try { filePath = decodeURIComponent(filePath) } catch {}
-  const dbDir = path.dirname(path.resolve(/*turbopackIgnore: true*/ process.cwd(), filePath))
-  const backupDir = path.join(/*turbopackIgnore: true*/ dbDir, BACKUP_DIR_NAME)
+  const dbDir = path.dirname(path.resolve(resolveDataDir(), filePath))
+  const backupDir = path.join(dbDir, BACKUP_DIR_NAME)
   fs.mkdirSync(backupDir, { recursive: true })
   return backupDir
 }
@@ -64,15 +70,16 @@ export async function POST() {
   if (authError) return authError
 
   try {
-    const scriptPath = path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'scripts', 'sauvegarde-bd.js')
+    const baseDir = process.env.GESTICOM_UNPACKED_PATH || process.cwd()
+    const scriptPath = path.resolve(baseDir, 'scripts', 'sauvegarde-bd.js')
     if (!fs.existsSync(scriptPath)) {
       return NextResponse.json({ error: 'Script de sauvegarde introuvable.' }, { status: 500 })
     }
 
     const child = spawn(process.execPath, [scriptPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: /*turbopackIgnore: true*/ process.cwd(),
-      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL || '' },
+      cwd: baseDir,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', DATABASE_URL: process.env.DATABASE_URL || '' },
       shell: true,
     })
 

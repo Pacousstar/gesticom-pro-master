@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { spawnSync } from 'child_process'
 import { MODES_INSTALLATION } from '@/lib/enums-commerce'
+import { prisma } from '@/lib/db'
 
 function sanitizeUrl(url: string) {
   return url.replace(/\/\/.*@/, '//***:***@')
@@ -11,8 +12,9 @@ function sanitizeUrl(url: string) {
 function autoInstallPostgres(dataDir: string) {
   try {
     const _require = eval('require')
-    const pgManager = _require(path.join(process.cwd(), 'scripts', 'postgres-manager'))
-    const result = pgManager.ensurePostgres(dataDir)
+    const baseDirForScripts = process.env.GESTICOM_UNPACKED_PATH || process.cwd()
+    const pgManager = _require(path.join(baseDirForScripts, 'scripts', 'postgres-manager'))
+    const result = pgManager.ensureAutoPostgres(dataDir)
     return result.creds
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -29,7 +31,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Mode d\'installation invalide' }, { status: 400 })
     }
 
-    const dataDir = process.env.GESTICOM_USER_DATA || process.cwd()
+    const dataDir = process.env.GESTICOM_USER_DATA
+      || (process.env.APPDATA ? path.join(process.env.APPDATA, 'gesticom-pro') : '')
+      || process.cwd()
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
 
     let pgCreds = postgres
@@ -46,9 +50,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const prismaCli = process.env.GESTICOM_PRISMA_PATH || path.join(process.cwd(), 'node_modules', 'prisma', 'build', 'index.js')
-
     const baseDir = process.env.GESTICOM_UNPACKED_PATH || process.cwd()
+
+    const prismaCli = process.env.GESTICOM_PRISMA_PATH || path.join(baseDir, 'node_modules', 'prisma', 'build', 'index.js')
+    const schemaEngineBin = path.join(baseDir, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe')
+    const queryEngineLib = path.join(baseDir, 'node_modules', '@prisma', 'client', 'query_engine-windows.dll.node')
 
     const config: Record<string, any> = { mode }
     if (mode === 'MODE_2') {
@@ -65,14 +71,16 @@ export async function POST(req: NextRequest) {
       const schemaPath = path.join(baseDir, 'prisma', 'schema.postgres.prisma')
       if (fs.existsSync(prismaCli) && fs.existsSync(schemaPath)) {
         const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPath], {
-          cwd: process.cwd(),
+          cwd: baseDir,
           stdio: 'pipe',
-          timeout: 60000,
+          timeout: 120000,
           windowsHide: true,
           env: {
             ...process.env,
+            ELECTRON_RUN_AS_NODE: '1',
             DATABASE_URL: url,
             PRISMA_HIDE_UPDATE_MESSAGE: '1',
+            PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin,
           },
         })
         if (r.status !== 0) {
@@ -83,19 +91,39 @@ export async function POST(req: NextRequest) {
 
         const seedScript = path.join(baseDir, 'scripts', 'seed.js')
         if (fs.existsSync(seedScript)) {
+          const pgClientPath = path.join(baseDir, 'node_modules', '@prisma', 'client-pg', 'index.js')
           const seed = spawnSync(process.execPath, [seedScript], {
             cwd: baseDir,
             stdio: 'pipe',
-            timeout: 30000,
+            timeout: 120000,
             windowsHide: true,
             env: {
               ...process.env,
+              ELECTRON_RUN_AS_NODE: '1',
               DATABASE_URL: url,
+              GESTICOM_PRISMA_CLIENT_PATH: pgClientPath,
+              PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin,
+              PRISMA_QUERY_ENGINE_LIBRARY: queryEngineLib,
             },
           })
           if (seed.status === 0) console.log('[setup] Seed exécuté avec succès')
           else console.error('[setup] Seed échoué: ' + (seed.stderr?.toString() || '').slice(0, 200))
         }
+        const gen = spawnSync(process.execPath, [prismaCli, 'generate', '--schema=' + schemaPath], {
+          cwd: baseDir,
+          stdio: 'pipe',
+          timeout: 120000,
+          windowsHide: true,
+          env: {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: '1',
+            DATABASE_URL: url,
+            PRISMA_HIDE_UPDATE_MESSAGE: '1',
+            PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin,
+          },
+        })
+        if (gen.status === 0) console.log('[setup] Client Prisma régénéré pour PostgreSQL')
+        else console.error('[setup] Échec regénération client Prisma: ' + (gen.stderr?.toString() || '').slice(0, 200))
       }
     }
 
@@ -104,14 +132,16 @@ export async function POST(req: NextRequest) {
       const schemaPathSqlite = path.join(baseDir, 'prisma', 'schema.prisma')
       if (fs.existsSync(prismaCli) && fs.existsSync(schemaPathSqlite)) {
         const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPathSqlite], {
-          cwd: process.cwd(),
+          cwd: baseDir,
           stdio: 'pipe',
-          timeout: 60000,
+          timeout: 120000,
           windowsHide: true,
           env: {
             ...process.env,
+            ELECTRON_RUN_AS_NODE: '1',
             DATABASE_URL: dbUrl,
             PRISMA_HIDE_UPDATE_MESSAGE: '1',
+            PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin,
           },
         })
         if (r.status !== 0) {
@@ -120,20 +150,14 @@ export async function POST(req: NextRequest) {
         }
         console.log('[setup] Schema SQLite créé avec succès')
 
-        const seedScript = path.join(baseDir, 'scripts', 'seed.js')
-        if (fs.existsSync(seedScript)) {
-          const seed = spawnSync(process.execPath, [seedScript], {
-            cwd: baseDir,
-            stdio: 'pipe',
-            timeout: 30000,
-            windowsHide: true,
-            env: {
-              ...process.env,
-              DATABASE_URL: dbUrl,
-            },
-          })
-          if (seed.status === 0) console.log('[setup] Seed SQLite exécuté avec succès')
-          else console.error('[setup] Seed SQLite échoué: ' + (seed.stderr?.toString() || '').slice(0, 200))
+        try {
+          const _require = eval('require')
+          const seed = _require(path.join(baseDir, 'scripts', 'seed.js'))
+          await seed.main(prisma)
+          console.log('[setup] Seed SQLite exécuté avec succès')
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          return NextResponse.json({ error: 'Erreur seed: ' + msg }, { status: 400 })
         }
       }
     }

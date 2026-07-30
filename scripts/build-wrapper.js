@@ -8,7 +8,14 @@ const projectRoot = path.join(__dirname, '..')
 // (Next.js standalone copie toute la racine → éviter d'embarquer 5 Go)
 const releaseDir = path.join(projectRoot, 'release')
 if (fs.existsSync(releaseDir)) {
-  try { fs.rmSync(releaseDir, { recursive: true, force: true }); console.log('[clean] Supprimé: release/') } catch (e) { console.warn('[clean] Impossible supprimer release/:', e.message) }
+  let retries = 5
+  while (retries > 0) {
+    try { fs.rmSync(releaseDir, { recursive: true, force: true }); console.log('[clean] Supprimé: release/'); break } catch (e) {
+      retries--
+    if (retries === 0) console.warn('[clean] Impossible supprimer release/ apres 5 tentatives:', e.message)
+    else { console.log('[clean] Nouvel essai suppression release/...'); try { require('child_process').execSync('timeout /t 2 /nobreak >nul', { stdio: 'ignore', shell: true }) } catch {} }
+    }
+  }
 }
 for (const f of fs.readdirSync(projectRoot)) {
   const full = path.join(projectRoot, f)
@@ -72,6 +79,20 @@ nextBuild.on('exit', (code) => {
   if (fs.existsSync(coverageDir)) {
     try { fs.rmSync(coverageDir, { recursive: true, force: true }); console.log('[clean] Supprimé: coverage/') } catch {}
   }
+
+  // 5. Vérification que @prisma/client-pg existe
+  const pgClientDir = path.join(projectRoot, 'node_modules', '@prisma', 'client-pg')
+  const pgIndex = path.join(pgClientDir, 'index.js')
+  if (!fs.existsSync(pgIndex)) {
+    console.error('[build-wrapper] ERREUR FATALE: @prisma/client-pg/index.js introuvable !')
+    console.error('[build-wrapper] Le packaging electron-builder n\'inclura pas le client PostgreSQL.')
+    process.exit(1)
+  }
+  const pgDll = path.join(pgClientDir, 'query_engine-windows.dll.node')
+  if (!fs.existsSync(pgDll)) {
+    console.warn('[build-wrapper] ATTENTION: query_engine-windows.dll.node manquant dans @prisma/client-pg/')
+  }
+  console.log('[build-wrapper] @prisma/client-pg vérifié OK')
 
   process.exit(code || 0)
 })

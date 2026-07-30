@@ -7,7 +7,11 @@ const logFile = path.join(projectRoot, 'GestiComService.out');
 const errFile = path.join(projectRoot, 'GestiComService.err');
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const prismaCli = path.join(projectRoot, 'node_modules', 'prisma', 'build', 'index.js');
-const schemaPath = path.join(projectRoot, 'prisma', 'schema.prisma');
+const schemaSQLite = path.join(projectRoot, 'prisma', 'schema.prisma');
+const schemaPostgres = path.join(projectRoot, 'prisma', 'schema.postgres.prisma');
+const schemaPath = () => isPostgres() ? schemaPostgres : schemaSQLite;
+const schemaEngineBin = path.join(projectRoot, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe');
+const queryEngineLib = path.join(projectRoot, 'node_modules', '@prisma', 'client', 'query_engine-windows.dll.node');
 const dbPath = 'C:/gesticom/gesticom.db';
 const backupPath = dbPath + '.backup';
 
@@ -69,8 +73,9 @@ if (isPostgres()) {
   // ── PostgreSQL : prisma migrate deploy propre ──
   l('Provider: PostgreSQL → prisma migrate deploy');
   try {
-    execSync(`node "${prismaCli}" migrate deploy --schema="${schemaPath}"`, {
+    execSync(`node "${prismaCli}" migrate deploy --schema="${schemaPath()}"`, {
       cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
+      env: { ...process.env, PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin, PRISMA_QUERY_ENGINE_LIBRARY: queryEngineLib },
     });
     l('  prisma migrate deploy réussi');
   } catch (err) {
@@ -78,8 +83,9 @@ if (isPostgres()) {
     e('  prisma migrate deploy échoué: ' + msg);
     l('  Repli: prisma db push...');
     try {
-      execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
+      execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath()}"`, {
         cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
+        env: { ...process.env, PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin, PRISMA_QUERY_ENGINE_LIBRARY: queryEngineLib },
       });
       l('  prisma db push réussi (repli PostgreSQL)');
     } catch (err2) {
@@ -215,8 +221,9 @@ if (isPostgres()) {
   l('Synchro schéma Prisma → prisma db push');
   let schemaSyncOk = false;
   try {
-    execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
+    execSync(`node "${prismaCli}" db push --skip-generate --accept-data-loss --schema="${schemaPath()}"`, {
       cwd: projectRoot, stdio: 'pipe', timeout: 60000, windowsHide: true,
+      env: { ...process.env, PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin, PRISMA_QUERY_ENGINE_LIBRARY: queryEngineLib },
     });
     l('  prisma db push réussi');
     schemaSyncOk = true;

@@ -23,6 +23,11 @@ if (!PG_URL || !PG_URL.startsWith('postgresql')) {
   process.exit(1);
 }
 
+const projectRoot = path.resolve(__dirname, '..');
+const prismaCli = path.join(projectRoot, 'node_modules', 'prisma', 'build', 'index.js');
+const schemaEngBin = path.join(projectRoot, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe');
+const queryEngLib = path.join(projectRoot, 'node_modules', '@prisma', 'client', 'query_engine-windows.dll.node');
+
 // --- Helpers ---
 function envPath() {
   return path.resolve(__dirname, '..', '.env');
@@ -32,7 +37,7 @@ function run(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, {
     stdio: 'inherit',
     shell: true,
-    cwd: path.resolve(__dirname, '..'),
+    cwd: projectRoot,
     env: { ...process.env, ...opts.env },
     ...opts,
   });
@@ -118,18 +123,20 @@ async function dumpSQLite() {
 function pushSchema() {
   console.log('\n[2/4] Deploiement du schema Prisma vers PostgreSQL...');
 
-  // Verification de la connexion PostgreSQL
   try {
-    execSync('npx prisma db push --accept-data-loss --skip-generate', {
+    const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--skip-generate'], {
       stdio: 'inherit',
-      cwd: path.resolve(__dirname, '..'),
+      cwd: projectRoot,
       env: {
         ...process.env,
         DATABASE_URL: PG_URL,
         PRISMA_HIDE_UPDATE_MESSAGE: '1',
+        PRISMA_SCHEMA_ENGINE_BINARY: schemaEngBin,
+        PRISMA_QUERY_ENGINE_LIBRARY: queryEngLib,
       },
-      timeout: 60000,
+      timeout: 120000,
     });
+    if (r.status !== 0) throw new Error(`prisma db push a echoue (code ${r.status})`);
   } catch (e) {
     throw new Error(`Echec du deploiement du schema: ${e.message}`);
   }

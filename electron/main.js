@@ -4,12 +4,30 @@ const path = require('path')
 const http = require('http')
 const fs = require('fs')
 const crypto = require('crypto')
+const Module = require('module')
 
 const PORT = 3000
+function getPort() { return global.__GESTICOM_PORT || PORT }
+
+const origResolveFilename = Module._resolveFilename
+Module._resolveFilename = function (request, parent, ...args) {
+  if (/^@prisma\/client-[a-f0-9]+$/.test(request)) {
+    try { return origResolveFilename.call(this, '@prisma/client', parent, ...args) } catch (_) {}
+  }
+  if (request.startsWith('.prisma/')) {
+    const nmDir = app.isPackaged && process.resourcesPath
+      ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
+      : path.join(process.cwd(), 'node_modules')
+    const p = path.join(nmDir, request) + '.js'
+    if (fs.existsSync(p)) return p
+  }
+  return origResolveFilename.call(this, request, parent, ...args)
+}
 const isDev = !app.isPackaged
 
 app.commandLine.appendSwitch('enable-usermedia-screen-capture')
 app.commandLine.appendSwitch('allow-file-access-from-files')
+
 
 function log(msg) {
   try {
@@ -69,6 +87,30 @@ function findPrismaCli(basePath) {
   return null
 }
 
+function injectPrismaClients() {
+  const rootDir = process.env.GESTICOM_UNPACKED_PATH || path.join(__dirname, '..')
+  if (global.__GESTICOM_SQLITE_CLIENT && global.__GESTICOM_PG_CLIENT) return
+  try {
+    global.__GESTICOM_SQLITE_CLIENT = require('@prisma/client').PrismaClient
+    log('SQLite PrismaClient injecte')
+  } catch (e) {
+    log('sqlite client injection failed: ' + e.message)
+    global.__GESTICOM_SQLITE_CLIENT = null
+  }
+  const pgClientPath = path.join(rootDir, 'node_modules', '@prisma', 'client-pg', 'index.js')
+  if (fs.existsSync(pgClientPath)) {
+    try {
+      global.__GESTICOM_PG_CLIENT = require(pgClientPath).PrismaClient
+      log('PostgreSQL PrismaClient injecte')
+    } catch (e) {
+      log('pg client injection failed: ' + e.message)
+      global.__GESTICOM_PG_CLIENT = null
+    }
+  } else {
+    global.__GESTICOM_PG_CLIENT = null
+  }
+}
+
 function ensureEnv() {
   const dataDir = app.getPath('userData')
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
@@ -93,12 +135,6 @@ function ensureEnv() {
   const prismaCliPath = findPrismaCli(basePath)
   if (prismaCliPath) process.env.GESTICOM_PRISMA_PATH = prismaCliPath
 
-  if (dbLegacy) {
-    const legacyResult = dbLegacy.copyLegacyToNew(dataDir)
-    if (legacyResult.copied) log('Base legacy copiee: ' + legacyResult.path + ' -> ' + path.join(dataDir, 'gesticom.db'))
-    if (legacyResult.found) log('Base legacy utilisee: ' + legacyResult.path)
-  }
-
   const config = loadConfig()
   if (!config) {
     log('aucune configuration - mode setup')
@@ -106,9 +142,15 @@ function ensureEnv() {
     return
   }
 
+  if (dbLegacy) {
+    const legacyResult = dbLegacy.copyLegacyToNew(dataDir)
+    if (legacyResult.copied) log('Base legacy copiee: ' + legacyResult.path + ' -> ' + path.join(dataDir, 'gesticom.db'))
+    if (legacyResult.found) log('Base legacy utilisee: ' + legacyResult.path)
+  }
+
   if (config.mode === 'MODE_2') {
     const pg = config.postgres
-    if (pg?.password) {
+    if (pg?.password && pg?.user && pg?.host && pg?.database) {
       const url = `postgresql://${encodeURIComponent(pg.user)}:${encodeURIComponent(pg.password)}@${pg.host}:${pg.port}/${pg.database}`
       process.env.DATABASE_URL = url
       log('mode postgresql: ' + url.replace(/\/\/.*@/, '//***:***@'))
@@ -129,12 +171,16 @@ function ensureEnv() {
     log('mode sqlite')
   }
 
+  const unpackedRoot = process.env.GESTICOM_UNPACKED_PATH || basePath
+  const qeLib = path.join(unpackedRoot, 'node_modules', '@prisma', 'client', 'query_engine-windows.dll.node')
+  if (fs.existsSync(qeLib)) process.env.PRISMA_QUERY_ENGINE_LIBRARY = qeLib
+
   if (!process.env.PORT) process.env.PORT = String(PORT)
   if (!process.env.SESSION_SECRET) process.env.SESSION_SECRET = crypto.randomBytes(32).toString('hex')
   process.env.NODE_ENV = 'production'
 }
 
-function runDbPush(basePath) {
+async function runDbPush(basePath) {
   const config = loadConfig()
   if (!config) { log('skip db push : pas de configuration'); return }
 
@@ -145,9 +191,12 @@ function runDbPush(basePath) {
   const schemaPath = path.join(rootDir, 'prisma', schemaName)
   if (!fs.existsSync(schemaPath)) { log('Schema introuvable: ' + schemaPath); return }
 
+  const schemaEngineBin = path.join(rootDir, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe')
+  const queryEngineLib = path.join(rootDir, 'node_modules', '@prisma', 'client', 'query_engine-windows.dll.node')
   try {
       const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--schema=' + schemaPath], {
       cwd: rootDir, stdio: 'pipe', timeout: 120000, windowsHide: true,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin },
     })
     if (r.status === 0) log('db push reussi (' + schemaName + ')')
     else log('db push echoue code ' + r.status + ': ' + (r.stderr?.toString() || '').slice(0, 200))
@@ -156,45 +205,59 @@ function runDbPush(basePath) {
   const seedScript = path.join(rootDir, 'scripts', 'seed.js')
   if (fs.existsSync(seedScript)) {
     try {
-      const r = spawnSync(process.execPath, [seedScript], {
-        cwd: rootDir, stdio: 'pipe', timeout: 120000, windowsHide: true,
-      })
-      if (r.status === 0) log('seed reussi')
-      else log('seed echoue code ' + r.status + ': ' + (r.stderr?.toString() || '').slice(0, 200))
-    } catch (e) { log('seed exception: ' + e.message) }
+      process.env.PRISMA_SCHEMA_ENGINE_BINARY = schemaEngineBin
+      if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) process.env.PRISMA_QUERY_ENGINE_LIBRARY = queryEngineLib
+      const seed = require(seedScript)
+      let PrismaClient
+      if (config.mode === 'MODE_2') {
+        if (!global.__GESTICOM_PG_CLIENT) throw new Error('Client PostgreSQL non disponible (seed ignoré)')
+        PrismaClient = global.__GESTICOM_PG_CLIENT
+      } else {
+        PrismaClient = global.__GESTICOM_SQLITE_CLIENT || require('@prisma/client').PrismaClient
+      }
+      const seedPrisma = new PrismaClient()
+      await seed.main(seedPrisma)
+      await seedPrisma.$disconnect()
+      process.env.PRISMA_SCHEMA_ENGINE_BINARY = undefined
+      log('seed reussi')
+    } catch (e) { log('seed exception: ' + (e.message || e)) }
   }
 }
 
-function startServer() {
-  return new Promise((resolve, reject) => {
-    if (isDev) {
-      waitForServer(resolve)
-      return
-    }
+async function startServer() {
+  if (isDev) {
+    return new Promise((resolve) => waitForServer(resolve))
+  }
 
-    const basePath = path.join(__dirname, '..')
-    log('basePath: ' + basePath)
-    ensureEnv()
-    log('env ok')
-    runDbPush(basePath)
-    log('db ok, demarrage serveur Next.js...')
+  const basePath = path.join(__dirname, '..')
+  log('basePath: ' + basePath)
+  ensureEnv()
+  injectPrismaClients()
+  log('env ok')
+  try { await runDbPush(basePath) } catch (e) { log('runDbPush exception: ' + (e.message || e)) }
+  log('db ok, demarrage serveur Next.js...')
 
-    const next = require('next')
-    const { parse } = require('url')
+  const next = require('next')
+  const { parse } = require('url')
 
-    const nextApp = next({ dev: false, dir: basePath })
-    const handle = nextApp.getRequestHandler()
+  const nextApp = next({ dev: false, dir: basePath })
+  const handle = nextApp.getRequestHandler()
 
-    nextApp.prepare().then(() => {
-      log('Next.js pret, creation serveur HTTP...')
-      http.createServer((req, res) => {
-        handle(req, res, parse(req.url, true))
-      }).listen(PORT, () => {
-        log('Serveur HTTP ecoute sur port ' + PORT)
-        resolve()
-      })
-    }).catch((err) => {
-      log('Erreur nextApp.prepare(): ' + (err.message || err))
+  await nextApp.prepare()
+  log('Next.js pret, creation serveur HTTP...')
+  const server = http.createServer((req, res) => {
+    handle(req, res, parse(req.url, true))
+  })
+  await new Promise((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port
+      process.env.PORT = String(port)
+      global.__GESTICOM_PORT = port
+      log('Serveur HTTP ecoute sur port ' + port)
+      resolve()
+    })
+    server.on('error', (err) => {
+      log('Erreur ecoute port: ' + err.message)
       reject(err)
     })
   })
@@ -202,7 +265,7 @@ function startServer() {
 
 function waitForServer(resolve, retries = 0) {
   if (retries > 60) return resolve()
-  http.get('http://127.0.0.1:' + PORT, (res) => {
+  http.get('http://127.0.0.1:' + getPort(), (res) => {
     resolve()
   }).on('error', () => {
     setTimeout(() => waitForServer(resolve, retries + 1), 1000)
@@ -230,7 +293,7 @@ function createWindow() {
     return permission === 'media' || permission === 'mediaKeySystem'
   })
   win.setMenuBarVisibility(false)
-  win.loadURL('http://127.0.0.1:' + PORT)
+  win.loadURL('http://127.0.0.1:' + getPort())
   return win
 }
 
@@ -242,6 +305,7 @@ ipcMain.on('restart-app', () => {
 
 app.whenReady().then(async () => {
   log('Electron pret')
+  ensureEnv()
   try {
     await startServer()
     log('Serveur OK, creation fenetre')

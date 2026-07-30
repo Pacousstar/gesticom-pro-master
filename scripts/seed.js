@@ -1,17 +1,18 @@
 /**
  * scripts/seed.js — Seed autonome pour production (JS pur, sans dépendance tsx)
- * Exécuté par standalone-launcher.js après migration.
+ * Exécuté par standalone-launcher.js après migration ou directement in-process.
  * Crée admin/entité/magasin/paramètres UNIQUEMENT si la base est vierge.
  */
 
-const { PrismaClient } = require('@prisma/client');
+const clientPath = process.env.GESTICOM_PRISMA_CLIENT_PATH;
+const { PrismaClient } = clientPath ? require(clientPath) : require('@prisma/client');
 const bcrypt = require('bcryptjs');
-const prisma = new PrismaClient();
 
 const ADMIN_LOGIN = 'admin';
 const ADMIN_PASSWORD = 'Admin@123';
 
-async function main() {
+async function main(prismaArg) {
+  const prisma = prismaArg || new PrismaClient();
   const totalUsers = await prisma.utilisateur.count();
   if (totalUsers > 0) {
     console.log('[Seed] Utilisateurs existants. Seed ignoré.');
@@ -83,9 +84,14 @@ async function main() {
   console.log('[Seed] Terminé.');
 }
 
-main()
-  .catch((e) => {
-    console.error('[Seed] Erreur:', e.message);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+module.exports = { main, ADMIN_LOGIN, ADMIN_PASSWORD }
+
+if (require.main === module) {
+  const prisma = new PrismaClient(); // lit DATABASE_URL + clientPath depuis l'env
+  main(prisma)
+    .catch((e) => {
+      console.error('[Seed] Erreur:', e.message);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}

@@ -40,8 +40,14 @@ function findPostgresData(dataDir) {
   return null
 }
 
-function isPostgresRunning(pgBinDir) {
+function isPostgresRunning(pgBinDir, pgDataDir) {
   try {
+    if (pgDataDir) {
+      const r = spawnSync(path.join(pgBinDir, 'pg_ctl.exe'), ['status', '-D', pgDataDir], {
+        stdio: 'pipe', timeout: 5000, windowsHide: true,
+      })
+      return r.status === 0
+    }
     const r = spawnSync(path.join(pgBinDir, 'pg_isready.exe'), ['-q'], { stdio: 'pipe', timeout: 5000, windowsHide: true })
     return r.status === 0
   } catch { return false }
@@ -190,7 +196,7 @@ function initPostgres(pgBinDir, pgDataDir) {
 }
 
 function startPostgres(pgBinDir, pgDataDir) {
-  if (isPostgresRunning(pgBinDir)) {
+  if (isPostgresRunning(pgBinDir, pgDataDir)) {
     log('PostgreSQL deja demarre')
     return true
   }
@@ -203,12 +209,17 @@ function startPostgres(pgBinDir, pgDataDir) {
     stdio: 'pipe', timeout: 30000, windowsHide: true,
   })
   if (r.status !== 0) {
+    log('pg_ctl start sortie: ' + (r.stderr?.toString() || '').slice(0, 200))
+    if (isPostgresRunning(pgBinDir, pgDataDir)) {
+      log('PostgreSQL semble deja demarre malgre l erreur')
+      return true
+    }
     throw new Error('pg_ctl start echoue: ' + (r.stderr?.toString() || '').slice(0, 300))
   }
 
   let attempts = 0
   while (attempts < 10) {
-    if (isPostgresRunning(pgBinDir)) {
+    if (isPostgresRunning(pgBinDir, pgDataDir)) {
       log('PostgreSQL demarre')
       return true
     }
@@ -219,7 +230,7 @@ function startPostgres(pgBinDir, pgDataDir) {
 }
 
 function stopPostgres(pgBinDir, pgDataDir) {
-  if (!isPostgresRunning(pgBinDir)) return true
+  if (!isPostgresRunning(pgBinDir, pgDataDir)) return true
 
   const pgCtl = path.join(pgBinDir, 'pg_ctl.exe')
   log('Arret PostgreSQL...')
@@ -228,32 +239,47 @@ function stopPostgres(pgBinDir, pgDataDir) {
   return true
 }
 
+function findAdminUser(pgBinDir) {
+  const psql = path.join(pgBinDir, 'psql.exe')
+  const candidates = ['postgres', 'gesticom', 'administrator', 'sa']
+  for (const user of candidates) {
+    const r = spawnSync(psql, ['-U', user, '-d', 'postgres', '-tAc', 'SELECT 1'], {
+      stdio: 'pipe', timeout: 5000, windowsHide: true,
+    })
+    if (r.status === 0) return user
+  }
+  throw new Error('Aucun utilisateur PostgreSQL superadmin trouve')
+}
+
 function createDatabase(pgBinDir) {
   const psql = path.join(pgBinDir, 'psql.exe')
   if (!fs.existsSync(psql)) throw new Error('psql introuvable: ' + psql)
 
-  const checkUser = spawnSync(psql, ['-U', 'postgres', '-tAc', "SELECT 1 FROM pg_roles WHERE rolname='gesticom'"], {
+  const adminUser = findAdminUser(pgBinDir)
+  log('Utilisateur admin PostgreSQL: ' + adminUser)
+
+  const checkUser = spawnSync(psql, ['-U', adminUser, '-tAc', "SELECT 1 FROM pg_roles WHERE rolname='gesticom'"], {
     stdio: 'pipe', timeout: 10000, windowsHide: true,
   })
   if (checkUser.status === 0 && checkUser.stdout.toString().trim() === '1') {
     log('Utilisateur gesticom existe deja')
   } else {
     log('Creation utilisateur gesticom...')
-    const r = spawnSync(psql, ['-U', 'postgres', '-c', "CREATE USER gesticom WITH PASSWORD 'gesticom123' CREATEDB;"], {
+    const r = spawnSync(psql, ['-U', adminUser, '-c', "CREATE USER gesticom WITH PASSWORD 'gesticom123' CREATEDB;"], {
       stdio: 'pipe', timeout: 10000, windowsHide: true,
     })
     if (r.status !== 0) throw new Error('Creation user echouee: ' + (r.stderr?.toString() || '').slice(0, 200))
     log('Utilisateur gesticom cree')
   }
 
-  const checkDb = spawnSync(psql, ['-U', 'postgres', '-tAc', "SELECT 1 FROM pg_database WHERE datname='gesticom'"], {
+  const checkDb = spawnSync(psql, ['-U', adminUser, '-tAc', "SELECT 1 FROM pg_database WHERE datname='gesticom'"], {
     stdio: 'pipe', timeout: 10000, windowsHide: true,
   })
   if (checkDb.status === 0 && checkDb.stdout.toString().trim() === '1') {
     log('Base gesticom existe deja')
   } else {
     log('Creation base gesticom...')
-    const r = spawnSync(psql, ['-U', 'postgres', '-c', 'CREATE DATABASE gesticom OWNER gesticom;'], {
+    const r = spawnSync(psql, ['-U', adminUser, '-c', 'CREATE DATABASE gesticom OWNER gesticom;'], {
       stdio: 'pipe', timeout: 10000, windowsHide: true,
     })
     if (r.status !== 0) throw new Error('Creation db echouee: ' + (r.stderr?.toString() || '').slice(0, 200))
@@ -292,8 +318,46 @@ function ensurePostgres(dataDir) {
   return { pgBinDir, pgDataDir, creds, installed: false }
 }
 
+function findAutoPostgresBin(dataDir) {
+  const ourPaths = [
+    path.join(dataDir, 'pgsql', 'bin', 'pg_ctl.exe'),
+    path.join(__dirname, '..', 'pgsql', 'bin', 'pg_ctl.exe'),
+  ]
+  for (const p of ourPaths) {
+    if (fs.existsSync(p)) return path.dirname(p)
+  }
+  return null
+}
+
+function ensureAutoPostgres(dataDir) {
+  let pgBinDir = findAutoPostgresBin(dataDir)
+
+  if (!pgBinDir) {
+    log('[auto] PostgreSQL non trouve, telechargement...')
+    const zipPath = downloadPostgres(dataDir, (pct) => log('[auto] Telechargement: ' + pct + '%'))
+    extractPostgres(dataDir, zipPath)
+    pgBinDir = findAutoPostgresBin(dataDir)
+    if (!pgBinDir) throw new Error('PostgreSQL introuvable apres extraction')
+  } else {
+    log('[auto] PostgreSQL deja installe')
+  }
+
+  const pgDataDir = path.join(dataDir, 'pgdata')
+
+  if (!fs.existsSync(path.join(pgDataDir, 'pg_hba.conf'))) {
+    initPostgres(pgBinDir, pgDataDir)
+  }
+
+  startPostgres(pgBinDir, pgDataDir)
+
+  const creds = createDatabase(pgBinDir)
+
+  return { pgBinDir, pgDataDir, creds, installed: true }
+}
+
 module.exports = {
   findPostgresBin, findPostgresData, isPostgresRunning,
   downloadPostgres, extractPostgres, initPostgres,
   startPostgres, stopPostgres, createDatabase, ensurePostgres,
+  ensureAutoPostgres,
 }

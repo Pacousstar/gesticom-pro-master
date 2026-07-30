@@ -36,7 +36,9 @@ function parsePostgresUrl(url: string) {
 
 function writeConfigFile(data: Record<string, any>) {
   try {
-    const dataDir = process.env.GESTICOM_USER_DATA || process.cwd()
+    const dataDir = process.env.GESTICOM_USER_DATA
+      || (process.env.APPDATA ? path.join(process.env.APPDATA, 'gesticom-pro') : '')
+      || process.cwd()
     const configPath = path.join(dataDir, 'config.json')
     let config: Record<string, any> = { mode: 'MODE_1' }
     if (fs.existsSync(configPath)) {
@@ -68,7 +70,10 @@ export async function POST(req: NextRequest) {
     if (!vres.success) return vres.response
     const { postgresUrl, password } = vres.data
 
-    const scriptPath = path.resolve(process.cwd(), 'scripts', 'migrate-sqlite-to-postgres.js')
+    const baseDir = process.env.GESTICOM_UNPACKED_PATH || process.cwd()
+    const engBin = path.join(baseDir, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe')
+    const queryLib = path.join(baseDir, 'node_modules', '@prisma', 'client', 'query_engine-windows.dll.node')
+    const scriptPath = path.resolve(baseDir, 'scripts', 'migrate-sqlite-to-postgres.js')
     if (!fs.existsSync(scriptPath)) {
       return NextResponse.json(
         { error: 'Script de migration introuvable.' },
@@ -81,13 +86,16 @@ export async function POST(req: NextRequest) {
 
     const child = spawn(process.execPath, [scriptPath, postgresUrl], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: process.cwd(),
+      cwd: baseDir,
       env: {
         ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
         DATABASE_URL: process.env.DATABASE_URL || '',
         DB_PASSWORD: password,
+        PRISMA_SCHEMA_ENGINE_BINARY: engBin,
+        PRISMA_QUERY_ENGINE_LIBRARY: queryLib,
       },
-      shell: true,
+      timeout: 300000,
     })
 
     let stdout = ''
@@ -97,8 +105,9 @@ export async function POST(req: NextRequest) {
     child.stderr?.on('data', (chunk) => { stderr += chunk.toString() })
 
     const exitCode = await new Promise<number>((resolve) => {
-      child.on('close', resolve)
-      child.on('error', () => resolve(-1))
+      const timer = setTimeout(() => { child.kill(); resolve(-1) }, 300000)
+      child.on('close', (code) => { clearTimeout(timer); resolve(code ?? -1) })
+      child.on('error', () => { clearTimeout(timer); resolve(-1) })
     })
 
     if (exitCode !== 0) {

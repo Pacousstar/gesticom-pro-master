@@ -8,7 +8,9 @@ import path from 'path'
 
 function writeConfigFile(data: Record<string, any>) {
   try {
-    const dataDir = process.env.GESTICOM_USER_DATA || process.cwd()
+    const dataDir = process.env.GESTICOM_USER_DATA
+      || (process.env.APPDATA ? path.join(process.env.APPDATA, 'gesticom-pro') : '')
+      || process.cwd()
     const configPath = path.join(dataDir, 'config.json')
     let config: Record<string, any> = { mode: 'MODE_1' }
     if (fs.existsSync(configPath)) {
@@ -49,6 +51,11 @@ export async function PUT(request: NextRequest) {
     await prisma.parametre.update({ where: { id: p.id }, data: { modeInstallation } })
   }
 
+  if (modeInstallation === 'MODE_2') {
+    if (!postgres || !postgres.password || postgres.password.length < 8) {
+      return NextResponse.json({ error: 'Mot de passe PostgreSQL requis (min 8 caracteres)' }, { status: 400 })
+    }
+  }
   const configData: Record<string, any> = { mode: modeInstallation }
   if (modeInstallation === 'MODE_2' && postgres) {
     configData.postgres = {
@@ -56,7 +63,7 @@ export async function PUT(request: NextRequest) {
       port: postgres.port || 5432,
       database: postgres.database || 'gesticom',
       user: postgres.user || 'gesticom',
-      password: postgres.password || '',
+      password: postgres.password,
     }
   }
   writeConfigFile(configData)
