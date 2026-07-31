@@ -201,6 +201,12 @@ function startPostgres(pgBinDir, pgDataDir) {
     return true
   }
 
+  const pidFile = path.join(pgDataDir, 'postmaster.pid')
+  if (fs.existsSync(pidFile)) {
+    log('Fichier postmaster.pid obsolet detecte, nettoyage...')
+    try { fs.unlinkSync(pidFile) } catch (_) {}
+  }
+
   const pgCtl = path.join(pgBinDir, 'pg_ctl.exe')
   const logFile = path.join(pgDataDir, 'pg.log')
 
