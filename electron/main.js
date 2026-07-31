@@ -156,8 +156,11 @@ function ensureEnv() {
       log('mode postgresql: ' + url.replace(/\/\/.*@/, '//***:***@'))
       if (pgManager) {
         try {
-          pgManager.ensurePostgres(dataDir)
-          log('PostgreSQL verifie')
+          Promise.resolve(pgManager.ensurePostgres(dataDir, pg.port || 5432)).then(() => {
+            log('PostgreSQL verifie')
+          }).catch((e) => {
+            log('pgManager.ensurePostgres: ' + e.message + ' (connexion directe conservee)')
+          })
         } catch (e) {
           log('pgManager.ensurePostgres: ' + e.message + ' (connexion directe conservee)')
         }

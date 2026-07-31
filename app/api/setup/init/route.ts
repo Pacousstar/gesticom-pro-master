@@ -14,8 +14,7 @@ function autoInstallPostgres(dataDir: string) {
     const _require = eval('require')
     const baseDirForScripts = process.env.GESTICOM_UNPACKED_PATH || process.cwd()
     const pgManager = _require(path.join(baseDirForScripts, 'scripts', 'postgres-manager'))
-    const result = pgManager.ensureAutoPostgres(dataDir)
-    return result.creds
+    return pgManager.ensureAutoPostgres(dataDir).then((result: any) => result.creds)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     throw new Error('Installation automatique PostgreSQL échouée: ' + msg)
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     let pgCreds = postgres
     if (mode === 'MODE_2' && autoInstall) {
-      pgCreds = autoInstallPostgres(dataDir)
+      pgCreds = await autoInstallPostgres(dataDir)
     }
 
     if (mode === 'MODE_2') {

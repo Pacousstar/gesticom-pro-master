@@ -67,6 +67,97 @@ function findLocalZip() {
   return null
 }
 
+function isZipValid(zipPath) {
+  try {
+    const st = fs.statSync(zipPath)
+    if (!st.isFile() || st.size < 50 * 1024 * 1024) return false
+    const fd = fs.openSync(zipPath, 'r')
+    const buf = Buffer.alloc(4)
+    fs.readSync(fd, buf, 0, 4, 0)
+    fs.closeSync(fd)
+    return buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04
+  } catch { return false }
+}
+
+async function downloadWithRetry(dataDir, onProgress, attempts = 3) {
+  let lastErr = null
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const zipPath = await downloadPostgres(dataDir, onProgress)
+      if (!isZipValid(zipPath)) throw new Error('Archive invalide ou incomplete: ' + zipPath)
+      return zipPath
+    } catch (e) {
+      lastErr = e
+      log('[auto] Tentative ' + i + '/' + attempts + ' echouee: ' + e.message)
+      try { fs.unlinkSync(path.join(dataDir, 'pgsql', ZIP_NAME)) } catch (_) {}
+    }
+  }
+  throw new Error('Telechargement PostgreSQL echoue apres ' + attempts + ' tentatives (' + (lastErr?.message || 'erreur inconnue') + ')')
+}
+
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const net = require('net')
+    const srv = net.createServer()
+    srv.once('error', () => { srv.close(); resolve(false) })
+    srv.listen(port, '127.0.0.1', () => { srv.close(() => resolve(true)) })
+  })
+}
+
+function findFreePort(startPort) {
+  return new Promise((resolve, reject) => {
+    const net = require('net')
+    const next = (p) => {
+      if (p > startPort + 20) return reject(new Error('Aucun port libre trouve entre ' + startPort + ' et ' + (startPort + 20)))
+      const srv = net.createServer()
+      srv.once('error', () => { srv.close(); next(p + 1) })
+      srv.listen(p, '127.0.0.1', () => { srv.close(() => resolve(p)) })
+    }
+    next(startPort)
+  })
+}
+
+function getConfiguredPort(pgDataDir) {
+  try {
+    const conf = fs.readFileSync(path.join(pgDataDir, 'postgresql.conf'), 'utf-8')
+    const m = conf.match(/^\s*port\s*=\s*(\d+)/m)
+    if (m) return parseInt(m[1], 10)
+  } catch (_) {}
+  return 5432
+}
+
+function setConfiguredPort(pgDataDir, port) {
+  const confPath = path.join(pgDataDir, 'postgresql.conf')
+  let conf = fs.readFileSync(confPath, 'utf-8')
+  if (/^\s*port\s*=\s*\d+/m.test(conf)) {
+    conf = conf.replace(/^\s*port\s*=\s*\d+/m, 'port = ' + port)
+  } else if (/^#\s*port\s*=\s*\d+/m.test(conf)) {
+    conf = conf.replace(/^#\s*port\s*=\s*\d+/m, 'port = ' + port)
+  } else {
+    conf += '\nport = ' + port + '\n'
+  }
+  fs.writeFileSync(confPath, conf, 'utf-8')
+  log('[auto] Port configure dans postgresql.conf: ' + port)
+}
+
+function stopLegacyGesticomPostgres() {
+  const legacyCtl = 'C:\\PostgreSQL\\pgsql\\bin\\pg_ctl.exe'
+  const legacyData = 'C:\\PostgreSQL\\data'
+  if (fs.existsSync(legacyCtl) && fs.existsSync(legacyData)) {
+    try {
+      log('[auto] Arret instance legacy C:\\PostgreSQL (pg_ctl)')
+      spawnSync(legacyCtl, ['-D', legacyData, 'stop', '-m', 'fast'], { stdio: 'pipe', timeout: 15000, windowsHide: true })
+    } catch (_) {}
+  }
+  try {
+    const ps = spawnSync('powershell', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+      "Get-Process postgres -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'C:\\PostgreSQL\\*' } | Stop-Process -Force -ErrorAction SilentlyContinue",
+    ], { stdio: 'pipe', timeout: 20000, windowsHide: true })
+    log('[auto] Anciennes instances legacy GestiCom arretees')
+  } catch (_) {}
+}
+
 function downloadPostgres(dataDir, onProgress) {
   const destDir = path.join(dataDir, 'pgsql')
   if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
@@ -80,9 +171,13 @@ function downloadPostgres(dataDir, onProgress) {
     return zipPath
   }
 
-  if (fs.existsSync(zipPath)) {
+  if (fs.existsSync(zipPath) && isZipValid(zipPath)) {
     log('zip deja telecharge: ' + zipPath)
     return zipPath
+  }
+  if (fs.existsSync(zipPath)) {
+    log('zip partiel/corrompu, re-telechargement: ' + zipPath)
+    try { fs.unlinkSync(zipPath) } catch (_) {}
   }
 
   log('Telechargement de PostgreSQL ' + PG_VERSION + '...')
@@ -104,7 +199,18 @@ function downloadPostgres(dataDir, onProgress) {
         if (onProgress && total) onProgress(Math.round((received / total) * 100))
       })
       res.pipe(file)
-      file.on('finish', () => { file.close(); log('Telechargement termine'); resolve(zipPath) })
+      file.on('finish', () => {
+        file.close()
+        const size = fs.existsSync(zipPath) ? fs.statSync(zipPath).size : 0
+        if (!total || size >= total) {
+          log('Telechargement termine (' + size + ' octets)')
+          resolve(zipPath)
+        } else {
+          log('Telechargement incomplet: ' + size + '/' + total)
+          try { fs.unlinkSync(zipPath) } catch (_) {}
+          reject(new Error('Telechargement incomplet (' + size + '/' + total + ' octets)'))
+        }
+      })
     })
     req.on('error', (e) => { file.close(); try { fs.unlinkSync(zipPath) } catch (_) {}; reject(e) })
     req.setTimeout(600000, () => { req.destroy(); reject(new Error('Timeout')) })
@@ -245,11 +351,11 @@ function stopPostgres(pgBinDir, pgDataDir) {
   return true
 }
 
-function findAdminUser(pgBinDir) {
+function findAdminUser(pgBinDir, port) {
   const psql = path.join(pgBinDir, 'psql.exe')
   const candidates = ['postgres', 'gesticom', 'administrator', 'sa']
   for (const user of candidates) {
-    const r = spawnSync(psql, ['-U', user, '-d', 'postgres', '-tAc', 'SELECT 1'], {
+    const r = spawnSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-U', user, '-d', 'postgres', '-tAc', 'SELECT 1'], {
       stdio: 'pipe', timeout: 5000, windowsHide: true,
     })
     if (r.status === 0) return user
@@ -257,57 +363,57 @@ function findAdminUser(pgBinDir) {
   throw new Error('Aucun utilisateur PostgreSQL superadmin trouve')
 }
 
-function createDatabase(pgBinDir) {
+function createDatabase(pgBinDir, port) {
   const psql = path.join(pgBinDir, 'psql.exe')
   if (!fs.existsSync(psql)) throw new Error('psql introuvable: ' + psql)
 
-  const adminUser = findAdminUser(pgBinDir)
-  log('Utilisateur admin PostgreSQL: ' + adminUser)
+  const adminUser = findAdminUser(pgBinDir, port)
+  log('Utilisateur admin PostgreSQL: ' + adminUser + ' (port ' + port + ')')
 
-  const checkUser = spawnSync(psql, ['-U', adminUser, '-tAc', "SELECT 1 FROM pg_roles WHERE rolname='gesticom'"], {
+  const checkUser = spawnSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-U', adminUser, '-tAc', "SELECT 1 FROM pg_roles WHERE rolname='gesticom'"], {
     stdio: 'pipe', timeout: 10000, windowsHide: true,
   })
   if (checkUser.status === 0 && checkUser.stdout.toString().trim() === '1') {
     log('Utilisateur gesticom existe deja')
   } else {
     log('Creation utilisateur gesticom...')
-    const r = spawnSync(psql, ['-U', adminUser, '-c', "CREATE USER gesticom WITH PASSWORD 'gesticom123' CREATEDB;"], {
+    const r = spawnSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-U', adminUser, '-c', "CREATE USER gesticom WITH PASSWORD 'gesticom123' CREATEDB;"], {
       stdio: 'pipe', timeout: 10000, windowsHide: true,
     })
     if (r.status !== 0) throw new Error('Creation user echouee: ' + (r.stderr?.toString() || '').slice(0, 200))
     log('Utilisateur gesticom cree')
   }
 
-  const checkDb = spawnSync(psql, ['-U', adminUser, '-tAc', "SELECT 1 FROM pg_database WHERE datname='gesticom'"], {
+  const checkDb = spawnSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-U', adminUser, '-tAc', "SELECT 1 FROM pg_database WHERE datname='gesticom'"], {
     stdio: 'pipe', timeout: 10000, windowsHide: true,
   })
   if (checkDb.status === 0 && checkDb.stdout.toString().trim() === '1') {
     log('Base gesticom existe deja')
   } else {
     log('Creation base gesticom...')
-    const r = spawnSync(psql, ['-U', adminUser, '-c', 'CREATE DATABASE gesticom OWNER gesticom;'], {
+    const r = spawnSync(psql, ['-h', '127.0.0.1', '-p', String(port), '-U', adminUser, '-c', 'CREATE DATABASE gesticom OWNER gesticom;'], {
       stdio: 'pipe', timeout: 10000, windowsHide: true,
     })
     if (r.status !== 0) throw new Error('Creation db echouee: ' + (r.stderr?.toString() || '').slice(0, 200))
     log('Base gesticom cree')
   }
 
-  return { host: 'localhost', port: 5432, database: 'gesticom', user: 'gesticom', password: 'gesticom123' }
+  return { host: 'localhost', port, database: 'gesticom', user: 'gesticom', password: 'gesticom123' }
 }
 
-function ensurePostgres(dataDir) {
+async function ensurePostgres(dataDir, port = 5432) {
   const pgBinDir = findPostgresBin(dataDir)
 
   if (!pgBinDir) {
     log('PostgreSQL non trouve, telechargement...')
-    const zipPath = downloadPostgres(dataDir)
+    const zipPath = await downloadWithRetry(dataDir)
     extractPostgres(dataDir, zipPath)
     const newBinDir = findPostgresBin(dataDir)
     if (!newBinDir) throw new Error('PostgreSQL introuvable apres extraction')
     const pgDataDir = path.join(dataDir, 'pgdata')
     initPostgres(newBinDir, pgDataDir)
     startPostgres(newBinDir, pgDataDir)
-    const creds = createDatabase(newBinDir)
+    const creds = createDatabase(newBinDir, port)
     return { pgBinDir: newBinDir, pgDataDir, creds, installed: true }
   }
 
@@ -319,7 +425,7 @@ function ensurePostgres(dataDir) {
 
   startPostgres(pgBinDir, pgDataDir)
 
-  const creds = createDatabase(pgBinDir)
+  const creds = createDatabase(pgBinDir, port)
 
   return { pgBinDir, pgDataDir, creds, installed: false }
 }
@@ -335,12 +441,14 @@ function findAutoPostgresBin(dataDir) {
   return null
 }
 
-function ensureAutoPostgres(dataDir) {
+async function ensureAutoPostgres(dataDir) {
+  stopLegacyGesticomPostgres()
+
   let pgBinDir = findAutoPostgresBin(dataDir)
 
   if (!pgBinDir) {
     log('[auto] PostgreSQL non trouve, telechargement...')
-    const zipPath = downloadPostgres(dataDir, (pct) => log('[auto] Telechargement: ' + pct + '%'))
+    const zipPath = await downloadWithRetry(dataDir, (pct) => log('[auto] Telechargement: ' + pct + '%'))
     extractPostgres(dataDir, zipPath)
     pgBinDir = findAutoPostgresBin(dataDir)
     if (!pgBinDir) throw new Error('PostgreSQL introuvable apres extraction')
@@ -354,9 +462,19 @@ function ensureAutoPostgres(dataDir) {
     initPostgres(pgBinDir, pgDataDir)
   }
 
-  startPostgres(pgBinDir, pgDataDir)
+  if (!isPostgresRunning(pgBinDir, pgDataDir)) {
+    let port = getConfiguredPort(pgDataDir)
+    if (!(await isPortFree(port))) {
+      const newPort = await findFreePort(port + 1)
+      log('[auto] Port ' + port + ' occupe, demarrage sur le port ' + newPort)
+      setConfiguredPort(pgDataDir, newPort)
+      port = newPort
+    }
+    startPostgres(pgBinDir, pgDataDir)
+  }
 
-  const creds = createDatabase(pgBinDir)
+  const port = getConfiguredPort(pgDataDir)
+  const creds = createDatabase(pgBinDir, port)
 
   return { pgBinDir, pgDataDir, creds, installed: true }
 }
@@ -366,4 +484,6 @@ module.exports = {
   downloadPostgres, extractPostgres, initPostgres,
   startPostgres, stopPostgres, createDatabase, ensurePostgres,
   ensureAutoPostgres,
+  isZipValid, downloadWithRetry, isPortFree, findFreePort,
+  getConfiguredPort, setConfiguredPort, stopLegacyGesticomPostgres,
 }
