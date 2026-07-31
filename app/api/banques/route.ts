@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { logAction } from '@/lib/audit'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
+import { comptabiliserOuvertureBanque } from '@/lib/comptabilisation'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { banqueSchema } from '@/lib/validations'
@@ -122,6 +123,19 @@ export async function POST(request: NextRequest) {
         compte: { select: { id: true, numero: true, libelle: true } },
       },
     })
+
+    // Comptabiliser le solde initial (apport en banque → D 521 / C 890)
+    if ((data.soldeInitial || 0) > 0) {
+      await comptabiliserOuvertureBanque({
+        banqueId: banque.id,
+        nom: banque.libelle || banque.nomBanque,
+        soldeInitial: data.soldeInitial,
+        date: new Date(),
+        entiteId,
+        utilisateurId: session.userId,
+        compteId: compteIdFinal,
+      })
+    }
 
     await logAction(session, 'CREATION', 'BANQUE', `Création compte bancaire: ${data.nomBanque} - ${data.libelle}`, session.entiteId)
 

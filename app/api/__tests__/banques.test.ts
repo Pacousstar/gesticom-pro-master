@@ -9,7 +9,11 @@ const mockPlanFindUnique = vi.fn()
 const mockPlanFindFirst = vi.fn()
 const mockLogAction = vi.fn()
 const mockValidate = vi.fn()
-const mockJson = vi.fn()
+const mockEcritureDeleteMany = vi.fn()
+const mockEcritureFindFirst = vi.fn()
+const mockEcritureCreate = vi.fn()
+const mockJournalUpsert = vi.fn()
+const mockPlanUpsert = vi.fn()
 
 vi.mock('@/lib/db', () => ({
   prisma: {
@@ -27,6 +31,15 @@ vi.mock('@/lib/db', () => ({
     planCompte: {
       findUnique: (...args: unknown[]) => mockPlanFindUnique(...args),
       findFirst: (...args: unknown[]) => mockPlanFindFirst(...args),
+      upsert: (...args: unknown[]) => mockPlanUpsert(...args),
+    },
+    journal: {
+      upsert: (...args: unknown[]) => mockJournalUpsert(...args),
+    },
+    ecritureComptable: {
+      deleteMany: (...args: unknown[]) => mockEcritureDeleteMany(...args),
+      findFirst: (...args: unknown[]) => mockEcritureFindFirst(...args),
+      create: (...args: unknown[]) => mockEcritureCreate(...args),
     },
   },
 }))
@@ -159,6 +172,11 @@ describe('POST /api/banques', () => {
     mockFindUnique.mockResolvedValue(null)
     mockUtilisateurFindUnique.mockResolvedValue({ id: 1, entiteId: 1 })
     mockCreate.mockResolvedValue(fakeBanque)
+    mockEcritureDeleteMany.mockResolvedValue({ count: 0 })
+    mockEcritureFindFirst.mockResolvedValue(null)
+    mockEcritureCreate.mockImplementation(({ data }: any) => ({ id: 99, ...data }))
+    mockJournalUpsert.mockImplementation(({ create }: any) => ({ id: 2, ...create }))
+    mockPlanUpsert.mockImplementation(({ create }: any) => ({ id: 100, ...create }))
 
     const { POST } = await import('@/app/api/banques/route')
     const res = await POST(createPostRequest({

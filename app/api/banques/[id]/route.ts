@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { logAction } from '@/lib/audit'
 import { estTypeOperationBanqueEntree } from '@/lib/banque'
+import { comptabiliserOuvertureBanque } from '@/lib/comptabilisation'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
@@ -64,6 +65,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updateData.soldeActuel = solde
     }
     if (compteId !== undefined) updateData.compteId = compteId ?? null
+
+    // Reprise comptable du solde initial : si soldeInitial ou compte comptable change,
+    // on recrée les écritures d'ouverture (D 521 / C 890) pour refléter le nouvel état.
+    const nouveauSoldeInitial = soldeInitial !== undefined ? soldeInitial : banqueExistante.soldeInitial
+    const compteFinal = compteId !== undefined ? (compteId ?? null) : banqueExistante.compteId
+    const rebookOuverture =
+      (soldeInitial !== undefined && soldeInitial !== banqueExistante.soldeInitial) ||
+      (compteId !== undefined && (compteId ?? null) !== banqueExistante.compteId)
+    if (rebookOuverture) {
+      if (nouveauSoldeInitial > 0) {
+        await comptabiliserOuvertureBanque({
+          banqueId,
+          nom: banqueExistante.libelle || banqueExistante.nomBanque,
+          soldeInitial: nouveauSoldeInitial,
+          date: new Date(),
+          entiteId: banqueExistante.entiteId,
+          utilisateurId: session.userId,
+          compteId: compteFinal,
+        })
+      } else {
+        await prisma.ecritureComptable.deleteMany({
+          where: { referenceType: 'OUVERTURE_BANQUE', referenceId: banqueId },
+        })
+      }
+    }
 
     const banque = await prisma.banque.update({
       where: { id: banqueId },

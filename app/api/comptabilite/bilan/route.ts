@@ -125,6 +125,11 @@ export async function getBilanForYear(
         } else if (prefix === '1') {
             passif.capitaux.push(p)
             passif.total += Math.abs(c.solde)
+        } else if (prefix === '8') {
+            // Comptes spéciaux (890 Bilan d'ouverture / 891 Bilan de clôture) :
+            // présentés dans les Capitaux Propres comme le prévoit SYSCOHADA
+            passif.capitaux.push(p)
+            passif.total += montant
         } else if (prefix === '7') {
             totalProduits += (c.totalCredit - c.totalDebit)
         } else if (prefix === '6') {

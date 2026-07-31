@@ -17,6 +17,11 @@ type TxClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transa
 
 // Comptes SYSCOHADA par défaut
 export const COMPTES_DEFAUT = {
+  // CLASSE 1 - CAPITAUX PROPRES
+  CAPITAL_SOCIAL: '101',     // Capital
+  COMPTE_EXPLOITANT: '108',  // Compte de l'exploitant
+  REPORT_A_NOUVEAU: '110',   // Report à nouveau
+  
   // CLASSE 3 - STOCKS
   STOCK_MARCHANDISES: '311', // Stock de marchandises (corrigé de 31 à 311)
   VARIATION_STOCKS: '603',   // Variation de stocks
@@ -27,11 +32,11 @@ export const COMPTES_DEFAUT = {
   CLIENTS_AVANCES: '4191', // Clients - avances et acomptes reçus
   TVA_COLLECTEE: '443', // État, TVA collectée (Ventes)
   TVA_DEDUCTIBLE: '445', // État, TVA récupérable (Achats)
+  ASSOCIE_COURANT: '455', // Associés - Comptes courants (paiements directs du dirigeant)
   
   // CLASSE 5 - TRÉSORERIE
   CAISSE: '531', // Caisse
   BANQUE: '521', // Banque (corrigé de 512 à 521)
-  ASSOCIE_COURANT: '455', // Associés - Comptes courants (paiements directs du dirigeant)
   
   // CLASSE 6 - CHARGES
   ACHATS_MARCHANDISES: '601', // Achats de marchandises
@@ -46,6 +51,10 @@ export const COMPTES_DEFAUT = {
   RRR_ACCORDES: '7097', // Rabais, remises et ristournes accordés
   VENTES_PRODUITS_FINIS: '703', // Ventes de produits finis
   PRODUITS_DIVERS: '758', // Produits divers
+
+  // CLASSE 8 - COMPTES SPÉCIAUX
+  BILAN_OUVERTURE: '890', // Bilan d'ouverture (contrepartie des soldes initiaux)
+  BILAN_CLOTURE: '891',   // Bilan de clôture
 }
 
 // Alias pour compatibilité
@@ -1320,6 +1329,7 @@ export async function comptabiliserCharge(data: {
  * sousType détermine le compte de contrepartie :
  *   ENTREE + MANUEL/PRODUIT → Crédit 758 (Produits divers)
  *   ENTREE + APPROVISIONNEMENT → Crédit 521 (Banque)
+ *   ENTREE + APPORT → Crédit 101 (Capital)
  *   SORTIE + MANUEL/CHARGE → Débit 658 (Autres charges)
  *   SORTIE + RETRAIT → Débit 521 (Banque)
  */
@@ -1355,10 +1365,13 @@ export async function comptabiliserCaisse(data: {
   
   if (data.type === 'ENTREE') {
     const isAppro = sousType === 'APPROVISIONNEMENT'
+    const isApport = sousType === 'APPORT'
     const compteContrepartie = isAppro
       ? await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque', '5', 'ACTIF', tx)
-      : await getOrCreateCompte(COMPTES_DEFAUT.PRODUITS_DIVERS, 'Produits divers', '7', 'PRODUITS', tx)
-    const libelleContrepartie = isAppro ? 'Approvisionnement caisse' : 'Entrée caisse'
+      : isApport
+        ? await getOrCreateCompte(COMPTES_DEFAUT.CAPITAL_SOCIAL, 'Capital', '1', 'PASSIF', tx)
+        : await getOrCreateCompte(COMPTES_DEFAUT.PRODUITS_DIVERS, 'Produits divers', '7', 'PRODUITS', tx)
+    const libelleContrepartie = isAppro ? 'Approvisionnement caisse' : isApport ? 'Apport de fonds' : 'Entrée caisse'
     
     await createEcriture({
       date: data.date,
@@ -1684,6 +1697,70 @@ export async function comptabiliserTransfert(data: {
 }
 
 /**
+ * Comptabilise le solde initial d'un compte bancaire (apport en banque à l'ouverture)
+ * D 521 (ou compte lié) / C 890 (Bilan d'ouverture)
+ */
+export async function comptabiliserOuvertureBanque(data: {
+  banqueId: number
+  nom: string
+  soldeInitial: number
+  date: Date
+  entiteId: number
+  utilisateurId: number
+  compteId?: number | null
+}, tx?: TxClient) {
+  const p = tx || prisma
+
+  if (data.soldeInitial <= 0) return
+
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'OUVERTURE_BANQUE', referenceId: data.banqueId }
+  })
+
+  const journal = await getOrCreateJournal('BA', 'Journal de Banque', 'BANQUE', tx)
+
+  let compteBanque
+  if (data.compteId) {
+    compteBanque = await p.planCompte.findUnique({ where: { id: data.compteId } })
+  }
+  if (!compteBanque) {
+    compteBanque = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque', '5', 'ACTIF', tx)
+  }
+
+  const compteOuverture = await getOrCreateCompte(COMPTES_DEFAUT.BILAN_OUVERTURE, 'Bilan d\'ouverture', '8', 'PASSIF', tx)
+  const libelle = `Solde initial banque ${data.nom} (apport en banque)`
+
+  await createEcriture({
+    date: data.date,
+    journalId: journal.id,
+    entiteId: data.entiteId,
+    piece: 'OUV-BQ',
+    libelle,
+    compteId: compteBanque.id,
+    debit: data.soldeInitial,
+    credit: 0,
+    reference: `BQ-${data.banqueId}`,
+    referenceType: 'OUVERTURE_BANQUE',
+    referenceId: data.banqueId,
+    utilisateurId: data.utilisateurId,
+  }, tx)
+  await createEcriture({
+    date: data.date,
+    journalId: journal.id,
+    entiteId: data.entiteId,
+    piece: 'OUV-BQ',
+    libelle,
+    compteId: compteOuverture.id,
+    debit: 0,
+    credit: data.soldeInitial,
+    reference: `BQ-${data.banqueId}`,
+    referenceType: 'OUVERTURE_BANQUE',
+    referenceId: data.banqueId,
+    utilisateurId: data.utilisateurId,
+  }, tx)
+}
+
+/**
  * Initialise le plan de comptes et les journaux par défaut
  */
 export async function initialiserComptabilite() {
@@ -1696,17 +1773,30 @@ export async function initialiserComptabilite() {
   
   // Créer les comptes principaux
   await getOrCreateCompte('101', 'Capital', '1', 'PASSIF')
+  await getOrCreateCompte('108', 'Compte de l\'exploitant', '1', 'PASSIF')
+  await getOrCreateCompte('110', 'Report à nouveau', '1', 'PASSIF')
   await getOrCreateCompte('311', 'Stock de marchandises', '3', 'ACTIF')
   await getOrCreateCompte('401', 'Fournisseurs', '4', 'PASSIF')
   await getOrCreateCompte('411', 'Clients', '4', 'ACTIF')
+  await getOrCreateCompte('4191', 'Clients - avances et acomptes reçus', '4', 'PASSIF')
+  await getOrCreateCompte('443', 'État, TVA collectée', '4', 'PASSIF')
+  await getOrCreateCompte('445', 'État, TVA récupérable', '4', 'ACTIF')
+  await getOrCreateCompte('455', 'Associés - Comptes courants', '4', 'PASSIF')
   await getOrCreateCompte('521', 'Banque', '5', 'ACTIF')
   await getOrCreateCompte('531', 'Caisse', '5', 'ACTIF')
   await getOrCreateCompte('601', 'Achats de marchandises', '6', 'CHARGES')
+  await getOrCreateCompte('602', 'Achats de matières premières', '6', 'CHARGES')
   await getOrCreateCompte('603', 'Variation de stocks', '6', 'CHARGES')
-  await getOrCreateCompte('443', 'État, TVA collectée', '4', 'PASSIF')
-  await getOrCreateCompte('445', 'État, TVA récupérable', '4', 'ACTIF')
+  await getOrCreateCompte('606', 'Services extérieurs', '6', 'CHARGES')
+  await getOrCreateCompte('631', 'Impôts, taxes et versements assimilés', '6', 'CHARGES')
+  await getOrCreateCompte('641', 'Charges de personnel', '6', 'CHARGES')
+  await getOrCreateCompte('658', 'Autres charges', '6', 'CHARGES')
   await getOrCreateCompte('701', 'Ventes de marchandises', '7', 'PRODUITS')
   await getOrCreateCompte('703', 'Ventes de produits finis', '7', 'PRODUITS')
+  await getOrCreateCompte('7097', 'Rabais, remises et ristournes accordés', '7', 'PRODUITS')
+  await getOrCreateCompte('758', 'Produits divers', '7', 'PRODUITS')
+  await getOrCreateCompte('890', 'Bilan d\'ouverture', '8', 'PASSIF')
+  await getOrCreateCompte('891', 'Bilan de clôture', '8', 'PASSIF')
 }
 
 /**
@@ -1731,8 +1821,7 @@ export async function comptabiliserOuvertureClient(data: {
 
   const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const compteClient = await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS, 'Clients', '4', 'ACTIF', tx)
-  const compteVentes = await getOrCreateCompte(COMPTES_DEFAUT.VENTES_MARCHANDISES, 'Ventes de marchandises', '7', 'PRODUITS', tx)
-  const compteCaisse = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+  const compteOuverture = await getOrCreateCompte(COMPTES_DEFAUT.BILAN_OUVERTURE, 'Bilan d\'ouverture', '8', 'PASSIF', tx)
 
   if (data.soldeInitial > 0) {
     await createEcriture({
@@ -1755,7 +1844,7 @@ export async function comptabiliserOuvertureClient(data: {
       entiteId: data.entiteId,
       piece: 'OUV-CLT',
       libelle: `Solde initial client ${data.nom} (dette reportée)`,
-      compteId: compteVentes.id,
+      compteId: compteOuverture.id,
       debit: 0,
       credit: data.soldeInitial,
       reference: `CLT-${data.clientId}`,
@@ -1772,7 +1861,7 @@ export async function comptabiliserOuvertureClient(data: {
       entiteId: data.entiteId,
       piece: 'OUV-CLT',
       libelle: `Avoir initial client ${data.nom} (acompte reporté)`,
-      compteId: compteCaisse.id,
+      compteId: compteOuverture.id,
       debit: data.avoirInitial,
       credit: 0,
       reference: `CLT-${data.clientId}`,
@@ -1819,8 +1908,7 @@ export async function comptabiliserOuvertureFournisseur(data: {
 
   const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const compteFournisseur = await getOrCreateCompte(COMPTES_DEFAUT.FOURNISSEURS, 'Fournisseurs', '4', 'PASSIF', tx)
-  const compteAchats = await getOrCreateCompte(COMPTES_DEFAUT.ACHATS_MARCHANDISES, 'Achats de marchandises', '6', 'CHARGES', tx)
-  const compteBanque = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque', '5', 'ACTIF', tx)
+  const compteOuverture = await getOrCreateCompte(COMPTES_DEFAUT.BILAN_OUVERTURE, 'Bilan d\'ouverture', '8', 'PASSIF', tx)
 
   if (data.soldeInitial > 0) {
     await createEcriture({
@@ -1829,7 +1917,7 @@ export async function comptabiliserOuvertureFournisseur(data: {
       entiteId: data.entiteId,
       piece: 'OUV-FRS',
       libelle: `Solde initial fournisseur ${data.nom} (dette reportée)`,
-      compteId: compteAchats.id,
+      compteId: compteOuverture.id,
       debit: data.soldeInitial,
       credit: 0,
       reference: `FRS-${data.fournisseurId}`,
@@ -1874,7 +1962,7 @@ export async function comptabiliserOuvertureFournisseur(data: {
       entiteId: data.entiteId,
       piece: 'OUV-FRS',
       libelle: `Avoir initial fournisseur ${data.nom} (acompte reporté)`,
-      compteId: compteBanque.id,
+      compteId: compteOuverture.id,
       debit: 0,
       credit: data.avoirInitial,
       reference: `FRS-${data.fournisseurId}`,

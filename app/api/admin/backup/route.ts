@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requireRole } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'

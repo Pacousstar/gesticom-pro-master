@@ -8,6 +8,7 @@ import {
   comptabiliserCharge,
   comptabiliserDepense,
   comptabiliserMouvementStock,
+  comptabiliserOuvertureBanque,
   comptabiliserReglementAchat,
   comptabiliserReglementVente,
   comptabiliserVente,
@@ -246,6 +247,25 @@ export async function POST(request: NextRequest) {
         motif: c.motif,
         utilisateurId: c.utilisateurId,
         entiteId: c.entiteId,
+        sousType: (c as any).sousType ?? 'MANUEL',
+      })
+    }
+
+    // 6bis) Soldes initiaux banques (comptabiliserOuvertureBanque)
+    const banquesOuverture = await prisma.banque.findMany({
+      where: { entiteId, soldeInitial: { gt: 0 } },
+      orderBy: { createdAt: 'asc' },
+    })
+    logs.push(`Banques (soldes initiaux) à recalculer: ${banquesOuverture.length}`)
+    for (const b of banquesOuverture) {
+      await comptabiliserOuvertureBanque({
+        banqueId: b.id,
+        nom: b.libelle || b.nomBanque,
+        soldeInitial: b.soldeInitial,
+        date: b.createdAt || new Date(),
+        entiteId: b.entiteId,
+        utilisateurId: session.userId,
+        compteId: b.compteId,
       })
     }
 

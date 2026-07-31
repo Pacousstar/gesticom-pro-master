@@ -1,4 +1,3 @@
-import { prisma } from './db'
 import { estModeBanque, estTypeOperationBanqueEntree } from './enums-commerce'
 
 interface OperationBancaireParams {

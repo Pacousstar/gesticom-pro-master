@@ -4,8 +4,6 @@ import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
 import { apiCatch } from '@/lib/log-error'
-import { validateApiRequest } from '@/lib/validation-helpers'
-import { produitSchema } from '@/lib/validations'
 
 export async function PATCH(
   _request: NextRequest,

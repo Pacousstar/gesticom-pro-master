@@ -62,8 +62,10 @@ vi.mock('@/lib/validation-helpers', () => ({
 
 vi.mock('@/lib/validations', () => {
   const { z } = require('zod')
+  const fields = { nom: z.string().optional(), telephone: z.string().optional(), soldeInitial: z.number().optional(), avoirInitial: z.number().optional(), email: z.string().optional(), type: z.string().optional(), plafondCredit: z.number().optional(), ncc: z.string().optional(), localisation: z.string().optional(), code: z.string().optional() }
   return {
-    clientSchema: z.object({ nom: z.string().optional(), telephone: z.string().optional(), soldeInitial: z.number().optional(), avoirInitial: z.number().optional(), email: z.string().optional(), type: z.string().optional(), plafondCredit: z.number().optional(), ncc: z.string().optional(), localisation: z.string().optional(), code: z.string().optional() }),
+    clientSchema: z.object(fields),
+    clientSchemaPartial: z.object(fields),
   }
 })
 

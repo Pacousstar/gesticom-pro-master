@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod'
-import { MODES_PAIEMENT, TYPES_CLIENT, TYPES_CHARGE, STATUTS_OPERATION, TYPES_OPERATION_BANCAIRE } from './enums-commerce'
+import { MODES_PAIEMENT, TYPES_CLIENT, TYPES_CHARGE, TYPES_OPERATION_BANCAIRE } from './enums-commerce'
 
 const MAX_STRING = 500
 const MAX_TEXT = 2000

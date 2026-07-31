@@ -6,7 +6,7 @@ import { verifierCloture } from '@/lib/cloture'
 import { logModification, logSuppression, getIpAddress } from '@/lib/audit'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
-import { clientSchema, clientSchemaPartial } from '@/lib/validations'
+import { clientSchemaPartial } from '@/lib/validations'
 import { comptabiliserOuvertureClient } from '@/lib/comptabilisation'
 
 // Utilisation directe du client Prisma
