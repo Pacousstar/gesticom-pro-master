@@ -23,7 +23,7 @@ type Backup = {
 
 export default function ParametresPage() {
   const { success, error: showError } = useToast()
-  const [data, setData] = useState<any>(null)
+  const [, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [userRole, setUserRole] = useState('')
@@ -61,16 +61,16 @@ export default function ParametresPage() {
   })
 
   const [magasins, setMagasins] = useState<Magasin[]>([])
-  const [magasinsLoading, setMagasinsLoading] = useState(true)
-  const [magasinsErr, setMagasinsErr] = useState('')
+  const [, setMagasinsLoading] = useState(true)
+  const [, setMagasinsErr] = useState('')
   const [magasinSaving, setMagasinSaving] = useState(false)
   const [magasinForm, setMagasinForm] = useState({ code: '', nom: '', localisation: '' })
   const [magasinEdit, setMagasinEdit] = useState<number | null>(null)
   const [magasinEditForm, setMagasinEditForm] = useState({ code: '', nom: '', localisation: '', actif: true })
 
   const [backups, setBackups] = useState<Backup[]>([])
-  const [backupsLoading, setBackupsLoading] = useState(false)
-  const [sauvegardeErr, setSauvegardeErr] = useState('')
+  const [, setBackupsLoading] = useState(false)
+  const [, setSauvegardeErr] = useState('')
   const [restoreLoading, setRestoreLoading] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
 
@@ -169,7 +169,7 @@ export default function ParametresPage() {
           if (retry.ok) setMagasins(await retry.json())
         }
       }
-    } catch (e) {
+    } catch {
       setMagasinsErr('Erreur lors du chargement des magasins.')
     } finally {
       setMagasinsLoading(false)
@@ -181,7 +181,7 @@ export default function ParametresPage() {
     try {
       const res = await fetch('/api/sauvegarde')
       if (res.ok) { const d = await res.json(); setBackups(d.backups || d) }
-    } catch (e) {
+    } catch {
       setSauvegardeErr('Erreur lors du chargement des sauvegardes.')
     } finally {
       setBackupsLoading(false)
@@ -225,7 +225,7 @@ export default function ParametresPage() {
         const d = await res.json()
         setErr(d.error || 'Erreur')
       }
-    } catch (e) {
+    } catch {
       setErr('Erreur réseau')
     } finally {
       setSaving(false)
@@ -295,7 +295,7 @@ export default function ParametresPage() {
         setMigrateResult({ success: false, message: data.error || data.details || 'Erreur inconnue' })
         showError(data.error || 'Échec de la migration')
       }
-    } catch (e) {
+    } catch {
       setMigrateResult({ success: false, message: 'Erreur réseau' })
       showError('Erreur réseau lors de la migration')
     } finally {
@@ -327,7 +327,7 @@ export default function ParametresPage() {
         setMigrateResult({ success: false, message: data.error || data.details || 'Erreur inconnue' })
         showError(data.error || 'Échec de la migration')
       }
-    } catch (e) {
+    } catch {
       setMigrateResult({ success: false, message: 'Erreur réseau' })
       showError('Erreur réseau lors de la migration automatique')
     } finally {
@@ -353,7 +353,7 @@ export default function ParametresPage() {
         const d = await res.json()
         setMagasinsErr(d.error || 'Erreur')
       }
-    } catch (e) {
+    } catch {
       setMagasinsErr('Erreur réseau')
     } finally {
       setMagasinSaving(false)
