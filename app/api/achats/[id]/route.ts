@@ -7,7 +7,7 @@ import { deleteEcrituresByReference, deleteEcrituresByReferenceForIds } from '@/
 import { logSuppression, logModification, getIpAddress } from '@/lib/audit'
 import { montantLigneTTC, htNetLigne, partFraisApprocheLigne, valeurAchatNetAvecFrais, nouveauPampApresAchatLigne } from '@/lib/calculs-commerciaux'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
-import { estModeEspeces } from '@/lib/enums-commerce'
+import { estModeEspeces, estModeBanque } from '@/lib/enums-commerce'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { verifierCloture } from '@/lib/cloture'
 import { apiCatch } from '@/lib/log-error'
@@ -286,13 +286,14 @@ const reglAchat = await tx.reglementAchat.create({
             libelle: `Règlement Achat ${achat.numero}`,
             montant: montantReglement,
             utilisateurId: session!.userId,
-            reference: achat.numero,
+            reference: `REG-A-${reglAchat.id}`,
             beneficiaire: achat.fournisseur?.nom || achat.fournisseurLibre || null,
             observation: `Paiement via ${modePaiement}`,
           }, tx)
         }
 
         await comptabiliserReglementAchat({
+          reglementId: reglAchat.id,
           achatId: achat.id,
           numeroAchat: achat.numero,
           date: dateReglement,
@@ -301,6 +302,7 @@ const reglAchat = await tx.reglementAchat.create({
           utilisateurId: session!.userId,
           magasinId: achat.magasinId,
           entiteId: achat.entiteId,
+          banqueId: banqueId ?? null,
           paiementDirect: !payeDepuisCaisse && !payeDepuisBanque,
         }, tx)
 
@@ -363,28 +365,37 @@ const reglAchat = await tx.reglementAchat.create({
               mode: r.modePaiement, 
               montant: r.montant, 
               banqueId: r.banqueId,
-              // Par défaut rétrocompatible : les anciens règlements ont été physiquement exécutés
+              // Rétrocompatibilité : reconstruire la source physique d'après le mode
               payeDepuisCaisse: estModeEspeces(r.modePaiement),
-              payeDepuisBanque: true,
+              payeDepuisBanque: estModeBanque(r.modePaiement),
             }))
 
         if (regsData.length > 0) {
           await tx.reglementAchat.deleteMany({ where: { achatId: id } })
           await tx.reglementAchatLigne.deleteMany({ where: { achatId: id } })
         }
-        // On supprime les mouvements de caisse liés exactement à ce numéro
+        // On supprime les mouvements de caisse liés à cet achat (tous les motifs connus)
         await tx.caisse.deleteMany({ 
           where: { 
             OR: [
+              { motif: `Règlement Achat ${oldAchat.numero}` },
               { motif: `RÈGLEMENT ACHAT ${oldAchat.numero}` },
               { motif: `ANNULATION ACHAT ${oldAchat.numero}` },
+              ...(oldAchat.reglements.map((r: any) => ({ motif: { contains: `REGLEMENT:${r.id}` } }))),
             ]
           } 
         })
         await recalculerSoldeCaisse(oldAchat.magasinId, tx)
-        // Supprimer les opérations bancaires liées à cet achat
+        // Supprimer les opérations bancaires liées à cet achat (toutes les références connues)
         const opsBancairesOld = await tx.operationBancaire.findMany({
-          where: { reference: oldAchat.numero }
+          where: {
+            OR: [
+              { reference: oldAchat.numero },
+              ...(oldAchat.reglements.length > 0 ? [{
+                reference: { in: oldAchat.reglements.map((r: any) => `REG-A-${r.id}`) }
+              }] : []),
+            ]
+          }
         })
         for (const op of opsBancairesOld) {
           const estEntree = ['DEPOT', 'VIREMENT_ENTRANT', 'INTERETS', 'REGLEMENT_CLIENT', 'VENTE', 'ENTREE', 'REVENU'].includes(op.type.toUpperCase())
@@ -547,6 +558,7 @@ const reglAchat = await tx.reglementAchat.create({
         }
 
         // 6. Règlements (Multi ou Simple) + synchro trésorerie
+        const reglementsEffectifs: { mode: string; montant: number; reglementId?: number | null; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean; banqueId?: number | null }[] = []
         if (mntPaye > 0 || regsData.length > 0) {
           for (const r of regsData) {
             const mntR = Number(r.montant) || 0
@@ -564,6 +576,14 @@ const reglAchat = await tx.reglementAchat.create({
                 observation: `Modif Achat ${updated.numero}`,
                 date: updated.date,
               }
+            })
+            reglementsEffectifs.push({
+              mode: r.mode || modePaiement || oldAchat.modePaiement || 'ESPECES',
+              montant: mntR,
+              reglementId: reglA.id,
+              payeDepuisCaisse: r.payeDepuisCaisse,
+              payeDepuisBanque: r.payeDepuisBanque,
+              banqueId: r.banqueId ? Number(r.banqueId) : null,
             })
             await tx.reglementAchatLigne.create({
               data: {
@@ -594,7 +614,7 @@ const reglAchat = await tx.reglementAchat.create({
                 libelle: `Règlement Achat ${updated.numero}`,
                 montant: mntR,
                 utilisateurId: session!.userId,
-                reference: updated.numero,
+                reference: `REG-A-${reglA.id}`,
                 beneficiaire: updated.fournisseur?.nom || updated.fournisseurLibre || null,
               }, tx)
             }
@@ -613,7 +633,7 @@ const reglAchat = await tx.reglementAchat.create({
           utilisateurId: session!.userId,
           magasinId: updated.magasinId,
           entiteId: updated.entiteId,
-          reglements: regsData.map((r: any) => ({ mode: r.mode, montant: Number(r.montant) || 0, payeDepuisCaisse: r.payeDepuisCaisse, payeDepuisBanque: r.payeDepuisBanque })),
+          reglements: reglementsEffectifs,
           lignes: updated.lignes,
         }, tx)
 

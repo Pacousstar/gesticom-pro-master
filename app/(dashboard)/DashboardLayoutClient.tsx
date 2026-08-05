@@ -46,6 +46,8 @@ import {
   Moon,
   Bug,
   BarChart3,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react'
 import type { Session } from '@/lib/auth'
 import { ToastContainer } from '@/components/ui/Toast'
@@ -174,6 +176,10 @@ export default function DashboardLayoutClient({
 }) {
   const [mounted, setMounted] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try { return localStorage.getItem('gesticom-sidebar-collapsed') === '1' } catch { return false }
+  })
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [nonLues, setNonLues] = useState(0)
@@ -288,6 +294,24 @@ export default function DashboardLayoutClient({
         : [...prev, sectionName]
     )
   }
+
+  // Sidebar rétractable : bascule le mode mobile (overlay) ou desktop (repli persistant)
+  const toggleSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarOpen(o => !o)
+    } else {
+      setSidebarCollapsed(c => !c)
+    }
+  }
+
+  const closeSidebarIfMobile = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) setSidebarOpen(false)
+  }
+
+  // Persister le repli de la sidebar desktop
+  useEffect(() => {
+    try { localStorage.setItem('gesticom-sidebar-collapsed', sidebarCollapsed ? '1' : '0') } catch { /* ignore */ }
+  }, [sidebarCollapsed])
 
   useEffect(() => {
     setMounted(true)
@@ -530,8 +554,10 @@ export default function DashboardLayoutClient({
         />
       )}
       <aside
-        className={`fixed top-0 left-0 z-[100] h-full w-72 transform bg-[#006B44] border-r border-emerald-700/30 shadow-[25px_0_60px_rgba(0,0,0,0.2)] transition-transform duration-300 ease-in-out lg:translate-x-0 pointer-events-auto no-print ${
+        className={`fixed top-0 left-0 z-[100] h-full w-72 transform bg-[#006B44] border-r border-emerald-700/30 shadow-[25px_0_60px_rgba(0,0,0,0.2)] transition-transform duration-300 ease-in-out pointer-events-auto no-print ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${
+          sidebarCollapsed ? 'lg:-translate-x-full' : 'lg:translate-x-0'
         }`}
       >
         <div className="flex h-full flex-col">
@@ -540,6 +566,9 @@ export default function DashboardLayoutClient({
               <Image src="/icon-512x512.png" alt="GestiCom Pro" width={48} height={48} className="h-12 w-12 object-contain drop-shadow-md brightness-105 rounded-lg" priority />
               <span className="font-black text-emerald-900 text-lg tracking-tighter">GestiCom <span className="text-orange-600">Pro</span></span>
             </Link>
+            <button className="hidden lg:flex p-2 rounded-lg hover:bg-emerald-100/50 transition-colors" onClick={() => setSidebarCollapsed(c => !c)} title={sidebarCollapsed ? 'Déplier le menu' : 'Replier le menu'}>
+              {sidebarCollapsed ? <ChevronsRight className="h-6 w-6 text-emerald-950" /> : <ChevronsLeft className="h-6 w-6 text-emerald-950" />}
+            </button>
             <button className="lg:hidden p-2 rounded-lg hover:bg-emerald-100/50 transition-colors" onClick={() => setSidebarOpen(false)}>
               <X className="h-6 w-6 text-emerald-950" />
             </button>
@@ -551,7 +580,7 @@ export default function DashboardLayoutClient({
                 <Link
                   href="/dashboard"
                   title="Dashboard - Vue d'ensemble"
-                  onClick={() => setSidebarOpen(false)}
+                  onClick={closeSidebarIfMobile}
                   className={`flex items-center gap-4 px-5 py-4 mx-2 mb-8 rounded-2xl transition-all duration-300 group ${
                     pathname === '/dashboard'
                       ? 'bg-gradient-to-br from-orange-500 to-orange-700 border-2 border-white/30 shadow-[0_10px_40px_rgba(249,115,22,0.4)] scale-[1.02]'
@@ -640,7 +669,7 @@ export default function DashboardLayoutClient({
                                     ? 'bg-orange-600 text-white shadow-[0_4px_20px_rgba(249,115,22,0.4)] scale-[1.02]'
                                     : 'text-white hover:bg-white/10 hover:pl-5'
                                 }`}
-                                onClick={() => setSidebarOpen(false)}
+                                onClick={closeSidebarIfMobile}
                               >
                                 <Icon className={`h-5 w-5 transition-colors ${isActive ? 'text-white' : 'text-white/70 group-hover:text-white'}`} />
                                 <span className="truncate text-white group-hover:whitespace-normal uppercase tracking-tight">{navItem.name}</span>
@@ -743,11 +772,11 @@ export default function DashboardLayoutClient({
         </div>
       </aside>
 
-      <div className="relative z-10 lg:pl-72 print:pl-0">
+      <div className={`relative z-10 print:pl-0 ${sidebarCollapsed ? 'lg:pl-0' : 'lg:pl-72'}`}>
         <header className="sticky top-0 z-30 border-b border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl shadow-sm no-print">
           <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
-              <button className="lg:hidden" onClick={() => setSidebarOpen(true)}>
+              <button onClick={toggleSidebar} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title={sidebarCollapsed ? 'Afficher le menu' : 'Masquer le menu'}>
                 <Menu className="h-6 w-6 text-gray-600" />
               </button>
               <Link href="/dashboard" className="hidden sm:flex items-center gap-2 pr-4 border-r border-gray-200 dark:border-gray-700">

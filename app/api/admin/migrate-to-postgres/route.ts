@@ -4,14 +4,18 @@ import { requireRole } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { isSQLite } from '@/lib/db-provider'
+import { prisma } from '@/lib/db'
+import { writeConfigFile, upsertParametreMode } from '@/lib/mode-config'
+import { autoInstallPostgres } from '@/lib/auto-install'
 import { z } from 'zod'
 import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 
 const migrateSchema = z.object({
-  postgresUrl: z.string().startsWith('postgresql://', 'L\'URL doit commencer par postgresql://'),
-  password: z.string().min(8, 'Mot de passe minimum 8 caracteres'),
+  autoInstall: z.boolean().optional().default(false),
+  postgresUrl: z.string().optional(),
+  password: z.string().optional(),
 })
 
 function sanitizeUrl(url: string): string {
@@ -33,22 +37,9 @@ function parsePostgresUrl(url: string) {
   }
 }
 
-function writeConfigFile(data: Record<string, any>) {
-  try {
-    const dataDir = process.env.GESTICOM_USER_DATA
-      || (process.env.APPDATA ? path.join(process.env.APPDATA, 'gesticom-pro') : '')
-      || process.cwd()
-    const configPath = path.join(dataDir, 'config.json')
-    let config: Record<string, any> = { mode: 'MODE_1' }
-    if (fs.existsSync(configPath)) {
-      try { config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) } catch (_) {}
-    }
-    Object.assign(config, data)
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
-    console.log('[migrate-to-postgres] config.json mis a jour')
-  } catch (e) {
-    console.error('[migrate-to-postgres] Erreur ecriture config.json:', e)
-  }
+function writeConfigFileLocal(data: Record<string, any>) {
+  writeConfigFile(data)
+  console.log('[migrate-to-postgres] config.json mis a jour')
 }
 
 export async function POST(req: NextRequest) {
@@ -67,7 +58,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const vres = validateApiRequest(migrateSchema, body)
     if (!vres.success) return vres.response
-    const { postgresUrl, password } = vres.data
+    const { autoInstall, postgresUrl, password } = vres.data
+
+    let targetUrl = postgresUrl
+    let targetPassword = password || ''
+    if (autoInstall) {
+      try {
+        const creds = await autoInstallPostgres()
+        targetUrl = `postgresql://${encodeURIComponent(creds.user)}:${encodeURIComponent(creds.password)}@${creds.host}:${creds.port}/${creds.database}`
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        return NextResponse.json({ error: 'Installation PostgreSQL automatique echouee: ' + msg }, { status: 500 })
+      }
+    } else if (!targetUrl || !targetUrl.startsWith('postgresql://')) {
+      return NextResponse.json({ error: 'L\'URL PostgreSQL est requise (postgresql://...)' }, { status: 400 })
+    } else if (!targetPassword || targetPassword.length < 8) {
+      return NextResponse.json({ error: 'Mot de passe minimum 8 caracteres' }, { status: 400 })
+    }
 
     const baseDir = process.env.GESTICOM_UNPACKED_PATH || process.cwd()
     const engBin = path.join(baseDir, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe')
@@ -80,17 +87,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const urlLog = sanitizeUrl(postgresUrl)
+    const urlLog = sanitizeUrl(targetUrl!)
     console.log(`[migrate-to-postgres] Lancement migration vers ${urlLog}`)
 
-    const child = spawn(process.execPath, [scriptPath, postgresUrl], {
+    const child = spawn(process.execPath, [scriptPath, targetUrl!], {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: baseDir,
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',
         DATABASE_URL: process.env.DATABASE_URL || '',
-        DB_PASSWORD: password,
+        DB_PASSWORD: targetPassword,
         PRISMA_SCHEMA_ENGINE_BINARY: engBin,
         PRISMA_QUERY_ENGINE_LIBRARY: queryLib,
       },
@@ -119,10 +126,11 @@ export async function POST(req: NextRequest) {
 
     console.log(`[migrate-to-postgres] Succes`)
 
-    const pg = parsePostgresUrl(postgresUrl)
+    const pg = parsePostgresUrl(targetUrl!)
     if (pg) {
-      writeConfigFile({ mode: 'MODE_2', postgres: pg })
+      writeConfigFileLocal({ mode: 'MODE_2', postgres: pg })
     }
+    await upsertParametreMode(prisma, 'MODE_2')
 
     return NextResponse.json({
       success: true,

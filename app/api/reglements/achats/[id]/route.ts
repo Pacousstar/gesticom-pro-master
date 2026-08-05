@@ -305,6 +305,7 @@ export async function PATCH(
         modePaiement: updated.modePaiement,
         utilisateurId: session.userId,
         entiteId: updated.entiteId ?? undefined,
+        banqueId: banqueId ?? null,
         paiementDirect: !payeDepuisCaisse && !payeDepuisBanque,
       }, tx)
 

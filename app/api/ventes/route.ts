@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { sousTotalRetraits } from '@/lib/comptes-courants'
 import { Prisma } from '@prisma/client'
 import { logAction, getIpAddress } from '@/lib/audit'
 import { comptabiliserVente, comptabiliserReglementVente } from '@/lib/comptabilisation'
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest) {
     
     let montantPaye = 0
     let autoReglementComplet = false
-    let listReglements: { mode: string; montant: number }[] = []
+    let listReglements: { mode: string; montant: number; banqueId?: number | null }[] = []
 
     if (reglementsPayload.length > 0) {
       for (const r of reglementsPayload) {
@@ -221,14 +222,27 @@ export async function POST(request: NextRequest) {
         const mode = String(r.mode).toUpperCase()
         if (amt > 0 && mode !== 'CREDIT') {
           // CREDIT = créance à terme, on ne crée PAS de règlement
-          listReglements.push({ mode, montant: amt })
+          listReglements.push({
+            mode,
+            montant: amt,
+            banqueId: estModeBanque(mode) ? (r.banqueId ? Number(r.banqueId) : (body?.banqueId ? Number(body.banqueId) : null)) : null,
+          })
           montantPaye += amt
         }
       }
     } else {
       const montantPayeRaw = body?.montantPaye != null ? Math.max(0, Number(body.montantPaye) || 0) : null
-      if (montantPayeRaw !== null && modePaiementPrincipal !== 'CREDIT') {
-         listReglements.push({ mode: modePaiementPrincipal, montant: montantPayeRaw })
+      if (montantPayeRaw !== null && montantPayeRaw > 0 && modePaiementPrincipal !== 'CREDIT') {
+         listReglements.push({
+           mode: modePaiementPrincipal,
+           montant: montantPayeRaw,
+           banqueId: estModeBanque(modePaiementPrincipal) && body?.banqueId ? Number(body.banqueId) : null,
+         })
+         montantPaye = montantPayeRaw
+      } else if (montantPayeRaw !== null && montantPayeRaw > 0 && modePaiementPrincipal === 'CREDIT') {
+         // Avance sur vente à crédit : l'avance est encaissée (espèces par défaut),
+         // le solde reste une créance (411). L'avance est comptabilisée avec les règlements.
+         listReglements.push({ mode: 'ESPECES', montant: montantPayeRaw, banqueId: null })
          montantPaye = montantPayeRaw
       } else {
          montantPaye = 0
@@ -335,7 +349,11 @@ export async function POST(request: NextRequest) {
 
     if (reglementsPayload.length === 0 && autoReglementComplet && montantPaye === 0) {
         montantPaye = montantTotal
-        listReglements = [{ mode: modePaiementPrincipal, montant: montantPaye }]
+        listReglements = [{
+          mode: modePaiementPrincipal,
+          montant: montantPaye,
+          banqueId: estModeBanque(modePaiementPrincipal) && body?.banqueId ? Number(body.banqueId) : null,
+        }]
     }
 
     // FCFA: tolérance "anti-1F" (arrondis / conversions UI) – clamp si écart minime
@@ -377,11 +395,17 @@ export async function POST(request: NextRequest) {
       
       const ventesClient = await prisma.vente.findMany({ where: { clientId, statut: 'VALIDEE', entiteId } })
       const detteFactures = ventesClient.reduce((s: number, v: any) => s + (v.montantTotal - (v.montantPaye ?? 0)), 0)
-      const regsLibres = await prisma.reglementVente.aggregate({
-        where: { clientId, venteId: null, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] } },
-        _sum: { montant: true }
-      })
-      const totalRegsLibres = regsLibres._sum?.montant || 0
+      const [regsLibresAgg, retraitsLibres] = await Promise.all([
+        prisma.reglementVente.aggregate({
+          where: { clientId, venteId: null, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] } },
+          _sum: { montant: true }
+        }),
+        prisma.reglementVente.findMany({
+          where: { clientId, venteId: null, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] }, observation: { startsWith: 'Retrait CC' } },
+          select: { montant: true, observation: true }
+        })
+      ])
+      const totalRegsLibres = (regsLibresAgg._sum?.montant || 0) - (sousTotalRetraits(retraitsLibres) * 2)
       const detteReelle = (detteFactures + (client.soldeInitial || 0)) - (totalRegsLibres + (client.avoirInitial || 0))
       
       if (detteReelle + (montantTotal - montantPaye) > client.plafondCredit) {
@@ -491,12 +515,11 @@ export async function POST(request: NextRequest) {
 
       let resteReglement = montantTotal
       let hasCashPayment = false
-      const reglementsEffectifs: { mode: string; montant: number }[] = []
+      const reglementsEffectifs: { mode: string; montant: number; reglementId?: number | null; banqueId?: number | null }[] = []
       for (const reg of listReglements) {
         const montantReg = Math.min(reg.montant, resteReglement)
         if (montantReg <= 0) continue
         resteReglement -= montantReg
-        reglementsEffectifs.push({ mode: reg.mode, montant: montantReg })
 
         const rv = await tx.reglementVente.create({
           data: {
@@ -509,6 +532,13 @@ export async function POST(request: NextRequest) {
             observation: `Règlement ${reg.mode} - Vente ${num}`,
             date: dateVente,
           }
+        })
+
+        reglementsEffectifs.push({
+          mode: reg.mode,
+          montant: montantReg,
+          reglementId: rv.id,
+          banqueId: reg.banqueId ?? (estModeBanque(reg.mode) && body?.banqueId ? Number(body.banqueId) : null),
         })
 
         await tx.reglementVenteLigne.create({
@@ -540,7 +570,7 @@ export async function POST(request: NextRequest) {
             libelle: `Vente ${num}`,
             montant: montantReg,
             utilisateurId: session.userId,
-            reference: num,
+            reference: `REG-V-${rv.id}`,
             beneficiaire: v?.client?.nom || clientLibre || null,
           }, tx)
         }
@@ -557,6 +587,7 @@ export async function POST(request: NextRequest) {
             utilisateurId: session.userId,
             entiteId,
             magasinId,
+            banqueId: reg.banqueId ?? (estModeBanque(reg.mode) && body?.banqueId ? Number(body.banqueId) : null),
             estAcompte: true,
           }, tx)
         }

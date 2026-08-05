@@ -36,7 +36,7 @@ export async function POST(
 
     const result = await prisma.$transaction(async (tx) => {
       const reglements = await tx.reglementVente.findMany({
-        where: { id: { in: reglementIds }, clientId, entiteId, venteId: null },
+        where: { id: { in: reglementIds }, clientId, entiteId, venteId: null, NOT: { observation: { startsWith: 'Retrait CC' } } },
         include: { ReglementVenteLigne: { select: { montant: true } } }
       })
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { estRetrait } from '@/lib/comptes-courants'
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
@@ -55,7 +56,7 @@ export async function GET(
         const reglements = await prisma.reglementAchat.findMany({
             where: whereReglement,
             orderBy: { date: 'asc' },
-            select: { date: true, montant: true, modePaiement: true }
+            select: { date: true, montant: true, modePaiement: true, observation: true }
         })
 
         const rows: any[] = []
@@ -105,15 +106,27 @@ export async function GET(
         for (const r of reglements) {
             const montant = Number(r.montant) || 0
             const dateReg = new Date(r.date)
-            solde -= montant
-            rows.push({
-                Date: dateReg.toLocaleDateString('fr-FR'),
-                'N° Pièce': 'RGL',
-                Libellé: `Règlement ${r.modePaiement || ''}`,
-                Débit: 0,
-                Crédit: montant,
-                'Solde': solde
-            })
+            if (estRetrait(r.observation)) {
+                solde += montant
+                rows.push({
+                    Date: dateReg.toLocaleDateString('fr-FR'),
+                    'N° Pièce': 'RTR',
+                    Libellé: `Retrait CC ${r.modePaiement || ''}`,
+                    Débit: montant,
+                    Crédit: 0,
+                    'Solde': solde
+                })
+            } else {
+                solde -= montant
+                rows.push({
+                    Date: dateReg.toLocaleDateString('fr-FR'),
+                    'N° Pièce': 'RGL',
+                    Libellé: `Règlement ${r.modePaiement || ''}`,
+                    Débit: 0,
+                    Crédit: montant,
+                    'Solde': solde
+                })
+            }
         }
 
         // Total line

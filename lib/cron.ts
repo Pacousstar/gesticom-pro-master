@@ -1,6 +1,7 @@
 import { prisma } from './db'
 import { createBackup } from './sauvegarde-db'
 import { purgeOldAuditLogs } from './purge-audit-logs'
+import { estRetrait } from './comptes-courants'
 
 let cronModule: any = null
 try {
@@ -79,7 +80,7 @@ function planifierPurge() {
   const task = cronModule.schedule('0 3 * * *', async () => {
     console.log('[cron] Exécution purge des logs...')
     try {
-      const resultat = await purgeOldAuditLogs()
+      await purgeOldAuditLogs()
       console.log('[cron] ✓ Purge effectuée')
     } catch (err) {
       console.error('[cron] ✗ Erreur purge:', err)
@@ -213,7 +214,7 @@ function planifierRelances() {
             },
             reglements: {
               where: { venteId: null, statut: 'VALIDE' },
-              select: { montant: true },
+              select: { montant: true, observation: true },
             },
           },
         })
@@ -223,7 +224,7 @@ function planifierRelances() {
 
         for (const client of clients) {
           const detteFactures = client.ventes.reduce((s, v) => s + (v.montantTotal - (v.montantPaye || 0)), 0)
-          const regsLibres = client.reglements.reduce((s, r) => s + r.montant, 0)
+          const regsLibres = client.reglements.reduce((s, r) => s + (estRetrait(r.observation) ? -r.montant : r.montant), 0)
           const solde = detteFactures + (client.soldeInitial || 0) - regsLibres - (client.avoirInitial || 0)
 
           if (solde <= 0) continue

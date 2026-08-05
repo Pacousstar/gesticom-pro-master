@@ -14,6 +14,8 @@
     "package.json",
     "scripts/**/*",
     "node_modules/**/*",
+    "!pgsql/**",
+    "!.next/standalone/pgsql/**",
     "!release/**",
     "!node_modules/.cache/**",
     "!node_modules/typescript/**",

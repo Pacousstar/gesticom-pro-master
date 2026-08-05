@@ -36,6 +36,8 @@ export async function GET(request: NextRequest) {
     include: {
       magasin: { select: { code: true, nom: true } },
       fournisseur: { select: { nom: true } },
+      ReglementAchatLigne: { select: { reglementId: true, montant: true } },
+      reglements: { select: { id: true, modePaiement: true } },
       lignes: {
         include: {
           produit: { select: { designation: true } }
@@ -64,10 +66,19 @@ export async function GET(request: NextRequest) {
   for (const a of filteredAchats) {
     const dateStr = a.date.toISOString().slice(0, 10)
     const fournisseur = a.fournisseur?.nom ?? a.fournisseurLibre ?? '—'
-    const reste = Math.max(0, a.montantTotal - (a.montantPaye || 0))
+    const creditReglementIds = new Set(
+      (a.reglements || [])
+        .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+        .map(r => r.id)
+    )
+    const totalLignePaye = (a.ReglementAchatLigne || [])
+      .filter(l => !creditReglementIds.has(l.reglementId))
+      .reduce((s, l) => s + (l.montant || 0), 0)
+    const montantPayeReel = totalLignePaye > 0 ? totalLignePaye : (a.montantPaye || 0)
+    const reste = Math.max(0, a.montantTotal - montantPayeReel)
 
     totalMontant += a.montantTotal
-    totalPaye += a.montantPaye || 0
+    totalPaye += montantPayeReel
     totalReste += reste
 
     rows.push({

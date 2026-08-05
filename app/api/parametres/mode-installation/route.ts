@@ -2,33 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireRole } from '@/lib/require-role'
-import { MODES_INSTALLATION } from '@/lib/enums-commerce'
-import fs from 'fs'
-import path from 'path'
-
-function writeConfigFile(data: Record<string, any>) {
-  try {
-    const dataDir = process.env.GESTICOM_USER_DATA
-      || (process.env.APPDATA ? path.join(process.env.APPDATA, 'gesticom-pro') : '')
-      || process.cwd()
-    const configPath = path.join(dataDir, 'config.json')
-    let config: Record<string, any> = { mode: 'MODE_1' }
-    if (fs.existsSync(configPath)) {
-      try { config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) } catch (_) {}
-    }
-    Object.assign(config, data)
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
-  } catch (e) {
-    console.error('[mode-installation] Erreur ecriture config.json:', e)
-  }
-}
+import { MODES_INSTALLATION, estModePostgres } from '@/lib/enums-commerce'
+import { readConfigFile, writeConfigFile, upsertParametreMode } from '@/lib/mode-config'
+import { autoInstallPostgres } from '@/lib/auto-install'
 
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
+  const config = readConfigFile()
+  if (MODES_INSTALLATION.includes(config.mode)) {
+    return NextResponse.json({ modeInstallation: config.mode, isCurrentPostgres: !!config.postgres })
+  }
+
   const p = await prisma.parametre.findFirst()
-  return NextResponse.json({ modeInstallation: p?.modeInstallation || 'MODE_1' })
+  return NextResponse.json({ modeInstallation: p?.modeInstallation || 'MODE_1', isCurrentPostgres: false })
 }
 
 export async function PUT(request: NextRequest) {
@@ -44,29 +32,39 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Mode d\'installation invalide' }, { status: 400 })
   }
 
-  const p = await prisma.parametre.findFirst()
-  if (!p) {
-    await prisma.parametre.create({ data: { modeInstallation } })
-  } else {
-    await prisma.parametre.update({ where: { id: p.id }, data: { modeInstallation } })
-  }
+  const configData: Record<string, any> = { mode: modeInstallation }
 
   if (modeInstallation === 'MODE_2') {
-    if (!postgres || !postgres.password || postgres.password.length < 8) {
-      return NextResponse.json({ error: 'Mot de passe PostgreSQL requis (min 8 caracteres)' }, { status: 400 })
+    if (!postgres || !postgres.host || !postgres.database || !postgres.user || !postgres.password || postgres.password.length < 8) {
+      return NextResponse.json({ error: 'Configuration PostgreSQL requise (mot de passe min 8 caracteres)' }, { status: 400 })
     }
-  }
-  const configData: Record<string, any> = { mode: modeInstallation }
-  if (modeInstallation === 'MODE_2' && postgres) {
     configData.postgres = {
-      host: postgres.host || 'localhost',
+      host: postgres.host,
       port: postgres.port || 5432,
-      database: postgres.database || 'gesticom',
-      user: postgres.user || 'gesticom',
+      database: postgres.database,
+      user: postgres.user,
       password: postgres.password,
     }
   }
-  writeConfigFile(configData)
 
-  return NextResponse.json({ modeInstallation })
+  if (modeInstallation === 'MODE_3') {
+    try {
+      const creds = await autoInstallPostgres()
+      configData.postgres = creds
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
+
+  writeConfigFile(configData)
+  await upsertParametreMode(prisma, modeInstallation)
+
+  const message = modeInstallation === 'MODE_1'
+    ? 'Mode mono-poste enregistré. Redémarrez l\'application pour appliquer le changement.'
+    : estModePostgres(modeInstallation)
+      ? 'Mode réseau enregistré. Redémarrez l\'application pour utiliser PostgreSQL.'
+      : 'Mode d\'installation mis à jour.'
+
+  return NextResponse.json({ modeInstallation, message })
 }

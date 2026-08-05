@@ -31,6 +31,8 @@ export async function GET(
         fournisseur: { select: { nom: true, telephone: true } },
         lignes: { include: { produit: { select: { designation: true } } } },
         utilisateur: { select: { nom: true } },
+        ReglementAchatLigne: { select: { reglementId: true, montant: true } },
+        reglements: { select: { id: true, modePaiement: true } },
       },
     })
 
@@ -190,9 +192,18 @@ export async function GET(
     doc.setFontSize(9)
     doc.text(`Mode de paiement: ${achat.modePaiement}`, margin, y)
     y += 6
-    doc.text(`Montant payé: ${(achat.montantPaye || 0).toLocaleString('fr-FR')} F`, margin, y)
+    const creditReglementIds = new Set(
+      (achat.reglements || [])
+        .filter(r => String(r.modePaiement).toUpperCase() === 'CREDIT')
+        .map(r => r.id)
+    )
+    const totalLignePaye = (achat.ReglementAchatLigne || [])
+      .filter(l => !creditReglementIds.has(l.reglementId))
+      .reduce((s, l) => s + (l.montant || 0), 0)
+    const montantPayeReel = totalLignePaye > 0 ? totalLignePaye : (achat.montantPaye || 0)
+    doc.text(`Montant payé: ${montantPayeReel.toLocaleString('fr-FR')} F`, margin, y)
     y += 6
-    const reste = Math.max(0, achat.montantTotal - (achat.montantPaye || 0))
+    const reste = Math.max(0, achat.montantTotal - montantPayeReel)
     doc.text(`Reste à payer: ${reste.toLocaleString('fr-FR')} F`, margin, y)
     y += 10
 

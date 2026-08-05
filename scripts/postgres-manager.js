@@ -233,6 +233,14 @@ function downloadPostgresDirect(url, zipPath, onProgress) {
   })
 }
 
+function cleanExtractDir(destDir) {
+  if (!fs.existsSync(destDir)) return
+  for (const e of fs.readdirSync(destDir)) {
+    if (e === ZIP_NAME) continue
+    try { fs.rmSync(path.join(destDir, e), { recursive: true, force: true }) } catch (_) {}
+  }
+}
+
 function extractPostgres(dataDir, zipPath) {
   const destDir = path.join(dataDir, 'pgsql')
   const binDir = path.join(destDir, 'bin')
@@ -243,15 +251,38 @@ function extractPostgres(dataDir, zipPath) {
   }
 
   log('Extraction de PostgreSQL...')
+  cleanExtractDir(destDir)
+
+  // 1. tar.exe (bsdtar natif Windows 10+, bien plus rapide que PowerShell ZipFile)
+  const tar = 'C:\\Windows\\System32\\tar.exe'
+  if (fs.existsSync(tar)) {
+    const r = spawnSync(tar, ['-xf', zipPath, '-C', destDir], {
+      timeout: 900000, stdio: 'pipe', windowsHide: true,
+    })
+    const pgctlOk = fs.existsSync(path.join(binDir, 'pg_ctl.exe')) ||
+      fs.existsSync(path.join(destDir, 'pgsql', 'bin', 'pg_ctl.exe'))
+    if (r.status === 0 && pgctlOk) {
+      log('Extraction terminee (tar)')
+      return finalizeExtract(destDir)
+    }
+    log('tar a echoue, fallback PowerShell: ' + (r.stderr?.toString() || '').slice(0, 200))
+    cleanExtractDir(destDir)
+  }
+
+  // 2. PowerShell ZipFile (fallback)
   try {
     execSync(`powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('${zipPath.replace(/'/g, "''")}', '${destDir.replace(/'/g, "''")}')"`, {
-      timeout: 300000, stdio: 'pipe',
+      timeout: 900000, stdio: 'pipe',
     })
-    log('Extraction terminee')
+    log('Extraction terminee (powershell)')
   } catch (e) {
     throw new Error('Extraction echouee: ' + e.message)
   }
 
+  return finalizeExtract(destDir)
+}
+
+function finalizeExtract(destDir) {
   const pgsqlSubdir = path.join(destDir, 'pgsql')
   if (fs.existsSync(pgsqlSubdir)) {
     const entries = fs.readdirSync(pgsqlSubdir)
@@ -292,7 +323,7 @@ function initPostgres(pgBinDir, pgDataDir) {
   if (!fs.existsSync(initdb)) throw new Error('initdb introuvable: ' + initdb)
 
   const r = spawnSync(initdb, ['-D', pgDataDir, '-U', 'postgres', '-A', 'trust', '--locale=C'], {
-    stdio: 'pipe', timeout: 60000, windowsHide: true,
+    stdio: 'pipe', timeout: 600000, windowsHide: true,
   })
   if (r.status !== 0) {
     throw new Error('initdb echoue: ' + (r.stderr?.toString() || '').slice(0, 300))
@@ -349,6 +380,24 @@ function stopPostgres(pgBinDir, pgDataDir) {
   spawnSync(pgCtl, ['-D', pgDataDir, 'stop'], { stdio: 'pipe', timeout: 30000, windowsHide: true })
   log('PostgreSQL arrete')
   return true
+}
+
+function waitForReady(pgBinDir, port, timeoutMs = 90000) {
+  const pgIsReady = path.join(pgBinDir, 'pg_isready.exe')
+  if (!fs.existsSync(pgIsReady)) return true
+  log('[auto] Attente du serveur PostgreSQL (pg_isready) port ' + port + '...')
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    const r = spawnSync(pgIsReady, ['-h', '127.0.0.1', '-p', String(port)], {
+      stdio: 'pipe', timeout: 5000, windowsHide: true,
+    })
+    if (r.status === 0) {
+      log('[auto] Serveur PostgreSQL pret (port ' + port + ')')
+      return true
+    }
+    require('child_process').execSync('timeout /t 1 /nobreak >nul 2>nul', { stdio: 'pipe' })
+  }
+  throw new Error('PostgreSQL ne repond pas sur le port ' + port + ' apres ' + Math.round(timeoutMs / 1000) + 's')
 }
 
 function findAdminUser(pgBinDir, port) {
@@ -425,6 +474,7 @@ async function ensurePostgres(dataDir, port = 5432) {
 
   startPostgres(pgBinDir, pgDataDir)
 
+  await waitForReady(pgBinDir, port)
   const creds = createDatabase(pgBinDir, port)
 
   return { pgBinDir, pgDataDir, creds, installed: false }
@@ -474,6 +524,7 @@ async function ensureAutoPostgres(dataDir) {
   }
 
   const port = getConfiguredPort(pgDataDir)
+  await waitForReady(pgBinDir, port)
   const creds = createDatabase(pgBinDir, port)
 
   return { pgBinDir, pgDataDir, creds, installed: true }

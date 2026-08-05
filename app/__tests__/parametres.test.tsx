@@ -31,6 +31,8 @@ const mockMagasins = [
 
 const mockBackups = { backups: [{ name: 'backup-2026-06-01.sqlite', size: 1024, mtime: '2026-06-01' }] }
 
+const mockMode = { modeInstallation: 'MODE_1', isCurrentPostgres: false }
+
 describe('ParametresPage', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
@@ -45,6 +47,7 @@ describe('ParametresPage', () => {
     mockFetch
       .mockResolvedValueOnce(new Response(JSON.stringify(mockParametres), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockAuth), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(mockMode), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockMagasins), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockBackups), { status: 200 }))
 
@@ -67,6 +70,7 @@ describe('ParametresPage', () => {
     mockFetch
       .mockResolvedValueOnce(new Response(JSON.stringify(mockParametres), { status: 403 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ role: 'USER', permissions: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(mockMode), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockMagasins), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockBackups), { status: 200 }))
 
@@ -83,6 +87,7 @@ describe('ParametresPage', () => {
     mockFetch
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce(new Response(JSON.stringify({ role: 'USER', permissions: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(mockMode), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockMagasins), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockBackups), { status: 200 }))
 
@@ -99,6 +104,7 @@ describe('ParametresPage', () => {
     mockFetch
       .mockResolvedValueOnce(new Response(JSON.stringify(mockParametres), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockAuth), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(mockMode), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockMagasins), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockBackups), { status: 200 }))
 
@@ -121,6 +127,7 @@ describe('ParametresPage', () => {
     mockFetch
       .mockResolvedValueOnce(new Response(JSON.stringify(mockParametres), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockAuth), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(mockMode), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(mockBackups), { status: 200 }))
 

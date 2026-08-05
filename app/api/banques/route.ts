@@ -109,33 +109,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const banque = await prisma.banque.create({
-      data: {
-        numero: data.numero,
-        nomBanque: data.nomBanque,
-        libelle: data.libelle,
-        soldeInitial: data.soldeInitial,
-        soldeActuel: data.soldeInitial,
-        entiteId,
-        compteId: compteIdFinal,
-      },
-      include: {
-        compte: { select: { id: true, numero: true, libelle: true } },
-      },
-    })
-
-    // Comptabiliser le solde initial (apport en banque → D 521 / C 890)
-    if ((data.soldeInitial || 0) > 0) {
-      await comptabiliserOuvertureBanque({
-        banqueId: banque.id,
-        nom: banque.libelle || banque.nomBanque,
-        soldeInitial: data.soldeInitial,
-        date: new Date(),
-        entiteId,
-        utilisateurId: session.userId,
-        compteId: compteIdFinal,
+    // Création + comptabilisation atomiques : si la comptabilisation échoue, la banque n'est pas créée
+    const banque = await prisma.$transaction(async (tx) => {
+      const b = await tx.banque.create({
+        data: {
+          numero: data.numero,
+          nomBanque: data.nomBanque,
+          libelle: data.libelle,
+          soldeInitial: data.soldeInitial,
+          soldeActuel: data.soldeInitial,
+          entiteId,
+          compteId: compteIdFinal,
+        },
+        include: {
+          compte: { select: { id: true, numero: true, libelle: true } },
+        },
       })
-    }
+
+      // Comptabiliser le solde initial (apport en banque → D 521 / C 890)
+      if ((data.soldeInitial || 0) > 0) {
+        await comptabiliserOuvertureBanque({
+          banqueId: b.id,
+          nom: b.libelle || b.nomBanque,
+          soldeInitial: data.soldeInitial,
+          date: new Date(),
+          entiteId,
+          utilisateurId: session.userId,
+          compteId: compteIdFinal,
+        }, tx)
+      }
+
+      return b
+    }, { timeout: 20000 })
 
     await logAction(session, 'CREATION', 'BANQUE', `Création compte bancaire: ${data.nomBanque} - ${data.libelle}`, session.entiteId)
 

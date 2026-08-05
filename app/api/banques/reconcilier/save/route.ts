@@ -3,7 +3,6 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
-import { comptabiliserOperationBancaire } from '@/lib/comptabilisation'
 import { verifierCloture } from '@/lib/cloture'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
@@ -104,7 +103,10 @@ export async function POST(request: NextRequest) {
       }
 
       // RB2: Utiliser enregistrerOperationBancaire (montant toujours positif, direction via type)
-const operation = await enregistrerOperationBancaire({
+      // NB: PAS de comptabilisation ici : le règlement a déjà généré ses écritures (VENTE_REGLEMENT/ACHAT_REGLEMENT
+      // + trésorerie) à sa création. L'opération de rapprochement RAP-* est purement physique, une seconde
+      // comptabilisation débiterait/créditerait deux fois le compte bancaire.
+      const operation = await enregistrerOperationBancaire({
         banqueId: data.banqueId,
         entiteId: banque.entiteId,
         date: new Date(date),
@@ -119,19 +121,6 @@ const operation = await enregistrerOperationBancaire({
       if (!operation) {
         throw new Error('Erreur lors de l\'enregistrement de l\'opération de rapprochement.')
       }
-
-      // RB8: Comptabiliser l'opération de rapprochement
-      await comptabiliserOperationBancaire({
-        operationId: operation.id,
-        banqueId: data.banqueId,
-        date: new Date(date),
-        type: typeOpBancaire,
-        montant: Math.abs(Number(montant)),
-        libelle: `Rapprochement: ${libelle}`,
-        compteId: banque.compteId,
-        utilisateurId: session.userId,
-        entiteId: banque.entiteId,
-      }, tx)
 
       return { success: true, operationId: operation.id }
     }, { timeout: 20000 })

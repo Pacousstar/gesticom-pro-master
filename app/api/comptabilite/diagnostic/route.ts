@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { sousTotalRetraits } from '@/lib/comptes-courants'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
@@ -103,12 +104,19 @@ export async function GET() {
     )
 
     // Audit de Caisse (Filtré par entité)
-    const [totalRegsEspVente, totalCaisseEntree, totalRegsEspAchat, totalCaisseSortie] = await Promise.all([
+    const [totalRegsEspVente, totalCaisseEntree, totalRegsEspAchat, totalCaisseSortie, retraitsEspVente, retraitsEspAchat] = await Promise.all([
       prisma.reglementVente.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] }, ...whereEntite }, _sum: { montant: true } }),
       prisma.caisse.aggregate({ where: { type: 'ENTREE', ...whereEntite }, _sum: { montant: true } }),
       prisma.reglementAchat.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] }, ...whereEntite }, _sum: { montant: true } }),
       prisma.caisse.aggregate({ where: { type: 'SORTIE', ...whereEntite }, _sum: { montant: true } }),
+      prisma.reglementVente.findMany({ where: { modePaiement: { in: ['ESPECES', 'CASH'] }, ...whereEntite, observation: { startsWith: 'Retrait CC' } }, select: { montant: true, observation: true } }),
+      prisma.reglementAchat.findMany({ where: { modePaiement: { in: ['ESPECES', 'CASH'] }, ...whereEntite, observation: { startsWith: 'Retrait CC' } }, select: { montant: true, observation: true } }),
     ])
+
+    // Les retraits CC créent des mouvements de caisse inversés (SORTIE pour un client, ENTREE pour un fournisseur) :
+    // on les retranche des totaux de règlements espèce pour un audit cohérent avec les mouvements de caisse.
+    const totalRegsEspVenteNet = (totalRegsEspVente._sum.montant || 0) - (sousTotalRetraits(retraitsEspVente) * 2)
+    const totalRegsEspAchatNet = (totalRegsEspAchat._sum.montant || 0) - (sousTotalRetraits(retraitsEspAchat) * 2)
 
     const totalDepensesEsp = await prisma.depense.aggregate({ where: { modePaiement: { in: ['ESPECES', 'CASH'] }, ...whereEntite }, _sum: { montantPaye: true } })
     const totalChargesEsp = await prisma.charge.aggregate({ where: whereEntite, _sum: { montant: true } })
@@ -122,16 +130,16 @@ export async function GET() {
       },
       auditCaisse: {
         entrees: {
-          reglementsVentes: totalRegsEspVente._sum.montant || 0,
+          reglementsVentes: totalRegsEspVenteNet,
           caisseFlux: totalCaisseEntree._sum.montant || 0,
-          ecart: (totalCaisseEntree._sum.montant || 0) - (totalRegsEspVente._sum.montant || 0),
+          ecart: (totalCaisseEntree._sum.montant || 0) - totalRegsEspVenteNet,
         },
         sorties: {
-          reglementsAchats: totalRegsEspAchat._sum.montant || 0,
+          reglementsAchats: totalRegsEspAchatNet,
           depenses: totalDepensesEsp._sum.montantPaye || 0,
           charges: totalChargesEsp._sum.montant || 0,
           caisseFlux: totalCaisseSortie._sum.montant || 0,
-          ecart: (totalCaisseSortie._sum.montant || 0) - ((totalRegsEspAchat._sum.montant || 0) + (totalDepensesEsp._sum.montantPaye || 0) + (totalChargesEsp._sum.montant || 0)),
+          ecart: (totalCaisseSortie._sum.montant || 0) - (totalRegsEspAchatNet + (totalDepensesEsp._sum.montantPaye || 0) + (totalChargesEsp._sum.montant || 0)),
         }
       },
       ecrituresDateMin: ecrituresDateRange._min.date?.toISOString().split('T')[0] ?? null,

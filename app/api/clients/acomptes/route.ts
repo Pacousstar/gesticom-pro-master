@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/require-role'
 import { getEntiteIdOrAll } from '@/lib/get-entite-id'
 import { apiCatch } from '@/lib/log-error'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'clients:view')
@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
       venteId: null,
       statut: { in: ['VALIDEE', 'VALIDE'] },
       clientId: { not: null },
+      NOT: { observation: { startsWith: 'Retrait CC' } },
     }
     if (entiteIdFilter != null) {
       where.entiteId = entiteIdFilter

@@ -115,6 +115,10 @@ export async function PATCH(
 
     const finalSolde = soldeInitial !== undefined ? soldeInitial : existing.soldeInitial
     const finalAvoir = avoirInitial !== undefined ? avoirInitial : existing.avoirInitial
+
+    // Soldes initiaux modifiés => toujours rappeler la comptabilisation d'ouverture :
+    // elle nettoie les anciennes écritures puis réécrit (y compris vers 0 => pas d'orphelines)
+    if (modifieSoldeInitial || modifieAvoirInitial) {
       if (finalSolde > 0 || finalAvoir > 0) {
         const existingCC = await prisma.compteCourant.findFirst({ where: { clientId: id } })
         if (!existingCC) {
@@ -129,22 +133,23 @@ export async function PATCH(
             }
           })
         }
-        try {
-          await comptabiliserOuvertureClient({
-            clientId: id,
-            nom: c.nom,
-            soldeInitial: finalSolde,
-            avoirInitial: finalAvoir,
-            date: new Date(),
-            entiteId: c.entiteId,
-            utilisateurId: session!.userId,
-          })
-        } catch (_) {
-          // Non-bloquant : la compta peut ne pas être initialisée
-        }
       }
+      try {
+        await comptabiliserOuvertureClient({
+          clientId: id,
+          nom: c.nom,
+          soldeInitial: finalSolde,
+          avoirInitial: finalAvoir,
+          date: new Date(),
+          entiteId: c.entiteId,
+          utilisateurId: session!.userId,
+        })
+      } catch (_) {
+        // Non-bloquant : la compta peut ne pas être initialisée
+      }
+    }
 
-      await logModification(session!, 'CLIENT', id, `Modification client ${c.nom} (${c.code || 'sans code'})`, existing, c, getIpAddress(request))
+    await logModification(session!, 'CLIENT', id, `Modification client ${c.nom} (${c.code || 'sans code'})`, existing, c, getIpAddress(request))
     
     return NextResponse.json(c)
   } catch (e) {

@@ -5,6 +5,7 @@ import {
   MODES_INSTALLATION,
   LABELS_MODE_INSTALLATION,
   labelModeInstallation,
+  estModePostgres,
   normaliserModePaiement,
   estModeBanque,
   estModeCredit,
@@ -50,11 +51,29 @@ describe('labelModeInstallation', () => {
   })
 
   it('retourne le libellé pour MODE_3', () => {
-    expect(labelModeInstallation('MODE_3')).toBe('Migration (MODE_1 → MODE_2)')
+    expect(labelModeInstallation('MODE_3')).toBe('Réseau auto (PostgreSQL automatique)')
   })
 
   it('retourne la valeur brute pour un mode inconnu', () => {
     expect(labelModeInstallation('INCONNU')).toBe('INCONNU')
+  })
+})
+
+describe('estModePostgres', () => {
+  it('identifie MODE_2 comme PostgreSQL', () => {
+    expect(estModePostgres('MODE_2')).toBe(true)
+  })
+
+  it('identifie MODE_3 comme PostgreSQL', () => {
+    expect(estModePostgres('MODE_3')).toBe(true)
+  })
+
+  it('rejette MODE_1', () => {
+    expect(estModePostgres('MODE_1')).toBe(false)
+  })
+
+  it('rejette un mode inconnu', () => {
+    expect(estModePostgres('INCONNU')).toBe(false)
   })
 })
 

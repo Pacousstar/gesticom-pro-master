@@ -185,6 +185,9 @@ export async function POST(request: NextRequest) {
       }
 
       // ✅ COMPTABILISATION
+      // Commandes non livrées / retraits non effectués : le règlement est une avance (4191)
+      const estCommandeNonLivree = v?.typeVente === 'COMMANDE' && !v?.dateLivraison
+      const estRetraitDiffereEnCours = v?.retraitDiffere === true && !v?.dateLivraison
       await comptabiliserReglementVente({
         reglementId: reglement.id,
         venteId: venteId || 0,
@@ -194,7 +197,9 @@ export async function POST(request: NextRequest) {
         modePaiement,
         entiteId,
         utilisateurId: session.userId,
-        magasinId: body.magasinId ? Number(body.magasinId) : undefined
+        magasinId: body.magasinId ? Number(body.magasinId) : undefined,
+        banqueId: estModeBanque(modePaiement) && body.banqueId ? Number(body.banqueId) : null,
+        estAcompte: estCommandeNonLivree || estRetraitDiffereEnCours || undefined,
       }, tx)
 
       return reglement

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { estRetrait } from '@/lib/comptes-courants'
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
@@ -41,7 +42,7 @@ export async function GET(
             where: { clientId: id },
             take: 10000,
             orderBy: { date: 'asc' },
-            select: { date: true, montant: true, modePaiement: true }
+            select: { date: true, montant: true, modePaiement: true, observation: true }
         })
 
         const rows: any[] = []
@@ -60,7 +61,9 @@ export async function GET(
         // Fusionner Ventes et Règlements
         const all = [
             ...ventes.map(v => ({ date: v.date, libelle: `Vente ${v.numero}`, debit: v.montantTotal, credit: 0 })),
-            ...reglements.map(r => ({ date: r.date, libelle: `Règlement (${r.modePaiement})`, debit: 0, credit: r.montant }))
+            ...reglements.map(r => estRetrait(r.observation)
+                ? { date: r.date, libelle: `Retrait CC (${r.modePaiement})`, debit: r.montant, credit: 0 }
+                : { date: r.date, libelle: `Règlement (${r.modePaiement})`, debit: 0, credit: r.montant })
         ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
         all.forEach(op => {

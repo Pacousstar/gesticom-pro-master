@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
           clientId: client.id,
           venteId: null,
           statut: { in: ['VALIDEE', 'VALIDE'] },
+          NOT: { observation: { startsWith: 'Retrait CC' } },
         },
         include: {
           ReglementVenteLigne: { select: { montant: true } },
@@ -233,7 +234,6 @@ export async function POST(request: NextRequest) {
       }
 
       // 3. Déduire le stock + RetraitPartiel
-      let montantTotalRetrait = 0
       const lignesRetirees: any[] = []
       const lignesUpdate: { id: number; quantiteLivree: number }[] = []
 
@@ -273,7 +273,6 @@ export async function POST(request: NextRequest) {
           lignesUpdate.push({ id: ligneVente.id, quantiteLivree })
         }
 
-        montantTotalRetrait += lv.montant
         lignesRetirees.push({
           produitId: lv.produitId,
           designation: lv.designation,

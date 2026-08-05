@@ -600,6 +600,36 @@ describe('reglementCompteCourantSchema', () => {
     const r = reglementCompteCourantSchema.safeParse({ compteCourantId: 1, montant: 50000, modePaiement: 'ESPECES' })
     expect(r.success).toBe(true)
   })
+
+  it('accepte une observation optionnelle', () => {
+    const r = reglementCompteCourantSchema.safeParse({
+      compteCourantId: 1,
+      montant: 50000,
+      modePaiement: 'ESPECES',
+      observation: 'Acompte sur livraison',
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('rejette un montant nul', () => {
+    const r = reglementCompteCourantSchema.safeParse({ compteCourantId: 1, montant: 0, modePaiement: 'ESPECES' })
+    expect(r.success).toBe(false)
+  })
+
+  it('accepte un retrait négatif avec observation', () => {
+    const r = reglementCompteCourantSchema.safeParse({
+      compteCourantId: 1,
+      montant: -1000,
+      modePaiement: 'ESPECES',
+      observation: 'Petite dette contractée au départ du client',
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('rejette un retrait négatif sans observation', () => {
+    const r = reglementCompteCourantSchema.safeParse({ compteCourantId: 1, montant: -1000, modePaiement: 'ESPECES' })
+    expect(r.success).toBe(false)
+  })
 })
 
 describe('commandeFournisseurSchema', () => {

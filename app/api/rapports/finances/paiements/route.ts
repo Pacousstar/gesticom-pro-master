@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gte: deb, lte: fin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
+          NOT: { observation: { startsWith: 'Retrait CC' } },
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
         },
         _sum: { montant: true },
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gte: deb, lte: fin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
+          NOT: { observation: { startsWith: 'Retrait CC' } },
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
         },
         include: { 
@@ -73,6 +75,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gte: deb, lte: fin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
+          NOT: { observation: { startsWith: 'Retrait CC' } },
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
         },
         _sum: { montant: true },
@@ -83,6 +86,7 @@ export async function GET(request: NextRequest) {
         where: {
           date: { gte: deb, lte: fin },
           statut: { in: ['VALIDE', 'VALIDEE'] },
+          NOT: { observation: { startsWith: 'Retrait CC' } },
           ...(entiteId && session.role !== 'SUPER_ADMIN' ? { entiteId } : {}),
         },
         include: { 

@@ -113,3 +113,38 @@ export async function recalculerSoldeBanque(banqueId: number, tx: any) {
     data: { soldeActuel: solde },
   })
 }
+
+/**
+ * Calcule le solde d'un compte bancaire à partir du solde initial et des opérations réelles,
+ * SANS modifier la base. Résout aussi la banque par défaut de l'entité si id non fourni.
+ */
+export async function calculerSoldeBanque(banqueId: number | null | undefined, entiteId: number, tx?: any): Promise<number> {
+  const prismaClient = tx || (await import(/*turbopackIgnore: true*/ './db')).prisma
+  let bId = banqueId
+  if (!bId) {
+    const defaultBanque = await prismaClient.banque.findFirst({
+      where: { entiteId, actif: true },
+      orderBy: { id: 'asc' }
+    })
+    if (!defaultBanque) throw new Error('Aucun compte bancaire configuré pour cette entité.')
+    bId = defaultBanque.id
+  }
+
+  const banque = await prismaClient.banque.findUnique({ where: { id: bId } })
+  if (!banque) throw new Error('Banque introuvable.')
+
+  const operations = await prismaClient.operationBancaire.findMany({
+    where: { banqueId: bId },
+    select: { type: true, montant: true },
+  })
+
+  let solde = banque.soldeInitial || 0
+  for (const op of operations) {
+    if (estTypeOperationBanqueEntree(op.type)) {
+      solde += op.montant
+    } else {
+      solde -= op.montant
+    }
+  }
+  return solde
+}

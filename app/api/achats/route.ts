@@ -440,12 +440,11 @@ let montantFactureHT = 0
 
       // 3. Règlement(s) automatique(s) - MULTI-PAIEMENT
       let resteReglement = montantTotal
-      const reglementsEffectifs: { mode: string; montant: number; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean }[] = []
+      const reglementsEffectifs: { mode: string; montant: number; reglementId?: number | null; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean; banqueId?: number | null }[] = []
       for (const reg of listReglements) {
         const montantReg = Math.min(reg.montant, resteReglement)
         if (montantReg <= 0) continue
         resteReglement -= montantReg
-        reglementsEffectifs.push({ mode: reg.mode, montant: montantReg, payeDepuisCaisse: reg.payeDepuisCaisse, payeDepuisBanque: reg.payeDepuisBanque })
 
         const reglAchat = await tx.reglementAchat.create({
           data: {
@@ -458,6 +457,15 @@ let montantFactureHT = 0
             observation: `Règlement ${reg.mode} - Achat ${num}`,
             date: dateAchat,
           }
+        })
+
+        reglementsEffectifs.push({
+          mode: reg.mode,
+          montant: montantReg,
+          reglementId: reglAchat.id,
+          payeDepuisCaisse: reg.payeDepuisCaisse,
+          payeDepuisBanque: reg.payeDepuisBanque,
+          banqueId: reg.banqueId || (body?.banqueId ? Number(body.banqueId) : null),
         })
 
         await tx.reglementAchatLigne.create({
@@ -491,7 +499,7 @@ let montantFactureHT = 0
             libelle: `Règlement Achat ${num}`,
             montant: montantReg,
             utilisateurId: session.userId,
-            reference: num,
+            reference: `REG-A-${reglAchat.id}`,
             beneficiaire: a?.fournisseur?.nom || fournisseurLibre || null,
             observation: `Paiement via ${reg.mode}`
           }, tx)
@@ -518,7 +526,11 @@ let montantFactureHT = 0
     }, { timeout: 20000 })
 
     // Invalider le cache pour affichage immédiat
-                return NextResponse.json(achat)
+    const resteAPayerAchat = Math.max(0, montantTotal - montantPaye)
+    const avertissementPartiel = resteAPayerAchat > 0
+      ? `Achat enregistré en paiement partiel : reste ${resteAPayerAchat.toLocaleString('fr-FR')} F à payer au fournisseur.`
+      : null
+    return NextResponse.json({ ...achat, avertissement: avertissementPartiel })
   } catch (e: any) {
     await apiCatch(e, 'api/achats')
     if (e.message?.includes('DOUBLE_TRANSACTION')) {

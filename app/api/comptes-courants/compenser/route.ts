@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { totalEncaissementsClient, totalReglementsAchat } from '@/lib/comptes-courants'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { validateApiRequest } from '@/lib/validation-helpers'
@@ -35,18 +36,16 @@ export async function POST(request: NextRequest) {
       where: { fournisseurId: cc.fournisseurId!, statut: { not: 'ANNULEE' } },
       _sum: { montantTotal: true },
     }).then(r => r._sum.montantTotal || 0).catch(() => 0),
-    prisma.reglementAchat.aggregate({
-      where: { fournisseurId: cc.fournisseurId!, statut: 'VALIDE', modePaiement: { not: 'CREDIT' } },
-      _sum: { montant: true },
-    }).then(r => r._sum.montant || 0).catch(() => 0),
+    cc.fournisseurId
+      ? totalReglementsAchat(cc.fournisseurId).catch(() => 0)
+      : Promise.resolve(0),
     prisma.vente.aggregate({
       where: { clientId: cc.clientId!, statut: { not: 'ANNULEE' } },
       _sum: { montantTotal: true },
     }).then(r => r._sum.montantTotal || 0).catch(() => 0),
-    prisma.reglementVente.aggregate({
-      where: { clientId: cc.clientId!, statut: 'VALIDE', modePaiement: { not: 'CREDIT' } },
-      _sum: { montant: true },
-    }).then(r => r._sum.montant || 0).catch(() => 0),
+    cc.clientId
+      ? totalEncaissementsClient(cc.clientId).catch(() => 0)
+      : Promise.resolve(0),
   ])
 
   const detteNette = totalAchats - totalPaiements

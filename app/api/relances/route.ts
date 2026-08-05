@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { estRetrait } from '@/lib/comptes-courants'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
       },
       reglements: {
         where: { venteId: null, statut: 'VALIDE' },
-        select: { montant: true },
+        select: { montant: true, observation: true },
       },
       relances: {
         orderBy: { date: 'desc' },
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   const qualifies = clients.map(c => {
     const detteFactures = c.ventes.reduce((s, v) => s + (v.montantTotal - (v.montantPaye || 0)), 0)
-    const totalRegsLibres = c.reglements.reduce((s, r) => s + r.montant, 0)
+    const totalRegsLibres = c.reglements.reduce((s, r) => s + (estRetrait(r.observation) ? -r.montant : r.montant), 0)
     const solde = (detteFactures + (c.soldeInitial || 0)) - (totalRegsLibres + (c.avoirInitial || 0))
 
     if (solde <= 0) return null

@@ -51,10 +51,9 @@ export async function enregistrerMouvementCaisse({
 }
 
 /**
- * Recalcule le soldeCaisse du magasin à partir des mouvements réels.
- * À appeler après chaque mouvement de caisse pour maintenir la cohérence.
+ * Calcule le solde de caisse d'un magasin à partir des mouvements réels, SANS modifier la base.
  */
-export async function recalculerSoldeCaisse(magasinId: number, tx?: any) {
+export async function calculerSoldeCaisse(magasinId: number, tx?: any): Promise<number> {
   const prismaClient = tx || prisma
   const entrees = (await prismaClient.caisse.aggregate({
     where: { magasinId, type: 'ENTREE' },
@@ -64,7 +63,16 @@ export async function recalculerSoldeCaisse(magasinId: number, tx?: any) {
     where: { magasinId, type: 'SORTIE' },
     _sum: { montant: true },
   }))._sum.montant || 0
-  const solde = entrees - sorties
+  return entrees - sorties
+}
+
+/**
+ * Recalcule le soldeCaisse du magasin à partir des mouvements réels.
+ * À appeler après chaque mouvement de caisse pour maintenir la cohérence.
+ */
+export async function recalculerSoldeCaisse(magasinId: number, tx?: any) {
+  const prismaClient = tx || prisma
+  const solde = await calculerSoldeCaisse(magasinId, tx)
   await prismaClient.magasin.update({
     where: { id: magasinId },
     data: { soldeCaisse: solde },

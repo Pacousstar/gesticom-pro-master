@@ -36,8 +36,9 @@ export default function CompteCourantDetailPage() {
   const [loading, setLoading] = useState(true)
   const [showReglement, setShowReglement] = useState(false)
   const [regMontant, setRegMontant] = useState('')
+  const [regObservation, setRegObservation] = useState('')
   const [regMode, setRegMode] = useState('ESPECES')
-  const [regCaisse, setRegCaisse] = useState(false)
+  const [regCaisse, setRegCaisse] = useState(true)
   const [regBanque, setRegBanque] = useState(false)
   const [regMagasinId, setRegMagasinId] = useState('')
   const [regBanqueId, setRegBanqueId] = useState('')
@@ -90,7 +91,16 @@ export default function CompteCourantDetailPage() {
   const handleReglement = async (e: React.FormEvent) => {
     e.preventDefault()
     const montant = Number(regMontant)
-    if (!montant || montant <= 0) return
+    if (!montant) return
+    if (montant < 0 && !regObservation.trim()) {
+      alert('Une observation est obligatoire pour un retrait (montant négatif).')
+      return
+    }
+    if (montant < 0) {
+      const tier = data?.client?.nom || data?.fournisseur?.nom || 'ce compte'
+      const ok = window.confirm(`Retirer ${fmt(Math.abs(montant))} du compte de ${tier} ?`)
+      if (!ok) return
+    }
     setSavingReg(true)
     try {
       const body: any = {
@@ -101,6 +111,7 @@ export default function CompteCourantDetailPage() {
         fournisseurId: data?.fournisseur?.id,
         payeDepuisCaisse: regCaisse,
         payeDepuisBanque: regBanque,
+        observation: regObservation.trim() || undefined,
       }
       if (regCaisse) body.magasinId = Number(regMagasinId)
       if (regBanque) body.banqueId = Number(regBanqueId)
@@ -112,7 +123,8 @@ export default function CompteCourantDetailPage() {
       if (res.ok) {
         setShowReglement(false)
         setRegMontant('')
-        setRegCaisse(false)
+        setRegObservation('')
+        setRegCaisse(true)
         setRegBanque(false)
         setRegMagasinId('')
         setRegBanqueId('')
@@ -434,10 +446,23 @@ export default function CompteCourantDetailPage() {
               <h3 className="text-lg font-bold text-gray-900 mb-4">Nouveau Règlement</h3>
               <form onSubmit={handleReglement} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Montant</label>
-                  <input type="number" value={regMontant} onChange={e => setRegMontant(e.target.value)} required
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700">Montant</label>
+                    {regMontant && Number(regMontant) < 0 && (
+                      <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-[11px] font-bold text-rose-700">Retrait (−)</span>
+                    )}
+                  </div>
+                  <input type="number" step="any" value={regMontant} onChange={e => setRegMontant(e.target.value)} required
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none"
-                    placeholder="0" min="1" />
+                    placeholder="Saisir 1000 ou -1000 pour un retrait" />
+                  <p className="text-[11px] text-gray-400 mt-1">Ajoutez un signe « − » pour retrancher du compte (retrait). L&apos;observation est obligatoire dans ce cas.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Observation</label>
+                  <textarea value={regObservation} onChange={e => setRegObservation(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none"
+                    rows={2}
+                    placeholder={Number(regMontant) < 0 ? 'Ex : petite dette contractée au départ du client' : 'Optionnel'} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Mode de paiement</label>
@@ -550,15 +575,15 @@ export default function CompteCourantDetailPage() {
                         <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded font-medium ${
                           t.type === 'ACHAT' ? 'bg-orange-100 text-orange-800'
                           : t.type === 'VENTE' ? 'bg-blue-100 text-blue-800'
-                          : t.type === 'PAIEMENT_FOURNISSEUR' ? 'bg-purple-100 text-purple-800'
-                          : t.type === 'ENCAISSEMENT_CLIENT' ? 'bg-emerald-100 text-emerald-800'
+                          : t.type === 'PAIEMENT_FOURNISSEUR' ? (t.montantSigne < 0 ? 'bg-rose-100 text-rose-700' : 'bg-purple-100 text-purple-800')
+                          : t.type === 'ENCAISSEMENT_CLIENT' ? (t.montantSigne > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800')
                           : t.type === 'COMPENSATION' ? 'bg-cyan-100 text-cyan-800'
                           : 'bg-gray-100 text-gray-700'
                         }`}>
                           {t.type === 'ACHAT' ? 'Achat'
                           : t.type === 'VENTE' ? 'Vente'
-                          : t.type === 'PAIEMENT_FOURNISSEUR' ? 'Paiement'
-                          : t.type === 'ENCAISSEMENT_CLIENT' ? 'Encaissement'
+                          : t.type === 'PAIEMENT_FOURNISSEUR' ? (t.montantSigne < 0 ? 'Retrait' : 'Paiement')
+                          : t.type === 'ENCAISSEMENT_CLIENT' ? (t.montantSigne > 0 ? 'Retrait' : 'Encaissement')
                           : t.type === 'COMPENSATION' ? 'Compensation'
                           : t.type}
                         </span>
@@ -574,14 +599,15 @@ export default function CompteCourantDetailPage() {
                         <span className="text-[10px] ml-1 opacity-70">{t.runningBalance >= 0 ? 'D' : 'C'}</span>
                       </td>
                       <td className="py-3 px-4 text-center align-top">
-                        {t.referenceType === 'REGLEMENT_VENTE' || t.referenceType === 'REGLEMENT_ACHAT' ? (
+                        {(t.referenceType === 'REGLEMENT_VENTE' || t.referenceType === 'REGLEMENT_ACHAT') && t.montantSigne !== 0 && (
+                          ((t.type === 'ENCAISSEMENT_CLIENT' && t.montantSigne < 0) || (t.type === 'PAIEMENT_FOURNISSEUR' && t.montantSigne > 0)) ? (
                           <button onClick={() => handleLettrage(t.id)}
                             className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors shadow-sm">
                             Lettrer
                           </button>
                         ) : (
                           <span className="text-[10px] text-gray-300">—</span>
-                        )}
+                        ))}
                       </td>
                     </tr>
                   )

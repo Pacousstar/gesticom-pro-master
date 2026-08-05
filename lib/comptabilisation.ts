@@ -57,9 +57,6 @@ export const COMPTES_DEFAUT = {
   BILAN_CLOTURE: '891',   // Bilan de clôture
 }
 
-// Alias pour compatibilité
-const VENTES_MARCHANDISES = COMPTES_DEFAUT.VENTES_MARCHANDISES
-
 /**
  * Récupère ou crée un compte par son numéro
  */
@@ -153,7 +150,7 @@ export async function comptabiliserVente(data: {
   utilisateurId: number
   magasinId: number
   fraisApproche?: number
-  reglements?: { mode: string; montant: number }[]
+  reglements?: { mode: string; montant: number; reglementId?: number | null; banqueId?: number | null }[]
   lignes?: { produitId: number; designation: string; quantite: number; prixUnitaire: number; coutUnitaire: number; tva?: number; remise?: number }[]
 }, tx?: TxClient) {
   const p = tx || prisma
@@ -164,9 +161,12 @@ export async function comptabiliserVente(data: {
   }
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
-  // Supprime toutes les écritures liées à cette vente pour éviter les doublons lors des mises à jour
-  // VENTE_REGLEMENT avec referenceId=venteId (créés sans reglementId) sont nettoyés ici
-  // Les VENTE_REGLEMENT avec referenceId=reglementId sont nettoyés par comptabiliserReglementVente
+  // Les écritures VENTE_REGLEMENT portent referenceId=reglementId (lorsqu'il est fourni) :
+  // on supprime donc aussi les écritures de TOUS les règlements de la vente
+  const reglementsVente = await p.reglementVente.findMany({
+    where: { venteId: data.venteId },
+    select: { id: true }
+  })
   await p.ecritureComptable.deleteMany({
     where: {
       OR: [
@@ -174,6 +174,10 @@ export async function comptabiliserVente(data: {
         { referenceType: 'VENTE_STOCK', referenceId: data.venteId },
         { referenceType: 'VENTE_FRAIS', referenceId: data.venteId },
         { referenceType: 'VENTE_REGLEMENT', referenceId: data.venteId },
+        ...(reglementsVente.length > 0 ? [{
+          referenceType: 'VENTE_REGLEMENT',
+          referenceId: { in: reglementsVente.map((r) => r.id) }
+        }] : [])
       ]
     }
   })
@@ -361,6 +365,7 @@ export async function comptabiliserVente(data: {
     for (const reg of data.reglements) {
       if (reg.montant <= 0) continue
       await comptabiliserReglementVente({
+        reglementId: reg.reglementId ?? null,
         venteId: data.venteId,
         numeroVente: data.numeroVente,
         date: data.date,
@@ -368,7 +373,8 @@ export async function comptabiliserVente(data: {
         modePaiement: reg.mode,
         utilisateurId: data.utilisateurId,
         entiteId: data.entiteId,
-        magasinId: data.magasinId
+        magasinId: data.magasinId,
+        banqueId: reg.banqueId ?? null
       }, tx)
     }
   }
@@ -388,6 +394,9 @@ export async function comptabiliserReglementVente(data: {
   entiteId?: number
   magasinId?: number | null
   estAcompte?: boolean
+  forcerCompteClient?: boolean
+  banqueId?: number | null
+  estRetrait?: boolean
 }, tx?: TxClient) {
   const p = tx || prisma
 
@@ -400,7 +409,8 @@ export async function comptabiliserReglementVente(data: {
 
   const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
   // Si venteId est null/0 ou estAcompte=true => acompte client (avance) : on crédite 4191 (passif) au lieu de 411.
-  const isAcompteClient = data.estAcompte || !data.venteId || data.venteId <= 0
+  // forcerCompteClient=true => crédite 411 même sans vente liée (règlement libre de compte courant client).
+  const isAcompteClient = (data.estAcompte || !data.venteId || data.venteId <= 0) && !data.forcerCompteClient
   const compteTiers = isAcompteClient
     ? await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS_AVANCES, 'Clients - Avances et acomptes reçus', '4', 'PASSIF', tx)
     : await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS, 'Clients', '4', 'ACTIF', tx)
@@ -413,6 +423,16 @@ export async function comptabiliserReglementVente(data: {
   
   if (isCash) {
     compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+  } else if (data.banqueId) {
+    // Mobile Money, Chèque, Virement : rechercher le compte spécifique de la banque si fourni
+    const banque = await p.banque.findUnique({ where: { id: data.banqueId }, include: { compte: true } })
+    if (banque?.compteId && banque.compte) {
+      compteTresorerie = { id: banque.compte.id }
+    } else if (banque?.compteId) {
+      compteTresorerie = { id: banque.compteId }
+    } else {
+      compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    }
   } else {
     // Mobile Money, Chèque, Virement vont en 521 (Banque/MM)
     const banque = await p.banque.findFirst({
@@ -438,15 +458,21 @@ export async function comptabiliserReglementVente(data: {
     ? `REG-VEN-${data.reglementId}` 
     : `REG-VEN-V${data.venteId}-M${data.montant}-${data.date.getTime()}`
 
+  const libelleReglementVente = isAcompteClient
+    ? `Acompte Client ${data.numeroVente}`
+    : data.estRetrait
+      ? `Retrait CC Client ${data.numeroVente}`
+      : `Règlement Vente ${data.numeroVente}`
+
   await createEcriture({
     date: data.date,
     journalId: journal.id,
     entiteId,
     piece: data.numeroVente,
-    libelle: isAcompteClient ? `Acompte Client ${data.numeroVente}` : `Règlement Vente ${data.numeroVente}`,
-    compteId: compteTresorerie.id,
-    debit: data.montant,
-    credit: 0,
+    libelle: libelleReglementVente,
+    compteId: compteTiers.id,
+    debit: data.estRetrait ? data.montant : 0,
+    credit: data.estRetrait ? 0 : data.montant,
     reference: uniqueRef,
     referenceType: 'VENTE_REGLEMENT',
     referenceId: referenceId,
@@ -458,10 +484,10 @@ export async function comptabiliserReglementVente(data: {
     journalId: journal.id,
     entiteId,
     piece: data.numeroVente,
-    libelle: isAcompteClient ? `Acompte Client ${data.numeroVente}` : `Règlement Vente ${data.numeroVente}`,
-    compteId: compteTiers.id,
-    debit: 0,
-    credit: data.montant,
+    libelle: libelleReglementVente,
+    compteId: compteTresorerie.id,
+    debit: data.estRetrait ? 0 : data.montant,
+    credit: data.estRetrait ? data.montant : 0,
     reference: uniqueRef,
     referenceType: 'VENTE_REGLEMENT',
     referenceId: referenceId,
@@ -687,18 +713,28 @@ export async function comptabiliserAchat(data: {
   entiteId?: number
   utilisateurId: number
   magasinId: number
-  reglements?: { mode: string; montant: number; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean }[]
+  reglements?: { mode: string; montant: number; reglementId?: number | null; payeDepuisCaisse?: boolean; payeDepuisBanque?: boolean; banqueId?: number | null }[]
   lignes?: { produitId: number; designation: string; quantite: number; prixUnitaire: number; tva?: number; remise?: number }[]
 }, tx?: TxClient) {
   const p = tx || prisma
 
   // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  // Les écritures ACHAT_REGLEMENT portent referenceId=reglementId (lorsqu'il est fourni) :
+  // on supprime donc aussi les écritures de TOUS les règlements de l'achat
+  const reglementsAchat = await p.reglementAchat.findMany({
+    where: { achatId: data.achatId },
+    select: { id: true }
+  })
   await p.ecritureComptable.deleteMany({
     where: {
       OR: [
         { referenceType: 'ACHAT', referenceId: data.achatId },
         { referenceType: 'ACHAT_STOCK', referenceId: data.achatId },
-        { referenceType: 'ACHAT_REGLEMENT', referenceId: data.achatId }
+        { referenceType: 'ACHAT_REGLEMENT', referenceId: data.achatId },
+        ...(reglementsAchat.length > 0 ? [{
+          referenceType: 'ACHAT_REGLEMENT',
+          referenceId: { in: reglementsAchat.map((r) => r.id) }
+        }] : [])
       ]
     }
   })
@@ -714,7 +750,10 @@ export async function comptabiliserAchat(data: {
   if (!entiteId) throw new Error('[Comptabilisation] entiteId requis')
   
   // Calcul TVA et HT (GestiCom travaille en prix unitaires HT)
-  let montantTTC = data.montantTotal
+  // Les frais d'approche sont exclus du calcul de la TVA : ils ne sont pas
+  // facturés par le fournisseur mais viennent majorer la valeur du stock
+  const frais = data.fraisApproche || 0
+  const montantTTC = data.montantTotal
   let montantHT = 0
   let montantTVA = 0
   
@@ -726,11 +765,11 @@ export async function comptabiliserAchat(data: {
         remise: l.remise ?? 0,
       }))
     )
-    montantTVA = montantTvaDepuisTtcEtHtNet(montantTTC, montantHT)
+    montantTVA = montantTvaDepuisTtcEtHtNet(Math.max(0, montantTTC - frais), montantHT)
   } else {
     const param = await p.parametre.findFirst({ orderBy: { id: 'asc' } })
-    montantHT = htNetDepuisTtcEtTauxGlobal(montantTTC, param?.tvaParDefaut || 0)
-    montantTVA = montantTvaDepuisTtcEtHtNet(montantTTC, montantHT)
+    montantHT = htNetDepuisTtcEtTauxGlobal(Math.max(0, montantTTC - frais), param?.tvaParDefaut || 0)
+    montantTVA = montantTvaDepuisTtcEtHtNet(Math.max(0, montantTTC - frais), montantHT)
   }
 
   // 1. Écriture de DÉBIT (Achats HT)
@@ -786,7 +825,6 @@ export async function comptabiliserAchat(data: {
   // 4. ENTRÉE EN STOCK (Classe 3)
   // VALORISATION = HT + Frais d'approche (pour être cohérent avec le PAMP)
   const journalOD = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
-  const frais = data.fraisApproche || 0
   const valorisationStock = montantHT + frais
   
   await createEcriture({
@@ -826,6 +864,7 @@ export async function comptabiliserAchat(data: {
       const payeCaisse = reg.payeDepuisCaisse ?? false   // défaut = paiement direct (compte 455)
       const payeBanque = reg.payeDepuisBanque ?? false    // défaut = paiement direct (compte 455)
       await comptabiliserReglementAchat({
+        reglementId: reg.reglementId ?? null,
         achatId: data.achatId,
         numeroAchat: data.numeroAchat,
         date: data.date,
@@ -834,6 +873,7 @@ export async function comptabiliserAchat(data: {
         utilisateurId: data.utilisateurId,
         entiteId: data.entiteId,
         magasinId: data.magasinId,
+        banqueId: reg.banqueId ?? null,
         paiementDirect: !payeCaisse && !payeBanque,
       }, tx)
     }
@@ -855,6 +895,7 @@ export async function comptabiliserReglementAchat(data: {
   magasinId?: number | null
   banqueId?: number | null
   paiementDirect?: boolean
+  estRetrait?: boolean
 }, tx?: TxClient) {
   const p = tx || prisma
 
@@ -913,15 +954,19 @@ export async function comptabiliserReglementAchat(data: {
   // ou Crédit 455 (Compte courant associé) en paiement direct
   const referenceId = data.reglementId || data.achatId || 0
 
+  const libelleReglementAchat = data.estRetrait
+    ? `Retrait CC Fournisseur ${data.numeroAchat}`
+    : `Règlement Achat ${data.numeroAchat}`
+
   await createEcriture({
     date: data.date,
     journalId: journal.id,
     entiteId,
     piece: data.numeroAchat,
-    libelle: `Règlement Achat ${data.numeroAchat}`,
+    libelle: libelleReglementAchat,
     compteId: compteFournisseur.id,
-    debit: data.montant,
-    credit: 0,
+    debit: data.estRetrait ? 0 : data.montant,
+    credit: data.estRetrait ? data.montant : 0,
     reference: `REG-ACH-${referenceId}`,
     referenceType: 'ACHAT_REGLEMENT',
     referenceId: referenceId,
@@ -933,10 +978,10 @@ export async function comptabiliserReglementAchat(data: {
     journalId: journal.id,
     entiteId,
     piece: data.numeroAchat,
-    libelle: `Règlement Achat ${data.numeroAchat}`,
+    libelle: libelleReglementAchat,
     compteId: compteTresorerie.id,
-    debit: 0,
-    credit: data.montant,
+    debit: data.estRetrait ? data.montant : 0,
+    credit: data.estRetrait ? 0 : data.montant,
     reference: `REG-ACH-${referenceId}`,
     referenceType: 'ACHAT_REGLEMENT',
     referenceId: referenceId,
@@ -945,6 +990,90 @@ export async function comptabiliserReglementAchat(data: {
 
   // NOTE: Les mouvements physiques de Caisse/Banque ne sont JAMAIS gérés ici (Lib).
   // C'est à l'API métier de décider si le paiement doit impacter la trésorerie physique.
+}
+
+/**
+ * Comptabilise un remboursement de compte courant associé (sortie de trésorerie)
+ * D 455 (réduit la dette envers l'associé) / C 531|521 (trésorerie sortie)
+ */
+export async function comptabiliserRemboursementAssocie(data: {
+  referenceId: number
+  numero: string
+  date: Date
+  montant: number
+  modePaiement: string
+  magasinId?: number | null
+  banqueId?: number | null
+  utilisateurId: number
+  entiteId: number
+}, tx?: TxClient) {
+  const p = tx || prisma
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'REMB_ASSOCIE', referenceId: data.referenceId }
+  })
+
+  const journal = await getOrCreateJournal('CA', 'Journal de Caisse', 'CAISSE', tx)
+  const compteAssocie = await getOrCreateCompte(
+    COMPTES_DEFAUT.ASSOCIE_COURANT,
+    'Associés - Comptes courants',
+    '4',
+    'PASSIF',
+    tx
+  )
+  const entiteId = data.entiteId
+
+  // Déterminer le compte de trésorerie dynamiquement
+  let compteTresorerie: { id: number }
+  const isCash = estModeEspeces(data.modePaiement)
+
+  if (isCash) {
+    compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+  } else if (data.banqueId) {
+    const banque = await p.banque.findUnique({ where: { id: data.banqueId }, include: { compte: true } })
+    if (banque?.compteId && banque.compte) {
+      compteTresorerie = { id: banque.compte.id }
+    } else if (banque?.compteId) {
+      compteTresorerie = { id: banque.compteId }
+    } else {
+      compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+    }
+  } else {
+    compteTresorerie = await getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+  }
+
+  const libelle = `Remboursement compte courant associé ${data.numero}`
+
+  await createEcriture({
+    date: data.date,
+    journalId: journal.id,
+    entiteId,
+    piece: data.numero,
+    libelle,
+    compteId: compteAssocie.id,
+    debit: data.montant,
+    credit: 0,
+    reference: `REM-${data.numero}`,
+    referenceType: 'REMB_ASSOCIE',
+    referenceId: data.referenceId,
+    utilisateurId: data.utilisateurId,
+  }, tx)
+
+  await createEcriture({
+    date: data.date,
+    journalId: journal.id,
+    entiteId,
+    piece: data.numero,
+    libelle,
+    compteId: compteTresorerie.id,
+    debit: 0,
+    credit: data.montant,
+    reference: `REM-${data.numero}`,
+    referenceType: 'REMB_ASSOCIE',
+    referenceId: data.referenceId,
+    utilisateurId: data.utilisateurId,
+  }, tx)
 }
 
 /**
@@ -1490,12 +1619,12 @@ export async function comptabiliserOperationBancaire(data: {
     // Entrée bancaire : Débit Banque, Crédit selon le type
     let compteCredit
     if (data.type === 'DEPOT') {
-      // Dépôt : généralement depuis Caisse ou Produits divers
+      // Dépôt : transfert d'espèces depuis la caisse vers la banque → crédit 531 (Caisse)
       compteCredit = await getOrCreateCompte(
-        COMPTES_DEFAUT.PRODUITS_DIVERS,
-        'Produits divers',
-        '7',
-        'PRODUITS',
+        COMPTES_DEFAUT.CAISSE,
+        'Caisse',
+        '5',
+        'ACTIF',
         tx
       )
     } else if (data.type === 'VIREMENT_ENTRANT') {
@@ -1630,6 +1759,101 @@ export async function comptabiliserOperationBancaire(data: {
       reference: `BANQUE-${data.operationId}`,
       referenceType: 'BANQUE',
       referenceId: data.operationId,
+      utilisateurId: data.utilisateurId,
+    }, tx)
+  }
+}
+
+/**
+ * Comptabilise un virement interne entre trésoreries (Banque↔Banque, Banque↔Caisse, Caisse↔Caisse)
+ * D compteDest (montant) / C compteSource (montant + frais) ; frais éventuels : D 658 / C compteSource
+ */
+export async function comptabiliserVirement(data: {
+  referenceId: number
+  date: Date
+  montant: number
+  frais?: number
+  libelle: string
+  sourceType: 'BANQUE' | 'CAISSE'
+  sourceId: number
+  destType: 'BANQUE' | 'CAISSE'
+  destId: number
+  utilisateurId: number
+  entiteId: number
+}, tx?: TxClient) {
+  const p = tx || prisma
+  const frais = Math.max(0, Number(data.frais) || 0)
+
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE)
+  await p.ecritureComptable.deleteMany({
+    where: { referenceType: 'VIREMENT', referenceId: data.referenceId }
+  })
+
+  const journal = await getOrCreateJournal('BA', 'Journal de Banque', 'BANQUE', tx)
+  const entiteId = data.entiteId
+
+  // Résoudre le compte de trésorerie de chaque côté
+  const compteSource = data.sourceType === 'BANQUE'
+    ? await (async () => {
+        const banque = await p.banque.findUnique({ where: { id: data.sourceId }, include: { compte: true } })
+        if (banque?.compteId && banque.compte) return { id: banque.compte.id }
+        if (banque?.compteId) return { id: banque.compteId }
+        return getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+      })()
+    : await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+  const compteDest = data.destType === 'BANQUE'
+    ? await (async () => {
+        const banque = await p.banque.findUnique({ where: { id: data.destId }, include: { compte: true } })
+        if (banque?.compteId && banque.compte) return { id: banque.compte.id }
+        if (banque?.compteId) return { id: banque.compteId }
+        return getOrCreateCompte(COMPTES_DEFAUT.BANQUE, 'Banque/MM', '5', 'ACTIF', tx)
+      })()
+    : await getOrCreateCompte(COMPTES_DEFAUT.CAISSE, 'Caisse', '5', 'ACTIF', tx)
+
+  await createEcriture({
+    date: data.date,
+    journalId: journal.id,
+    entiteId,
+    piece: null,
+    libelle: data.libelle,
+    compteId: compteDest.id,
+    debit: data.montant,
+    credit: 0,
+    reference: `VIR-${data.referenceId}`,
+    referenceType: 'VIREMENT',
+    referenceId: data.referenceId,
+    utilisateurId: data.utilisateurId,
+  }, tx)
+
+  await createEcriture({
+    date: data.date,
+    journalId: journal.id,
+    entiteId,
+    piece: null,
+    libelle: data.libelle,
+    compteId: compteSource.id,
+    debit: 0,
+    credit: data.montant + frais,
+    reference: `VIR-${data.referenceId}`,
+    referenceType: 'VIREMENT',
+    referenceId: data.referenceId,
+    utilisateurId: data.utilisateurId,
+  }, tx)
+
+  if (frais > 0) {
+    const compteFrais = await getOrCreateCompte(COMPTES_DEFAUT.AUTRES_CHARGES, 'Autres charges', '6', 'CHARGES', tx)
+    await createEcriture({
+      date: data.date,
+      journalId: journal.id,
+      entiteId,
+      piece: null,
+      libelle: `Frais bancaires: ${data.libelle}`,
+      compteId: compteFrais.id,
+      debit: frais,
+      credit: 0,
+      reference: `VIR-${data.referenceId}`,
+      referenceType: 'VIREMENT',
+      referenceId: data.referenceId,
       utilisateurId: data.utilisateurId,
     }, tx)
   }
@@ -1813,11 +2037,13 @@ export async function comptabiliserOuvertureClient(data: {
 }, tx?: TxClient) {
   const p = tx || prisma
 
-  if (data.soldeInitial <= 0 && data.avoirInitial <= 0) return
-
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE) : on supprime TOUJOURS les anciennes écritures,
+  // même si les soldes sont ramenés à 0 (évite les écritures orphelines)
   await p.ecritureComptable.deleteMany({
     where: { referenceType: 'OUVERTURE_CLIENT', referenceId: data.clientId }
   })
+
+  if (data.soldeInitial <= 0 && data.avoirInitial <= 0) return
 
   const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const compteClient = await getOrCreateCompte(COMPTES_DEFAUT.CLIENTS, 'Clients', '4', 'ACTIF', tx)
@@ -1900,11 +2126,13 @@ export async function comptabiliserOuvertureFournisseur(data: {
 }, tx?: TxClient) {
   const p = tx || prisma
 
-  if (data.soldeInitial <= 0 && data.avoirInitial <= 0) return
-
+  // NETTOYAGE PRÉALABLE (IDEMPOTENCE STRICTE) : on supprime TOUJOURS les anciennes écritures,
+  // même si les soldes sont ramenés à 0 (évite les écritures orphelines)
   await p.ecritureComptable.deleteMany({
     where: { referenceType: 'OUVERTURE_FOURNISSEUR', referenceId: data.fournisseurId }
   })
+
+  if (data.soldeInitial <= 0 && data.avoirInitial <= 0) return
 
   const journal = await getOrCreateJournal('OD', 'Journal des Opérations Diverses', 'OD', tx)
   const compteFournisseur = await getOrCreateCompte(COMPTES_DEFAUT.FOURNISSEURS, 'Fournisseurs', '4', 'PASSIF', tx)

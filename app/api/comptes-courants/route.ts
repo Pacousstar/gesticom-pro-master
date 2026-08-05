@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { totalEncaissementsClient, totalReglementsAchat } from '@/lib/comptes-courants'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { compteCourantSchema } from '@/lib/validations'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -117,11 +118,7 @@ async function calculerSolde(clientId: number | null, fournisseurId: number | nu
     })
     totalAchats = achats._sum.montantTotal || 0
 
-    const paiements = await prisma.reglementAchat.aggregate({
-      where: { fournisseurId, statut: 'VALIDE', modePaiement: { not: 'CREDIT' } },
-      _sum: { montant: true },
-    })
-    totalPaiements = paiements._sum.montant || 0
+    totalPaiements = await totalReglementsAchat(fournisseurId)
 
     const fournisseur = await prisma.fournisseur.findUnique({
       where: { id: fournisseurId },
@@ -137,11 +134,7 @@ async function calculerSolde(clientId: number | null, fournisseurId: number | nu
     })
     totalVentes = ventes._sum.montantTotal || 0
 
-    const encaissements = await prisma.reglementVente.aggregate({
-      where: { clientId, statut: 'VALIDE', modePaiement: { not: 'CREDIT' } },
-      _sum: { montant: true },
-    })
-    totalEncaissements = encaissements._sum.montant || 0
+    totalEncaissements = await totalEncaissementsClient(clientId)
 
     const retoursAgg = await prisma.retour.aggregate({
       where: { clientId, vente: { statut: { not: 'ANNULEE' } } },

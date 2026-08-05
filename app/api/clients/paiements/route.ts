@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { estRetrait } from '@/lib/comptes-courants'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
       clientNom: p.client?.nom,
       modePaiement: p.modePaiement,
       venteNumero: p.vente?.numero || 'Règlement Compte',
-      montant: p.montant,
+      montant: estRetrait(p.observation) ? -p.montant : p.montant,
       observation: p.observation
     }))
 

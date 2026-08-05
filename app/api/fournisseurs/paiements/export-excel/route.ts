@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { estRetrait } from '@/lib/comptes-courants'
 import { getSession } from '@/lib/auth'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
@@ -48,13 +49,14 @@ export async function GET(request: NextRequest) {
     let totalMontant = 0
 
     for (const p of paiements) {
-      totalMontant += p.montant
+      const montant = estRetrait(p.observation) ? -p.montant : p.montant
+      totalMontant += montant
       rows.push({
         Date: p.date.toISOString().slice(0, 10),
         Fournisseur: p.fournisseur?.nom || '—',
         Mode: p.modePaiement,
         Référence: p.achat?.numero || p.observation || 'Règlement Compte',
-        Montant: p.montant
+        Montant: montant
       })
     }
 

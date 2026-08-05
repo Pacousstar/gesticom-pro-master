@@ -121,7 +121,14 @@ export async function POST(
       }
 
       const opsBancaires = await tx.operationBancaire.findMany({
-        where: { reference: a.numero }
+        where: {
+          OR: [
+            { reference: a.numero },
+            ...(a.reglements.length > 0 ? [{
+              reference: { in: a.reglements.map((r) => `REG-A-${r.id}`) }
+            }] : []),
+          ]
+        }
       })
       if (opsBancaires.length > 0) {
         for (const op of opsBancaires) {

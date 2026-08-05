@@ -28,6 +28,16 @@ const prismaCli = path.join(projectRoot, 'node_modules', 'prisma', 'build', 'ind
 const schemaEngBin = path.join(projectRoot, 'node_modules', '@prisma', 'engines', 'schema-engine-windows.exe');
 const queryEngLib = path.join(projectRoot, 'node_modules', '@prisma', 'client', 'query_engine-windows.dll.node');
 
+// Client PostgreSQL (provider postgresql) — genere par scripts/generate-pg-client.js
+let PgPrismaClient = null;
+try {
+  PgPrismaClient = require(path.join(projectRoot, 'node_modules', '@prisma', 'client-pg')).PrismaClient;
+  console.log('Client PostgreSQL detecte (@prisma/client-pg).');
+} catch (e) {
+  console.warn('Client @prisma/client-pg introuvable, fallback @prisma/client:', e.message);
+  PgPrismaClient = PrismaClient;
+}
+
 // --- Helpers ---
 function envPath() {
   return path.resolve(__dirname, '..', '.env');
@@ -123,8 +133,10 @@ async function dumpSQLite() {
 function pushSchema() {
   console.log('\n[2/4] Deploiement du schema Prisma vers PostgreSQL...');
 
+  const postgresSchemaPath = path.join(projectRoot, 'prisma', 'schema.postgres.prisma');
+
   try {
-    const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--skip-generate'], {
+    const r = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--accept-data-loss', '--skip-generate', '--schema=' + postgresSchemaPath], {
       stdio: 'inherit',
       cwd: projectRoot,
       env: {
@@ -148,13 +160,18 @@ function pushSchema() {
 async function insertIntoPostgres(data) {
   console.log('\n[3/4] Insertion des donnees dans PostgreSQL...');
 
-  const pg = new PrismaClient({
+  const pg = new PgPrismaClient({
     datasources: { db: { url: PG_URL } },
   });
 
   try {
-    // Desactiver les contraintes FK pour l'import
-    await pg.$executeRawUnsafe('SET session_replication_role = replica;');
+    // Desactiver les contraintes FK pour l'import (requiert un superuser PostgreSQL).
+    // Les tables sont deja inserees dans l'ordre topologique des FK, donc optionnel.
+    try {
+      await pg.$executeRawUnsafe('SET session_replication_role = replica;');
+    } catch (e) {
+      console.log('  (replica indisponible, import dans l\'ordre des FK)');
+    }
 
     const tables = Object.keys(data);
 
@@ -185,7 +202,36 @@ async function insertIntoPostgres(data) {
     }
 
     // Reactiver les contraintes FK
-    await pg.$executeRawUnsafe('SET session_replication_role = origin;');
+    try {
+      await pg.$executeRawUnsafe('SET session_replication_role = origin;');
+    } catch (e) {
+      // ignorable : session deja fermee apres le try
+    }
+
+    // Remettre les sequences a niveau (les id ont ete inseres explicitement)
+    console.log('  Remise a niveau des sequences PostgreSQL...');
+    await pg.$executeRawUnsafe(`
+      DO $$
+      DECLARE
+        t text;
+        maxv bigint;
+        nxt bigint;
+      BEGIN
+        FOR t IN
+          SELECT c.relname FROM pg_class c
+          WHERE c.relkind='r' AND c.relnamespace='public'::regnamespace
+            AND EXISTS (
+              SELECT 1 FROM pg_attrdef d JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=d.adnum
+              WHERE d.adrelid=c.oid AND a.attname='id' AND pg_get_expr(d.adbin,d.adrelid) LIKE 'nextval%')
+          ORDER BY c.relname
+        LOOP
+          EXECUTE format('SELECT COALESCE(MAX(id),0) FROM %I', t) INTO maxv;
+          nxt := maxv + 1;
+          EXECUTE format('SELECT setval(pg_get_serial_sequence(%L, %L), %s, false)', quote_ident(t), 'id', nxt);
+        END LOOP;
+      END $$;
+    `);
+    console.log('  Sequences remises a niveau.');
 
     console.log('[3/4] Donnees inserees avec succes.');
   } finally {

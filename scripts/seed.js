@@ -11,8 +11,21 @@ const bcrypt = require('bcryptjs');
 const ADMIN_LOGIN = 'admin';
 const ADMIN_PASSWORD = 'Admin@123';
 
-async function main(prismaArg) {
+async function main(prismaArg, opts) {
   const prisma = prismaArg || new PrismaClient();
+  const mode = opts && opts.mode ? opts.mode : process.env.GESTICOM_MODE;
+
+  if (mode) {
+    const p = await prisma.parametre.findFirst();
+    if (!p) {
+      await prisma.parametre.create({ data: { modeInstallation: mode } });
+      console.log('[Seed] Parametre mode installation cree: ' + mode);
+    } else {
+      await prisma.parametre.update({ where: { id: p.id }, data: { modeInstallation: mode } });
+      console.log('[Seed] Mode installation enregistre: ' + mode);
+    }
+  }
+
   const totalUsers = await prisma.utilisateur.count();
   if (totalUsers > 0) {
     console.log('[Seed] Utilisateurs existants. Seed ignoré.');

@@ -165,7 +165,16 @@ export async function DELETE(
 
       // 5. Nettoyage Trésorerie : CAISSE (y compris écritures retour)
       const caissesSupprimees = await tx.caisse.findMany({
-        where: { OR: [{ motif: `VENTE ${v.numero}` }, { motif: `RÈGLEMENT VENTE ${v.numero}` }, { motif: `ANNULATION VENTE ${v.numero}` }, { motif: { contains: `sur vente ${v.numero}` } }] },
+        where: {
+          OR: [
+            { motif: `Vente ${v.numero}` },
+            { motif: `RÈGLEMENT VENTE ${v.numero}` },
+            { motif: `ANNULATION VENTE ${v.numero}` },
+            { motif: { contains: `Règlement Vente ${v.numero}` } },
+            { motif: { contains: `sur vente ${v.numero}` } },
+            ...(v.reglements.map((r: any) => ({ motif: { contains: `REGLEMENT:${r.id}` } }))),
+          ]
+        },
         select: { id: true }
       })
       const caisseIds = caissesSupprimees.map((c: any) => c.id)
@@ -175,7 +184,7 @@ export async function DELETE(
       await tx.caisse.deleteMany({ where: { id: { in: caisseIds } } })
 
       // 6. Nettoyage Trésorerie : BANQUE (y compris opérations retour)
-      const allBanqueRefs = [v.numero, `ANN-${v.numero}`, ...retourRefs]
+      const allBanqueRefs = [v.numero, `ANN-${v.numero}`, ...retourRefs, ...(v.reglements.map((r: any) => `REG-V-${r.id}`))]
       const opsBancaires = await tx.operationBancaire.findMany({
         where: { reference: { in: allBanqueRefs } },
         select: { id: true, banqueId: true, montant: true, type: true }
@@ -189,7 +198,7 @@ export async function DELETE(
       }
       const banqueOpIds = opsBancaires.map((op: any) => op.id)
       if (banqueOpIds.length > 0) {
-        await tx.ecritureComptable.deleteMany({ where: { referenceType: 'BANQUE_OPERATION', referenceId: { in: banqueOpIds } } })
+        await tx.ecritureComptable.deleteMany({ where: { referenceType: 'BANQUE', referenceId: { in: banqueOpIds } } })
       }
       await tx.operationBancaire.deleteMany({ where: { id: { in: banqueOpIds } } })
 
@@ -586,6 +595,7 @@ export async function PATCH(
           utilisateurId: session!.userId,
           entiteId: vente.entiteId,
           magasinId: vente.magasinId,
+          banqueId: estModeBanque(modePaiement) ? banqueId : null,
           estAcompte: isCommandeNonLivree,
         }, tx)
 
@@ -596,7 +606,7 @@ export async function PATCH(
     }
 
     if (action === 'FULL_UPDATE') {
-      const { clientId, date, magasinId, observation, lignes, modePaiement, reglements, clientLibre, remiseGlobale, fraisApproche, typeVente, dateLivraison, retraitDiffere, banqueId } = body
+      const { clientId, date, magasinId, observation, lignes, modePaiement, reglements, clientLibre, remiseGlobale, fraisApproche, typeVente, dateLivraison, retraitDiffere } = body
       
       const preCheck = await prisma.vente.findUnique({ where: { id }, select: { updatedAt: true } })
       if (!preCheck) return NextResponse.json({ error: 'Vente introuvable.' }, { status: 404 })
@@ -866,7 +876,7 @@ export async function PATCH(
         }
 
         // 6. Règlements (Multi ou Simple) + synchro trésorerie
-        const reglementIds: number[] = []
+        const reglementsEffectifs: { mode: string; montant: number; reglementId?: number | null; banqueId?: number | null }[] = []
         if (mntPaye > 0 || regsData.length > 0) {
           for (const r of regsData) {
             const mntR = Number(r.montant) || 0
@@ -885,7 +895,12 @@ export async function PATCH(
                 date: updated.date,
               }
             })
-            reglementIds.push(regl.id)
+            reglementsEffectifs.push({
+              mode: r.mode,
+              montant: mntR,
+              reglementId: regl.id,
+              banqueId: r.banqueId ? Number(r.banqueId) : null,
+            })
             await tx.reglementVenteLigne.create({
               data: {
                 reglementId: regl.id,
@@ -933,7 +948,7 @@ export async function PATCH(
             entiteId: updated.entiteId,
             utilisateurId: session!.userId,
             magasinId: updated.magasinId,
-            reglements: regsData.map((r: any) => ({ mode: r.mode, montant: Number(r.montant) || 0 })),
+            reglements: reglementsEffectifs,
             fraisApproche: updated.fraisApproche || 0,
             lignes: updated.lignes,
           }, tx)
@@ -946,7 +961,7 @@ export async function PATCH(
             const modeR = String(r.mode).toUpperCase()
             if (modeR === 'CREDIT') continue
             await comptabiliserReglementVente({
-              reglementId: reglementIds[regIdx] || undefined,
+              reglementId: reglementsEffectifs[regIdx]?.reglementId || undefined,
               venteId: updated.id,
               numeroVente: updated.numero,
               date: updated.date,
@@ -955,6 +970,7 @@ export async function PATCH(
               utilisateurId: session!.userId,
               entiteId: updated.entiteId,
               magasinId: updated.magasinId,
+              banqueId: r.banqueId ? Number(r.banqueId) : null,
               estAcompte: true,
             }, tx)
             regIdx++

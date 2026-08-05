@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { sousTotalRetraits } from '@/lib/comptes-courants'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
@@ -44,7 +45,6 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams
     const dateDebut = searchParams.get('dateDebut')
     const dateFin = searchParams.get('dateFin')
-    const inclureTout = !dateDebut || !dateFin
 
     const whereVente: any = {
       clientId,
@@ -65,7 +65,7 @@ export async function GET(
     }
 
     // Calcul global pour le solde (toutes les ventes validées - tous les règlements validés + soldes initiaux)
-    const [ventesGlobalesAgg, reglementsGlobauxAgg, retoursGlobauxAgg] = await Promise.all([
+    const [ventesGlobalesAgg, reglementsGlobauxAgg, retoursGlobauxAgg, retraitsGlobaux] = await Promise.all([
       prisma.vente.aggregate({
         where: { clientId, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] } },
         _sum: { montantTotal: true, montantPaye: true }
@@ -77,12 +77,17 @@ export async function GET(
       prisma.retour.aggregate({
         where: { clientId, entiteId },
         _sum: { montantTotal: true }
+      }),
+      prisma.reglementVente.findMany({
+        where: { clientId, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] }, observation: { startsWith: 'Retrait CC' } },
+        select: { montant: true, observation: true }
       })
     ])
 
     const totalDebitGlobal = (Number(ventesGlobalesAgg._sum?.montantTotal) || 0) + (client.soldeInitial || 0)
     const totalRetours = Number(retoursGlobauxAgg._sum?.montantTotal) || 0
-    const totalCreditGlobal = (Number(reglementsGlobauxAgg._sum?.montant) || 0) + (client.avoirInitial || 0) + totalRetours
+    const totalRetraitsCC = sousTotalRetraits(retraitsGlobaux)
+    const totalCreditGlobal = (Number(reglementsGlobauxAgg._sum?.montant) || 0) + (client.avoirInitial || 0) + totalRetours - (totalRetraitsCC * 2)
     const globalSolde = (totalDebitGlobal - totalCreditGlobal)
 
     const [ventes, reglements] = await Promise.all([
@@ -164,7 +169,7 @@ export async function GET(
     if (dateDebut && dateFin) {
       // Calculer le solde réel à la date début du filtre
       const debut = new Date(dateDebut + 'T00:00:00')
-      const [ventesAvant, reglementsAvant, retoursAvant] = await Promise.all([
+      const [ventesAvant, reglementsAvant, retoursAvant, retraitsAvant] = await Promise.all([
         prisma.vente.aggregate({
           where: { clientId, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] }, date: { lt: debut } },
           _sum: { montantTotal: true }
@@ -176,10 +181,18 @@ export async function GET(
         prisma.retour.aggregate({
           where: { clientId, entiteId, date: { lt: debut } },
           _sum: { montantTotal: true }
+        }),
+        prisma.reglementVente.findMany({
+          where: {
+            clientId, entiteId, statut: { in: ['VALIDE', 'VALIDEE'] },
+            date: { lt: debut }, observation: { startsWith: 'Retrait CC' },
+          },
+          select: { montant: true, observation: true }
         })
       ])
       const soldeAvant = (ventesAvant._sum.montantTotal || 0) + (client.soldeInitial || 0)
-        - (reglementsAvant._sum.montant || 0) - (client.avoirInitial || 0) - (retoursAvant._sum.montantTotal || 0)
+        - ((reglementsAvant._sum.montant || 0) - (sousTotalRetraits(retraitsAvant) * 2))
+        - (client.avoirInitial || 0) - (retoursAvant._sum.montantTotal || 0)
       if (Math.abs(soldeAvant) > 0.01) {
         allOperations = [
           {

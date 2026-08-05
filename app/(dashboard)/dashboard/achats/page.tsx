@@ -113,7 +113,7 @@ export default function AchatsPage() {
     fournisseurLibre: '',
     modePaiement: 'ESPECES',
     montantPaye: '',
-    reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }] as { mode: string; montant: string; payeDepuisCaisse: boolean; payeDepuisBanque: boolean }[], // Multi-Paiement
+    reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: true, payeDepuisBanque: false }] as { mode: string; montant: string; payeDepuisCaisse: boolean; payeDepuisBanque: boolean }[], // Multi-Paiement
     banqueId: '',
     numeroCamion: '',
     fraisApproche: '',
@@ -149,7 +149,7 @@ export default function AchatsPage() {
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
-  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0], payeDepuisCaisse: false, payeDepuisBanque: false })
+  const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0], payeDepuisCaisse: true, payeDepuisBanque: false })
   const [submitting, setSubmitting] = useState(false)
   const [savingReglement, setSavingReglement] = useState(false)
   const [formFournisseurSearch, setFormFournisseurSearch] = useState('')
@@ -793,7 +793,7 @@ export default function AchatsPage() {
       fournisseurLibre: '',
       modePaiement: 'ESPECES',
       montantPaye: '',
-      reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }],
+      reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: true, payeDepuisBanque: false }],
       banqueId: '',
       numeroCamion: '',
       fraisApproche: '',
@@ -880,7 +880,7 @@ export default function AchatsPage() {
       if (res.ok) {
         showSuccess('Règlement enregistré avec succès.')
         setShowReglement(null)
-        setReglementData({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0], payeDepuisCaisse: false, payeDepuisBanque: false })
+        setReglementData({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0], payeDepuisCaisse: true, payeDepuisBanque: false })
         setCurrentPage(1)
         if (detailAchat?.id === showReglement.id) {
           handleVoirDetail(showReglement.id)
@@ -918,7 +918,7 @@ export default function AchatsPage() {
             Imprimer
           </button>
           <button
-            onClick={() => { setEditingAchatId(null); setFormData({ date: new Date().toLocaleDateString('en-CA'), magasinId: '', fournisseurId: '', fournisseurLibre: '', modePaiement: 'ESPECES', montantPaye: '', reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }], banqueId: '', numeroCamion: '', fraisApproche: '', observation: '', lignes: [] }); setForm(true) }}
+            onClick={() => { setEditingAchatId(null); setFormData({ date: new Date().toLocaleDateString('en-CA'), magasinId: '', fournisseurId: '', fournisseurLibre: '', modePaiement: 'ESPECES', montantPaye: '', reglements: [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: true, payeDepuisBanque: false }], banqueId: '', numeroCamion: '', fraisApproche: '', observation: '', lignes: [] }); setForm(true) }}
             className="flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-3 text-sm font-bold text-white hover:bg-orange-700 shadow-lg shadow-orange-900/20 transition-all hover:scale-105"
             title="Nouvel achat (Ctrl+N)"
           >
@@ -1553,7 +1553,7 @@ export default function AchatsPage() {
                       </h3>
                       <button
                         type="button"
-                        onClick={() => setFormData(f => ({ ...f, reglements: [...f.reglements, { mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }] }))}
+                        onClick={() => setFormData(f => ({ ...f, reglements: [...f.reglements, { mode: 'ESPECES', montant: '', payeDepuisCaisse: true, payeDepuisBanque: false }] }))}
                         className="text-[10px] font-bold bg-orange-200 text-orange-800 px-2 py-1 rounded hover:bg-orange-300 transition-colors"
                       >
                         + AJOUTER UN MODE
@@ -1621,6 +1621,9 @@ export default function AchatsPage() {
                               />
                               Banque
                             </label>
+                          )}
+                          {reg.mode !== 'CREDIT' && !reg.payeDepuisCaisse && !reg.payeDepuisBanque && (
+                            <span className="text-[11px] font-bold text-amber-600 whitespace-nowrap">Paiement direct (455)</span>
                           )}
                           {formData.reglements.length > 1 && (
                             <button
@@ -1863,7 +1866,11 @@ export default function AchatsPage() {
                         fournisseurLibre: detailAchat.fournisseurLibre || '',
                         modePaiement: detailAchat.modePaiement,
                         montantPaye: detailAchat.montantPaye ? String(detailAchat.montantPaye) : '',
-                        reglements: ((detailAchat as any).reglements as Array<{ modePaiement?: string; mode?: string; montant: number }>)?.map((r) => ({ mode: r.modePaiement || r.mode || 'ESPECES', montant: String(r.montant), payeDepuisCaisse: false, payeDepuisBanque: false })) || [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: false, payeDepuisBanque: false }],
+                        reglements: ((detailAchat as any).reglements as Array<{ modePaiement?: string; mode?: string; montant: number }>)?.map((r) => {
+                          const modeR = String(r.modePaiement || r.mode || 'ESPECES').toUpperCase()
+                          const modeBanque = ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(modeR)
+                          return { mode: r.modePaiement || r.mode || 'ESPECES', montant: String(r.montant), payeDepuisCaisse: !modeBanque, payeDepuisBanque: modeBanque }
+                        }) || [{ mode: 'ESPECES', montant: '', payeDepuisCaisse: true, payeDepuisBanque: false }],
                         banqueId: '',
                         numeroCamion: detailAchat.numeroCamion || '',
                         fraisApproche: String((detailAchat as any).fraisApproche || '0'),
@@ -2105,6 +2112,9 @@ export default function AchatsPage() {
                   />
                   Payé depuis la banque
                 </label>
+              )}
+              {reglementData.modePaiement !== 'CREDIT' && !reglementData.payeDepuisCaisse && !reglementData.payeDepuisBanque && (
+                <div className="text-xs font-bold text-amber-600">Paiement direct (compte courant associé 455)</div>
               )}
 
               {(reglementData.payeDepuisBanque || ['MOBILE_MONEY', 'CHEQUE', 'VIREMENT'].includes(String(reglementData.modePaiement).toUpperCase())) && (

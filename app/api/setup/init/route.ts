@@ -2,23 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 import { spawnSync } from 'child_process'
-import { MODES_INSTALLATION } from '@/lib/enums-commerce'
+import { MODES_INSTALLATION, estModePostgres } from '@/lib/enums-commerce'
 import { prisma } from '@/lib/db'
+import { getDataDir, writeConfigFile } from '@/lib/mode-config'
+import { autoInstallPostgres } from '@/lib/auto-install'
 
 function sanitizeUrl(url: string) {
   return url.replace(/\/\/.*@/, '//***:***@')
-}
-
-function autoInstallPostgres(dataDir: string) {
-  try {
-    const _require = eval('require')
-    const baseDirForScripts = process.env.GESTICOM_UNPACKED_PATH || process.cwd()
-    const pgManager = _require(path.join(baseDirForScripts, 'scripts', 'postgres-manager'))
-    return pgManager.ensureAutoPostgres(dataDir).then((result: any) => result.creds)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    throw new Error('Installation automatique PostgreSQL échouée: ' + msg)
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -30,17 +20,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Mode d\'installation invalide' }, { status: 400 })
     }
 
-    const dataDir = process.env.GESTICOM_USER_DATA
-      || (process.env.APPDATA ? path.join(process.env.APPDATA, 'gesticom-pro') : '')
-      || process.cwd()
+    const dataDir = getDataDir()
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
 
     let pgCreds = postgres
-    if (mode === 'MODE_2' && autoInstall) {
-      pgCreds = await autoInstallPostgres(dataDir)
+    if (estModePostgres(mode) && (autoInstall || mode === 'MODE_3')) {
+      pgCreds = await autoInstallPostgres()
     }
 
-    if (mode === 'MODE_2') {
+    if (estModePostgres(mode)) {
       if (!pgCreds || !pgCreds.host || !pgCreds.database || !pgCreds.user || !pgCreds.password) {
         return NextResponse.json({ error: 'Tous les champs PostgreSQL sont requis' }, { status: 400 })
       }
@@ -56,7 +44,7 @@ export async function POST(req: NextRequest) {
     const queryEngineLib = path.join(baseDir, 'node_modules', '@prisma', 'client', 'query_engine-windows.dll.node')
 
     const config: Record<string, any> = { mode }
-    if (mode === 'MODE_2') {
+    if (estModePostgres(mode)) {
       config.postgres = {
         host: pgCreds.host,
         port: pgCreds.port || 5432,
@@ -100,6 +88,7 @@ export async function POST(req: NextRequest) {
               ...process.env,
               ELECTRON_RUN_AS_NODE: '1',
               DATABASE_URL: url,
+              GESTICOM_MODE: mode,
               GESTICOM_PRISMA_CLIENT_PATH: pgClientPath,
               PRISMA_SCHEMA_ENGINE_BINARY: schemaEngineBin,
               PRISMA_QUERY_ENGINE_LIBRARY: queryEngineLib,
@@ -152,7 +141,7 @@ export async function POST(req: NextRequest) {
         try {
           const _require = eval('require')
           const seed = _require(path.join(baseDir, 'scripts', 'seed.js'))
-          await seed.main(prisma)
+          await seed.main(prisma, { mode })
           console.log('[setup] Seed SQLite exécuté avec succès')
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
@@ -161,14 +150,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const configPath = path.join(dataDir, 'config.json')
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+    writeConfigFile(config)
 
     return NextResponse.json({
       success: true,
       message: mode === 'MODE_1'
         ? 'Configuration mono-poste enregistrée. Redémarrage...'
-        : 'Configuration PostgreSQL enregistrée. Redémarrage...',
+        : mode === 'MODE_3'
+          ? 'PostgreSQL installé et configuré automatiquement. Redémarrage...'
+          : 'Configuration PostgreSQL enregistrée. Redémarrage...',
     })
   } catch (e) {
     console.error('[setup] Erreur:', e)

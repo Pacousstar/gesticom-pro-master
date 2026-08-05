@@ -27,7 +27,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
   const [montant, setMontant] = useState<string>('')
   const [modePaiement, setModePaiement] = useState('ESPECES')
   const [observation, setObservation] = useState('')
-  const [payeDepuisCaisse, setPayeDepuisCaisse] = useState(false)
+  const [payeDepuisCaisse, setPayeDepuisCaisse] = useState(true)
   const [payeDepuisBanque, setPayeDepuisBanque] = useState(false)
   const { success: showSuccess, error: showError } = useToast()
 

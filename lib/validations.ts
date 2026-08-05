@@ -310,19 +310,30 @@ export const reglementVenteSchema = z.object({
   banqueId: z.coerce.number().int().positive().nullable().optional(),
 })
 
-/** Règlement depuis compte courant */
-export const reglementCompteCourantSchema = z.object({
-  compteCourantId: z.coerce.number().int().positive('Le compte courant est requis.'),
-  montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
-  modePaiement: z.string().max(50),
-  clientId: z.coerce.number().int().positive().nullable().optional(),
-  fournisseurId: z.coerce.number().int().positive().nullable().optional(),
-  payeDepuisCaisse: z.boolean().optional(),
-  payeDepuisBanque: z.boolean().optional(),
-  magasinId: z.coerce.number().int().positive().nullable().optional(),
-  banqueId: z.coerce.number().int().positive().nullable().optional(),
-  date: z.string().optional(),
-})
+/** Règlement depuis compte courant (montant négatif = retrait, observation requise) */
+export const reglementCompteCourantSchema = z
+  .object({
+    compteCourantId: z.coerce.number().int().positive('Le compte courant est requis.'),
+    montant: z.coerce.number().refine(m => m !== 0, 'Le montant ne doit pas être nul.'),
+    modePaiement: z.string().max(50),
+    clientId: z.coerce.number().int().positive().nullable().optional(),
+    fournisseurId: z.coerce.number().int().positive().nullable().optional(),
+    payeDepuisCaisse: z.boolean().optional(),
+    payeDepuisBanque: z.boolean().optional(),
+    magasinId: z.coerce.number().int().positive().nullable().optional(),
+    banqueId: z.coerce.number().int().positive().nullable().optional(),
+    observation: z.string().max(500).trim().optional(),
+    date: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.montant < 0 && !data.observation) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['observation'],
+        message: 'Une observation est obligatoire pour un retrait (montant négatif).',
+      })
+    }
+  })
 
 /** Règlement fournisseur direct (sans compteCourantId, le fournisseur est dans l'URL) */
 export const reglementFournisseurSchema = z.object({
@@ -363,7 +374,7 @@ export const caisseSchema = z.object({
   montant: z.coerce.number().positive('Le montant doit être supérieur à 0.'),
   date: z.string().optional(),
   observation: z.string().max(MAX_TEXT).trim().nullable().optional(),
-  sousType: z.enum(['MANUEL', 'PRODUIT', 'APPROVISIONNEMENT', 'CHARGE', 'RETRAIT']).default('MANUEL'),
+  sousType: z.enum(['MANUEL', 'PRODUIT', 'APPROVISIONNEMENT', 'APPORT', 'CHARGE', 'RETRAIT', 'RETOUR']).default('MANUEL'),
 })
 
 /** Entité */

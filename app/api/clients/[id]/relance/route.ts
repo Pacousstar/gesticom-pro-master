@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { sousTotalRetraits } from '@/lib/comptes-courants'
 import { requirePermission } from '@/lib/require-role'
 import { generateRelancePDF } from '@/lib/pdf-gen'
 import { sendRelanceEmail } from '@/lib/mail'
@@ -50,12 +51,18 @@ export async function GET(
     
     const detteFactures = ventesClient.reduce((s, v) => s + (v.montantTotal - (v.montantPaye || 0)), 0)
     
-    const regsLibres = await prisma.reglementVente.aggregate({
-      where: { clientId, venteId: null, statut: 'VALIDE' },
-      _sum: { montant: true }
-    })
+    const [regsLibresAgg, retraitsLibres] = await Promise.all([
+      prisma.reglementVente.aggregate({
+        where: { clientId, venteId: null, statut: 'VALIDE' },
+        _sum: { montant: true }
+      }),
+      prisma.reglementVente.findMany({
+        where: { clientId, venteId: null, statut: 'VALIDE', observation: { startsWith: 'Retrait CC' } },
+        select: { montant: true, observation: true }
+      })
+    ])
     
-    const totalRegsLibres = regsLibres._sum?.montant || 0
+    const totalRegsLibres = (regsLibresAgg._sum?.montant || 0) - (sousTotalRetraits(retraitsLibres) * 2)
     const soldeInitial = client.soldeInitial || 0
     const avoirInitial = client.avoirInitial || 0
     

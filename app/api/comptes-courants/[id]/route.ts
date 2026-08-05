@@ -123,7 +123,7 @@ export async function DELETE(
   try {
     await prisma.compteCourant.delete({ where: { id } })
     return NextResponse.json({ success: true })
-  } catch (e: any) {
+  } catch {
     return NextResponse.json({ error: 'Erreur lors de la suppression.' }, { status: 500 })
   }
 }
@@ -171,14 +171,20 @@ async function getTransactions(
       orderBy: { date: 'desc' },
     })
     for (const p of paiements) {
+      const estRetrait = (p.observation || '').trim().toUpperCase().startsWith('RETRAIT CC')
+      const libelleObs = estRetrait
+        ? (p.observation || '').replace(/^Retrait CC\s*-?\s*/i, '')
+        : p.observation || ''
       rows.push({
         id: `REG-ACHAT-${p.id}`,
         date: p.date,
-        libelle: `Paiement fournisseur ${p.observation ? `- ${p.observation}` : ''} (${p.modePaiement})`,
+        libelle: estRetrait
+          ? `Retrait CC Fournisseur${libelleObs ? ` - ${libelleObs}` : ''} (${p.modePaiement})`
+          : `Paiement fournisseur${libelleObs ? ` - ${libelleObs}` : ''} (${p.modePaiement})`,
         montant: p.montant,
         type: 'PAIEMENT_FOURNISSEUR',
         referenceType: 'REGLEMENT_ACHAT',
-        montantSigne: p.montant,
+        montantSigne: estRetrait ? -p.montant : p.montant,
       })
     }
   }
@@ -208,14 +214,20 @@ async function getTransactions(
       orderBy: { date: 'desc' },
     })
     for (const e of encaissements) {
+      const estRetrait = (e.observation || '').trim().toUpperCase().startsWith('RETRAIT CC')
+      const libelleObs = estRetrait
+        ? (e.observation || '').replace(/^Retrait CC\s*-?\s*/i, '')
+        : e.observation || ''
       rows.push({
         id: `REG-VENTE-${e.id}`,
         date: e.date,
-        libelle: `Encaissement client ${e.observation ? `- ${e.observation}` : ''} (${e.modePaiement})`,
+        libelle: estRetrait
+          ? `Retrait CC Client${libelleObs ? ` - ${libelleObs}` : ''} (${e.modePaiement})`
+          : `Encaissement client${libelleObs ? ` - ${libelleObs}` : ''} (${e.modePaiement})`,
         montant: e.montant,
         type: 'ENCAISSEMENT_CLIENT',
         referenceType: 'REGLEMENT_VENTE',
-        montantSigne: -e.montant,
+        montantSigne: estRetrait ? e.montant : -e.montant,
       })
     }
 

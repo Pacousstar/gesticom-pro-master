@@ -148,7 +148,7 @@ function ensureEnv() {
     if (legacyResult.found) log('Base legacy utilisee: ' + legacyResult.path)
   }
 
-  if (config.mode === 'MODE_2') {
+      if (config.mode === 'MODE_2' || config.mode === 'MODE_3') {
     const pg = config.postgres
     if (pg?.password && pg?.user && pg?.host && pg?.database) {
       const url = `postgresql://${encodeURIComponent(pg.user)}:${encodeURIComponent(pg.password)}@${pg.host}:${pg.port}/${pg.database}`
@@ -190,7 +190,7 @@ async function runDbPush(basePath) {
   const prismaCli = findPrismaCli(basePath)
   if (!prismaCli) { log('Prisma CLI introuvable'); return }
   const rootDir = process.env.GESTICOM_UNPACKED_PATH || basePath
-  const schemaName = config.mode === 'MODE_2' ? 'schema.postgres.prisma' : 'schema.prisma'
+  const schemaName = (config.mode === 'MODE_2' || config.mode === 'MODE_3') ? 'schema.postgres.prisma' : 'schema.prisma'
   const schemaPath = path.join(rootDir, 'prisma', schemaName)
   if (!fs.existsSync(schemaPath)) { log('Schema introuvable: ' + schemaPath); return }
 
@@ -212,7 +212,7 @@ async function runDbPush(basePath) {
       if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) process.env.PRISMA_QUERY_ENGINE_LIBRARY = queryEngineLib
       const seed = require(seedScript)
       let PrismaClient
-      if (config.mode === 'MODE_2') {
+  if (config.mode === 'MODE_2' || config.mode === 'MODE_3') {
         if (!global.__GESTICOM_PG_CLIENT) throw new Error('Client PostgreSQL non disponible (seed ignoré)')
         PrismaClient = global.__GESTICOM_PG_CLIENT
       } else {

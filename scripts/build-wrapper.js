@@ -94,5 +94,15 @@ nextBuild.on('exit', (code) => {
   }
   console.log('[build-wrapper] @prisma/client-pg vérifié OK')
 
+  // 6. Vérification des scripts critiques requis au runtime (setup auto, migration)
+  for (const critical of ['postgres-manager.js', 'seed.js']) {
+    const p = path.join(projectRoot, 'scripts', critical)
+    if (!fs.existsSync(p)) {
+      console.error('[build-wrapper] ERREUR FATALE: scripts/' + critical + ' introuvable ! Le package serait incomplet.')
+      process.exit(1)
+    }
+  }
+  console.log('[build-wrapper] Scripts critiques vérifiés OK (postgres-manager.js, seed.js)')
+
   process.exit(code || 0)
 })

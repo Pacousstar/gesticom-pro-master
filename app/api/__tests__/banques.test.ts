@@ -14,6 +14,7 @@ const mockEcritureFindFirst = vi.fn()
 const mockEcritureCreate = vi.fn()
 const mockJournalUpsert = vi.fn()
 const mockPlanUpsert = vi.fn()
+const mockTransaction = vi.fn()
 
 vi.mock('@/lib/db', () => ({
   prisma: {
@@ -41,6 +42,7 @@ vi.mock('@/lib/db', () => ({
       findFirst: (...args: unknown[]) => mockEcritureFindFirst(...args),
       create: (...args: unknown[]) => mockEcritureCreate(...args),
     },
+    $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
 }))
 
@@ -177,6 +179,16 @@ describe('POST /api/banques', () => {
     mockEcritureCreate.mockImplementation(({ data }: any) => ({ id: 99, ...data }))
     mockJournalUpsert.mockImplementation(({ create }: any) => ({ id: 2, ...create }))
     mockPlanUpsert.mockImplementation(({ create }: any) => ({ id: 100, ...create }))
+    mockTransaction.mockImplementation(async (cb: any) => cb({
+      banque: { create: mockCreate },
+      journal: { upsert: mockJournalUpsert },
+      planCompte: { findUnique: mockPlanFindUnique, upsert: mockPlanUpsert },
+      ecritureComptable: {
+        deleteMany: mockEcritureDeleteMany,
+        findFirst: mockEcritureFindFirst,
+        create: mockEcritureCreate,
+      },
+    }))
 
     const { POST } = await import('@/app/api/banques/route')
     const res = await POST(createPostRequest({

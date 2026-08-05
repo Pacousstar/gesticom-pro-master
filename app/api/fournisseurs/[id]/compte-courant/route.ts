@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { estRetrait, sousTotalRetraits, totalReglementsAchat } from '@/lib/comptes-courants'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 
@@ -58,18 +59,25 @@ export async function GET(
         if (dateDebut && dateFin) {
             // Calculer le solde réel à la date début du filtre
             const debut = new Date(dateDebut + 'T00:00:00')
-            const [achatsAvant, reglementsAvant] = await Promise.all([
+            const [achatsAvant, retraitsAvant] = await Promise.all([
                 prisma.achat.aggregate({
                     where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] }, date: { lt: debut } },
                     _sum: { montantTotal: true }
                 }),
-                prisma.reglementAchat.aggregate({
-                    where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] }, date: { lt: debut } },
-                    _sum: { montant: true }
+                prisma.reglementAchat.findMany({
+                    where: {
+                        fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] },
+                        date: { lt: debut }, observation: { startsWith: 'Retrait CC' },
+                    },
+                    select: { montant: true, observation: true }
                 })
             ])
+            const reglementsAvantTotal = (await prisma.reglementAchat.aggregate({
+                where: { fournisseurId: id, statut: { in: ['VALIDEE', 'VALIDE'] }, date: { lt: debut } },
+                _sum: { montant: true }
+            }))._sum.montant || 0
             const soldeAvant = (achatsAvant._sum.montantTotal || 0) + (fournisseur.soldeInitial || 0)
-                - (reglementsAvant._sum.montant || 0) - (fournisseur.avoirInitial || 0)
+                - (reglementsAvantTotal - (sousTotalRetraits(retraitsAvant) * 2)) - (fournisseur.avoirInitial || 0)
             if (Math.abs(soldeAvant) > 0.01) {
                 operations.push({
                     type: 'SOLDE_OUVERTURE',
@@ -117,15 +125,18 @@ export async function GET(
         })
 
         reglements.forEach(r => {
+            const estRetraitReg = estRetrait(r.observation)
             operations.push({
-                type: 'REGLEMENT',
+                type: estRetraitReg ? 'RETRAIT' : 'REGLEMENT',
                 id: r.id,
-                libelle: r.achat ? `Règlement facture ${r.achat.numero}` : 'Règlement libre / Avoir',
+                libelle: estRetraitReg
+                    ? `Retrait CC Fournisseur ${r.observation ? `- ${(r.observation || '').replace(/^Retrait CC\s*-?\s*/i, '')}` : ''}`
+                    : r.achat ? `Règlement facture ${r.achat.numero}` : 'Règlement libre / Avoir',
                 reference: r.achat?.numero || '-',
                 date: r.date,
                 createdAt: r.createdAt,
-                debit: 0,
-                credit: r.montant,
+                debit: estRetraitReg ? r.montant : 0,
+                credit: estRetraitReg ? 0 : r.montant,
                 mode: r.modePaiement,
                 observation: r.observation
             })
@@ -136,9 +147,9 @@ export async function GET(
 
         // Calcul global du solde (cohérent avec clients/soldes)
         const totalAchatsGlobal = achats.reduce((s, a) => s + (a.montantTotal || 0), 0)
-        const totalReglementsGlobal = reglements.reduce((s, r) => s + (r.montant || 0), 0)
+        const totalReglementsGlobalNet = await totalReglementsAchat(id)
         const totalDebitGlobal = totalAchatsGlobal + (fournisseur.soldeInitial || 0)
-        const totalCreditGlobal = totalReglementsGlobal + (fournisseur.avoirInitial || 0)
+        const totalCreditGlobal = totalReglementsGlobalNet + (fournisseur.avoirInitial || 0)
         const globalSolde = totalDebitGlobal - totalCreditGlobal
 
         return NextResponse.json({

@@ -179,6 +179,7 @@ export async function POST(request: NextRequest) {
         entiteId,
         utilisateurId: session.userId,
         magasinId: data.magasinId ?? undefined,
+        banqueId: data.banqueId ?? null,
         paiementDirect: !payeDepuisCaisse && !payeDepuisBanque,
       }, tx)
 

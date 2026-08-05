@@ -73,11 +73,34 @@ export async function DELETE(
       }
       const banqueOpIds = opsBancaires.map((op: any) => op.id)
       if (banqueOpIds.length > 0) {
-        await tx.ecritureComptable.deleteMany({ where: { referenceType: 'BANQUE_OPERATION', referenceId: { in: banqueOpIds } } })
+        await tx.ecritureComptable.deleteMany({ where: { referenceType: 'BANQUE', referenceId: { in: banqueOpIds } } })
         await tx.operationBancaire.deleteMany({ where: { id: { in: banqueOpIds } } })
       }
 
-      // 5. Supprimer les lignes et le retour
+      // 5. Restaurer le montant payé de la vente (le retour avait réduit montantPaye)
+      if (vente) {
+        const venteFull = await tx.vente.findUnique({
+          where: { id: retour.venteId },
+          select: { montantTotal: true }
+        })
+        if (venteFull) {
+          const lignesReglement = await tx.reglementVenteLigne.findMany({
+            where: { venteId: retour.venteId },
+            select: { montant: true }
+          })
+          const totalPaye = lignesReglement.reduce((s: number, l: any) => s + (l.montant || 0), 0)
+          const nouveauMontantPaye = Math.min(venteFull.montantTotal, totalPaye)
+          await tx.vente.update({
+            where: { id: retour.venteId },
+            data: {
+              montantPaye: nouveauMontantPaye,
+              statutPaiement: nouveauMontantPaye >= venteFull.montantTotal ? 'PAYE' : nouveauMontantPaye > 0 ? 'PARTIEL' : 'CREDIT',
+            }
+          })
+        }
+      }
+
+      // 6. Supprimer les lignes et le retour
       await tx.retourLigne.deleteMany({ where: { retourId: id } })
       await tx.retour.delete({ where: { id } })
 

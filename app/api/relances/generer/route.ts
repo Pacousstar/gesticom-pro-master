@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { estRetrait } from '@/lib/comptes-courants'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
       where: { id: { in: clientIds.map(Number) }, entiteId },
       include: {
         ventes: { where: { statut: 'VALIDEE' }, select: { id: true, montantTotal: true, montantPaye: true, numero: true } },
-        reglements: { where: { venteId: null, statut: 'VALIDE' }, select: { montant: true } },
+        reglements: { where: { venteId: null, statut: 'VALIDE' }, select: { montant: true, observation: true } },
       },
     })
 
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     for (const client of clients) {
       try {
         const detteFactures = client.ventes.reduce((s, v) => s + (v.montantTotal - (v.montantPaye || 0)), 0)
-        const regsLibres = client.reglements.reduce((s, r) => s + r.montant, 0)
+        const regsLibres = client.reglements.reduce((s, r) => s + (estRetrait(r.observation) ? -r.montant : r.montant), 0)
         const solde = detteFactures + (client.soldeInitial || 0) - regsLibres - (client.avoirInitial || 0)
 
         if (solde <= 0) {

@@ -28,7 +28,7 @@ export default function SetupPage() {
     setError('')
 
     try {
-      const body: any = { mode: mode === 'MODE_2_AUTO' ? 'MODE_2' : mode }
+      const body: any = { mode: mode === 'MODE_2_AUTO' ? 'MODE_3' : mode }
       if (mode === 'MODE_2') {
         if (!pgPassword || pgPassword.length < 8) {
           setError('Le mot de passe PostgreSQL doit contenir au moins 8 caractères')

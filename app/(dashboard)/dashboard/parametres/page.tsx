@@ -80,9 +80,9 @@ export default function ParametresPage() {
   const [pgUser, setPgUser] = useState('gesticom')
   const [pgPassword, setPgPassword] = useState('')
   const [migrating, setMigrating] = useState(false)
+  const [modeSaving, setModeSaving] = useState(false)
   const [migrateResult, setMigrateResult] = useState<{ success: boolean; message: string } | null>(null)
   const [isCurrentPostgres, setIsCurrentPostgres] = useState(false)
-
   useEffect(() => {
     fetchData()
     fetchMagasins()
@@ -91,17 +91,20 @@ export default function ParametresPage() {
 
   const fetchData = async () => {
     try {
-      const [pRes, aRes] = await Promise.all([
+      const [pRes, aRes, modeRes] = await Promise.all([
         fetch('/api/parametres'),
-        fetch('/api/auth/check')
+        fetch('/api/auth/check'),
+        fetch('/api/parametres/mode-installation'),
       ])
 
       const p = await pRes.json().catch(() => null)
       const a = await aRes.json().catch(() => ({}))
+      const modeData = await modeRes.json().catch(() => ({}))
 
       setUserRole(typeof a?.role === 'string' ? a.role : '')
       setUserPermissions(Array.isArray(a?.permissions) ? a.permissions : [])
       setBackendAccess(pRes.ok)
+      setIsCurrentPostgres(modeData.isCurrentPostgres ?? false)
 
       if (pRes.status === 403) {
         setData(null)
@@ -141,7 +144,7 @@ export default function ParametresPage() {
           fideliteSeuilPoints: String(p.fideliteSeuilPoints ?? 100),
           fideliteTauxRemise: String(p.fideliteTauxRemise ?? 5),
           mentionSpeciale: p.mentionSpeciale ?? '',
-          modeInstallation: p.modeInstallation ?? 'MODE_1',
+          modeInstallation: modeData.modeInstallation ?? p.modeInstallation ?? 'MODE_1',
         })
       }
     } catch (e) {
@@ -232,6 +235,41 @@ export default function ParametresPage() {
   const buildPostgresUrl = () =>
     `postgresql://${pgUser}:${pgPassword}@${pgHost}:${pgPort}/${pgDb}`
 
+  const handleModeChange = async (mode: string) => {
+    if (mode === form.modeInstallation) return
+    if (modeSaving) return
+    setModeSaving(true)
+    try {
+      if (mode === 'MODE_2' && (!pgPassword || pgPassword.length < 8)) {
+        showError('Mot de passe PostgreSQL requis (min 8 caractères)')
+        return
+      }
+      const body: any = { modeInstallation: mode }
+      if (mode === 'MODE_2') {
+        body.postgres = { host: pgHost, port: Number(pgPort), database: pgDb, user: pgUser, password: pgPassword }
+      }
+      if (mode === 'MODE_3') body.autoInstall = true
+
+      const r = await fetch('/api/parametres/mode-installation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const d = await r.json()
+      if (r.ok) {
+        setForm({ ...form, modeInstallation: mode })
+        success(d.message || 'Mode d\'installation mis à jour')
+      } else {
+        showError(d.error || 'Erreur mise à jour mode installation')
+      }
+    } catch (e) {
+      console.error(e)
+      showError('Erreur réseau lors de la mise à jour du mode')
+    } finally {
+      setModeSaving(false)
+    }
+  }
+
   const handleMigrateToPostgres = async () => {
     if (!pgPassword || pgPassword.length < 8) {
       showError('Le mot de passe PostgreSQL doit contenir au moins 8 caractères')
@@ -260,6 +298,38 @@ export default function ParametresPage() {
     } catch (e) {
       setMigrateResult({ success: false, message: 'Erreur réseau' })
       showError('Erreur réseau lors de la migration')
+    } finally {
+      setMigrating(false)
+    }
+  }
+
+  const handleMigrateAuto = async () => {
+    if (migrating) return
+    if (!confirm(
+      'Passer au Mode Réseau automatique ?\n\n' +
+      'PostgreSQL sera installé automatiquement et TOUTES vos données seront migrées. ' +
+      'L\'application devra ensuite être redémarrée.\n\nContinuer ?'
+    )) return
+    setMigrating(true)
+    setMigrateResult(null)
+    try {
+      const res = await fetch('/api/admin/migrate-to-postgres', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoInstall: true }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setMigrateResult({ success: true, message: data.message || 'Migration réussie !' })
+        success('Migration PostgreSQL automatique réussie ! Veuillez redémarrer l\'application.')
+        setIsCurrentPostgres(true)
+      } else {
+        setMigrateResult({ success: false, message: data.error || data.details || 'Erreur inconnue' })
+        showError(data.error || 'Échec de la migration')
+      }
+    } catch (e) {
+      setMigrateResult({ success: false, message: 'Erreur réseau' })
+      showError('Erreur réseau lors de la migration automatique')
     } finally {
       setMigrating(false)
     }
@@ -722,30 +792,85 @@ export default function ParametresPage() {
               <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-1.5 ml-1">Type d'installation</label>
               <select
                 value={form.modeInstallation}
-                onChange={(e) => {
-                  const mode = e.target.value
-                  setForm({ ...form, modeInstallation: mode })
-                  fetch('/api/parametres/mode-installation', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ modeInstallation: mode }),
-                  }).then((r) => {
-                    if (r.ok) success('Mode d\'installation mis à jour')
-                    else console.error('Erreur mise à jour mode installation')
-                  })
-                }}
-                className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all"
+                onChange={(e) => handleModeChange(e.target.value)}
+                disabled={modeSaving}
+                className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all disabled:opacity-50"
               >
                 <option value="MODE_1">Mode 1 — Poste unique (Local)</option>
-                <option value="MODE_2">Mode 2 — Réseau (Serveur interne + PostgreSQL)</option>
-                <option value="MODE_3">Mode 3 — Migration (MODE_1 vers MODE_2)</option>
+                <option value="MODE_2">Mode 2 — Réseau (PostgreSQL)</option>
+                <option value="MODE_3">Mode 3 — Réseau auto (PostgreSQL automatique)</option>
               </select>
+              {modeSaving && (
+                <p className="mt-2 text-[10px] text-cyan-400 italic flex items-center gap-1.5">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Application du mode en cours...
+                </p>
+              )}
               <p className="mt-2 text-[10px] text-white/40 italic">
-                Mode 1 : installation sur un seul poste (SQLite). Mode 2 : installation réseau multi-poste avec serveur PostgreSQL centralisé. Mode 3 : migration d'une base SQLite vers PostgreSQL.
+                Mode 1 : installation sur un seul poste (SQLite). Mode 2 : installation réseau multi-poste avec serveur PostgreSQL centralisé. Mode 3 : PostgreSQL installé et configuré automatiquement.
               </p>
             </div>
 
-            {(form.modeInstallation === 'MODE_2' || form.modeInstallation === 'MODE_3') && (
+            {form.modeInstallation === 'MODE_3' && (
+              <div className="mt-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-6 space-y-3">
+                <h3 className="text-sm font-black text-emerald-300 uppercase tracking-wider flex items-center gap-2">
+                  <Server className="h-4 w-4" />
+                  PostgreSQL automatique
+                </h3>
+                <p className="text-xs text-white/70 leading-relaxed">
+                  PostgreSQL est installé et géré automatiquement par GestiCom Pro. Aucune configuration manuelle requise.
+                </p>
+
+                {migrateResult?.success && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-sm">{migrateResult.message}</p>
+                      <p className="mt-1">Redémarrez l'application pour utiliser PostgreSQL.</p>
+                    </div>
+                  </div>
+                )}
+
+                {migrateResult?.success === false && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+                    <XCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-sm">Échec de la migration</p>
+                      <p className="mt-1">{migrateResult.message}</p>
+                    </div>
+                  </div>
+                )}
+
+                {isCurrentPostgres && !migrateResult?.success && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-sm">PostgreSQL actif</p>
+                      <p className="mt-1">La base de données PostgreSQL est déjà configurée et utilisée.</p>
+                    </div>
+                  </div>
+                )}
+
+                {!isCurrentPostgres && !migrateResult?.success && (
+                  <button
+                    type="button"
+                    onClick={handleMigrateAuto}
+                    disabled={migrating}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-4 font-black text-white text-sm uppercase tracking-widest hover:bg-emerald-500 transition-all disabled:opacity-50 shadow-lg shadow-emerald-500/20"
+                  >
+                    {migrating ? (
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Migration en cours...</>
+                    ) : (
+                      <><ArrowRight className="h-5 w-5" /> Migrer mes données vers PostgreSQL</>
+                    )}
+                  </button>
+                )}
+                <p className="text-[10px] text-white/40 italic text-center">
+                  L'installation de PostgreSQL (téléchargement et configuration) se fait automatiquement lors du Mode 3.
+                </p>
+              </div>
+            )}
+
+            {form.modeInstallation === 'MODE_2' && (
               <div className="mt-6 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6 space-y-4">
                 <h3 className="text-sm font-black text-cyan-300 uppercase tracking-wider flex items-center gap-2">
                   <Server className="h-4 w-4" />
@@ -772,7 +897,17 @@ export default function ParametresPage() {
                   </div>
                 )}
 
-                {!migrateResult?.success && (
+                {isCurrentPostgres && !migrateResult?.success && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-sm">PostgreSQL actif</p>
+                      <p className="mt-1">La base de données PostgreSQL est déjà configurée et utilisée.</p>
+                    </div>
+                  </div>
+                )}
+
+                {!migrateResult?.success && !isCurrentPostgres && (
                   <>
                     <div className="grid grid-cols-2 gap-3">
                       <div>

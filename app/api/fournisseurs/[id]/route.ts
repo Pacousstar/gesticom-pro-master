@@ -81,6 +81,11 @@ export async function PATCH(
 
     const finalSolde = v.soldeInitial !== undefined ? v.soldeInitial : existing.soldeInitial
     const finalAvoir = v.avoirInitial !== undefined ? v.avoirInitial : existing.avoirInitial
+    const modifieSoldes = v.soldeInitial !== undefined || v.avoirInitial !== undefined
+
+    // Soldes initiaux modifiés => toujours rappeler la comptabilisation d'ouverture :
+    // elle nettoie les anciennes écritures puis réécrit (y compris vers 0 => pas d'orphelines)
+    if (modifieSoldes) {
       if (finalSolde > 0 || finalAvoir > 0) {
         const existingCC = await prisma.compteCourant.findFirst({ where: { fournisseurId: id } })
         if (!existingCC) {
@@ -95,22 +100,23 @@ export async function PATCH(
             }
           })
         }
-        try {
-          await comptabiliserOuvertureFournisseur({
-            fournisseurId: id,
-            nom: f.nom,
-            soldeInitial: finalSolde,
-            avoirInitial: finalAvoir,
-            date: new Date(),
-            entiteId: Number(f.entiteId) || session!.entiteId!,
-            utilisateurId: session!.userId,
-          })
-        } catch (_) {
-          // Non-bloquant : la compta peut ne pas être initialisée
-        }
       }
+      try {
+        await comptabiliserOuvertureFournisseur({
+          fournisseurId: id,
+          nom: f.nom,
+          soldeInitial: finalSolde,
+          avoirInitial: finalAvoir,
+          date: new Date(),
+          entiteId: Number(f.entiteId) || session!.entiteId!,
+          utilisateurId: session!.userId,
+        })
+      } catch (_) {
+        // Non-bloquant : la compta peut ne pas être initialisée
+      }
+    }
 
-      return NextResponse.json(f)
+    return NextResponse.json(f)
   } catch (e) {
     await apiCatch(e, 'api/fournisseurs/[id]')
     return NextResponse.json({ error: 'Erreur serveur.' }, { status: 500 })

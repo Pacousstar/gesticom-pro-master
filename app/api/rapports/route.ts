@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { sousTotalRetraits } from '@/lib/comptes-courants'
 import { requirePermission } from '@/lib/require-role'
 
 export async function GET(request: NextRequest) {
@@ -178,7 +179,7 @@ export async function GET(request: NextRequest) {
     finPrecedent.setDate(finPrecedent.getDate() - 1)
 
     // 1. Agrégations Ventes et Achats pour le calcul des totaux et de l'évolution
-    const [ventesActuelles, achatsActuelsResult, ventesPrecedentes, achatsPrecedentsResult, regsActuels, regsPrecedents] = await Promise.all([
+    const [ventesActuelles, achatsActuelsResult, ventesPrecedentes, achatsPrecedentsResult, regsActuels, regsPrecedents, retraitsActuels, retraitsPrecedents] = await Promise.all([
       prisma.vente.aggregate({
         where: {
           date: { gte: deb, lte: fin },
@@ -237,16 +238,38 @@ export async function GET(request: NextRequest) {
           } : {}),
         },
         _sum: { montant: true }
+      }),
+      prisma.reglementVente.findMany({
+        where: {
+          date: { gte: deb, lte: fin },
+          statut: { in: ['VALIDEE', 'VALIDE'] },
+          observation: { startsWith: 'Retrait CC' },
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
+             utilisateur: { entiteId }
+          } : {}),
+        },
+        select: { montant: true, observation: true }
+      }),
+      prisma.reglementVente.findMany({
+        where: {
+          date: { gte: debPrecedent, lte: finPrecedent },
+          statut: { in: ['VALIDEE', 'VALIDE'] },
+          observation: { startsWith: 'Retrait CC' },
+          ...(entiteId && session.role !== 'SUPER_ADMIN' ? {
+             utilisateur: { entiteId }
+          } : {}),
+        },
+        select: { montant: true, observation: true }
       })
     ])
 
     const caActuel = Number(ventesActuelles._sum.montantTotal || 0)
-    const caEncaisseActuel = Number(regsActuels._sum.montant || 0)
+    const caEncaisseActuel = Number(regsActuels._sum.montant || 0) - (sousTotalRetraits(retraitsActuels) * 2)
     const montantAchatsActuels = Number(achatsActuelsResult._sum.montantTotal || 0) + Number(achatsActuelsResult._sum.fraisApproche || 0)
     const ventesActuellesCount = ventesActuelles._count.id || 0
 
     const caPrecedent = Number(ventesPrecedentes._sum.montantTotal || 0)
-    const caEncaissePrecedent = Number(regsPrecedents._sum.montant || 0)
+    const caEncaissePrecedent = Number(regsPrecedents._sum.montant || 0) - (sousTotalRetraits(retraitsPrecedents) * 2)
     const montantAchatsPrecedents = Number(achatsPrecedentsResult._sum.montantTotal || 0) + Number(achatsPrecedentsResult._sum.fraisApproche || 0)
     const ventesPrecedentesCount = ventesPrecedentes._count.id || 0
 

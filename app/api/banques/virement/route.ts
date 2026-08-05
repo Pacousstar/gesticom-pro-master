@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { enregistrerOperationBancaire } from '@/lib/banque'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
+import { comptabiliserVirement } from '@/lib/comptabilisation'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
@@ -40,8 +41,9 @@ export async function POST(request: NextRequest) {
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. DÉBIT DE LA SOURCE
+      let opSourceId: number | null = null
       if (sourceIdType === 'BANQUE') {
-await enregistrerOperationBancaire({
+        const op = await enregistrerOperationBancaire({
           banqueId: Number(sourceId),
           entiteId,
           date: dateVirement,
@@ -52,6 +54,7 @@ await enregistrerOperationBancaire({
           reference: `VIR-${Date.now()}`,
           observation: motif
         }, tx)
+        opSourceId = op?.id ?? null
       } else if (sourceIdType === 'CAISSE') {
         await enregistrerMouvementCaisse({
           magasinId: Number(sourceId),
@@ -107,6 +110,25 @@ await enregistrerOperationBancaire({
           date: dateVirement,
         }, tx)
         await recalculerSoldeCaisse(Number(destId), tx)
+      }
+
+      // 4. COMPTABILISATION DU VIREMENT (D compteDest / C compteSource, frais en 658)
+      if (opSourceId) {
+        const srcLabel = sourceIdType === 'BANQUE' ? 'Banque' : 'Caisse'
+        const destLabel = destIdType === 'BANQUE' ? 'Banque' : 'Caisse'
+        await comptabiliserVirement({
+          referenceId: opSourceId,
+          date: dateVirement,
+          montant: data.montant,
+          frais: fraisMontant,
+          libelle: `Virement Interne ${srcLabel} ${sourceId} => ${destLabel} ${destId}`,
+          sourceType: sourceIdType === 'BANQUE' ? 'BANQUE' : 'CAISSE',
+          sourceId: Number(sourceId),
+          destType: destIdType === 'BANQUE' ? 'BANQUE' : 'CAISSE',
+          destId: Number(destId),
+          utilisateurId: session.userId,
+          entiteId,
+        }, tx)
       }
 
       return { success: true }
