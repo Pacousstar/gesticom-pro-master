@@ -1,4 +1,4 @@
-# Dépendances
+﻿# DÃ©pendances
 node_modules/
 .next/
 .turbo/
@@ -6,7 +6,7 @@ out/
 build/
 dist/
 
-# Environnement (SÉCURITÉ !)
+# Environnement (SÃ‰CURITÃ‰ !)
 .env
 .env.local
 .env.development.local
@@ -14,7 +14,7 @@ dist/
 .env.production.local
 *.env
 
-# Base de données (On n'envoie JAMAIS les données clients sur GitHub)
+# Base de donnÃ©es (On n'envoie JAMAIS les donnÃ©es clients sur GitHub)
 *.db
 *.db-wal
 *.db-shm
@@ -23,7 +23,7 @@ prisma/*.sqlite-journal
 prisma/gesticom.db
 prisma/dev.db
 
-# Binaires Lourds et Exécutables
+# Binaires Lourds et ExÃ©cutables
 node.exe
 nssm.exe
 GestiComService.exe
@@ -46,7 +46,7 @@ yarn-error.log*
 private.pem
 .vscode/
 .idea/
-.tsbuildinfo
+*.tsbuildinfo
 .next-env.d.ts
 .cursor/
 s
