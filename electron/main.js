@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
-const { spawnSync } = require('child_process')
+const { spawnSync, spawn } = require('child_process')
 const path = require('path')
 const http = require('http')
 const fs = require('fs')
@@ -304,6 +304,26 @@ ipcMain.on('restart-app', () => {
   log('redemarrage demande par l\'utilisateur')
   app.relaunch()
   app.quit()
+})
+
+ipcMain.handle('install-update', async (_event, setupPath) => {
+  if (typeof setupPath !== 'string' || !fs.existsSync(setupPath)) {
+    log('ECHEC install-update: fichier introuvable (' + setupPath + ')')
+    throw new Error('Fichier de mise a jour introuvable')
+  }
+  log('Installation de la mise a jour: ' + setupPath)
+  try {
+    const child = spawn(setupPath, ['/S'], { detached: true, stdio: 'ignore' })
+    child.unref()
+    setTimeout(() => {
+      log('Fermeture de l\'application pour finaliser la mise a jour')
+      app.quit()
+    }, 1500)
+    return { success: true }
+  } catch (err) {
+    log('ERREUR install-update: ' + (err.message || err))
+    throw new Error('Impossible de lancer l\'installateur')
+  }
 })
 
 app.whenReady().then(async () => {

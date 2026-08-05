@@ -10,7 +10,7 @@ import {
   Loader2,
 } from 'lucide-react'
 
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error' | 'uptodate'
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error' | 'uptodate'
 
 interface CheckResult {
   hasUpdate: boolean
@@ -29,6 +29,7 @@ export default function UpdateChecker() {
   const [status, setStatus] = useState<UpdateStatus>('idle')
   const [result, setResult] = useState<CheckResult | null>(null)
   const [downloadProgress, setDownloadProgress] = useState(0)
+  const [localPath, setLocalPath] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [dismissed, setDismissed] = useState(false)
 
@@ -75,6 +76,7 @@ export default function UpdateChecker() {
 
       const data = await res.json()
       setDownloadProgress(100)
+      setLocalPath(data.localPath || '')
       setStatus('downloaded')
     } catch (err: any) {
       setStatus('error')
@@ -83,12 +85,25 @@ export default function UpdateChecker() {
   }
 
   const handleInstall = async () => {
-    setStatus('downloading')
-    setDownloadProgress(50)
-    await new Promise((r) => setTimeout(r, 500))
-    setDownloadProgress(100)
-    setStatus('downloaded')
-    setDismissed(true)
+    const api = (window as any).electronAPI
+    if (api?.installUpdate && localPath) {
+      setStatus('installing')
+      setErrorMsg('')
+      try {
+        await api.installUpdate(localPath)
+        setDismissed(true)
+      } catch (err: any) {
+        setStatus('error')
+        setErrorMsg(err?.message || "Erreur au lancement de l'installation")
+      }
+      return
+    }
+    setStatus('error')
+    setErrorMsg(
+      localPath
+        ? `Le fichier a été téléchargé dans : ${localPath}. Lancez-le manuellement depuis cet emplacement.`
+        : 'Aucun fichier de mise à jour téléchargé'
+    )
   }
 
   if (dismissed || status === 'idle' || status === 'uptodate' || status === 'checking') {
@@ -216,6 +231,11 @@ export default function UpdateChecker() {
                   Plus tard
                 </button>
               </div>
+              {!((window as any).electronAPI?.installUpdate) && (
+                <p className="mt-2 break-all text-[10px] leading-snug text-gray-400">
+                  {localPath}
+                </p>
+              )}
             </div>
             <button
               onClick={() => setDismissed(true)}
@@ -223,6 +243,29 @@ export default function UpdateChecker() {
             >
               <X className="h-4 w-4" />
             </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'installing') {
+    return (
+      <div className="fixed bottom-4 right-4 z-[9999] max-w-sm animate-slide-up">
+        <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4 shadow-2xl ring-1 ring-blue-500/20">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-900">
+                Installation en cours…
+              </p>
+              <p className="mt-0.5 text-xs text-gray-600">
+                v{result?.remoteVersion} — l'application va se fermer et
+                redémarrer automatiquement.
+              </p>
+            </div>
           </div>
         </div>
       </div>

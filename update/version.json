@@ -1,8 +1,8 @@
 {
-  "version": "3.48.13",
+  "version": "3.51.12",
   "downloadUrl": "https://github.com/Pacousstar/GestiCom-Pro/releases/download/production/GestiCom-Pro-Setup.exe",
-  "checksum": "",
-  "changelog": "Corrections bugs setup/scan/code-barres/caméra + build v3.48.12",
-  "releaseDate": "2026-07-28",
+  "checksum": "42DA196BDCEB3D6B7AC725604E20D9EFC59FDC7F812DF121E6553EC62EB445A5",
+  "changelog": "Mise à jour automatique en ligne : le bouton Installer lance désormais réellement le nouveau Setup (installation silencieuse + redémarrage automatique).",
+  "releaseDate": "2026-08-05",
   "required": false
 }
