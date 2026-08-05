@@ -43,15 +43,15 @@ describe('LABELS_MODE_INSTALLATION', () => {
 
 describe('labelModeInstallation', () => {
   it('retourne le libellé pour MODE_1', () => {
-    expect(labelModeInstallation('MODE_1')).toBe('Poste unique (Local)')
+    expect(labelModeInstallation('MODE_1')).toBe('Mono-poste (1 ordinateur)')
   })
 
   it('retourne le libellé pour MODE_2', () => {
-    expect(labelModeInstallation('MODE_2')).toBe('Réseau (Serveur interne)')
+    expect(labelModeInstallation('MODE_2')).toBe('Réseau (PostgreSQL existant)')
   })
 
   it('retourne le libellé pour MODE_3', () => {
-    expect(labelModeInstallation('MODE_3')).toBe('Réseau auto (PostgreSQL automatique)')
+    expect(labelModeInstallation('MODE_3')).toBe('Réseau automatique (clé en main)')
   })
 
   it('retourne la valeur brute pour un mode inconnu', () => {

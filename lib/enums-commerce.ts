@@ -185,9 +185,9 @@ export const MODES_INSTALLATION = [
 export type ModeInstallation = (typeof MODES_INSTALLATION)[number]
 
 export const LABELS_MODE_INSTALLATION: Record<ModeInstallation, string> = {
-  MODE_1: 'Poste unique (Local)',
-  MODE_2: 'Réseau (Serveur interne)',
-  MODE_3: 'Réseau auto (PostgreSQL automatique)',
+  MODE_1: 'Mono-poste (1 ordinateur)',
+  MODE_2: 'Réseau (PostgreSQL existant)',
+  MODE_3: 'Réseau automatique (clé en main)',
 }
 
 export function labelModeInstallation(mode: string): string {

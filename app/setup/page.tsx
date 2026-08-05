@@ -100,7 +100,7 @@ export default function SetupPage() {
             Configuration
           </h1>
           <p className="text-orange-100 text-sm">
-            Première installation de GestiCom Pro
+            Première installation de GestiCom Pro — choisissez le mode de votre entreprise
           </p>
         </div>
 
@@ -122,8 +122,30 @@ export default function SetupPage() {
                   <div>
                     <h3 className="text-lg font-black text-white uppercase tracking-tight mb-1">Mono-poste</h3>
                     <p className="text-orange-100 text-xs leading-relaxed">
-                      Installation sur un seul ordinateur. Base de données locale (SQLite).<br />
+                      Un seul ordinateur, base de données locale.<br />
                       Simple et rapide, aucun serveur requis.
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode('MODE_2_AUTO')}
+                className="group relative overflow-hidden rounded-2xl border-2 border-emerald-400/60 bg-emerald-500/10 p-8 text-left hover:bg-emerald-500/20 transition-all"
+              >
+                <div className="absolute top-3 right-3 rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black text-emerald-950 uppercase tracking-wider shadow-lg shadow-amber-400/30">
+                  Clé en main
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-xl bg-emerald-500/20 shrink-0">
+                    <Server className="h-6 w-6 text-emerald-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight mb-1">Réseau multi-poste (automatique)</h3>
+                    <p className="text-orange-100 text-xs leading-relaxed">
+                      Plusieurs ordinateurs partageant la même base, prêt en quelques minutes.<br />
+                      PostgreSQL s&apos;installe et se configure tout seul sur ce poste.
                     </p>
                   </div>
                 </div>
@@ -134,34 +156,18 @@ export default function SetupPage() {
                 onClick={() => setMode('MODE_2')}
                 className="group relative overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-8 text-left hover:bg-white/20 transition-all"
               >
-                <div className="flex items-start gap-4">
-                  <div className="p-3 rounded-xl bg-emerald-500/20 shrink-0">
-                    <Server className="h-6 w-6 text-emerald-300" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-black text-white uppercase tracking-tight mb-1">Multi-poste (Réseau)</h3>
-                    <p className="text-orange-100 text-xs leading-relaxed">
-                      Plusieurs postes connectés à une base PostgreSQL centralisée.<br />
-                      Serveur PostgreSQL existant requis.
-                    </p>
-                  </div>
+                <div className="absolute top-3 right-3 rounded-full bg-white/15 px-3 py-1 text-[10px] font-black text-white uppercase tracking-wider">
+                  Expert
                 </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setMode('MODE_2_AUTO')}
-                className="group relative overflow-hidden rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-8 text-left hover:bg-emerald-500/20 transition-all"
-              >
                 <div className="flex items-start gap-4">
                   <div className="p-3 rounded-xl bg-emerald-500/20 shrink-0">
                     <Server className="h-6 w-6 text-emerald-300" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-white uppercase tracking-tight mb-1">Multi-poste (Auto)</h3>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight mb-1">Réseau multi-poste (serveur existant)</h3>
                     <p className="text-orange-100 text-xs leading-relaxed">
-                      Installation clé en main.<br />
-                      PostgreSQL sera téléchargé et configuré automatiquement.
+                      Pour les entreprises possédant déjà un serveur PostgreSQL.<br />
+                      Les données restent sur votre serveur, rien n&apos;est installé en plus.
                     </p>
                   </div>
                 </div>
@@ -179,12 +185,12 @@ export default function SetupPage() {
                   ) : mode === 'MODE_2_AUTO' ? (
                     <>
                       <div className="p-2 rounded-lg bg-emerald-500/20"><Server className="h-5 w-5 text-emerald-300" /></div>
-                      <span className="text-lg font-black text-white uppercase tracking-tight">Multi-poste (Auto)</span>
+                      <span className="text-lg font-black text-white uppercase tracking-tight">Réseau multi-poste (automatique)</span>
                     </>
                   ) : (
                     <>
                       <div className="p-2 rounded-lg bg-emerald-500/20"><Server className="h-5 w-5 text-emerald-300" /></div>
-                      <span className="text-lg font-black text-white uppercase tracking-tight">Multi-poste</span>
+                      <span className="text-lg font-black text-white uppercase tracking-tight">Réseau multi-poste (serveur existant)</span>
                     </>
                   )}
                 </div>
@@ -200,10 +206,10 @@ export default function SetupPage() {
               {mode === 'MODE_2_AUTO' && (
                 <div className="rounded-xl bg-emerald-500/10 border border-emerald-400/30 p-4 text-center">
                   <p className="text-emerald-200 text-sm font-bold">
-                    PostgreSQL sera téléchargé et installé automatiquement.
+                    PostgreSQL sera téléchargé puis configuré automatiquement sur ce poste.
                   </p>
                   <p className="text-orange-200/70 text-xs mt-1">
-                    Téléchargement ~350 Mo · Configuration automatique
+                    Une seule installation nécessaire : les autres postes se connecteront à ce serveur.
                   </p>
                 </div>
               )}

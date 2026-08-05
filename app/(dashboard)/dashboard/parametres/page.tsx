@@ -796,9 +796,9 @@ export default function ParametresPage() {
                 disabled={modeSaving}
                 className="w-full rounded-xl border border-white/10 bg-gray-900 px-4 py-3 text-sm text-white font-bold focus:border-cyan-500 outline-none transition-all disabled:opacity-50"
               >
-                <option value="MODE_1">Mode 1 — Poste unique (Local)</option>
-                <option value="MODE_2">Mode 2 — Réseau (PostgreSQL)</option>
-                <option value="MODE_3">Mode 3 — Réseau auto (PostgreSQL automatique)</option>
+                <option value="MODE_1">Mode 1 — Mono-poste (1 ordinateur)</option>
+                <option value="MODE_2">Mode 2 — Réseau (PostgreSQL existant)</option>
+                <option value="MODE_3">Mode 3 — Réseau automatique (clé en main)</option>
               </select>
               {modeSaving && (
                 <p className="mt-2 text-[10px] text-cyan-400 italic flex items-center gap-1.5">
@@ -806,7 +806,7 @@ export default function ParametresPage() {
                 </p>
               )}
               <p className="mt-2 text-[10px] text-white/40 italic">
-                Mode 1 : installation sur un seul poste (SQLite). Mode 2 : installation réseau multi-poste avec serveur PostgreSQL centralisé. Mode 3 : PostgreSQL installé et configuré automatiquement.
+                Mode 1 : un seul poste (base locale). Mode 2 : plusieurs postes reliés à un serveur PostgreSQL existant. Mode 3 : PostgreSQL installé et configuré automatiquement, prêt pour le réseau.
               </p>
             </div>
 

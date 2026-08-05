@@ -1,4 +1,4 @@
-﻿# DÃ©pendances
+﻿# Dépendances
 node_modules/
 .next/
 .turbo/
@@ -6,7 +6,7 @@ out/
 build/
 dist/
 
-# Environnement (SÃ‰CURITÃ‰ !)
+# Environnement (SÉCURITÉ !)
 .env
 .env.local
 .env.development.local
@@ -14,7 +14,7 @@ dist/
 .env.production.local
 *.env
 
-# Base de donnÃ©es (On n'envoie JAMAIS les donnÃ©es clients sur GitHub)
+# Base de données (On n'envoie JAMAIS les données clients sur GitHub)
 *.db
 *.db-wal
 *.db-shm
@@ -23,7 +23,7 @@ prisma/*.sqlite-journal
 prisma/gesticom.db
 prisma/dev.db
 
-# Binaires Lourds et ExÃ©cutables
+# Binaires Lourds et Exécutables
 node.exe
 nssm.exe
 GestiComService.exe
@@ -49,8 +49,32 @@ private.pem
 *.tsbuildinfo
 .next-env.d.ts
 .cursor/
-s
+scripts/audit-compteurs.js
+scripts/audit-detail.js
+
+# Fichiers de test / artefacts locaux
+_test_*.pdf
+_test_*.js
+GestiComService.out
+opencode.json.disabled
+
+# Build artifacts
+tsconfig.tsbuildinfo
+.next/
+
+# Artéfacts de diagnostic local
+_check_db.js
+_check_db.*
+tsc_errors.txt
+tsc_output.txt
+logs/
+coverage/
+
+# Build output
+release/
+*.tar.gz
+*.gz
+
 # Artefacts locaux (ne jamais committer)
 gesticom.db.bak
 build-log.txt
-
