@@ -25,7 +25,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validation = validateApiRequest(pushSchema, body)
     if (!validation.success) return validation.response
-    const { userId, title, body: messageBody, data } = validation.data
 
     // Notification enregistrée en base
     // L'envoi se fait côté client via le service worker

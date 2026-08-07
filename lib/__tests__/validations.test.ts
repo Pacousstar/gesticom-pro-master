@@ -630,6 +630,25 @@ describe('reglementCompteCourantSchema', () => {
     const r = reglementCompteCourantSchema.safeParse({ compteCourantId: 1, montant: -1000, modePaiement: 'ESPECES' })
     expect(r.success).toBe(false)
   })
+
+  it('accepte un règlement sans compteCourantId (résolu par clientId)', () => {
+    const r = reglementCompteCourantSchema.safeParse({
+      clientId: 5,
+      montant: 50000,
+      modePaiement: 'ESPECES',
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepte un retrait sans compteCourantId mais avec observation', () => {
+    const r = reglementCompteCourantSchema.safeParse({
+      fournisseurId: 3,
+      montant: -1000,
+      modePaiement: 'ESPECES',
+      observation: 'Avoir à récupérer',
+    })
+    expect(r.success).toBe(true)
+  })
 })
 
 describe('commandeFournisseurSchema', () => {

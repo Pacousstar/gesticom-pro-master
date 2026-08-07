@@ -17,12 +17,11 @@ function formatMontant(n: number): string {
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'comptabilite:view')
   if (authError) return authError
-
-  try {
     const limit = Math.min(5000, Math.max(1, Number(request.nextUrl.searchParams.get('limit')) || 1000))
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()

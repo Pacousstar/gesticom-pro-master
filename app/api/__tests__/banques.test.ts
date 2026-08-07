@@ -119,10 +119,6 @@ describe('GET /api/banques', () => {
 
     mockGroupBy
       .mockResolvedValueOnce([
-        { banqueId: 1, _sum: { montant: 500 } },
-        { banqueId: 2, _sum: { montant: 1000 } },
-      ])
-      .mockResolvedValueOnce([
         { banqueId: 1, type: 'VERSEMENT', _sum: { montant: 300 } },
         { banqueId: 1, type: 'RETRAIT', _sum: { montant: 100 } },
         { banqueId: 2, type: 'VERSEMENT', _sum: { montant: 500 } },

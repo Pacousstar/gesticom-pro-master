@@ -25,7 +25,6 @@ export default function ParClientPage() {
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-    const [isPrinting, setIsPrinting] = useState(false)
     const { error: showError } = useToast()
     const [selectedHistory, setSelectedHistory] = useState<{ id: number | null; nom: string } | null>(null)
     const [historyData, setHistoryData] = useState<any[]>([])
@@ -73,7 +72,7 @@ export default function ParClientPage() {
             if (res.ok) {
                 setHistoryData(await res.json())
             }
-        } catch (e) {
+        } catch {
             showError('Erreur chargement historique client')
         } finally {
             setLoadingHistory(false)

@@ -9,7 +9,7 @@ import { z } from 'zod'
 
 const doublonsSchema = z.object({ idPrincipal: z.coerce.number().int().positive(), idDoublon: z.coerce.number().int().positive() })
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const forbidden = requirePermission(session, 'produits:view')

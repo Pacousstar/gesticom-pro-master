@@ -8,6 +8,7 @@ import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'comptabilite:export')
@@ -18,7 +19,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
   }
 
-  try {
     const typeParam = request.nextUrl.searchParams.get('type')?.trim()
     const where: { type?: string; entiteId?: number } = { entiteId }
     if (typeParam && ['ACHATS', 'VENTES', 'BANQUE', 'CAISSE', 'OD'].includes(typeParam)) {

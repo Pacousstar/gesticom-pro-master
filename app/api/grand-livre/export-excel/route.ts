@@ -8,12 +8,11 @@ import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'comptabilite:export')
   if (authError) return authError
-
-  try {
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
     const compteId = request.nextUrl.searchParams.get('compteId')?.trim()

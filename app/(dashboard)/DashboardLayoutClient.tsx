@@ -58,9 +58,6 @@ import { useTheme } from '@/components/ThemeProvider'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { labelModeInstallation } from '@/lib/enums-commerce'
 
-// Diagnostic DB banner
-type DbInfo = { nodeEnv?: string; databaseUrl?: string }
-
 const navigation = [
   {
     section: '🛒 COMMERCE',
@@ -174,7 +171,7 @@ export default function DashboardLayoutClient({
   children: React.ReactNode
   user: UserWithPermissions
 }) {
-  const [mounted, setMounted] = useState(false)
+  const [, setMounted] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -190,7 +187,7 @@ export default function DashboardLayoutClient({
   const [entiteSelectOpen, setEntiteSelectOpen] = useState(false)
   const [switchingEntite, setSwitchingEntite] = useState(false)
   const entiteSelectRef = useRef<HTMLDivElement>(null)
-  const { toasts, removeToast, success: showSuccess, error: showError } = useToast()
+  const { toasts, removeToast, error: showError } = useToast()
   const { theme, toggle: toggleTheme } = useTheme()
   const pathname = usePathname()
   const router = useRouter()
@@ -336,7 +333,7 @@ export default function DashboardLayoutClient({
       try {
         const res = await fetch('/api/auth/check', { method: 'GET' });
         setIsServerConnected(res.ok);
-      } catch (e) {
+      } catch {
         setIsServerConnected(false);
       }
     };
@@ -491,7 +488,7 @@ export default function DashboardLayoutClient({
   async function marquerToutesLues() {
     try {
       await fetch('/api/notifications/marquer-lues', { method: 'PATCH' })
-    } catch (e) {
+    } catch {
       // Silencieux
     } finally {
       setToutesLues(true)

@@ -18,8 +18,7 @@ export default function RapportInventaireGlobalPage() {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
     const { error: showError } = useToast()
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-    const [isPrinting, setIsPrinting] = useState(false)
-    const [entreprise, setEntreprise] = useState<any>(null)
+    const [, setEntreprise] = useState<any>(null)
 
     const fetchData = async () => {
         setLoading(true)
@@ -31,7 +30,7 @@ export default function RapportInventaireGlobalPage() {
             } else {
                 showError('Erreur lors du chargement de l\'inventaire')
             }
-        } catch (e) {
+        } catch {
             showError('Erreur réseau')
         } finally {
             setLoading(false)

@@ -26,11 +26,10 @@ export default function PaiementsFournisseursPage() {
   const [endDate, setEndDate] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
-  const ITEMS_PER_PAGE_REPORT = 18
   const { error: showError } = useToast()
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isPrintingData, setIsPrintingData] = useState(false)
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [, setEntreprise] = useState<any>(null)
 
   useEffect(() => {
     const now = new Date()

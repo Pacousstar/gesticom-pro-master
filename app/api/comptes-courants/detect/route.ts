@@ -16,7 +16,7 @@ function nomsProches(a: string, b: string): boolean {
   return false
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'clients:view')

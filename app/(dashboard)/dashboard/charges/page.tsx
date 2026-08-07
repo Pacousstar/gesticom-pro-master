@@ -255,10 +255,6 @@ export default function ChargesPage() {
     }
   }
 
-  const total = charges.reduce((s, c) => s + c.montant, 0)
-  const totalFixe = charges.filter((c) => c.type === 'FIXE').reduce((s, c) => s + c.montant, 0)
-  const totalVariable = charges.filter((c) => c.type === 'VARIABLE').reduce((s, c) => s + c.montant, 0)
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">

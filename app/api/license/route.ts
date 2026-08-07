@@ -66,7 +66,7 @@ export async function GET() {
       features: licence.features ? JSON.parse(licence.features) : [],
       erreur: validation.erreur
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Erreur lors de la lecture de la licence' },
       { status: 500 }
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
       expire: licenceValide.payload!.expire,
       features: licenceValide.payload!.features,
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Erreur lors de l'activation de la licence" },
       { status: 500 }

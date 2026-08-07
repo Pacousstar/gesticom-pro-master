@@ -5,7 +5,7 @@ import { comptabiliserReglementVente, comptabiliserReglementAchat } from '@/lib/
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse, calculerSoldeCaisse } from '@/lib/caisse'
 import { estModeEspeces } from '@/lib/enums-commerce'
 import { getEntiteId } from '@/lib/get-entite-id'
-import { requirePermission } from '@/lib/require-role'
+import { requireAnyPermission } from '@/lib/require-role'
 import { reglementCompteCourantSchema } from '@/lib/validations'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { apiCatch } from '@/lib/log-error'
@@ -14,7 +14,7 @@ import { enregistrerOperationBancaire, calculerSoldeBanque } from '@/lib/banque'
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const authError = requirePermission(session, 'comptabilite:view')
+  const authError = requireAnyPermission(session, ['comptabilite:view', 'clients:edit', 'fournisseurs:edit', 'ventes:create'])
   if (authError) return authError
 
   try {
@@ -42,10 +42,23 @@ export async function POST(request: NextRequest) {
     const entiteId = await getEntiteId(session)
     if (!entiteId) return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
 
-    const cc = await prisma.compteCourant.findUnique({ where: { id: Number(compteCourantId) } })
-    if (!cc || cc.entiteId !== entiteId) {
-      return NextResponse.json({ error: 'Compte courant introuvable.' }, { status: 404 })
+    // Compte courant optionnel : résolu via clientId/fournisseurId si possible, sinon toléré
+    // (les comptes courants mathématiques des pages soldes/[id] n'ont pas forcément de rangée CompteCourant).
+    let cc: { id: number; entiteId: number; code?: string | null; nom?: string | null } | null = null
+    if (compteCourantId) {
+      const found = await prisma.compteCourant.findUnique({ where: { id: Number(compteCourantId) } })
+      if (!found || found.entiteId !== entiteId) {
+        return NextResponse.json({ error: 'Compte courant introuvable.' }, { status: 404 })
+      }
+      cc = found
+    } else if (clientId) {
+      cc = await prisma.compteCourant.findFirst({ where: { clientId: Number(clientId), entiteId } })
+    } else if (fournisseurId) {
+      cc = await prisma.compteCourant.findFirst({ where: { fournisseurId: Number(fournisseurId), entiteId } })
     }
+    const ccRefId = cc ? cc.id : 0
+    const ccRef = ccRefId ? `#${ccRefId}` : ''
+    const dateReglement = v.date ? new Date(v.date) : new Date()
 
     // Client : règlement normal => argent ENTRANT (ENTREE / REGLEMENT_CLIENT),
     // retrait (montant négatif) => argent SORTANT (SORTIE / RETRAIT).
@@ -98,7 +111,7 @@ export async function POST(request: NextRequest) {
             montant: montantFinal,
             modePaiement,
             statut: 'VALIDE',
-            date: new Date(),
+            date: dateReglement,
             utilisateurId: session.userId,
             observation: observationReglement,
           },
@@ -113,6 +126,7 @@ export async function POST(request: NextRequest) {
             montant: montantFinal,
             utilisateurId: session.userId,
             entiteId,
+            date: dateReglement,
           }, tx)
           await recalculerSoldeCaisse(magasinId!, tx)
         }
@@ -120,9 +134,9 @@ export async function POST(request: NextRequest) {
           await enregistrerOperationBancaire({
             banqueId,
             entiteId,
-            date: new Date(),
+            date: dateReglement,
             type: typeBanqueClient,
-            libelle: `${estRetrait ? 'Retrait' : 'Règlement'} CC Client #${compteCourantId}`,
+            libelle: `${estRetrait ? 'Retrait' : 'Règlement'} CC Client ${ccRef}`,
             montant: montantFinal,
             utilisateurId: session.userId,
             reference: `REGLEMENT_${reglement.id}`,
@@ -168,7 +182,7 @@ export async function POST(request: NextRequest) {
             montant: montantFinal,
             modePaiement,
             statut: 'VALIDE',
-            date: new Date(),
+            date: dateReglement,
             utilisateurId: session.userId,
             observation: observationReglement,
           },
@@ -183,6 +197,7 @@ export async function POST(request: NextRequest) {
             montant: montantFinal,
             utilisateurId: session.userId,
             entiteId,
+            date: dateReglement,
           }, tx)
           await recalculerSoldeCaisse(magasinId!, tx)
         }
@@ -190,9 +205,9 @@ export async function POST(request: NextRequest) {
           await enregistrerOperationBancaire({
             banqueId,
             entiteId,
-            date: new Date(),
+            date: dateReglement,
             type: typeBanqueFournisseur,
-            libelle: `${estRetrait ? 'Retrait' : 'Règlement'} CC Fournisseur #${compteCourantId}`,
+            libelle: `${estRetrait ? 'Retrait' : 'Règlement'} CC Fournisseur ${ccRef}`,
             montant: montantFinal,
             utilisateurId: session.userId,
             reference: `REGLEMENT_${reglement.id}`,

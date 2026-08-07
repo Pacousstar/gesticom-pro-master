@@ -43,7 +43,7 @@ export default function ValeurStockPage() {
   const itemsPerPage = 20
   const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [, setEntreprise] = useState<any>(null)
   const [allDataForPrint, setAllDataForPrint] = useState<any[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
@@ -146,7 +146,7 @@ export default function ValeurStockPage() {
 
     const chunks = paginateForPrint(data, { firstPageSize: 14, otherPagesSize: 18 })
     const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-    let totalValeur = 0, totalQte = 0
+    let totalValeur = 0
 
     const headerHtml = (showFull: boolean, pageNum: number, totalPages: number) => {
       if (showFull) {
@@ -198,7 +198,6 @@ export default function ValeurStockPage() {
           <th style="width:12%">VALEUR<br/>STOCK</th>
         </tr></thead><tbody>`
       chunk.forEach((p: any) => {
-        totalQte += p.quantite || 0
         totalValeur += p.valeurTotal || 0
         html += `<tr>
           <td class="center"><b>${chunk.indexOf(p) + 1}</b><br/><span style="font-size:11px;color:#555;">${p.code || '—'}</span></td>
@@ -343,7 +342,7 @@ export default function ValeurStockPage() {
               {(() => {
                 const printData = allDataForPrint.length > 0 ? allDataForPrint : data
                 const chunks = paginateForPrint(printData, { firstPageSize: 14, otherPagesSize: 18 })
-                let totalValeur = 0, totalQte = 0
+                let totalValeur = 0
                 return chunks.map((chunk: any[], index: number, allChunks: any[][]) => (
                   <div key={index} className={index < allChunks.length - 1 ? 'page-break border-b-2 border-dashed border-gray-100 mb-8 pb-8' : ''}>
                     <table className="w-full border-collapse text-sm">
@@ -358,7 +357,6 @@ export default function ValeurStockPage() {
                       </thead>
                       <tbody>
                         {chunk.map((p: any, idx: number) => {
-                          totalQte += p.quantite || 0
                           totalValeur += p.valeurTotal || 0
                           return (
                             <tr key={idx} className="border-b">

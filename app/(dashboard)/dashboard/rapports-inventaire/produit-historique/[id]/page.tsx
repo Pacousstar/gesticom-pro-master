@@ -42,7 +42,7 @@ export default function ProduitHistoriquePage() {
       } else {
         error("Impossible de charger l'historique du produit.")
       }
-    } catch (e) {
+    } catch {
       error("Erreur réseau.")
     } finally {
       setLoading(false)

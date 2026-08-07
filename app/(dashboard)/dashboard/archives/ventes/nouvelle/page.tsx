@@ -18,7 +18,6 @@ import {
   montantLigneTTC,
   montantTvaImpliciteLigne,
   montantTotalVenteDocument,
-  pointsFideliteDepuisEncaissement,
 } from '@/lib/calculs-commerciaux'
 
 // Chargement dynamique du scanner (évite les erreurs SSR liées au DOM et à la webcam)
@@ -425,8 +424,6 @@ export default function ArchivesVentesNouvellePage() {
     { totalHT: 0, totalTVA: 0, totalRemise: 0, totalAvantRemiseGlobale: 0 }
   )
   const total = montantTotalVenteDocument(totalAvantRemiseGlobale, 0, 0)
-  const pointsGagnes = pointsFideliteDepuisEncaissement(total)
-
   const popupTotal = popupLignes.reduce(
     (s, l) =>
       s +
@@ -552,8 +549,6 @@ export default function ArchivesVentesNouvellePage() {
   }
 
   // Calculer points restants pour remise (Fidélité Pro)
-  const clientSel = clients.find(c => c.id === Number(formData.clientId))
-  const pointsClient = clientSel?.pointsFidelite || 0
 
   const addLigneInPopup = () => {
     const pid = Number(popupAjoutProduit.produitId)
@@ -568,14 +563,6 @@ export default function ArchivesVentesNouvellePage() {
 
   const removePopupLigne = (i: number) => {
     setPopupLignes((prev) => prev.filter((_, j) => j !== i))
-  }
-
-  const onSelectProduit = (id: string) => {
-    const p = produits.find((x) => x.id === Number(id))
-    if (p) {
-      const prixDefaut = (p.prixVente && p.prixVente > 0) ? p.prixVente : (p.prixAchat ?? 0)
-      setAjoutProduit((a) => ({ ...a, produitId: id, prixUnitaire: String(prixDefaut) }))
-    }
   }
 
   /**
@@ -745,7 +732,7 @@ export default function ArchivesVentesNouvellePage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors du règlement.')
       }
-    } catch (e) {
+    } catch {
       showError('Erreur réseau.')
     } finally {
       setSavingReglement(false)
@@ -1801,7 +1788,7 @@ export default function ArchivesVentesNouvellePage() {
                   } else {
                     showError(data.error || 'Erreur lors de l\'ajout du stock.')
                   }
-                } catch (e) {
+                } catch {
                   showError('Erreur réseau lors de l\'ajout du stock.')
                 } finally {
                   setAjoutStockSaving(false)

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { apiCatch } from '@/lib/log-error'
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   const maintenanceEnabled = process.env.ENABLE_DANGEROUS_MAINTENANCE === 'true'
   if (process.env.NODE_ENV === 'production' && !maintenanceEnabled) {
     return NextResponse.json({ error: 'Route de maintenance désactivée en production.' }, { status: 403 })

@@ -40,7 +40,7 @@ export default function RapportFournisseursPage() {
             } else {
                 showError('Erreur lors du chargement des données')
             }
-        } catch (e) {
+        } catch {
             showError('Erreur réseau')
         } finally {
             setLoading(false)
@@ -77,7 +77,7 @@ export default function RapportFournisseursPage() {
             if (res.ok) {
                 setHistoryData(await res.json())
             }
-        } catch (e) {
+        } catch {
             showError('Erreur chargement historique')
         } finally {
             setLoadingHistory(false)

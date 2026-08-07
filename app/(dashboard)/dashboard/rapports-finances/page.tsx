@@ -53,7 +53,7 @@ export default function RapportFinancesPage() {
                 return
             }
             setData(await res.json())
-        } catch (e) {
+        } catch {
             showError('Erreur chargement des données.')
         } finally {
             setLoading(false)

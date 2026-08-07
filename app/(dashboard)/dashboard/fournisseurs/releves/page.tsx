@@ -53,7 +53,7 @@ export default function FournisseurRelevesPage() {
   
   const [data, setData] = useState<Achat[]>([])
   const [loading, setLoading] = useState(false)
-  const [loadingFournisseurs, setLoadingFournisseurs] = useState(true)
+  const [, setLoadingFournisseurs] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
@@ -92,7 +92,7 @@ export default function FournisseurRelevesPage() {
       } else {
         showError("Impossible de charger le relevé.")
       }
-    } catch (e) {
+    } catch {
       showError("Erreur réseau lors du chargement du relevé.")
     } finally {
       setLoading(false)

@@ -17,6 +17,7 @@ function formatMontant(n: number): string {
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'comptabilite:view')
@@ -26,8 +27,6 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
   const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
-
-  try {
     const eId = await getEntiteId(session)
     const whereEntite: any = {}
 

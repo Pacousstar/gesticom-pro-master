@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 
 
-export async function GET(req: Request) {
+export async function GET(_req: Request) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -66,7 +66,6 @@ export async function DELETE(req: Request) {
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     const authError = requirePermission(session, 'archives:delete')
     if (authError) return authError
-    const currentUser = { id: session.userId, entiteId: session.entiteId, role: session.role }
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')

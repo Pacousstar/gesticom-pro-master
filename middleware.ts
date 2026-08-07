@@ -25,7 +25,6 @@ export function middleware(request: NextRequest) {
     }
 
     if (rateLimitMap.size > 10000) {
-      const cutoff = now - RATE_LIMIT_WINDOW
       for (const [key, val] of rateLimitMap) {
         if (now > val.resetAt) rateLimitMap.delete(key)
       }

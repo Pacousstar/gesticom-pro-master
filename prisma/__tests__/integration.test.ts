@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { createTestDatabase, destroyTestDatabase, getDb } from './helpers'
+import { createTestDatabase, destroyTestDatabase } from './helpers'
 
 let prisma: any
 let magasinId: number
@@ -499,7 +499,6 @@ describe('Cycle 3: Caisse → Banque → Lettrage', () => {
   let compteCaisseId: number
   let compteBanqueId: number
   let banqueId: number
-  let ecritureId: number
 
   it('a. Création du journal et plans comptes', async () => {
     const journal = await prisma.journal.create({
@@ -584,7 +583,6 @@ describe('Cycle 3: Caisse → Banque → Lettrage', () => {
         referenceId: banqueId
       }
     })
-    ecritureId = ecriture.id
     expect(ecriture.debit).toBe(50000)
     expect(ecriture.credit).toBe(0)
     expect(ecriture.referenceType).toBe('BANQUE')

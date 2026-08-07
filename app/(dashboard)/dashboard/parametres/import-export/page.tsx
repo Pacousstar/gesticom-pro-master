@@ -54,26 +54,28 @@ export default function ImportExportPage() {
         body: formData,
       })
 
-      const data = await res.json()
+      const text = await res.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { data = null }
       if (res.ok) {
         setImportResult({
           success: true,
-          imported: data.imported || 0,
-          failed: data.failed || 0,
-          errors: data.errors || [],
-          message: data.message || 'Import réussi.',
+          imported: data?.imported || 0,
+          failed: data?.failed || 0,
+          errors: data?.errors || [],
+          message: data?.message || 'Import réussi.',
         })
-        showSuccess(data.message || 'Import réussi.')
+        showSuccess(data?.message || 'Import réussi.')
         setImportFile(null)
       } else {
         setImportResult({
           success: false,
           imported: 0,
           failed: 0,
-          errors: data.errors || [],
-          message: data.error || 'Erreur lors de l\'import.',
+          errors: data?.errors || [],
+          message: data?.error || data || 'Erreur lors de l\'import.',
         })
-        showError(formatApiError(data.error || 'Erreur lors de l\'import.'))
+        showError(formatApiError(data?.error || (text || 'Erreur lors de l\'import.')))
       }
     } catch (e) {
       showError(formatApiError(e))
@@ -110,8 +112,10 @@ export default function ImportExportPage() {
 
         showSuccess('Export réussi.')
       } else {
-        const data = await res.json()
-        showError(formatApiError(data.error || 'Erreur lors de l\'export.'))
+        const errText = await res.text().catch(() => '')
+        let msg = 'Erreur lors de l\'export.'
+        try { const data = errText ? JSON.parse(errText) : null; if (data?.error) msg = data.error; else if (errText) msg = errText } catch { if (errText) msg = errText }
+        showError(formatApiError(msg))
       }
     } catch (e) {
       showError(formatApiError(e))

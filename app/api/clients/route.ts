@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
           utilisateurId: session.userId,
         })
       }
-    } catch (_) {
+    } catch {
       // Non-bloquant : la compta peut ne pas être initialisée
     }
 

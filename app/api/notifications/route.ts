@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { apiCatch } from '@/lib/log-error'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 

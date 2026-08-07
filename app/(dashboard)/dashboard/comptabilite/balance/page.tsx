@@ -28,7 +28,7 @@ export default function BalancePage() {
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
+  const [isPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   // Filtre et Pagination

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { unauthorized, notFound, badRequest, handleApiError } from '@/lib/api-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
@@ -49,7 +48,6 @@ export async function PATCH(
     const vres = validateApiRequest(commandeFournisseurSchema.partial(), body)
     if (!vres.success) return vres.response
     const cfData = vres.data
-    const entiteId = await getEntiteId(session)
 
     // Validation de la machine à états si un statut est fourni
     if (cfData.statut) {

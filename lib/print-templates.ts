@@ -347,9 +347,9 @@ export function printHtml(html: string, title: string = 'Document'): void {
   doc.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>${title}</title></head><body>${html}</body></html>`)
   doc.close()
   setTimeout(() => {
-    try { iframe.contentWindow?.print() } catch (e) {}
+    try { iframe.contentWindow?.print() } catch {}
     setTimeout(() => {
-      try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe) } catch (e) {}
+      try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe) } catch {}
     }, 3000)
   }, 500)
 }

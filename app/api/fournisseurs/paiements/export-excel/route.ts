@@ -9,6 +9,7 @@ import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'fournisseurs:view')
@@ -21,11 +22,7 @@ export async function GET(request: NextRequest) {
 
   const where: any = {}
 
-  if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-    where.achat = { entiteId: session.entiteId }
-  } else if(entiteId) {
-      where.achat = { entiteId }
-  }
+  if (entiteId) where.achat = { entiteId }
 
   if (dateDebut && dateFin) {
     where.date = {
@@ -33,8 +30,6 @@ export async function GET(request: NextRequest) {
       lte: new Date(dateFin + 'T23:59:59'),
     }
   }
-
-  try {
     const paiements = await prisma.reglementAchat.findMany({
       where,
       take: 10000,

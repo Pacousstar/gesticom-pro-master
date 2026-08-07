@@ -69,7 +69,6 @@ export default function ProduitsPage() {
   const [showArchived, setShowArchived] = useState(false)
   const { success: showSuccess, error: showError } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
-  const ITEMS_PER_PAGE_REPORT = 25
   const [suggesting, setSuggesting] = useState(false)
   const [formData, setFormData] = useState({
     code: '',
@@ -132,13 +131,6 @@ export default function ProduitsPage() {
 
   const fetchStats = () => {
     fetch('/api/produits/stats').then((r) => (r.ok ? r.json() : null)).then((s) => { if (s) setStats(s) }).catch(() => {})
-  }
-
-  const fetchCategories = () => {
-    fetch('/api/produits/categories')
-      .then((r) => (r.ok ? r.json() : ['DIVERS']))
-      .then((cat) => setCategories(Array.isArray(cat) && cat.length ? cat : ['DIVERS']))
-      .catch(() => {})
   }
 
   useEffect(() => {
@@ -232,7 +224,7 @@ export default function ProduitsPage() {
           showError(data.error || "Erreur lors de l'archivage.")
         }
       }
-    } catch (e) {
+    } catch {
       showError('Erreur réseau.')
     } finally {
       setIsDeleting(false)
@@ -255,7 +247,7 @@ export default function ProduitsPage() {
       } else {
         showError(data.error || 'Erreur lors de la restauration.')
       }
-    } catch (e) {
+    } catch {
       showError('Erreur réseau lors de la restauration.')
     } finally {
       setRestoring(null)
@@ -306,8 +298,14 @@ export default function ProduitsPage() {
     try {
       const res = await fetch('/api/produits/export')
       if (!res.ok) {
-        const data = await res.json()
-        showError(formatApiError(data.error || 'Erreur lors de l\'export Excel'))
+        const text = await res.text().catch(() => '')
+        let msg = 'Erreur lors de l\'export Excel'
+        try {
+          const data = text ? JSON.parse(text) : null
+          if (data && data.error) msg = data.error
+          else if (text) msg = text
+        } catch { if (text) msg = text }
+        showError(formatApiError(msg))
         return
       }
       const blob = await res.blob()
@@ -885,7 +883,7 @@ export default function ProduitsPage() {
                               const d = await res.json()
                               showError(d.error || 'Erreur mise à jour prix vente')
                             }
-                          } catch (e) {
+                          } catch {
                             showError('Erreur réseau')
                           }
                         }}
@@ -912,7 +910,7 @@ export default function ProduitsPage() {
                               const d = await res.json()
                               showError(d.error || 'Erreur mise à jour prix minimum')
                             }
-                          } catch (e) {
+                          } catch {
                             showError('Erreur réseau')
                           }
                         }}

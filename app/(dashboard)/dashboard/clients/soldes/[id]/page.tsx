@@ -49,6 +49,7 @@ export default function CompteCourantClientPage() {
   const [selectedMagasinId, setSelectedMagasinId] = useState<string>('')
   const [selectedBanqueId, setSelectedBanqueId] = useState<string>('')
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0])
+  const [payObservation, setPayObservation] = useState('')
   
   // MODIF POINT 7 : États pour l'édition/suppression
   const [editingReglement, setEditingReglement] = useState<any>(null)
@@ -59,7 +60,6 @@ export default function CompteCourantClientPage() {
   const [selectedReglement, setSelectedReglement] = useState<Operation | null>(null)
   const [unpaidInvoices, setUnpaidInvoices] = useState<any[]>([])
   const [loadingInvoices, setLoadingInvoices] = useState(false)
-  const [allVentesDetail, setAllVentesDetail] = useState<any[]>([])
   const [isPreparingPrint, setIsPreparingPrint] = useState(false)
   const [lettrageError, setLettrageError] = useState('')
   const [lettrageRestant, setLettrageRestant] = useState(0)
@@ -84,7 +84,7 @@ export default function CompteCourantClientPage() {
     try {
       const res = await fetch(`/api/clients/${id}/factures-impayer`)
       if (res.ok) setUnpaidInvoices(await res.json())
-    } catch (e) {
+    } catch {
       showError("Erreur lors de la récupération des factures.")
     } finally {
       setLoadingInvoices(false)
@@ -132,42 +132,57 @@ export default function CompteCourantClientPage() {
         const error = await res.json()
         setLettrageError(error.error || "Erreur lors du lettrage.")
       }
-    } catch (e) {
+    } catch {
       setLettrageError("Erreur réseau.")
     }
   }
 
   const handleQuickPay = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!payAmount || Number(payAmount) <= 0) return
+    const montant = Number(payAmount)
+    if (!payAmount || isNaN(montant) || montant === 0) {
+      showError('Montant invalide.')
+      return
+    }
+    if (montant < 0 && !payObservation.trim()) {
+      showError('Une observation est obligatoire pour un retrait (montant négatif).')
+      return
+    }
     setIsPaying(true)
     try {
-      const res = await fetch('/api/reglements/ventes', {
+      const estRetrait = montant < 0
+      const res = await fetch('/api/comptes-courants/reglement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clientId: Number(id),
-          montant: Number(payAmount),
+          montant,
           modePaiement: payMode,
           magasinId: selectedMagasinId ? Number(selectedMagasinId) : null,
           banqueId: selectedBanqueId ? Number(selectedBanqueId) : null,
+          payeDepuisCaisse: payMode === 'ESPECES',
+          payeDepuisBanque: payMode !== 'ESPECES',
+          observation: payObservation.trim() || (estRetrait ? undefined : 'Règlement rapide depuis Compte Courant'),
           date: payDate,
-          observation: 'Règlement rapide depuis Compte Courant'
         })
       })
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        showSuccess("Règlement enregistré !")
+        const msg = estRetrait
+          ? `Retrait de ${Math.abs(montant).toLocaleString('fr-FR')} F enregistré !`
+          : "Règlement enregistré !"
+        showSuccess(msg)
         setShowPayModal(false)
         setPayAmount('')
+        setPayObservation('')
         setSelectedMagasinId('')
         setSelectedBanqueId('')
         fetchData()
       } else {
-        const d = await res.json().catch(() => ({}))
-        showError(d.error || "Erreur lors du règlement.")
+        showError(data.error || 'Erreur lors du règlement.')
       }
-    } catch (e) {
-      showError("Erreur réseau.")
+    } catch {
+      showError('Erreur réseau.')
     } finally {
       setIsPaying(false)
     }
@@ -186,7 +201,7 @@ export default function CompteCourantClientPage() {
         const err = await res.json()
         showError(err.error || "Erreur lors de la suppression.")
       }
-    } catch (e) {
+    } catch {
       showError("Erreur réseau.")
     } finally {
       setIsDeleting(null)
@@ -242,7 +257,7 @@ export default function CompteCourantClientPage() {
         const err = await res.json()
         showError(err.error || "Erreur lors de la modification.")
       }
-    } catch (e) {
+    } catch {
       showError("Erreur réseau.")
     } finally {
       setIsPaying(false)
@@ -282,7 +297,7 @@ export default function CompteCourantClientPage() {
       if (pRes.ok) {
         setParams(await pRes.json())
       }
-    } catch (err) {
+    } catch {
       showError("Erreur de connexion.")
     } finally {
       setLoading(false)
@@ -326,8 +341,8 @@ export default function CompteCourantClientPage() {
         return `${html}${pageBreak}`
       }).join('')
 
-      printHtml(`<style>${getPrintStyles('A4')}</style>${allPagesHTML}`, `Factures - ${data?.client?.nom || 'Client'}`)
-    } catch (e) {
+printHtml(`<style>${getPrintStyles('A4')}</style>${allPagesHTML}`, `Factures - ${data?.client?.nom || 'Client'}`)
+    } catch {
       showError("Erreur lors de la préparation de l'impression.")
     } finally {
       setIsPreparingPrint(false)
@@ -756,6 +771,23 @@ export default function CompteCourantClientPage() {
                         />
                         <DollarSign className="absolute right-6 top-1/2 -translate-y-1/2 h-8 w-8 text-orange-200 group-focus-within:text-orange-500 transition-colors" />
                         </div>
+                        {Number(payAmount) < 0 && (
+                          <p className="text-[10px] font-bold text-rose-500 uppercase tracking-widest mt-2 ml-1">
+                            Retrait de compte courant — l'observation est obligatoire.
+                          </p>
+                        )}
+                    </div>
+                    <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">
+                          Observation {Number(payAmount) < 0 ? '(obligatoire pour un retrait)' : '(optionnelle)'}
+                        </label>
+                        <input 
+                            type="text"
+                            value={payObservation}
+                            onChange={e => setPayObservation(e.target.value)}
+                            placeholder={Number(payAmount) < 0 ? "Ex : petite dette contractée au départ du client" : "Ex : acompte, avance..."}
+                            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-500/5 transition-all"
+                        />
                     </div>
                  </div>
 

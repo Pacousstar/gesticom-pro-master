@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         if (!isNaN(tempDate.getTime())) {
           dateReglement = tempDate
         }
-      } catch (e) {
+      } catch {
         await apiCatch(new Error('Date invalide reçue: ' + dateStr), 'api/reglements/ventes')
       }
     }

@@ -7,8 +7,6 @@ import { parseExcel } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 import { comptabiliserMouvementStock } from '@/lib/comptabilisation'
 
-const CODE_PADDING = 3
-
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })

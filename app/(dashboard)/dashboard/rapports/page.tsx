@@ -21,15 +21,6 @@ type Alerte = {
 
 type Top = { produitId: number; code: string; designation: string; quantiteVendue: number }
 
-type Mouvement = {
-  id: number
-  date: string
-  type: string
-  quantite: number
-  produit: { code: string; designation: string }
-  magasin: { code: string; nom: string }
-}
-
 type Magasin = { id: number; code: string; nom: string }
 type Produit = { id: number; code: string; designation: string; categorie?: string }
 
@@ -81,52 +72,6 @@ type RapportProduitClient = {
 
 // --- NOUVEAUX TYPES PHASE 2 ---
 
-type NouveauMouvement = {
-  id: number
-  date: string
-  type: string
-  produitId: number
-  produit: { code: string; designation: string; prixAchat: number }
-  magasin: { nom: string }
-  utilisateur: { nom: string }
-  quantite: number
-  observation?: string
-}
-
-type SoldeTiers = {
-  id: number
-  code: string | null
-  nom: string
-  type?: string
-  totalDu: number
-  totalPaye: number
-  solde: number
-}
-
-type PaiementDetail = {
-  modePaiement: string
-  _sum: { montantPaye: number }
-  _count: { id: number }
-}
-
-type ValeurStock = {
-  id: number
-  code: string
-  designation: string
-  categorie: string
-  quantite: number
-  prixAchat: number
-  valeur: number
-}
-
-type RapportCategorie = {
-  nom: string
-  nbProduits: number
-  quantiteTotale: number
-  valeurAchatStock: number
-  valeurVenteStock: number
-}
-
 export default function RapportsPage() {
   const [activeTab, setActiveTab] = useState('logistique')
   const [loading, setLoading] = useState(true)
@@ -136,9 +81,9 @@ export default function RapportsPage() {
     return d.toISOString().split('T')[0]
   })
   const [dateFin, setDateFin] = useState(() => new Date().toISOString().split('T')[0])
-  const [userRole, setUserRole] = useState<string>('')
+  const [, setUserRole] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
-  const { success: showSuccess, error: showError } = useToast()
+  const { error: showError } = useToast()
 
   // Data State
   const [alertes, setAlertes] = useState<Alerte[]>([])
@@ -147,7 +92,7 @@ export default function RapportsPage() {
   const [caClients, setCaClients] = useState<RapportClient[]>([])
   const [etatPaiementVentes, setEtatPaiementVentes] = useState<RapportPaiement[]>([])
   const [etatPaiementAchats, setEtatPaiementAchats] = useState<RapportPaiement[]>([])
-  const [facturesVentes, setFacturesVentes] = useState<RapportFacture[]>([])
+  const [, setFacturesVentes] = useState<RapportFacture[]>([])
   const [produitsParClient, setProduitsParClient] = useState<RapportProduitClient[]>([])
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null)
   const [selectedFournisseurId, setSelectedFournisseurId] = useState<number | null>(null)
@@ -163,28 +108,14 @@ export default function RapportsPage() {
   const [mouvementsPagination, setMouvementsPagination] = useState<any>(null)
   const [mouvementsPage, setMouvementsPage] = useState(1)
 
-  // New Data State Phase 2
-  const [enterprise, setEnterprise] = useState<any>(null)
-
-  // Pagination Tiers States
-  const [pageClients, setPageClients] = useState(1)
-  const [pageFournisseurs, setPageFournisseurs] = useState(1)
-  const itemsPerPageTiers = 10
-
   // Filter Data
   const [magasins, setMagasins] = useState<Magasin[]>([])
-  const [produits, setProduits] = useState<Produit[]>([])
-  const [clients, setClients] = useState<{ id: number; nom: string }[]>([])
+  const [, setProduits] = useState<Produit[]>([])
+  const [, setClients] = useState<{ id: number; nom: string }[]>([])
   const [filtreMagasin, setFiltreMagasin] = useState('')
 
-  // Pagination
-  const [alertesPage, setAlertesPage] = useState(1)
-  const [topPage, setTopPage] = useState(1)
-  const [facturesPage, setFacturesPage] = useState(1)
-  const [pageTresorerie, setPageTresorerie] = useState(1)
-  const [paginationFactures, setPaginationFactures] = useState<{ totalPages: number; total: number } | null>(null)
-  const [selectedCatFilter, setSelectedCatFilter] = useState('')
-  const [selectedProdFilter, setSelectedProdFilter] = useState('')
+  const [facturesPage] = useState(1)
+  const [, setPaginationFactures] = useState<{ totalPages: number; total: number } | null>(null)
 
   // Pagination Valorisation
   const [pageValorisation, setPageValorisation] = useState(1)
@@ -227,11 +158,6 @@ export default function RapportsPage() {
     }
     
     setLoading(true)
-    const params = new URLSearchParams({
-      dateDebut,
-      dateFin,
-      magasinId: filtreMagasin,
-    })
 
     try {
 // 1. Rapports Généraux
@@ -329,7 +255,7 @@ export default function RapportsPage() {
       const res = await fetch(`/api/rapports/ventes/clients/produits?clientId=${clientId}&dateDebut=${dateDebut}&dateFin=${dateFin}`)
       const data = await res.json()
       setProduitsParClient(Array.isArray(data) ? data : [])
-    } catch (e) {
+    } catch {
       showError('Erreur chargement produits client')
     }
   }
@@ -341,7 +267,7 @@ export default function RapportsPage() {
       const res = await fetch(`/api/rapports/achats/fournisseurs/produits?fournisseurId=${fournisseurId}&dateDebut=${dateDebut}&dateFin=${dateFin}`)
       const data = await res.json()
       setProduitsParFournisseur(Array.isArray(data) ? data : [])
-    } catch (e) {
+    } catch {
       showError('Erreur chargement produits fournisseur')
     }
   }
@@ -349,14 +275,6 @@ export default function RapportsPage() {
   useEffect(() => {
     fetchAllData()
   }, [dateDebut, dateFin, filtreMagasin, facturesPage, mouvementsPage])
-
-  const preset = (days: number) => {
-    const end = new Date()
-    const start = new Date()
-    start.setDate(end.getDate() - days)
-    setDateDebut(start.toISOString().split('T')[0])
-    setDateFin(end.toISOString().split('T')[0])
-  }
 
   if (loading && !alertes.length && !caClients.length) {
     return (
@@ -366,7 +284,7 @@ export default function RapportsPage() {
     )
   }
 
-  const TabButton = ({ id, label, icon: Icon, color, sublabel }: { id: string; label: string; icon: any; color: string; sublabel?: string }) => {
+  const TabButton = ({ id, label, icon: Icon, color }: { id: string; label: string; icon: any; color: string }) => {
     const isActive = activeTab === id
     const colorMap: Record<string, { active: string; bg: string; text: string; ring: string; shadow: string; border: string }> = {
       orange: { active: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-600', ring: 'ring-orange-500/20', shadow: 'shadow-orange-200/50', border: 'border-orange-100' },

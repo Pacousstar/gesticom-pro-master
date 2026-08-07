@@ -50,7 +50,7 @@ interface LignePanier {
 }
 
 export default function EnlevementsAcomptesPage() {
-  const [clients, setClients] = useState<ClientItem[]>([])
+  const [, setClients] = useState<ClientItem[]>([])
   const [clientsAcomptes, setClientsAcomptes] = useState<ClientAcompte[]>([])
   const [selectedClient, setSelectedClient] = useState<ClientAcompte | null>(null)
   const [montant, setMontant] = useState('')
@@ -365,10 +365,7 @@ export default function EnlevementsAcomptesPage() {
 
                     {showHistorique && (
                       <div className="mt-2 bg-gray-50 rounded-xl border border-gray-200 p-3 max-h-48 overflow-y-auto space-y-2">
-                        {selectedClient.paiements.map((p, i) => {
-                          const reste = selectedClient.paiements
-                            .slice(0, i + 1)
-                            .reduce((s, pp) => s + (selectedClient.paiements.find(x => x.id === pp.id)?.montant || 0), 0)
+                        {selectedClient.paiements.map((p) => {
                           return (
                             <div key={p.id} className="flex items-center justify-between text-xs border-b border-gray-100 pb-1.5 last:border-0">
                               <div className="flex items-center gap-2">

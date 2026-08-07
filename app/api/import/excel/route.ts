@@ -58,11 +58,6 @@ export async function POST(request: NextRequest) {
     let result: { created: number; updated: number; errors: string[] } = { created: 0, updated: 0, errors: [] }
 
     if (type === 'produits') {
-      const magasinList = await prisma.magasin.findMany({
-        where: { actif: true, entiteId },
-        select: { id: true, code: true },
-      })
-      const magasinByCode = new Map(magasinList.map((m) => [m.code.trim().toUpperCase(), m.id]))
 
       for (const row of normalized) {
         try {

@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       }
 
       const whereProduit: any = { entiteId: where.entiteId, ...searchConditions, ...categorieCondition } // Filtrer par entité (inclut archivés avec stock)
-      const [tousProduits, stocksExistants, total] = await Promise.all([
+      const [tousProduits, stocksExistants, _total] = await Promise.all([
         prisma.produit.findMany({
           where: whereProduit,
           select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, pamp: true, prixVente: true, prixMinimum: true },
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
       // Cas 2: Pas de magasin spécifié - Afficher tous les produits avec leur stock dans leur magasin d'origine
       const whereProduit: any = { entiteId: where.entiteId, ...searchConditions, ...categorieCondition }
       // Récupérer tous les produits
-      const [tousProduits, tousStocks, total] = await Promise.all([
+      const [tousProduits, tousStocks, _total2] = await Promise.all([
         prisma.produit.findMany({
           where: whereProduit,
           select: { id: true, code: true, designation: true, categorie: true, seuilMin: true, prixAchat: true, pamp: true, prixVente: true, prixMinimum: true },

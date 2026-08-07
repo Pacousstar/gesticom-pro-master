@@ -25,7 +25,6 @@ export default function ListeAchatsPage() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [search, setSearch] = useState('')
-  const [isPrinting, setIsPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const { error: showError } = useToast()
 

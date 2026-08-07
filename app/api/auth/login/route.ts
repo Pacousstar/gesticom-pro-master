@@ -9,8 +9,6 @@ import { loginSchema } from '@/lib/validations'
 import { logConnexion, getIpAddress, getUserAgent } from '@/lib/audit'
 import { apiCatch } from '@/lib/log-error'
 
-const IS_DEV = process.env.NODE_ENV === 'development'
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
@@ -109,7 +107,7 @@ export async function POST(request: NextRequest) {
         ? (e.stack || e.message || e.name)
         : (e != null && typeof e === 'object' ? JSON.stringify(e).slice(0, 500) : String(e))
       fs.appendFileSync(logPath, new Date().toISOString() + ' [login] ' + logLine + '\n', 'utf8')
-    } catch (_) { /* ignore */ }
+    } catch { /* ignore */ }
     return NextResponse.json(
       {
         error: 'Erreur serveur.',

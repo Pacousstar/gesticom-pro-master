@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/require-role'
 import { prisma } from '@/lib/db'
 import { apiCatch } from '@/lib/log-error'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession()
   const authError = requirePermission(session, 'users:view')
   if (authError) return authError

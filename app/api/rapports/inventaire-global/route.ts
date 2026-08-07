@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
         }
 
         const dateStr = searchParams.get('date') || new Date().toISOString().split('T')[0]
-        const date = new Date(dateStr)
         const start = new Date(dateStr + 'T00:00:00')
         const end = new Date(dateStr + 'T23:59:59')
 

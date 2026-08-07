@@ -27,7 +27,6 @@ const CATEGORIES = [
 export default function DepenseJournalPage() {
   const [depenses, setDepenses] = useState<Depense[]>([])
   const [loading, setLoading] = useState(true)
-  const [isPrinting, setIsPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   
   // Filtres
@@ -35,9 +34,9 @@ export default function DepenseJournalPage() {
   const [dateFin, setDateFin] = useState('')
   const [filtreCategorie, setFiltreCategorie] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [magasins, setMagasins] = useState<{ id: number; nom: string }[]>([])
-  const [filtreMagasin, setFiltreMagasin] = useState('')
-  const [enterprise, setEnterprise] = useState<any>(null)
+  const [, setMagasins] = useState<{ id: number; nom: string }[]>([])
+  const [filtreMagasin] = useState('')
+  const [, setEnterprise] = useState<any>(null)
 
   useEffect(() => {
     fetch('/api/parametres').then(r => r.ok && r.json()).then(setEnterprise).catch(() => {})
@@ -75,14 +74,6 @@ export default function DepenseJournalPage() {
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault()
     fetchData(dateDebut, dateFin, filtreCategorie, filtreMagasin, searchTerm)
-  }
-
-  const handlePrint = () => {
-    setIsPrinting(true)
-    setTimeout(() => {
-      window.print()
-      setIsPrinting(false)
-    }, 0)
   }
 
   const total = depenses.reduce((acc, d) => acc + d.montant, 0)

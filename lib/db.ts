@@ -39,7 +39,7 @@ if (process.env.NODE_ENV !== 'production' && process.platform === 'win32') {
     try {
       const url = fs.readFileSync(prodPath, 'utf8').trim()
       if (url) process.env.DATABASE_URL = url
-    } catch (_) {}
+    } catch {}
   }
 }
 

@@ -9,7 +9,7 @@ export interface LicencePayload {
   features: string[]
 }
 
-export function genererClePrivee(client: string, expire: string | null, maxVersion: string, features: string[]): string {
+export function genererClePrivee(_client: string, _expire: string | null, _maxVersion: string, _features: string[]): string {
   throw new Error('Use scripts/generate-license.js instead')
 }
 

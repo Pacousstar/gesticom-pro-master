@@ -5,8 +5,10 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'achats:view')
@@ -60,7 +62,6 @@ export async function GET(request: NextRequest) {
 
   const rows: any[] = []
   let totalMontant = 0
-  let totalPaye = 0
   let totalReste = 0
 
   for (const a of filteredAchats) {
@@ -78,7 +79,6 @@ export async function GET(request: NextRequest) {
     const reste = Math.max(0, a.montantTotal - montantPayeReel)
 
     totalMontant += a.montantTotal
-    totalPaye += montantPayeReel
     totalReste += reste
 
     rows.push({
@@ -113,4 +113,11 @@ export async function GET(request: NextRequest) {
   const buf = await rowsToBuffer(rows as any[], 'Achats')
   const filename = `achats_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')
   return makeResponse(buf, filename)
+  } catch (e) {
+    await apiCatch(e, 'api/achats/export')
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Erreur lors de l\'export Excel.' },
+      { status: 500 }
+    )
+  }
 }

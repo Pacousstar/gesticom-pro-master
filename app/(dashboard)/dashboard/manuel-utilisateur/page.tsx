@@ -3,9 +3,8 @@
 import { useState, useEffect, type JSX } from 'react'
 import {
   ChevronDown, ChevronRight, Printer, BookOpen, ShoppingCart, Package, Users,
-  Briefcase, Calculator, FileBarChart, Settings, LayoutDashboard, AlertTriangle,
-  Search, Download, Lightbulb, Target, ShoppingBag, CreditCard, FileText,
-  Warehouse, TrendingUp, Shield, HelpCircle, Menu, X, Camera,
+  Briefcase, Calculator, FileBarChart, Settings, LayoutDashboard,
+  Search, Download, ShoppingBag, HelpCircle, Menu, X, Camera,
   Sparkles, Star, BookMarked, ArrowUp, Layers, GraduationCap
 } from 'lucide-react'
 
@@ -936,7 +935,6 @@ function renderContent(text: string) {
       if (line.includes('---')) continue
       const cells = line.split('|').filter(c => c.trim()).map(c => c.trim())
       if (cells.length > 0) {
-        const isHeader = line.includes('---') === false && elements.length > 0
         const prevEl = elements[elements.length - 1]
         if (prevEl && prevEl.type === 'table') {
           const table = prevEl as any

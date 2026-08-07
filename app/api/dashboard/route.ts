@@ -502,7 +502,6 @@ const result = await Promise.race([
     })
   } catch (e: any) {
     await apiCatch(e, 'api/dashboard')
-    const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({
       transactionsJour: 0,
       transactionsHier: 0,

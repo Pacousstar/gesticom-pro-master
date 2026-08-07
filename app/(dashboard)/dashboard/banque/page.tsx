@@ -84,7 +84,6 @@ export default function BanquePage() {
   const { success: showSuccess, error: showError } = useToast()
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
-  const [filtreBanque, setFiltreBanque] = useState('')
   const [filtreType, setFiltreType] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -1390,7 +1389,7 @@ export default function BanquePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {printFluxData.map((f: any, i: number) => (
+                  {printFluxData.map((f: any) => (
                     <tr key={f.id} className="hover:bg-violet-50/30 transition-colors">
                       <td className="p-4 text-center whitespace-nowrap text-xs text-gray-600">
                         {new Date(f.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}

@@ -772,15 +772,18 @@ export async function comptabiliserAchat(data: {
     montantTVA = montantTvaDepuisTtcEtHtNet(Math.max(0, montantTTC - frais), montantHT)
   }
 
-  // 1. Écriture de DÉBIT (Achats HT)
+  // 1. Écriture de DÉBIT (Achats HT + frais d'approche)
+  // Les frais d'approche majorant le stock (PAMP) doivent aussi majorer le
+  // compte d'achat (607) : sinon le crédit Fournisseurs porte les frais sans
+  // contrepartie en débit -> deséquilibre du bilan (= montant des frais).
   await createEcriture({
     date: data.date,
     journalId: journalAchats.id,
     entiteId,
     piece: data.numeroAchat,
-    libelle: `Achat ${data.numeroAchat} (HT)`,
+    libelle: `Achat ${data.numeroAchat} (HT + frais d'approche)`,
     compteId: compteAchats.id,
-    debit: montantHT,
+    debit: montantHT + frais,
     credit: 0,
     reference: data.numeroAchat,
     referenceType: 'ACHAT',

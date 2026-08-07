@@ -27,6 +27,7 @@ export const MESSAGES = {
   VENTE_ANNULEE: 'Vente annulée avec succès.',
   VENTE_SUPPRIMEE: 'Vente supprimée avec succès.',
   ACHAT_SUPPRIME: 'Achat supprimé avec succès.',
+  ACHAT_ANNULE: 'Achat annulé avec succès. Stocks restitués et écritures supprimées.',
   DEPENSE_MODIFIEE: 'Dépense modifiée avec succès.',
   DEPENSE_SUPPRIMEE: 'Dépense supprimée avec succès.',
   CHARGE_MODIFIEE: 'Charge modifiée avec succès.',

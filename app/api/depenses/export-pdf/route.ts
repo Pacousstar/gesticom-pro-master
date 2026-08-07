@@ -12,12 +12,11 @@ function formatMontant(n: number): string {
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'depenses:view')
   if (authError) return authError
-
-  try {
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
     const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
     const categorie = request.nextUrl.searchParams.get('categorie')?.trim()
@@ -78,7 +77,6 @@ export async function GET(request: NextRequest) {
 
     const margin = 15
     const colDate = margin
-    const colCateg = 38
     const colLib = 75
     const colMontant = 145
     const colWidth = 180

@@ -4,8 +4,10 @@ import { prisma } from '@/lib/db'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'ventes:view')
@@ -53,7 +55,6 @@ export async function GET(request: NextRequest) {
 
   const rows: any[] = []
   let totalMontant = 0
-  let totalPaye = 0
   let totalReste = 0
   let totalRetourne = 0
 
@@ -66,7 +67,6 @@ export async function GET(request: NextRequest) {
     const reste = Math.max(0, montantNet - (v.montantPaye || 0))
 
     totalMontant += v.montantTotal
-    totalPaye += v.montantPaye || 0
     totalReste += reste
     totalRetourne += montantRetourne
 
@@ -115,4 +115,11 @@ export async function GET(request: NextRequest) {
   const buf = await rowsToBuffer(rows, 'Ventes')
   const filename = `ventes_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')
   return makeResponse(buf, filename)
+  } catch (e) {
+    await apiCatch(e, 'api/ventes/export')
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Erreur lors de l\'export Excel.' },
+      { status: 500 }
+    )
+  }
 }

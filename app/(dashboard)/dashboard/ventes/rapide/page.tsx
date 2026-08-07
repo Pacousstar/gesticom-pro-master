@@ -43,7 +43,7 @@ export default function VenteRapidePage() {
   const [selectedCategorie, setSelectedCategorie] = useState<string>('TOUS')
   const [categories, setCategories] = useState<string[]>([])
   const { success: showSuccess, error: showError } = useToast()
-  const [lastSale, setLastSale] = useState<any>(null)
+  const [, setLastSale] = useState<any>(null)
   const printFrameRef = useRef<HTMLIFrameElement>(null)
   
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -280,7 +280,7 @@ export default function VenteRapidePage() {
         const d = await res.json()
         showError(formatApiError(d.error))
       }
-    } catch (e) {
+    } catch {
       showError('Erreur lors de la validation')
     } finally {
       setSubmitting(false)

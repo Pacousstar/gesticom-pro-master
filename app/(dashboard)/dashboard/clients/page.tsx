@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/swr-fetcher'
@@ -57,14 +57,11 @@ export default function ClientsPage() {
   const [selectedHistory, setSelectedHistory] = useState<{ id: number; nom: string } | null>(null)
   const [historyData, setHistoryData] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
-  const [historyClientInitial, setHistoryClientInitial] = useState<{soldeInitial: number; avoirInitial: number}>({soldeInitial: 0, avoirInitial: 0})
-  const [updatingDebt, setUpdatingDebt] = useState(false)
-  const [tempDebt, setTempDebt] = useState('')
-  const [editingDebt, setEditingDebt] = useState<number | null>(null)
   const [paymentModal, setPaymentModal] = useState<{ client: Client; invoices: any[] } | null>(null)
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [, setHistoryClientInitial] = useState<{soldeInitial: number; avoirInitial: number}>({soldeInitial: 0, avoirInitial: 0})
+  const [, setEntreprise] = useState<any>(null)
   const [historyForPrint, setHistoryForPrint] = useState<any[]>([])
   const [printDateDebut, setPrintDateDebut] = useState('')
   const [printDateFin, setPrintDateFin] = useState('')
@@ -346,41 +343,12 @@ export default function ClientsPage() {
       } else {
         setHistoryClientInitial({soldeInitial: 0, avoirInitial: 0})
       }
-    } catch (e) {
+    } catch {
       setHistoryData([])
       setHistoryClientInitial({soldeInitial: 0, avoirInitial: 0})
       showError('Erreur chargement historique client.')
     } finally {
       setLoadingHistory(false)
-    }
-  }
-
-  const handleUpdateDebt = async (client: Client) => {
-    if (updatingDebt) return
-    setUpdatingDebt(true)
-    try {
-      const nouvelleValeur = Number(tempDebt)
-      const valeurActuelle = client.dette || 0
-      const ecart = nouvelleValeur - valeurActuelle
-      
-      const res = await fetch(`/api/clients/${client.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          soldeInitial: (client.soldeInitial || 0) + ecart 
-        }),
-      })
-      if (res.ok) {
-        showSuccess("Dette corrigée avec succès.")
-        setEditingDebt(null)
-        mutate()
-      } else {
-        showError("Erreur lors de la correction.")
-      }
-    } catch (e) {
-      showError("Erreur réseau.")
-    } finally {
-      setUpdatingDebt(false)
     }
   }
 
@@ -392,7 +360,7 @@ export default function ClientsPage() {
         const clientInvoices = await res.json()
         setPaymentModal({ client: c, invoices: Array.isArray(clientInvoices) ? clientInvoices : [] })
       }
-    } catch (e) {
+    } catch {
       showError("Erreur lors de la récupération des factures.")
     }
   }
@@ -878,9 +846,19 @@ export default function ClientsPage() {
                          </div>
                          <div className="text-right">
                             <p className="text-xl font-black text-gray-900 tracking-tighter italic">{h.montantTotal.toLocaleString()} F</p>
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800 border-green-200 border' : 'bg-red-100 text-red-800 border-red-200 border'}`}>
-                              {h.statutPaiement === 'PAYE' ? 'SÉCURISÉ ✅' : 'IMPAYÉ ⏳'}
-                            </span>
+                            {(() => {
+                              const paye = h.montantPaye || 0
+                              const impaye = Math.max(0, (h.montantTotal || 0) - paye)
+                              return h.statutPaiement === 'PAYE' ? (
+                                <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest bg-green-100 text-green-800 border-green-200 border">
+                                  Réglé : {paye.toLocaleString()} F
+                                </span>
+                              ) : (
+                                <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest bg-red-100 text-red-800 border-red-200 border">
+                                  Impayé : {impaye.toLocaleString()} F
+                                </span>
+                              )
+                            })()}
                          </div>
                       </div>
 
@@ -904,6 +882,9 @@ export default function ClientsPage() {
                          <div className="flex items-center gap-4">
                             <span className="text-gray-400 italic">Encaissement : <span className="text-gray-700 font-bold uppercase">{h.modePaiement}</span></span>
                             <span className="text-gray-400 italic">Réglé : <span className="text-emerald-700 font-bold">{(h.montantPaye || 0).toLocaleString()} F</span></span>
+                            {h.statutPaiement !== 'PAYE' && (
+                              <span className="text-gray-400 italic">Restant : <span className="text-red-700 font-bold">{Math.max(0, (h.montantTotal || 0) - (h.montantPaye || 0)).toLocaleString()} F</span></span>
+                            )}
                          </div>
                          <button 
                           onClick={() => window.location.href = `/dashboard/ventes?numero=${h.numero}`}

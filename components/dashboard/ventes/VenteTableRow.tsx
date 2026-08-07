@@ -28,7 +28,7 @@ interface VenteTableRowProps {
 
 function VenteTableRowInner({
   v, userRole, annulant, supprimant, loadingDetail, livrant,
-  onEdit, onPay, onView, onReturn, onCancel, onDelete, onEditModal, onDeliver, onRetrait, retraitant,
+  onEdit: _onEdit, onPay, onView, onReturn, onCancel, onDelete, onEditModal, onDeliver, onRetrait, retraitant,
 }: VenteTableRowProps) {
   const montantNet = Number(v.montantNet ?? v.montantTotal)
   const resteAPayer = Math.max(0, montantNet - (Number(v.montantPaye) || 0))

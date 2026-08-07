@@ -138,7 +138,7 @@ export default function SoldesClientsPage() {
           <th style="width:22%">FACTURATION /<br/>RÈGLEMENTS</th>
           <th style="width:20%">SOLDE GLOBAL NET /<br/>ÉTAT</th>
         </tr></thead><tbody>`
-      chunk.forEach((c, idx) => {
+      chunk.forEach((c) => {
         html += `<tr>
           <td class="left"><b>${c.nom}</b><br/><span style="font-size:11px;color:#555;font-family:monospace;">${c.code || '—'}</span></td>
           <td>${(c.localisation && c.localisation !== 'null') ? c.localisation : '—'}</td>
@@ -403,7 +403,7 @@ export default function SoldesClientsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {printData.map((c, i) => (
+                  {printData.map((c) => (
                     <tr key={c.id} className="hover:bg-violet-50/30 transition-colors">
                       <td className="p-4 text-left">
                         <span className="font-bold text-gray-900">{c.nom}</span>

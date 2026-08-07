@@ -93,7 +93,7 @@ export default function ClientRelevesPage() {
       } else {
         showError("Impossible de charger le relevé.")
       }
-    } catch (e) {
+    } catch {
       showError("Erreur réseau lors du chargement du relevé.")
     } finally {
       setLoading(false)

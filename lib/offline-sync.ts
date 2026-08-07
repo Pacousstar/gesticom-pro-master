@@ -20,7 +20,6 @@ export interface PendingSync {
 }
 
 const SYNC_QUEUE_KEY = 'gesticom_sync_queue'
-const MAX_RETRIES = 50 // Augmenté pour éviter la perte de données
 
 /**
  * Ajouter une opération à la file d'attente

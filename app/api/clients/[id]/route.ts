@@ -144,7 +144,7 @@ export async function PATCH(
           entiteId: c.entiteId,
           utilisateurId: session!.userId,
         })
-      } catch (_) {
+      } catch {
         // Non-bloquant : la compta peut ne pas être initialisée
       }
     }

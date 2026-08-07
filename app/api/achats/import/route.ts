@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
             const dateStr = getVal(['date', 'created_at', 'le'])?.toString()
             const fournisseurNom = getVal(['fournisseur', 'nom fournisseur', 'supplier', 'expediteur'])?.toString()
             const montantTotal = Number(getVal(['montant total', 'total', 'montant', 'net'])) || 0
-            const statut = (getVal(['statut', 'status', 'etat'])?.toString() || 'VALIDEE').toUpperCase()
 
             if (!numero || !montantTotal) continue
 

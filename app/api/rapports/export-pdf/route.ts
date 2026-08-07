@@ -8,6 +8,7 @@ import { apiCatch } from '@/lib/log-error'
 import jsPDF from 'jspdf'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
@@ -19,8 +20,6 @@ export async function GET(request: NextRequest) {
   const hasDates = dateDebut && dateFin
   const deb = hasDates ? new Date(dateDebut + 'T00:00:00') : null
   const fin = hasDates ? new Date(dateFin + 'T23:59:59') : null
-
-  try {
     const entiteId = await getEntiteId(session)
     const whereBase: any = {}
 
@@ -36,7 +35,7 @@ export async function GET(request: NextRequest) {
       whereBase.entiteId = entiteId
     }
 
-    const [stocks, topData, mouvements, allProduits] = await Promise.all([
+    const [stocks, topData, allProduits] = await Promise.all([
       prisma.stock.findMany({
         where: { ...whereBase, produit: { actif: true } },
         include: {
@@ -63,14 +62,6 @@ export async function GET(request: NextRequest) {
             },
             _sum: { quantite: true } 
           }),
-      prisma.mouvement.findMany({
-        where: { ...whereBase, ...(deb && fin ? { date: { gte: deb, lte: fin } } : {}) },
-        orderBy: { date: 'desc' },
-        include: {
-          produit: { select: { code: true, designation: true } },
-          magasin: { select: { code: true, nom: true } },
-        },
-      }),
       prisma.produit.findMany({
         where: { actif: true },
         select: { id: true, code: true, designation: true },

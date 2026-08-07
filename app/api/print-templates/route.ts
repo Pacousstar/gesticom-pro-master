@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const result = validateApiRequest(printTemplateSchema.omit({ contenu: true }), body)
     if (!result.success) return result.response
     const data = result.data
-    const { type, nom, logo, enTete, piedDePage, variables, actif } = body
+    const { nom, logo, enTete, piedDePage, variables, actif } = body
 
     const template = await prisma.printTemplate.create({
       data: {

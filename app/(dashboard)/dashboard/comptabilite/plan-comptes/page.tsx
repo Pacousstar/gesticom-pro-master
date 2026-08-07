@@ -38,7 +38,7 @@ export default function PlanComptesPage() {
   const [filtreType, setFiltreType] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
+  const [isPrinting] = useState(false)
 
   const fetchComptes = () => {
     setLoading(true)

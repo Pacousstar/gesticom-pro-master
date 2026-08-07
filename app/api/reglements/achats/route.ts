@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
         const now = new Date()
         const tempDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
         if (!isNaN(tempDate.getTime())) dateReglement = tempDate
-      } catch (e) {
+      } catch {
         // Ignore date invalide: on conserve la date courante par défaut.
       }
     }

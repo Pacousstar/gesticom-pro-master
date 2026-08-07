@@ -103,9 +103,7 @@ export async function GET(request: NextRequest) {
       const facturesGlobal = venteGlobaleMap[c.id] || 0
       const paiementsGlobal = reglementGlobaleMap[c.id] || 0
       const retoursGlobal = retourGlobaleMap[c.id] || 0
-      // soldeInitial = dette initiale existante avant usage de GestiCom (doit être AJOUTÉE)
-      const soldeInitial = c.soldeInitial || 0
-      
+
       const variationPeriode = factures - paiements - retoursGlobal
       // ✅ FORMULE UNIFIÉE : SoldeGlobal = Dettes(factures-paiements) + DetteDépart - AvoirDépart - Retours
       const soldeClient = facturesGlobal - paiementsGlobal - retoursGlobal + (c.soldeInitial || 0) - (c.avoirInitial || 0)

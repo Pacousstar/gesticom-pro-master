@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
@@ -26,12 +26,6 @@ export async function GET(request: NextRequest) {
     // Pour chaque catégorie, récupérer le stock total
     // (Prisma groupBy ne permet pas encore de faire des sommes sur des tables liées complexes facilement en une passe)
     const resultats = await Promise.all(categories.map(async (cat) => {
-      const stocks = await prisma.stock.aggregate({
-        where: {
-          produit: { categorie: cat.categorie, actif: true }
-        },
-        _sum: { quantite: true }
-      })
 
       // Calculer la valeur du stock (Quantité * Prix) par produit pour être précis
       const produitsDeLaCat = await prisma.produit.findMany({

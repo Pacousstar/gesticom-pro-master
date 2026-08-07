@@ -16,9 +16,9 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(errorParam === 'config' ? 'Configuration serveur manquante (SESSION_SECRET).' : null)
   const [loading, setLoading] = useState(false)
-  const [hwid, setHwid] = useState<string | null>(null)
+  const [, setHwid] = useState<string | null>(null)
   const [attempts, setAttempts] = useState(0)
-  const [lockTime, setLockTime] = useState<number | null>(null)
+  const [, setLockTime] = useState<number | null>(null)
   const [timeRemaining, setTimeRemaining] = useState<number>(0)
 
   // HWID non nécessaire en version déverrouillée

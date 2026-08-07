@@ -35,7 +35,7 @@ export default function GrandLivrePage() {
   const [dateFin, setDateFin] = useState('')
   const [filtreCompte, setFiltreCompte] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
+  const [isPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   // Nouveaux états

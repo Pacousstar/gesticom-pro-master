@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import {
   ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X,
-  Search, Edit2, Pencil, Wallet, AlertTriangle, Calculator, FileText,
+  Search, Edit2, Pencil, Wallet, AlertTriangle, Calculator, FileText, RotateCcw,
 } from 'lucide-react'
 import SuppressionConfirmModal from '@/components/SuppressionConfirmModal'
 import ModificationAchatModal from '@/components/dashboard/achats/ModificationAchatModal'
+import AnnulerAchatModal from '@/components/dashboard/achats/AnnulerAchatModal'
 import { useToast } from '@/hooks/useToast'
 import { extractList } from '@/lib/api-client'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -14,7 +15,7 @@ import { MESSAGES } from '@/lib/messages'
 import { fournisseurSchema } from '@/lib/validations'
 import { validateForm } from '@/lib/validation-helpers'
 import Pagination from '@/components/ui/Pagination'
-import { printDocument, generateLignesHTML, type TemplateData } from '@/lib/print-templates'
+import { generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import PrintPreview from '@/components/print/PrintPreview'
 import { paginateForPrint } from '@/lib/print-helpers'
@@ -54,6 +55,7 @@ type AchatItem = {
   date: string
   montantTotal: number
   montantPaye?: number
+  statut?: string
   statutPaiement?: string
   modePaiement: string
   magasin: { code: string; nom: string }
@@ -74,6 +76,7 @@ export default function AchatsPage() {
     date: string
     montantTotal: number
     montantPaye?: number
+    statut?: string
     statutPaiement?: string
     modePaiement: string
     magasin: { code: string; nom: string }
@@ -148,6 +151,8 @@ export default function AchatsPage() {
   const [userRole, setUserRole] = useState<string>('')
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
+  const [annulerTarget, setAnnulerTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number; montantTotal: number; montantPaye: number } | null>(null)
+  const [annulant, setAnnulant] = useState<number | null>(null)
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
   const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0], payeDepuisCaisse: true, payeDepuisBanque: false })
   const [submitting, setSubmitting] = useState(false)
@@ -156,7 +161,7 @@ export default function AchatsPage() {
   const [showFournisseurList, setShowFournisseurList] = useState(false)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
   const [editingAchatModalId, setEditingAchatModalId] = useState<number | null>(null)
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [, setEntreprise] = useState<any>(null)
   const [banques, setBanques] = useState<any[]>([])
   const [showCreateBanque, setShowCreateBanque] = useState(false)
   const [creatingBanque, setCreatingBanque] = useState(false)
@@ -223,7 +228,7 @@ export default function AchatsPage() {
       setNewBanque({ numero: '', nomBanque: '', libelle: '', soldeInitial: '0', compteId: '' })
       setShowCreateBanque(false)
       showSuccess('Compte bancaire créé et sélectionné.')
-    } catch (e) {
+    } catch {
       showError('Erreur réseau lors de la création du compte bancaire.')
     } finally {
       setCreatingBanque(false)
@@ -470,7 +475,7 @@ export default function AchatsPage() {
   const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printData, setPrintData] = useState<TemplateData | null>(null)
-  const [isPrintingData, setIsPrintingData] = useState(false)
+  const [, setIsPrintingData] = useState(false)
   const [allAchatsForPrint, setAllAchatsForPrint] = useState<any[]>([])
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
@@ -575,29 +580,6 @@ export default function AchatsPage() {
       setTimeout(() => w.print(), 500)
     } else {
       alert('Autorisez les popups pour imprimer, ou utilisez Ctrl+P')
-    }
-  }
-
-  const handlePrintAll = async () => {
-    setIsPrintingData(true)
-    try {
-      const params = new URLSearchParams({ limit: '10000', page: '1' })
-      if (dateDebut) params.set('dateDebut', dateDebut)
-      if (dateFin) params.set('dateFin', dateFin)
-      if (searchQuery) params.set('q', searchQuery)
-      if (searchNumero) params.set('numero', searchNumero)
-      if (searchNumeroCamion) params.set('numeroCamion', searchNumeroCamion)
-      if (searchFournisseur) params.set('fournisseurSearch', searchFournisseur)
-      const res = await fetch('/api/achats?' + params.toString())
-      if (res.ok) {
-        const response = await res.json()
-        const data = extractList(response)
-        printInNewWindow(data)
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setIsPrintingData(false)
     }
   }
 
@@ -805,11 +787,6 @@ export default function AchatsPage() {
     showSuccess(message)
   }
 
-  const onSelectProduit = (id: string) => {
-    const p = produits.find((x) => x.id === Number(id))
-    if (p) setAjoutProduit((a) => ({ ...a, produitId: id, prixUnitaire: String(p.prixAchat ?? '') }))
-  }
-
   const handleVoirDetail = async (id: number) => {
     setDetailAchat(null)
     setLoadingDetail(id)
@@ -843,6 +820,27 @@ export default function AchatsPage() {
       showError(formatApiError(e))
     } finally {
       setSupprimant(null)
+    }
+  }
+
+  const handleAnnulerAchat = async () => {
+    const target = annulerTarget
+    if (!target) return
+    setAnnulant(target.id)
+    setAnnulerTarget(null)
+    try {
+      const res = await fetch(`/api/achats/${target.id}/annuler`, { method: 'POST' })
+      if (res.ok) {
+        showSuccess(MESSAGES.ACHAT_ANNULE)
+        fetchAchats()
+      } else {
+        const d = await res.json()
+        showError(formatApiError(d.error || "Erreur lors de l'annulation de l'achat."))
+      }
+    } catch (e) {
+      showError(formatApiError(e))
+    } finally {
+      setAnnulant(null)
     }
   }
 
@@ -889,7 +887,7 @@ export default function AchatsPage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors du règlement.')
       }
-    } catch (e) {
+    } catch {
       showError('Erreur réseau.')
     } finally {
       setSavingReglement(false)
@@ -1747,7 +1745,9 @@ export default function AchatsPage() {
                     <td className="px-4 py-3 text-right font-medium text-gray-900">
                       {Number(a.montantTotal).toLocaleString('fr-FR')} F
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{a.modePaiement}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm text-gray-600">{a.modePaiement}</div>
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${a.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800' :
                         a.statutPaiement === 'PARTIEL' ? 'bg-amber-100 text-amber-800' :
@@ -1756,13 +1756,18 @@ export default function AchatsPage() {
                         }`}>
                         {a.statutPaiement === 'PAYE' ? 'Payé' : a.statutPaiement === 'PARTIEL' ? 'Partiel' : a.statutPaiement === 'CREDIT' ? 'Crédit' : '—'}
                       </span>
+                      {a.statut === 'ANNULEE' && (
+                        <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                          Annulé
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-medium text-amber-800">
                       {(Number(a.montantTotal) - (Number(a.montantPaye) || 0)).toLocaleString('fr-FR')} F
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        {a.statutPaiement !== 'PAYE' && (
+                        {a.statut !== 'ANNULEE' && a.statutPaiement !== 'PAYE' && (
                           <button
                             onClick={() => setShowReglement({ id: a.id, numero: a.numero, reste: Number(a.montantTotal) - (Number(a.montantPaye) || 0) })}
                             className="rounded p-1.5 text-orange-600 hover:bg-orange-100"
@@ -1771,7 +1776,7 @@ export default function AchatsPage() {
                             <Wallet className="h-4 w-4" />
                           </button>
                         )}
-                        {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                        {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && a.statut !== 'ANNULEE' && (
                           <button
                             onClick={() => setEditingAchatModalId(a.id)}
                             className="rounded p-1.5 text-blue-600 hover:bg-blue-100"
@@ -1788,6 +1793,23 @@ export default function AchatsPage() {
                         >
                           {loadingDetail === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                         </button>
+{(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && a.statut !== 'ANNULEE' && (
+                          <button
+                            onClick={() => setAnnulerTarget({
+                              id: a.id,
+                              numero: a.numero,
+                              lignesCount: a.lignes?.length ?? 0,
+                              reglementsCount: a.reglements?.length ?? 0,
+                              montantTotal: Number(a.montantTotal),
+                              montantPaye: Number(a.montantPaye) || 0,
+                            })}
+                            disabled={annulant === a.id}
+                            className="rounded p-1.5 text-amber-600 hover:bg-amber-100 disabled:opacity-50"
+                            title="Annuler l'achat (restituer les stocks)"
+                          >
+                            {annulant === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                          </button>
+                        )}
 {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                           <button
                             onClick={() => setDeleteConfirmTarget({
@@ -2339,6 +2361,21 @@ export default function AchatsPage() {
         onClose={() => setEditingAchatModalId(null)}
         achatId={editingAchatModalId || 0}
         onSuccess={() => fetchAchats()}
+      />
+
+      <AnnulerAchatModal
+        isOpen={annulerTarget !== null}
+        onClose={() => setAnnulerTarget(null)}
+        onConfirm={handleAnnulerAchat}
+        numero={annulerTarget?.numero ?? ''}
+        montantTotal={annulerTarget?.montantTotal ?? 0}
+        montantPaye={annulerTarget?.montantPaye ?? 0}
+        details={[
+          { label: 'Stocks achetés', count: annulerTarget?.lignesCount, description: 'quantités restituées aux magasins' },
+          { label: 'Règlements', count: annulerTarget?.reglementsCount, description: 'mouvements marqués annulés' },
+          { label: 'Écritures comptables', description: 'Grand Livre (AC, OD) — écritures supprimées' },
+          { label: 'PAMP', description: 'prix moyen pondéré rétabli si stock à zéro' },
+        ]}
       />
 
       <SuppressionConfirmModal

@@ -9,7 +9,7 @@ import { apiCatch } from '@/lib/log-error'
 import { validateApiRequest } from '@/lib/validation-helpers'
 import { banqueSchema } from '@/lib/validations'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé.' }, { status: 401 })
   const authError = requirePermission(session, 'banque:view')
@@ -28,11 +28,6 @@ export async function GET(request: NextRequest) {
     })
 
     const banqueIds = banques.map(b => b.id)
-    const operationAggregates = await prisma.operationBancaire.groupBy({
-      by: ['banqueId'],
-      where: { banqueId: { in: banqueIds } },
-      _sum: { montant: true },
-    })
 
     const typeAggregates = await prisma.operationBancaire.groupBy({
       by: ['banqueId', 'type'],

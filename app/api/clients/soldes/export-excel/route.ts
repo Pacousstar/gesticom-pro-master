@@ -8,6 +8,7 @@ import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'clients:view')
@@ -18,8 +19,6 @@ export async function GET(request: NextRequest) {
   const dateDebut = searchParams.get('dateDebut')
   const dateFin = searchParams.get('dateFin')
   const q = searchParams.get('q')?.toLowerCase()
-
-  try {
     const clients = await prisma.client.findMany({
       where: { actif: true, entiteId },
       take: 10000,

@@ -58,8 +58,8 @@ export default async function ComptabilitePage({
 
   // CA du mois (ventes validées), achats — Client: $queryRaw car conflit de nom prisma.client
   const [
-    caMois, caMoisPrec, nbVentesMois, nbVentesMoisPrec, rClient, rClientPrec,
-    totalAchatsMois, totalAchatsMoisPrec, ventesMois, achatsMois,
+    caMois, caMoisPrec, nbVentesMois, _unused, rClient, rClientPrec,
+    totalAchatsMois, _unused2, ventesMois, achatsMois,
   ] = await Promise.all([
     prisma.vente.aggregate({
       where: { date: { gte: debMois, lte: finMois }, statut: 'VALIDEE', ...entiteFilter },
@@ -145,61 +145,13 @@ export default async function ComptabilitePage({
   const ca = caMois._sum?.montantTotal ?? 0
   const caPrec = caMoisPrec._sum?.montantTotal ?? 0
   const totalAchats = totalAchatsMois._sum?.montantTotal ?? 0
-  const totalAchatsPrec = totalAchatsMoisPrec._sum?.montantTotal ?? 0
   const totalDepenses = totalDepensesMois._sum?.montant ?? 0
   const totalCharges = totalChargesMois._sum?.montant ?? 0
   const evolCa = caPrec > 0 ? ((ca - caPrec) / caPrec) * 100 : (ca > 0 ? 100 : 0)
-  const evolVentes =
-    nbVentesMoisPrec > 0
-      ? ((nbVentesMois - nbVentesMoisPrec) / nbVentesMoisPrec) * 100
-      : (nbVentesMois > 0 ? 100 : 0)
   const evolClients =
     nbClientsMoisPrec > 0
       ? ((totalClients - nbClientsMoisPrec) / nbClientsMoisPrec) * 100
       : (totalClients > 0 ? 100 : 0)
-  const evolAchats =
-    totalAchatsPrec > 0
-      ? ((totalAchats - totalAchatsPrec) / totalAchatsPrec) * 100
-      : (totalAchats > 0 ? 100 : 0)
-
-  const cards = [
-    {
-      title: "Chiffre d'affaires",
-      value: formatFcfa(ca),
-      sub: 'Ce mois',
-      change: evolCa,
-      icon: Banknote,
-      color: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-      iconBg: 'bg-emerald-100/50',
-    },
-    {
-      title: 'Transactions',
-      value: String(nbVentesMois),
-      sub: 'Ventes ce mois',
-      change: evolVentes,
-      icon: ShoppingCart,
-      color: 'bg-blue-50 text-blue-600 border-blue-100',
-      iconBg: 'bg-blue-100/50',
-    },
-    {
-      title: 'Clients Actifs',
-      value: String(totalClients),
-      sub: 'Base clients',
-      change: evolClients,
-      icon: Users,
-      color: 'bg-indigo-50 text-indigo-600 border-indigo-100',
-      iconBg: 'bg-indigo-100/50',
-    },
-    {
-      title: 'Achats Fournisseurs',
-      value: formatFcfa(totalAchats),
-      sub: 'Total ce mois',
-      change: evolAchats,
-      icon: ShoppingBag,
-      color: 'bg-orange-50 text-orange-600 border-orange-100',
-      iconBg: 'bg-orange-100/50',
-    },
-  ]
 
   const moisLabel = debMois.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
 

@@ -127,10 +127,12 @@ export default function UtilisateursPage() {
         window.URL.revokeObjectURL(url)
         a.remove()
       } else {
-        const data = await res.json()
-        showErrorToast(data.error || 'Erreur lors de l\'export.')
+        const text = await res.text().catch(() => '')
+        let msg = 'Erreur lors de l\'export.'
+        try { const data = text ? JSON.parse(text) : null; if (data?.error) msg = data.error; else if (text) msg = text } catch { if (text) msg = text }
+        showErrorToast(msg)
       }
-    } catch (err) {
+    } catch {
       showErrorToast('Erreur lors de l\'export.')
     } finally {
       setExporting(false)

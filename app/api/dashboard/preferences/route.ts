@@ -11,7 +11,7 @@ const preferencesSchema = z.object({
   periode: z.string().max(10).optional().default('30'),
 })
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'dashboard:view')

@@ -124,8 +124,6 @@ export default function BilanPage() {
     const [currentPage, setCurrentPage] = useState(1)
     const itemsPerPage = 100
 
-    const handlePrint = () => window.print()
-
     if (error) return <div className="p-4 bg-red-50 text-red-600 rounded-lg">Erreur de chargement du bilan</div>
 
     const actifImm = mergeSection(data?.bilan.actif?.immobilise || [], data?.bilanPrecedent?.actif?.immobilise || [])

@@ -26,7 +26,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, type, tierId,
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('')
   const [montant, setMontant] = useState<string>('')
   const [modePaiement, setModePaiement] = useState('ESPECES')
-  const [observation, setObservation] = useState('')
+  const [observation] = useState('')
   const [payeDepuisCaisse, setPayeDepuisCaisse] = useState(true)
   const [payeDepuisBanque, setPayeDepuisBanque] = useState(false)
   const { success: showSuccess, error: showError } = useToast()
@@ -92,7 +92,7 @@ const handleSubmit = async (e: React.FormEvent) => {
         const d = await res.json()
         showError(d.error || 'Erreur lors de l\'enregistrement.')
       }
-    } catch (e) {
+    } catch {
       showError('Erreur serveur.')
     } finally {
       setLoading(false)

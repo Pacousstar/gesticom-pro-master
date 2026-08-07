@@ -28,15 +28,6 @@ export async function GET(request: NextRequest) {
     const dateDebut = request.nextUrl.searchParams.get('dateDebut')
     const dateFin = request.nextUrl.searchParams.get('dateFin')
 
-    let dateDebutPrec: string | null = null
-    let dateFinPrec: string | null = null
-    if (dateDebut && dateFin) {
-      const d = new Date(dateDebut)
-      dateDebutPrec = new Date(d.getFullYear() - 1, d.getMonth(), d.getDate()).toISOString().split('T')[0]
-      const f = new Date(dateFin)
-      dateFinPrec = new Date(f.getFullYear() - 1, f.getMonth(), f.getDate()).toISOString().split('T')[0]
-    }
-
     let entiteId = 0
     const entiteIdFromParams = request.nextUrl.searchParams.get('entiteId')?.trim()
 
@@ -160,23 +151,6 @@ export async function GET(request: NextRequest) {
       { title: 'DETTES', items: bilan.passif.dettes, total: cumulPassifDettes },
       { title: 'TRÉSORERIE PASSIF', items: bilan.passif.tresorerie, total: cumulPassifTreso },
     ]
-
-    // Calculate total lines per column for alignment
-    function countLines(sections: any[]): number {
-      let c = 0
-      for (const s of sections) {
-        if (s.items.length === 0) continue
-        c += 1 // title
-        c += s.items.length // items
-        c += 1 // total
-        c += 1 // blank line after section
-      }
-      return c
-    }
-
-    const actifLines = countLines(actifSections)
-    const passifLines = countLines(passifSections)
-    const maxLines = Math.max(actifLines, passifLines)
 
     // Pre-extract rows for both columns
     const actifRows: (string | null)[][] = []

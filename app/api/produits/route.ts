@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      const st = await tx.stock.create({
+      await tx.stock.create({
         data: { produitId: p.id, magasinId: magasinIdRaw, quantite: quantiteInitiale, quantiteInitiale, entiteId },
       })
 

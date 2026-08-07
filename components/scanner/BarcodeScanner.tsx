@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { X, Camera, CameraOff, Loader2, ZapOff } from 'lucide-react'
+import { X, Camera, CameraOff, Loader2 } from 'lucide-react'
 
 interface BarcodeScannerProps {
     /** Appelé quand un code-barres est détecté avec succès */
@@ -63,7 +63,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
 
         const init = async () => {
             // Chargement dynamique (évite l'erreur SSR de Next.js)
-            const { Html5Qrcode, Html5QrcodeScanner } = await import('html5-qrcode')
+            const { Html5Qrcode } = await import('html5-qrcode')
 
             // Lister les caméras disponibles
             let camList: Array<{ id: string; label: string }> = []

@@ -12,6 +12,7 @@ import {
   Clock,
   Pencil,
   Trash2,
+  RotateCcw,
   Printer,
   FileSpreadsheet,
   X
@@ -20,6 +21,7 @@ import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ModificationAchatModal from '@/components/dashboard/achats/ModificationAchatModal'
+import AnnulerAchatModal from '@/components/dashboard/achats/AnnulerAchatModal'
 import { paginateForPrint } from '@/lib/print-helpers'
 import { getStatutPaiementLabel, getStatutPaiementColors } from '@/lib/enums-commerce'
 
@@ -48,6 +50,7 @@ export default function TousLesAchatsPage() {
   const [printType, setPrintType] = useState<'GLOBAL' | 'DETAIL' | null>(null)
   const [editingAchatId, setEditingAchatId] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
+  const [annulationCible, setAnnulationCible] = useState<{ id: number; numero: string } | null>(null)
   const [userRole, setUserRole] = useState('')
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isPrintingData, setIsPrintingData] = useState(false)
@@ -112,10 +115,28 @@ export default function TousLesAchatsPage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors de la suppression.')
       }
-    } catch (err) {
+    } catch {
       showError('Erreur de connexion.')
     } finally {
       setSupprimant(null)
+    }
+  }
+
+  const handleAnnuler = async () => {
+    const cible = annulationCible
+    if (!cible) return
+    try {
+      const res = await fetch(`/api/achats/${cible.id}/annuler`, { method: 'POST' })
+      if (res.ok) {
+        showSuccess(`Achat ${cible.numero} annulé. Stocks restitués et écritures supprimées.`)
+        setAnnulationCible(null)
+        fetchData(startDate, endDate)
+      } else {
+        const d = await res.json()
+        showError(d.error || "Erreur lors de l'annulation.")
+      }
+    } catch {
+      showError('Erreur de connexion.')
     }
   }
 
@@ -515,6 +536,15 @@ export default function TousLesAchatsPage() {
                           </button>
                           {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                           <button
+                            onClick={() => setAnnulationCible({ id: a.id, numero: a.numero })}
+                            className="rounded-xl border border-gray-200 bg-white p-2.5 text-amber-600 hover:bg-amber-600 hover:text-white transition-all shadow-sm"
+                            title="Annuler l'achat (restituer les stocks)"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                          )}
+                          {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                          <button
                             onClick={() => handleSupprimer(a.id, a.numero)}
                             disabled={supprimant === a.id}
                             className="rounded-xl border border-gray-200 bg-white p-2.5 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
@@ -580,6 +610,20 @@ export default function TousLesAchatsPage() {
         onClose={() => setEditingAchatId(null)}
         achatId={editingAchatId || 0}
         onSuccess={() => fetchData(startDate, endDate)}
+      />
+
+      <AnnulerAchatModal
+        isOpen={annulationCible !== null}
+        onClose={() => setAnnulationCible(null)}
+        onConfirm={handleAnnuler}
+        numero={annulationCible?.numero ?? ''}
+        montantTotal={0}
+        montantPaye={0}
+        details={[
+          { label: 'Stocks achetés', description: 'quantités restituées aux magasins' },
+          { label: 'Règlements', description: 'mouvements marqués annulés' },
+          { label: 'Écritures comptables', description: 'Grand Livre (AC, OD) — écritures supprimées' },
+        ]}
       />
 
     </div>

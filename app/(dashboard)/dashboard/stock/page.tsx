@@ -114,8 +114,8 @@ export default function StockPage() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [allStocksForPrint, setAllStocksForPrint] = useState<StockRow[]>([])
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [entreprise, setEntreprise] = useState<any>(null)
-  const ITEMS_PER_PAGE_REPORT = 25
+  const [, setEntreprise] = useState<any>(null)
+
   const [showTransferAssistant, setShowTransferAssistant] = useState(false)
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [loadingRecommendations, setLoadingRecommendations] = useState(false)
@@ -139,7 +139,7 @@ export default function StockPage() {
         const data = await res.json()
         setAlertesRupture(data)
       }
-    } catch (e) {
+    } catch {
       showError('Erreur lors du chargement des alertes.')
     } finally {
       setLoadingIntelligence(false)
@@ -156,7 +156,7 @@ export default function StockPage() {
         // Sélectionner tout par défaut
         setSelectedRecommendations(new Set(data.map((_: Recommendation, i: number) => i)))
       }
-    } catch (e) {
+    } catch {
       showError("Erreur lors du chargement des recommandations")
     } finally {
       setLoadingRecommendations(false)
@@ -210,7 +210,7 @@ export default function StockPage() {
       }
       setShowTransferAssistant(false)
       refetch()
-    } catch (e) {
+    } catch {
       showError("Erreur lors de la validation des transferts")
     } finally {
       setValidatingTransfers(false)
@@ -491,7 +491,7 @@ export default function StockPage() {
           setProduitForm((f) => ({ ...f, code: data.code }))
         }
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
   }
@@ -936,7 +936,7 @@ export default function StockPage() {
                 a.click()
                 window.URL.revokeObjectURL(blobUrl)
               }
-            } catch (err) {
+            } catch {
               showError('Erreur export')
             }
           }}
@@ -1593,7 +1593,7 @@ export default function StockPage() {
                   } else {
                     showError(data.error || 'Erreur lors de l\'ajout du stock.')
                   }
-                } catch (e) {
+                } catch {
                   showError('Erreur réseau lors de l\'ajout du stock.')
                 } finally {
                   setAjoutStockSaving(false)

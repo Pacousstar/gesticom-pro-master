@@ -11,6 +11,7 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     const authError = requirePermission(session, 'clients:view')
@@ -20,8 +21,6 @@ export async function GET(
     if (!entiteId) {
         return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
     }
-
-    try {
         const id = Number((await params).id)
         if (!id) return NextResponse.json({ error: 'ID Client requis' }, { status: 400 })
 

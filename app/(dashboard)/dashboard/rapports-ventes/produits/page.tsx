@@ -27,7 +27,6 @@ export default function ParProduitPage() {
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-    const [isPrinting, setIsPrinting] = useState(false)
     const { error: showError } = useToast()
 
     useEffect(() => {

@@ -16,7 +16,7 @@ export default function RentabilitePage() {
   const [dateFin, setDateFin] = useState(() => new Date().toISOString().split('T')[0])
   const [recherche, setRecherche] = useState('')
   const [page, setPage] = useState(1)
-  const { success: showSuccess, error: showError } = useToast()
+  const { error: showError } = useToast()
 
   useEffect(() => {
     fetchRentabilite()
@@ -37,7 +37,7 @@ export default function RentabilitePage() {
         return
       }
       setData(await res.json())
-    } catch (e) {
+    } catch {
       showError('Erreur chargement des données')
     } finally {
       setLoading(false)

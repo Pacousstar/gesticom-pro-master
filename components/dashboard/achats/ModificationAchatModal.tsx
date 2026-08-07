@@ -118,7 +118,7 @@ export default function ModificationAchatModal({
           montant: l.montant
         }))
       })
-    } catch (e) {
+    } catch {
       showError('Erreur lors du chargement des données.')
       onClose()
     } finally {
@@ -220,7 +220,7 @@ export default function ModificationAchatModal({
       } else {
         showError(data.error || 'Erreur lors de la modification.')
       }
-    } catch (e) {
+    } catch {
       showError('Erreur réseau.')
     } finally {
       setSubmitting(false)

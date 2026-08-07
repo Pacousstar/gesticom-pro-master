@@ -8,6 +8,7 @@ import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
@@ -26,8 +27,6 @@ export async function GET(request: NextRequest) {
     gte: new Date(dateDebut + 'T00:00:00'),
     lte: new Date(dateFin + 'T23:59:59'),
   } : undefined
-
-  try {
     const rows: any[] = []
     if (type === 'ACHAT') {
       const forbidden = requirePermission(session, 'rapports:view')
@@ -37,8 +36,7 @@ export async function GET(request: NextRequest) {
         date: dateFilter,
         statut: { in: ['VALIDE', 'VALIDEE'] }
       }
-      if (session.role !== 'SUPER_ADMIN' && session.entiteId) where.entiteId = session.entiteId
-      else if (entiteId) where.entiteId = entiteId
+      if (session.role !== 'SUPER_ADMIN') where.entiteId = entiteId
       if (filter === 'NON_SOLDER') where.statutPaiement = { in: ['PARTIEL', 'CREDIT'] }
       if (filter === 'SOLDER') where.statutPaiement = 'PAYE'
 
@@ -70,8 +68,7 @@ export async function GET(request: NextRequest) {
       if (forbidden) return forbidden
 
       const where: any = { date: dateFilter, statut: { in: ['VALIDE', 'VALIDEE'] } }
-      if (session.role !== 'SUPER_ADMIN' && session.entiteId) where.entiteId = session.entiteId
-      else if (entiteId) where.entiteId = entiteId
+      if (session.role !== 'SUPER_ADMIN') where.entiteId = entiteId
       if (filter === 'NON_SOLDER') where.statutPaiement = { in: ['PARTIEL', 'CREDIT'] }
       if (filter === 'SOLDER') where.statutPaiement = 'PAYE'
 

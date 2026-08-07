@@ -289,7 +289,7 @@ export async function POST(request: NextRequest) {
       const logPath = path.join(process.cwd(), 'gesticom-error.log')
       const detail = e instanceof Error ? (e.stack || e.message) : String(e)
       fs.appendFileSync(logPath, new Date().toISOString() + ' [depenses:POST] ' + detail + '\n', 'utf8')
-    } catch (_) {
+    } catch {
       // ignore
     }
     return NextResponse.json(

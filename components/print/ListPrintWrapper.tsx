@@ -29,7 +29,7 @@ export default function ListPrintWrapper({
   children,
   enterprise: providedEnterprise,
   hideHeader = false,
-  hideVisa = false,
+  hideVisa: _hideVisa = false,
   layout = 'portrait',
   kpis
 }: ListPrintWrapperProps) {

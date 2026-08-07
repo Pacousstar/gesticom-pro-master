@@ -4,7 +4,7 @@ import { getProduitsEnAlerte } from '@/lib/intelligence'
 import { requirePermission } from '@/lib/require-role'
 import { apiCatch } from '@/lib/log-error'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const forbidden = requirePermission(session, 'rapports:view')

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { sousTotalRetraits } from '@/lib/comptes-courants'
+import { sousTotalRetraits, estRetrait } from '@/lib/comptes-courants'
 import { getEntiteId } from '@/lib/get-entite-id'
 import { requirePermission } from '@/lib/require-role'
 import { enregistrerMouvementCaisse, recalculerSoldeCaisse } from '@/lib/caisse'
@@ -136,18 +136,23 @@ export async function GET(
         credit: 0,
         libelle: `Vente ${v.numero} - ${v.magasin?.nom || ''}`
       })),
-      ...reglements.map((r: any) => ({
-        id: r.id,
-        date: r.date,
-        createdAt: r.createdAt,
-        numero: `R${r.id}`,
-        type: 'REGLEMENT' as const,
-        debit: 0,
-        credit: r.montant,
-        libelle: `Règlement ${r.modePaiement}${r.observation ? ' - ' + r.observation : ''}`,
-        reference: r.venteId ? r.vente?.numero || `V${r.venteId}` : '-',
-        mode: r.modePaiement
-      })),
+      ...reglements.map((r: any) => {
+        const retraitReg = estRetrait(r.observation)
+        return {
+          id: r.id,
+          date: r.date,
+          createdAt: r.createdAt,
+          numero: `R${r.id}`,
+          type: retraitReg ? 'RETRAIT' as const : 'REGLEMENT' as const,
+          debit: retraitReg ? r.montant : 0,
+          credit: retraitReg ? 0 : r.montant,
+          libelle: retraitReg
+            ? `Retrait CC Client ${r.observation ? `- ${(r.observation || '').replace(/^Retrait CC\s*-?\s*/i, '')}` : ''}`
+            : `Règlement ${r.modePaiement}${r.observation ? ' - ' + r.observation : ''}`,
+          reference: r.venteId ? r.vente?.numero || `V${r.venteId}` : '-',
+          mode: r.modePaiement
+        }
+      }),
       ...((await prisma.retour.findMany({
         where: { clientId, entiteId },
         select: { id: true, createdAt: true, numero: true, montantTotal: true, observation: true },

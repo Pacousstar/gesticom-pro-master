@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, X, Filter, Loader2, Truck, ShoppingBag, Printer, ArrowLeft } from 'lucide-react'
+import { Search, X, Filter, Loader2, Truck, Printer, ArrowLeft } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { VenteTableRow } from '@/components/dashboard/ventes/VenteTableRow'
+import AnnulerVenteModal from '@/components/dashboard/ventes/AnnulerVenteModal'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
@@ -33,6 +34,7 @@ export default function SuiviVentesPage() {
   const [detailVente, setDetailVente] = useState<any>(null)
   const [loadingDetail, setLoadingDetail] = useState<number | null>(null)
   const [annulant, setAnnulant] = useState<number | null>(null)
+  const [annulerTarget, setAnnulerTarget] = useState<{ id: number; numero: string; montantTotal: number; montantPaye: number } | null>(null)
   const [livrant, setLivrant] = useState<number | null>(null)
 
   const [deliverVente, setDeliverVente] = useState<any>(null)
@@ -80,12 +82,22 @@ export default function SuiviVentesPage() {
     finally { setLoadingDetail(null) }
   }
 
-  const handleAnnuler = async (v: { id: number; numero: string }) => {
-    if (!confirm(`Annuler ${v.numero} ? Le stock sera recrédité.`)) return
-    setAnnulant(v.id)
+  const handleAnnuler = (v: { id: number; numero: string; montantTotal?: number; montantPaye?: number }) => {
+    setAnnulerTarget({
+      id: v.id,
+      numero: v.numero,
+      montantTotal: Number(v.montantTotal) || 0,
+      montantPaye: Number(v.montantPaye) || 0,
+    })
+  }
+
+  const handleConfirmAnnuler = async () => {
+    const cible = annulerTarget
+    if (!cible) return
+    setAnnulant(cible.id)
     try {
-      const res = await fetch(`/api/ventes/${v.id}/annuler`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      if (res.ok) { showSuccess('Vente annulée.'); fetchVentes(); if (detailVente?.id === v.id) setDetailVente(null) }
+      const res = await fetch(`/api/ventes/${cible.id}/annuler`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      if (res.ok) { setAnnulerTarget(null); showSuccess('Vente annulée.'); fetchVentes(); if (detailVente?.id === cible.id) setDetailVente(null) }
       else { const d = await res.json(); showError(d.error || 'Erreur') }
     } catch (e) { showError(formatApiError(e)) }
     finally { setAnnulant(null) }
@@ -189,14 +201,6 @@ export default function SuiviVentesPage() {
     if (s === 'soldee') return 'Soldée'
     if (s === 'annulee') return 'Annulée'
     return ''
-  }
-
-  const statutColor = (v: any) => {
-    const s = computedStatus(v)
-    if (s === 'en_attente') return v.typeVente === 'COMMANDE' ? 'bg-purple-100 text-purple-800' : 'bg-amber-100 text-amber-800'
-    if (s === 'partiel') return 'bg-blue-100 text-blue-800'
-    if (s === 'soldee') return 'bg-green-100 text-green-800'
-    return 'bg-red-100 text-red-800'
   }
 
   return (
@@ -512,6 +516,24 @@ export default function SuiviVentesPage() {
           ))
         })()}
       </div>
+
+      <AnnulerVenteModal
+        isOpen={annulerTarget !== null}
+        onClose={() => setAnnulerTarget(null)}
+        onConfirm={handleConfirmAnnuler}
+        numero={annulerTarget?.numero ?? ''}
+        montantTotal={annulerTarget?.montantTotal ?? 0}
+        montantPaye={annulerTarget?.montantPaye ?? 0}
+        isLoading={annulant !== null}
+        details={[
+          { label: 'Stocks vendus', description: 'quantités recréditées au magasin' },
+          { label: 'Règlements', description: 'règlements marqués annulés (traçabilité)' },
+          { label: 'Trésorerie', description: 'mouvements de caisse compensés en sortie' },
+          { label: 'Opérations bancaires', description: 'remboursements ou dépôts compensateurs' },
+          { label: 'Points fidélité', description: 'points déduits de l\'encaissement restitués' },
+          { label: 'Écritures comptables', description: 'Grand Livre (VE, CA, OD) — écritures supprimées' },
+        ]}
+      />
     </div>
     </>
   )

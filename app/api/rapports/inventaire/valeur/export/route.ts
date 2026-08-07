@@ -9,6 +9,7 @@ import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
@@ -18,8 +19,6 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const dateFin = searchParams.get('dateFin') || new Date().toISOString().split('T')[0]
   const magasinId = searchParams.get('magasinId')
-
-  try {
     const entiteId = await getEntiteId(session)
     const where: any = {}
 

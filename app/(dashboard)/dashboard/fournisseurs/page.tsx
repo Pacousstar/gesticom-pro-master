@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/swr-fetcher'
@@ -45,7 +45,7 @@ export default function FournisseursPage() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [paymentModal, setPaymentModal] = useState<{ fournisseur: Fournisseur; invoices: any[] } | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [, setEntreprise] = useState<any>(null)
   const [historyForPrint, setHistoryForPrint] = useState<any[]>([])
   const [printDateDebut, setPrintDateDebut] = useState('')
   const [printDateFin, setPrintDateFin] = useState('')
@@ -302,7 +302,7 @@ export default function FournisseursPage() {
       } else {
         setHistoryData([])
       }
-    } catch (e) {
+    } catch {
       setHistoryData([])
       showError('Erreur chargement historique.')
     } finally {
@@ -325,7 +325,7 @@ export default function FournisseursPage() {
         const errData = await res.json().catch(() => ({ error: 'Erreur serveur' }))
         showError(errData.error || `Erreur ${res.status}`)
       }
-    } catch (e) {
+    } catch {
       showError("Erreur lors de la récupération des factures.")
     }
   }
@@ -869,12 +869,22 @@ export default function FournisseursPage() {
                                  {new Date(h.date).toLocaleDateString('fr-FR')}
                               </div>
                            </div>
-                           <div className="text-right">
-                              <p className="text-xl font-black text-gray-900 tracking-tighter italic">{h.montantTotal.toLocaleString()} F</p>
-                              <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest ${h.statutPaiement === 'PAYE' ? 'bg-green-100 text-green-800 border-green-200 border' : 'bg-orange-100 text-orange-800 border-orange-200 border'}`}>
-                                {h.statutPaiement === 'PAYE' ? 'SÉCURISÉ ✅' : 'IMPAYÉ ⏳'}
-                              </span>
-                           </div>
+<div className="text-right">
+                               <p className="text-xl font-black text-gray-900 tracking-tighter italic">{h.montantTotal.toLocaleString()} F</p>
+                               {(() => {
+                                  const paye = h.montantPaye || 0
+                                  const impaye = Math.max(0, (h.montantTotal || 0) - paye)
+                                  return h.statutPaiement === 'PAYE' ? (
+                                     <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest bg-green-100 text-green-800 border-green-200 border`}>
+                                       Réglé : {paye.toLocaleString()} F
+                                     </span>
+                                  ) : (
+                                     <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest bg-orange-100 text-orange-800 border-orange-200 border`}>
+                                       Impayé : {impaye.toLocaleString()} F
+                                     </span>
+                                  )
+                               })()}
+                            </div>
                         </div>
                         <div className="space-y-2 mt-4 bg-gray-50/50 p-3 rounded-xl border border-dashed border-gray-200">
                           {h.lignes && h.lignes.length > 0 ? h.lignes.map((l: any, idx: number) => (
@@ -890,16 +900,19 @@ export default function FournisseursPage() {
                           )}
                         </div>
                         <div className="mt-4 pt-3 flex items-center justify-between text-[10px] border-t border-gray-100 no-print">
-                           <div className="flex items-center gap-4">
-                              <span className="text-gray-400 italic">Paiement : <span className="text-gray-700 font-bold uppercase">{h.modePaiement}</span></span>
-                              <span className="text-gray-400 italic">Réglé : <span className="text-emerald-700 font-bold">{(h.montantPaye || 0).toLocaleString()} F</span></span>
-                           </div>
+<div className="flex items-center gap-4">
+                               <span className="text-gray-400 italic">Paiement : <span className="text-gray-700 font-bold uppercase">{h.modePaiement}</span></span>
+                               <span className="text-gray-400 italic">Réglé : <span className="text-emerald-700 font-bold">{(h.montantPaye || 0).toLocaleString()} F</span></span>
+                               {h.statutPaiement !== 'PAYE' && (
+                                 <span className="text-gray-400 italic">Restant : <span className="text-red-700 font-bold">{Math.max(0, (h.montantTotal || 0) - (h.montantPaye || 0)).toLocaleString()} F</span></span>
+                               )}
+                            </div>
                            <div className="flex items-center gap-2">
                              <button
                                title="Imprimer facture A4 premium"
                                onClick={async () => {
                                  let entreprise: any = {}
-                                try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch (_) {}
+                                try { const r = await fetch('/api/parametres'); if (r.ok) entreprise = await r.json() } catch {}
                                   const { getDefaultA4Template, replaceTemplateVariables, generateLignesHTML, getPrintStyles, printHtml } = await import('@/lib/print-templates')
                                  const lignesHTML = generateLignesHTML((h.lignes || []).map((l: any) => ({ designation: l.produit?.designation || l.designation, quantite: l.quantite, prixUnitaire: l.prixUnitaire, montant: l.montant })))
                                  const template = getDefaultA4Template('ACHAT')

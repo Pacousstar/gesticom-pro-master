@@ -7,21 +7,20 @@ import Link from 'next/link'
 import { VenteTableRow } from '@/components/dashboard/ventes/VenteTableRow'
 import VenteFormModal from '@/components/dashboard/ventes/VenteFormModal'
 import ModificationVenteModal from '@/components/dashboard/ventes/ModificationVenteModal'
+import AnnulerVenteModal from '@/components/dashboard/ventes/AnnulerVenteModal'
 import {
-  ShoppingBag, Plus, Loader2, Trash2, Eye, FileSpreadsheet, Printer, X, 
-  Search, Edit2, Wallet, AlertTriangle, XCircle, RotateCcw, CreditCard, Truck
+  ShoppingBag, Plus, Loader2, Trash2, FileSpreadsheet, Printer, X, Edit2, Wallet, AlertTriangle, RotateCcw, CreditCard, Truck
 } from 'lucide-react'
 import { generateLignesHTML, type TemplateData } from '@/lib/print-templates'
 import PrintPreview from '@/components/print/PrintPreview'
 import { extractList } from '@/lib/api-client'
 import Pagination from '@/components/ui/Pagination'
 import { formatDate } from '@/lib/format-date'
-import { montantLigneTTC, montantTvaImpliciteLigne } from '@/lib/calculs-commerciaux'
+import { montantTvaImpliciteLigne } from '@/lib/calculs-commerciaux'
 import { formatApiError } from '@/lib/validation-helpers'
 import { MESSAGES } from '@/lib/messages'
 import { useToast } from '@/hooks/useToast'
 import { getStatutPaiementLabel, getStatutPaiementColors } from '@/lib/enums-commerce'
-import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 
 type Magasin = { id: number; code: string; nom: string }
@@ -59,6 +58,7 @@ export default function VentesPage() {
     lignes: Array<{ quantite: number; prixUnitaire: number; designation: string; tvaPerc?: number }>
   }>>([])
   const [annulant, setAnnulant] = useState<number | null>(null)
+  const [annulerTarget, setAnnulerTarget] = useState<{ id: number; numero: string; montantTotal: number; montantPaye: number } | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
   const [livrant, setLivrant] = useState<number | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; numero: string; lignesCount: number; reglementsCount: number } | null>(null)
@@ -104,17 +104,17 @@ export default function VentesPage() {
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printData, setPrintData] = useState<TemplateData | null>(null)
   const [tvaParDefaut, setTvaParDefaut] = useState(0)
-  const [editingVente, setEditingVente] = useState<any>(null)
+  const [, setEditingVente] = useState<any>(null)
   const [editingVenteId, setEditingVenteId] = useState<number | null>(null)
   const [editingVenteModalId, setEditingVenteModalId] = useState<number | null>(null)
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [, setEntreprise] = useState<any>(null)
   const [allVentesForPrint, setAllVentesForPrint] = useState<any[]>([])
   const [isPrinting, setIsPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [banques, setBanques] = useState<any[]>([])
 
   const { success: showSuccess, error: showError } = useToast()
-  const [err, setErr] = useState('')
+  const [, setErr] = useState('')
 
   const [showReglement, setShowReglement] = useState<{ id: number; numero: string; reste: number } | null>(null)
   const [reglementData, setReglementData] = useState({ montant: '', modePaiement: 'ESPECES', banqueId: '', date: new Date().toISOString().split('T')[0] })
@@ -519,15 +519,26 @@ export default function VentesPage() {
     }
   }, [openIdParam, handleVoirDetail])
 
-  const handleAnnuler = async (v: { id: number; numero: string; statut: string }) => {
+  const handleAnnuler = (v: { id: number; numero: string; statut: string; montantTotal: number; montantPaye?: number }) => {
     if (v.statut === 'ANNULEE') return
-    if (!confirm(`Annuler la vente ${v.numero} ? Le stock sera recrédité.`)) return
-    setAnnulant(v.id)
+    setAnnulerTarget({
+      id: v.id,
+      numero: v.numero,
+      montantTotal: Number(v.montantTotal) || 0,
+      montantPaye: Number(v.montantPaye) || 0,
+    })
+  }
+
+  const handleConfirmAnnuler = async () => {
+    const cible = annulerTarget
+    if (!cible) return
+    setAnnulant(cible.id)
     setErr('')
     try {
-      const res = await fetch(`/api/ventes/${v.id}/annuler`, { method: 'POST' })
+      const res = await fetch(`/api/ventes/${cible.id}/annuler`, { method: 'POST' })
       if (res.ok) {
-        setVentes((list) => list.map((x) => (x.id === v.id ? { ...x, statut: 'ANNULEE' } : x)))
+        setVentes((list) => list.map((x) => (x.id === cible.id ? { ...x, statut: 'ANNULEE' } : x)))
+        setAnnulerTarget(null)
         showSuccess(MESSAGES.VENTE_ANNULEE)
       } else {
         const d = await res.json()
@@ -662,7 +673,7 @@ export default function VentesPage() {
       setNewBanque({ numero: '', nomBanque: '', libelle: '', soldeInitial: '0', compteId: '' })
       setShowCreateBanque(false)
       showSuccess('Compte bancaire créé et sélectionné.')
-    } catch (e) {
+    } catch {
       showError('Erreur réseau lors de la création du compte bancaire.')
     } finally {
       setCreatingBanque(false)
@@ -783,7 +794,7 @@ export default function VentesPage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors du règlement.')
       }
-    } catch (e) {
+    } catch {
       showError('Erreur réseau.')
     } finally {
       setSavingReglement(false)
@@ -1593,6 +1604,25 @@ export default function VentesPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de confirmation d'annulation */}
+      <AnnulerVenteModal
+        isOpen={annulerTarget !== null}
+        onClose={() => setAnnulerTarget(null)}
+        onConfirm={handleConfirmAnnuler}
+        numero={annulerTarget?.numero ?? ''}
+        montantTotal={annulerTarget?.montantTotal ?? 0}
+        montantPaye={annulerTarget?.montantPaye ?? 0}
+        isLoading={annulant !== null}
+        details={[
+          { label: 'Stocks vendus', description: 'quantités recréditées au magasin' },
+          { label: 'Règlements', description: 'règlements marqués annulés (traçabilité)' },
+          { label: 'Trésorerie', description: 'mouvements de caisse compensés en sortie' },
+          { label: 'Opérations bancaires', description: 'remboursements ou dépôts compensateurs' },
+          { label: 'Points fidélité', description: 'points déduits de l\'encaissement restitués' },
+          { label: 'Écritures comptables', description: 'Grand Livre (VE, CA, OD) — écritures supprimées' },
+        ]}
+      />
 
       {/* Modal de confirmation de suppression détaillée */}
       <SuppressionConfirmModal

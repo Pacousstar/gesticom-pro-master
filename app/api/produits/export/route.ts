@@ -7,7 +7,8 @@ import { requirePermission } from '@/lib/require-role'
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const forbidden = requirePermission(session, 'produits:view')
@@ -17,8 +18,6 @@ export async function GET(request: NextRequest) {
   if (!entiteId) {
     return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
   }
-
-  try {
     const produits = await prisma.produit.findMany({
       where: { actif: true, entiteId },
       orderBy: [{ categorie: 'asc' }, { code: 'asc' }],

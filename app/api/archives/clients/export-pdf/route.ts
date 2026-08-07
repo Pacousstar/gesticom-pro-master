@@ -12,6 +12,7 @@ function formatMontant(n: number): string {
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'archives:view')
@@ -21,8 +22,6 @@ export async function GET(request: NextRequest) {
   if (!entiteId) {
     return NextResponse.json({ error: 'Entité non identifiée.' }, { status: 400 })
   }
-
-  try {
     const q = String(request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
     
     const list = await prisma.archiveSoldeClient.findMany({

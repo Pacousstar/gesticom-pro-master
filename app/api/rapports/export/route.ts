@@ -5,8 +5,10 @@ import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
 
 import { multiSheetToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
@@ -148,4 +150,11 @@ export async function GET(request: NextRequest) {
   ])
   const filename = `rapports_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')
   return makeResponse(buf, filename)
+  } catch (e) {
+    await apiCatch(e, 'api/rapports/export')
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Erreur lors de l\'export Excel.' },
+      { status: 500 }
+    )
+  }
 }

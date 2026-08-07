@@ -6,7 +6,7 @@ import {
   AlertTriangle, Bug, Info, Clock, Trash2,
   Calendar, RefreshCw, Terminal, Code, FileWarning,
   Globe, ShieldAlert, Filter,
-  AlertCircle, AlertOctagon, Check,
+  AlertCircle, AlertOctagon,
 } from 'lucide-react'
 
 type ErrorEntry = {
@@ -274,7 +274,7 @@ export default function ErrorsPage() {
             { label: 'Erreurs', value: stats.errors, icon: AlertOctagon, color: 'from-red-500 to-rose-600', textColor: 'text-red-100', bgGlow: 'bg-red-400/10' },
             { label: 'Avertissements', value: stats.warnings, icon: AlertTriangle, color: 'from-amber-500 to-orange-600', textColor: 'text-amber-100', bgGlow: 'bg-amber-400/10' },
             { label: 'Aujourd\'hui', value: stats.today, icon: Clock, color: 'from-cyan-500 to-teal-600', textColor: 'text-cyan-100', bgGlow: 'bg-cyan-400/10' },
-          ].map((stat, i) => {
+          ].map((stat, _i) => {
             const Icon = stat.icon
             return (
               <div key={stat.label} className="relative group">
@@ -417,7 +417,7 @@ export default function ErrorsPage() {
 
       {/* Errors Table */}
       <div className="space-y-2">
-        {paged.map((entry, idx) => {
+        {paged.map((entry, _idx) => {
           const globalIdx = errors.indexOf(entry)
           const isExpanded = expanded.has(globalIdx)
           const levelStyle = LEVEL_STYLES[entry.level] || LEVEL_STYLES.error

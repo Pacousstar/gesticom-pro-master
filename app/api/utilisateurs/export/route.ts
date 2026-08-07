@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { apiCatch } from '@/lib/log-error'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
+  try {
   const session = await getSession()
   const authError = requirePermission(session, 'users:view')
   if (authError) return authError
 
-  try {
     const where: any = {}
     if (session?.role !== 'SUPER_ADMIN') {
-      where.entiteId = session?.entiteId
+      where.entiteId = await getEntiteId(session)
     }
 
     const utilisateurs = await prisma.utilisateur.findMany({

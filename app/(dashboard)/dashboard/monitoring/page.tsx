@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Server, Database, AlertTriangle, RefreshCw, Clock,
+  Server, Database, AlertTriangle, RefreshCw,
   Activity, HardDrive, Users, ShoppingCart, ShoppingBag,
-  Cpu, Globe, BarChart3, Wifi, ShieldCheck, Loader2,
+  Cpu, Globe, BarChart3,
 } from 'lucide-react'
 
 type MonitoringData = {

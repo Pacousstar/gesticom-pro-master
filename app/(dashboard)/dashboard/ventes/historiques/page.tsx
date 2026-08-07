@@ -3,28 +3,25 @@
 import { useState, useEffect } from 'react'
 import { Archive, Plus, Loader2, Trash2, Search, Filter, X, Printer, ShoppingBag, Wallet, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useToast } from '@/hooks/useToast'
-import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import { paginateForPrint } from '@/lib/print-helpers'
 import { formatDate } from '@/lib/format-date'
 import { montantLigneTTC } from '@/lib/calculs-commerciaux'
-import { getStatutPaiementLabel, getStatutPaiementColors } from '@/lib/enums-commerce'
+import { getStatutPaiementLabel } from '@/lib/enums-commerce'
 
 type Client = { id: number; nom: string }
 type Magasin = { id: number; code: string; nom: string }
 type Produit = { id: number; code: string; designation: string; prixVente?: number | null }
 type Ligne = { produitId: number; designation: string; quantite: number; prixUnitaire: number; tva?: number; remise?: number }
 
-const LABEL_HISTORIQUE = 'ANCIEN-'
-
 export default function AnciennesVentesPage() {
   const [ventes, setVentes] = useState<any[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [magasins, setMagasins] = useState<Magasin[]>([])
   const [produits, setProduits] = useState<Produit[]>([])
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [form, setForm] = useState(false)
   const [detailVente, setDetailVente] = useState<any | null>(null)
   const [dateDebut, setDateDebut] = useState('')
@@ -39,7 +36,6 @@ export default function AnciennesVentesPage() {
   const [allVentesForPrint, setAllVentesForPrint] = useState<any[]>([])
   const { success: showSuccess, error: showError } = useToast()
   const pathname = usePathname()
-  const router = useRouter()
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -197,18 +193,6 @@ export default function AnciennesVentesPage() {
       setSubmitting(false)
     }
   }
-
-  const filteredVentes = ventes.filter(v => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return (
-      v.numero?.toLowerCase().includes(s) ||
-      v.client?.nom?.toLowerCase().includes(s) ||
-      v.clientLibre?.toLowerCase().includes(s) ||
-      (v.magasin?.nom?.toLowerCase().includes(s) || false) ||
-      (v.magasinId?.toString().includes(s) || false)
-    )
-  })
 
   return (
     <>
@@ -465,7 +449,7 @@ export default function AnciennesVentesPage() {
                           tvaPourcent: l.tva || 0,
                         })
                         return (
-                          <tr key={i} className="border-b border-gray-100">
+                            <tr key={i} className="border-b border-gray-100">
                             <td className="py-2">{l.designation}</td>
                             <td className="text-right">{l.quantite}</td>
                             <td className="text-right">{l.prixUnitaire.toLocaleString('fr-FR')} F</td>

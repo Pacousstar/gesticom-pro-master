@@ -68,7 +68,7 @@ export default function ArchivesClientsPage() {
       } else {
         showError('Erreur de suppression.')
       }
-    } catch (e) {
+    } catch {
       showError('Erreur système')
     }
   }
@@ -108,7 +108,7 @@ export default function ArchivesClientsPage() {
         const d = await res.json()
         setErr(d.error || 'Erreur création')
       }
-    } catch (e) {
+    } catch {
       setErr('Erreur de connexion')
     }
   }

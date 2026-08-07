@@ -26,7 +26,7 @@ export function formatDate(date: string | Date | null | undefined, options?: { i
         }
 
         return res
-    } catch (e) {
+    } catch {
         return '—'
     }
 }

@@ -33,7 +33,7 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false)
 const [authorized, setAuthorized] = useState<boolean | null>(null)
   const [currentUserRole, setCurrentUserRole] = useState<string>('')
-  const [currentUserEntiteId, setCurrentUserEntiteId] = useState<number>(0)
+  const [, setCurrentUserEntiteId] = useState<number>(0)
 
   useEffect(() => {
     async function checkAuth() {

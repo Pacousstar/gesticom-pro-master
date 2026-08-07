@@ -31,6 +31,7 @@ const configs = [
       'scripts/*',
       'backups/*',
       'public/sw.js',
+      'release/*',
     ],
   },
 ];

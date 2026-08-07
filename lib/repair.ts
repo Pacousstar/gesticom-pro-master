@@ -8,10 +8,6 @@ export async function repairStockIntegrity() {
   let repairedCount = 0;
 
   for (const st of stocks) {
-    const mvtAgg = await prisma.mouvement.aggregate({
-      where: { produitId: st.produitId, magasinId: st.magasinId },
-      _sum: { quantite: true } // Note: type ENTREE est +, type SORTIE est - (à vérifier dans le moteur)
-    });
     
     // Si la logique de montant signé n'est pas utilisée dans Mouvement, 
     // il faut calculer Entrées - Sorties manuellement.

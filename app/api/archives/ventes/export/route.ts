@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
+import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'archives:view')
@@ -14,7 +17,7 @@ export async function GET(request: NextRequest) {
   const dateDebut = request.nextUrl.searchParams.get('dateDebut')?.trim()
   const dateFin = request.nextUrl.searchParams.get('dateFin')?.trim()
 
-  const where: any = { entiteId: session.entiteId }
+  const where: any = { entiteId: await getEntiteId(session) }
   if (dateDebut && dateFin) {
     where.date = {
       gte: new Date(dateDebut + 'T00:00:00'),
@@ -63,4 +66,11 @@ export async function GET(request: NextRequest) {
   const buf = await rowsToBuffer(rows as any[], 'Archives Ventes')
   const filename = `archives-ventes_${dateDebut || 'debut'}_${dateFin || 'fin'}.xlsx`.replace(/\s/g, '_')
   return makeResponse(buf, filename)
+  } catch (e) {
+    await apiCatch(e, 'api/archives/ventes/export')
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Erreur lors de l\'export Excel.' },
+      { status: 500 }
+    )
+  }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { requirePermission } from '@/lib/require-role'
+import { getEntiteId } from '@/lib/get-entite-id'
 import { prisma } from '@/lib/db'
 import { apiCatch } from '@/lib/log-error'
  
@@ -9,11 +10,10 @@ import jsPDF from 'jspdf'
 const EXPORT_MAX_ROWS = 1000
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   const authError = requirePermission(session, 'audit:view')
   if (authError) return authError
-
-  try {
     const searchParams = request.nextUrl.searchParams
     const utilisateurId = searchParams.get('utilisateurId')
     const action = searchParams.get('action')
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const where: any = {}
 
     if (session?.role !== 'SUPER_ADMIN') {
-      where.entiteId = session?.entiteId
+      where.entiteId = await getEntiteId(session)
     }
 
     if (utilisateurId) {

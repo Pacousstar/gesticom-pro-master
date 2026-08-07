@@ -9,6 +9,7 @@ import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
@@ -59,7 +60,6 @@ export async function GET(request: NextRequest) {
   }
   if (type && type !== 'TOUT') where.type = type
 
-  try {
     const mouvements = await prisma.mouvement.findMany({
       where,
       take: 20000,

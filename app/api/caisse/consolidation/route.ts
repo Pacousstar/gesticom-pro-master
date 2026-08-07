@@ -269,18 +269,11 @@ export async function GET(request: NextRequest) {
   })
 }
 
-function mapMode(mode: string): keyof typeof stats | string {
+function mapMode(mode: string): 'ESPECES' | 'MOBILE_MONEY' | 'VIREMENT' | 'CHEQUE' | string {
   const m = mode?.toUpperCase() || ''
   if (m === 'ESPECES' || m === 'CASH' || m === 'ESPECE') return 'ESPECES'
   if (m === 'MOBILE_MONEY' || m === 'MOMO' || m === 'ORANGE MONEY' || m === 'WAVE') return 'MOBILE_MONEY'
   if (m === 'VIREMENT' || m === 'BANQUE') return 'VIREMENT'
   if (m === 'CHEQUE') return 'CHEQUE'
   return m
-}
-
-const stats = {
-  ESPECES: 0,
-  MOBILE_MONEY: 0,
-  VIREMENT: 0,
-  CHEQUE: 0
 }

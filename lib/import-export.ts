@@ -137,7 +137,7 @@ export function mapColumns(entity: ImportEntity, headers: string[]): Record<stri
 
   const entityMapping = defaultMappings[entity]
   
-  headers.forEach((header, index) => {
+  headers.forEach((header, _index) => {
     const headerLower = header.toLowerCase().trim()
     for (const [field, aliases] of Object.entries(entityMapping)) {
       if (aliases.includes(headerLower)) {

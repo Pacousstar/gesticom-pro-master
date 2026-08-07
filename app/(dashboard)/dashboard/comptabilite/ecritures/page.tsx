@@ -61,7 +61,7 @@ export default function EcrituresPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
   const [toutesLesDates, setToutesLesDates] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
+  const [isPrinting] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [diagnostic, setDiagnostic] = useState<{
     operations?: { ventes: number; achats: number; depenses: number; charges: number }

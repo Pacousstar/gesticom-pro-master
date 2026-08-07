@@ -20,10 +20,8 @@ export async function POST(req: Request) {
       magasinId,
       clientId,
       clientLibre,
-      modePaiement,
       date,
       lignes,
-      observation,
       numeroFactureOrigine
     } = body
 

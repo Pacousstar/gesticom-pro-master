@@ -22,7 +22,7 @@ export default function ParVendeurPage() {
     const [loading, setLoading] = useState(true)
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
-    const [isPrinting, setIsPrinting] = useState(false)
+    const [isPrinting] = useState(false)
     const [selectedHistory, setSelectedHistory] = useState<VendeurData | null>(null)
     const [historyData, setHistoryData] = useState<any[]>([])
     const [loadingHistory, setLoadingHistory] = useState(false)

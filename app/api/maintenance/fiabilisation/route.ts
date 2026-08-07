@@ -168,7 +168,7 @@ export async function POST() {
                 magasinId: 1 // Default
             })
             results.ecrituresGenerees++
-        } catch (e) {
+        } catch {
           // Ignoré: certaines écritures peuvent déjà exister (idempotence).
         }
     }
@@ -187,7 +187,7 @@ export async function POST() {
                 magasinId: v.magasinId,
                 entiteId: v.entiteId
             })
-        } catch (e) {
+        } catch {
           // Ignoré: certaines ventes peuvent déjà être comptabilisées.
         }
     }

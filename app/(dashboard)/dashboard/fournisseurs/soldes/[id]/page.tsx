@@ -49,6 +49,7 @@ export default function CompteCourantFournisseurPage() {
   const [selectedMagasinId, setSelectedMagasinId] = useState<string>('')
   const [selectedBanqueId, setSelectedBanqueId] = useState<string>('')
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0])
+  const [payObservation, setPayObservation] = useState('')
   const [isPaying, setIsPaying] = useState(false)
   const [isDeleting, setIsDeleting] = useState<number | null>(null)
   const [printDate, setPrintDate] = useState('')
@@ -102,7 +103,7 @@ export default function CompteCourantFournisseurPage() {
       if (pRes.ok) {
         setParams(await pRes.json())
       }
-    } catch (e) {
+    } catch {
       showError("Erreur de connexion.")
     } finally {
       setLoading(false)
@@ -131,39 +132,52 @@ export default function CompteCourantFournisseurPage() {
   }
 
   const handlePay = async () => {
-    if (!payAmount || Number(payAmount) <= 0) {
+    const montant = Number(payAmount)
+    if (!payAmount || isNaN(montant) || montant === 0) {
       showError('Montant invalide.')
       return
     }
-    if (!selectedMagasinId) {
+    if (montant < 0 && !payObservation.trim()) {
+      showError('Une observation est obligatoire pour un retrait (montant négatif).')
+      return
+    }
+    if (!selectedMagasinId && payMode === 'ESPECES') {
       showError('Sélectionnez un magasin.')
       return
     }
+    const estRetrait = montant < 0
     setIsPaying(true)
     try {
-      const res = await fetch(`/api/fournisseurs/${id}/compte-courant/paiement`, {
+      const res = await fetch('/api/comptes-courants/reglement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          montant: Number(payAmount),
+          fournisseurId: Number(id),
+          montant,
           modePaiement: payMode,
-          magasinId: Number(selectedMagasinId),
-          banqueId: selectedBanqueId ? Number(selectedBanqueId) : undefined,
+          magasinId: selectedMagasinId ? Number(selectedMagasinId) : null,
+          banqueId: selectedBanqueId ? Number(selectedBanqueId) : null,
+          payeDepuisCaisse: payMode === 'ESPECES',
+          payeDepuisBanque: payMode !== 'ESPECES',
+          observation: payObservation.trim() || (estRetrait ? undefined : 'Règlement rapide depuis Compte Courant'),
           date: payDate,
         })
       })
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        showSuccess('Paiement enregistré avec succès !')
+        showSuccess(estRetrait
+          ? `Retrait de ${Math.abs(montant).toLocaleString('fr-FR')} F enregistré !`
+          : 'Paiement enregistré avec succès !')
         setShowPayModal(false)
         setPayAmount('')
+        setPayObservation('')
         setPayMode('ESPECES')
         setSelectedMagasinId('')
         setSelectedBanqueId('')
         setPayDate(new Date().toISOString().split('T')[0])
         fetchData()
       } else {
-        const err = await res.json()
-        showError(err.error || 'Erreur lors du paiement.')
+        showError(data.error || 'Erreur lors du paiement.')
         setIsPaying(false)
       }
     } catch {
@@ -223,7 +237,7 @@ export default function CompteCourantFournisseurPage() {
         const err = await res.json()
         showError(err.error || "Erreur lors de la modification.")
       }
-    } catch (e) {
+    } catch {
       showError("Erreur réseau.")
     } finally {
       setIsPaying(false)
@@ -238,7 +252,7 @@ export default function CompteCourantFournisseurPage() {
     try {
       const res = await fetch(`/api/fournisseurs/${id}/factures-impayer`)
       if (res.ok) setUnpaidInvoices(await res.json())
-    } catch (e) {
+    } catch {
       showError("Erreur lors de la récupération des factures.")
     } finally {
       setLoadingInvoices(false)
@@ -263,7 +277,7 @@ export default function CompteCourantFournisseurPage() {
         const error = await res.json()
         setLettrageError(error.error || "Erreur lors du lettrage.")
       }
-    } catch (e) {
+    } catch {
       setLettrageError("Erreur réseau.")
     }
   }
@@ -613,11 +627,27 @@ export default function CompteCourantFournisseurPage() {
                 <label className="block text-sm font-bold text-gray-700 mb-1">Montant (FCFA) *</label>
                 <input
                   type="number"
-                  min="1"
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
                   className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-lg font-bold focus:border-emerald-500 focus:outline-none"
                   placeholder="0"
+                />
+                {Number(payAmount) < 0 && (
+                  <p className="text-[10px] font-bold text-rose-500 uppercase tracking-widest mt-2">
+                    Retrait de compte courant — l'observation est obligatoire.
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">
+                  Observation {Number(payAmount) < 0 ? '(obligatoire pour un retrait)' : '(optionnelle)'}
+                </label>
+                <input
+                  type="text"
+                  value={payObservation}
+                  onChange={(e) => setPayObservation(e.target.value)}
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-bold focus:border-emerald-500 focus:outline-none"
+                  placeholder={Number(payAmount) < 0 ? "Ex : avoir à récupérer, reprise de marchandise..." : "Ex : acompte sur livraison"}
                 />
               </div>
               <div>

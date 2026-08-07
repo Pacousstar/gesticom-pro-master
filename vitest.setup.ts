@@ -24,7 +24,7 @@ vi.mock('next/server', () => {
       const instance = new MockNextResponse(body, init)
       return instance
     }
-    static redirect(url: string) {
+    static redirect(_url: string) {
       return new MockNextResponse(null, { status: 307 })
     }
   }

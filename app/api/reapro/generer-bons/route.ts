@@ -49,9 +49,6 @@ export async function POST(request: NextRequest) {
 
     for (const [fournisseurId, lignesGroupe] of grouped) {
       counter++
-      const fournisseur = fournisseurId
-        ? produitsMap.get(lignesGroupe[0].produitId)?.fournisseur
-        : null
 
       const montantTotal = lignesGroupe.reduce((s, l) => s + l.montant, 0)
 

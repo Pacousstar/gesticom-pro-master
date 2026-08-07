@@ -57,7 +57,7 @@ export default function MouvementsStockPage() {
   const { error: showError } = useToast()
   const [isPrinting, setIsPrinting] = useState(false)
   const [allDataForPrint, setAllDataForPrint] = useState<any[]>([])
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [, setEntreprise] = useState<any>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
 useEffect(() => {

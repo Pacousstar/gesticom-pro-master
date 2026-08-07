@@ -59,7 +59,7 @@ export default function SoldesTiersPage() {
         }))
         setFournisseurs(fournWithType)
       }
-    } catch (e) {
+    } catch {
       showError("Erreur chargement données.")
     } finally {
       setLoading(false)

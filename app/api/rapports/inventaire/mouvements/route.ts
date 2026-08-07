@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit
 
-    const [mouvements, total, totals] = await Promise.all([
+    const [mouvements, total] = await Promise.all([
       prisma.mouvement.findMany({
         where,
         include: {
@@ -148,10 +148,6 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.mouvement.count({ where }),
-      includeTotals ? prisma.mouvement.aggregate({
-        where,
-        _sum: { quantite: true }
-      }) : Promise.resolve({ _sum: { quantite: null } })
     ])
 
     // Filtrer par type pour les totaux si nécessaire

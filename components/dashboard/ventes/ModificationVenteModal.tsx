@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Loader2, Save, ShoppingBag, Plus, Trash2, DollarSign } from 'lucide-react'
+import { X, Loader2, Save, ShoppingBag, Plus, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 
 interface Ligne {
@@ -124,7 +124,7 @@ export default function ModificationVenteModal({
           montant: l.montant
         }))
       })
-    } catch (e) {
+    } catch {
       showError('Erreur lors du chargement des données.')
       onClose()
     } finally {
@@ -229,7 +229,7 @@ export default function ModificationVenteModal({
       } else {
         showError(data.error || 'Erreur lors de la modification.')
       }
-    } catch (e) {
+    } catch {
       showError('Erreur réseau.')
     } finally {
       setSubmitting(false)

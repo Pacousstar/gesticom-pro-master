@@ -10,6 +10,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
@@ -17,8 +18,6 @@ export async function GET(
   if (!Number.isInteger(id) || id < 1) {
     return NextResponse.json({ error: 'ID invalide.' }, { status: 400 })
   }
-
-  try {
     const where: { id: number; entiteId?: number } = { id }
     if (session.role !== 'SUPER_ADMIN') {
       where.entiteId = await getEntiteId(session)
@@ -136,10 +135,6 @@ export async function GET(
     y += lineHeight + 1
 
     doc.setFont('helvetica', 'normal')
-    let totalHT = 0
-    let totalTVA = 0
-    let totalRemise = 0
-    let totalTTC = 0
 
     for (const l of vente.lignes) {
       if (y > pageHeight - 30) {
@@ -150,14 +145,7 @@ export async function GET(
       const pu = l.prixUnitaire || 0
       const qte = l.quantite || 0
       const rem = l.remise || 0
-      const tva = l.tva || 0
       const mnt = l.montant || 0
-      const ht = qte * pu - rem
-
-      totalHT += ht
-      totalTVA += ht * tva / 100
-      totalRemise += rem
-      totalTTC += mnt
 
       xPos = startX
       const des = l.designation || l.produit?.designation || ''

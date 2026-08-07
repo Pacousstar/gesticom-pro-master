@@ -28,7 +28,6 @@ export default function ListeVentesPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
   const { error: showError } = useToast()
 
   useEffect(() => {

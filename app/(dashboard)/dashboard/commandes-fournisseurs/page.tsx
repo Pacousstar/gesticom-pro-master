@@ -72,7 +72,7 @@ export default function CommandesFournisseursPage() {
 
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printData, setPrintData] = useState<TemplateData | null>(null)
-  const [defaultTemplateId, setDefaultTemplateId] = useState<number | null>(null)
+  const [defaultTemplateId] = useState<number | null>(null)
   
   const [showCreateFournisseur, setShowCreateFournisseur] = useState(false)
   const [fournisseurForm, setFournisseurForm] = useState({
@@ -678,7 +678,7 @@ export default function CommandesFournisseursPage() {
               } else {
                 showError('Erreur lors de l\'export.')
               }
-            } catch (err) {
+            } catch {
               showError('Erreur export')
             }
           }}

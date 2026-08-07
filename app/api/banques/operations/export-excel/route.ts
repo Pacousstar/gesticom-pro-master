@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requirePermission } from '@/lib/require-role'
+import { getEntiteId } from '@/lib/get-entite-id'
 
 import { rowsToBuffer, makeResponse } from '@/lib/excel'
 import { apiCatch } from '@/lib/log-error'
@@ -20,8 +21,8 @@ export async function GET(request: NextRequest) {
 
     const where: any = {}
 
-    if (session.role !== 'SUPER_ADMIN' && session.entiteId) {
-      where.banque = { entiteId: session.entiteId }
+    if (session.role !== 'SUPER_ADMIN') {
+      where.banque = { entiteId: await getEntiteId(session) }
     }
 
     if (banqueId) {
@@ -53,7 +54,6 @@ export async function GET(request: NextRequest) {
     })
 
     const data: any[] = operations.map((op) => {
-      const isEntree = op.type === 'DEPOT' || op.type === 'VIREMENT_ENTRANT' || op.type === 'INTERETS'
       const typeLabel = 
         op.type === 'DEPOT' ? 'Dépôt' :
         op.type === 'RETRAIT' ? 'Retrait' :

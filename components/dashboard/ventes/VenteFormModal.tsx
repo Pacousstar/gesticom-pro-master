@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import {
-  Loader2, Search, X, Plus, Trash2, Wallet, CreditCard, UserPlus,
-  AlertTriangle, XCircle, DollarSign, RotateCcw, Pencil, Camera,
+  Loader2, Search, X, Trash2, CreditCard, UserPlus,
+  AlertTriangle, XCircle, Pencil, Camera,
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { formatApiError } from '@/lib/validation-helpers'
@@ -34,7 +34,7 @@ type Ligne = { produitId: number; designation: string; code?: string; quantite: 
 
 export default function VenteFormModal({
   magasins, clients, produits, ventes, banques,
-  tvaParDefaut, editingVenteId,
+  tvaParDefaut: _tvaParDefaut, editingVenteId,
   onClose, onSuccess,
 }: VenteFormModalProps) {
   const { success: showSuccess, error: showError } = useToast()
@@ -66,7 +66,6 @@ export default function VenteFormModal({
   const [submitting, setSubmitting] = useState(false)
   const [showCreateClient, setShowCreateClient] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
-  const [scannerContext, setScannerContext] = useState<'main' | 'popup'>('main')
   const [clientForm, setClientForm] = useState({ nom: '', telephone: '', email: '', adresse: '', type: 'CASH', plafondCredit: '' })
   const [savingClient, setSavingClient] = useState(false)
   const [err, setErr] = useState('')
@@ -181,13 +180,10 @@ export default function VenteFormModal({
         const data = await r.json()
         return Array.isArray(data) ? data : []
       })
-      .then((data) => {
+      .then(() => {
         // Cannot setProduits directly; the effect is a soft refresh used for stock info
       })
   }
-
-  const [produitsLocaux, setProduitsLocaux] = useState<any[]>(produits)
-  useState(() => setProduitsLocaux(produits))
 
   const doEnregistrerVente = async (lignes: Ligne[]) => {
     const magasinId = Number(formData.magasinId)
@@ -393,7 +389,6 @@ export default function VenteFormModal({
     const val = code.trim().toLowerCase()
     const p = produits.find((x: any) => x.code.toLowerCase() === val || (x.codeBarres || '').toLowerCase() === val)
     if (p) {
-      const s = p.stocks?.find((st: any) => st.magasinId === Number(formData.magasinId))?.quantite || 0
       setAjoutProduit((a) => ({ ...a, produitId: String(p.id), recherche: p.designation, prixUnitaire: String(p.prixVente ?? 0) }))
     } else {
       showError(`Produit non trouvé : ${code}`)

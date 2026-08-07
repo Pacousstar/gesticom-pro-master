@@ -14,12 +14,14 @@ import {
   Clock,
   Pencil,
   Trash2,
-  X
+  X,
+  RotateCcw
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Pagination from '@/components/ui/Pagination'
 import ListPrintWrapper from '@/components/print/ListPrintWrapper'
 import ModificationVenteModal from '@/components/dashboard/ventes/ModificationVenteModal'
+import AnnulerVenteModal from '@/components/dashboard/ventes/AnnulerVenteModal'
 import { paginateForPrint } from '@/lib/print-helpers'
 import { getStatutPaiementLabel, getStatutPaiementColors } from '@/lib/enums-commerce'
 
@@ -52,7 +54,9 @@ export default function ToutesLesVentesPage() {
   const [printType, setPrintType] = useState<'GLOBAL' | 'DETAIL' | null>(null)
   const [editingVenteId, setEditingVenteId] = useState<number | null>(null)
   const [supprimant, setSupprimant] = useState<number | null>(null)
-  const [entreprise, setEntreprise] = useState<any>(null)
+  const [annulationCible, setAnnulationCible] = useState<{ id: number; numero: string; montantTotal: number; montantPaye: number; statutPaiement: string } | null>(null)
+  const [annulant, setAnnulant] = useState<number | null>(null)
+  const [, setEntreprise] = useState<any>(null)
   const [userRole, setUserRole] = useState<string>('')
   
   const ITEMS_PER_PAGE_REPORT = 18
@@ -105,10 +109,31 @@ export default function ToutesLesVentesPage() {
         const d = await res.json()
         showError(d.error || 'Erreur lors de la suppression.')
       }
-    } catch (err) {
+    } catch {
       showError('Erreur de connexion.')
     } finally {
       setSupprimant(null)
+    }
+  }
+
+  const handleConfirmAnnuler = async () => {
+    const cible = annulationCible
+    if (!cible) return
+    setAnnulant(cible.id)
+    try {
+      const res = await fetch(`/api/ventes/${cible.id}/annuler`, { method: 'POST' })
+      if (res.ok) {
+        showSuccess('Vente annulée avec succès.')
+        setAnnulationCible(null)
+        fetchData(startDate, endDate)
+      } else {
+        const d = await res.json()
+        showError(d.error || "Erreur lors de l'annulation.")
+      }
+    } catch {
+      showError('Erreur de connexion.')
+    } finally {
+      setAnnulant(null)
     }
   }
 
@@ -153,11 +178,6 @@ export default function ToutesLesVentesPage() {
     setPage(1)
   }, [search, statutPaiement])
 
-  const now = new Date().toISOString().split('T')[0]
-  const todaySales = data.filter(v => (v.date || '').split('T')[0] === now)
-  const caDay = todaySales.reduce((acc, v) => acc + v.montantTotal, 0)
-  const nbSalesDay = todaySales.length
-  
   const caMonth = data.reduce((acc, v) => acc + v.montantTotal, 0)
   const nbSalesMonth = data.length
   const encaisseMonth = data.reduce((acc, v) => acc + v.montantPaye, 0)
@@ -539,6 +559,16 @@ export default function ToutesLesVentesPage() {
                             )}
                             {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
                               <button
+                                onClick={() => setAnnulationCible({ id: v.id, numero: v.numero, montantTotal: v.montantTotal, montantPaye: v.montantPaye, statutPaiement: v.statutPaiement })}
+                                disabled={annulant === v.id}
+                                className="rounded-xl border border-gray-200 bg-white p-2.5 text-amber-600 hover:bg-amber-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
+                                title="Annuler la vente (recréditer les stocks)"
+                              >
+                                {annulant === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                              </button>
+                            )}
+                            {(userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
+                              <button
                                 onClick={() => handleSupprimer(v.id, v.numero)}
                                 disabled={supprimant === v.id}
                                 className="rounded-xl border border-gray-200 bg-white p-2.5 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm disabled:opacity-50"
@@ -604,6 +634,24 @@ export default function ToutesLesVentesPage() {
         onClose={() => setEditingVenteId(null)}
         venteId={editingVenteId || 0}
         onSuccess={() => fetchData(startDate, endDate)}
+      />
+
+      <AnnulerVenteModal
+        isOpen={annulationCible !== null}
+        onClose={() => setAnnulationCible(null)}
+        onConfirm={handleConfirmAnnuler}
+        numero={annulationCible?.numero ?? ''}
+        montantTotal={annulationCible?.montantTotal ?? 0}
+        montantPaye={annulationCible?.montantPaye ?? 0}
+        isLoading={annulant !== null}
+        details={[
+          { label: 'Stocks vendus', description: 'quantités recréditées au magasin' },
+          { label: 'Règlements', description: 'règlements marqués annulés (traçabilité)' },
+          { label: 'Trésorerie', description: 'mouvements de caisse compensés en sortie' },
+          { label: 'Opérations bancaires', description: 'remboursements ou dépôts compensateurs' },
+          { label: 'Points fidélité', description: 'points déduits de l\'encaissement restitués' },
+          { label: 'Écritures comptables', description: 'Grand Livre (VE, CA, OD) — écritures supprimées' },
+        ]}
       />
 
     </div>

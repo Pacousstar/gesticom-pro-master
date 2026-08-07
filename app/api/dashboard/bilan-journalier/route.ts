@@ -7,7 +7,7 @@ import { apiCatch } from '@/lib/log-error'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const authError = requirePermission(session, 'dashboard:view')

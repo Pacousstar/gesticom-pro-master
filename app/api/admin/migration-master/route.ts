@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
     try {
       const logPath = path.join(process.cwd(), 'gesticom-error.log')
       fs.appendFileSync(logPath, new Date().toISOString() + ' [migration-api] ' + errorMsg + '\n', 'utf8')
-    } catch (_) {
+    } catch {
       // Ignorer l'échec d'écriture du log fichier, l'erreur API est déjà renvoyée.
     }
     return NextResponse.json({ success: false, error: errorMsg, logs }, { status: 500 })

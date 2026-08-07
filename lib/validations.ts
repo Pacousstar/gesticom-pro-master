@@ -313,7 +313,8 @@ export const reglementVenteSchema = z.object({
 /** Règlement depuis compte courant (montant négatif = retrait, observation requise) */
 export const reglementCompteCourantSchema = z
   .object({
-    compteCourantId: z.coerce.number().int().positive('Le compte courant est requis.'),
+    // Optionnel : la route résout le compte courant par clientId/fournisseurId si absent
+    compteCourantId: z.coerce.number().int().positive().nullable().optional(),
     montant: z.coerce.number().refine(m => m !== 0, 'Le montant ne doit pas être nul.'),
     modePaiement: z.string().max(50),
     clientId: z.coerce.number().int().positive().nullable().optional(),

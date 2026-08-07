@@ -18,7 +18,7 @@ export default function InitButton() {
       } else {
         alert(data.error || 'Erreur lors de l\'initialisation')
       }
-    } catch (e) {
+    } catch {
       alert('Erreur de connexion')
     } finally {
       setLoading(false)

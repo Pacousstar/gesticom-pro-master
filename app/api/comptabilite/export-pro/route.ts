@@ -7,13 +7,12 @@ import { getEntiteId } from '@/lib/get-entite-id'
 import { apiCatch } from '@/lib/log-error'
 
 export async function GET(request: NextRequest) {
+  try {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   
   const forbidden = requirePermission(session, 'comptabilite:view')
   if (forbidden) return forbidden
-
-  try {
     const { searchParams } = new URL(request.url)
     const dateDebut = searchParams.get('dateDebut')
     const dateFin = searchParams.get('dateFin')

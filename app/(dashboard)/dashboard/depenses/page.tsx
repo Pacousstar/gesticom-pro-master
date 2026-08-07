@@ -267,12 +267,6 @@ export default function DepensesPage() {
     }
   }
 
-  const total = depenses.reduce((s, d) => s + d.montant, 0)
-  const totalParCategorie = depenses.reduce((acc, d) => {
-    acc[d.categorie] = (acc[d.categorie] || 0) + d.montant
-    return acc
-  }, {} as Record<string, number>)
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
